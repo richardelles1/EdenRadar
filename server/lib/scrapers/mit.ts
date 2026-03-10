@@ -12,6 +12,7 @@ export const mitScraper: InstitutionScraper = {
         `${BASE}/industry-entrepreneurs/available-technologies`,
         `${BASE}/industry-entrepreneurs/available-technologies?page=1`,
         `${BASE}/industry-entrepreneurs/available-technologies?page=2`,
+        `${BASE}/industry-entrepreneurs/available-technologies?page=3`,
       ];
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
@@ -20,26 +21,25 @@ export const mitScraper: InstitutionScraper = {
         const $ = await fetchHtml(url);
         if (!$) continue;
 
-        $("article, .views-row, .technology-item, li.tech, .node--type-technology").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .field--name-title a, a.technology-link").first();
-          const title = cleanText(titleEl.text());
+        $(".views-row").each((_, el) => {
+          const linkEl = $(el).find("a.tech-brief-teaser__link, .tech-brief-teaser__heading a, h3 a, h2 a").first();
+          const title = cleanText(linkEl.text());
           if (!title || seen.has(title)) return;
           seen.add(title);
-          const href = titleEl.attr("href") ?? "";
-          const listing: ScrapedListing = {
+          const href = linkEl.attr("href") ?? "";
+          results.push({
             title,
-            description: cleanText($(el).find("p, .field--name-body, .summary").first().text()) || title,
+            description: cleanText($(el).find(".tech-brief-teaser__description, p").first().text()) || title,
             url: href ? resolveUrl(BASE, href) : BASE,
             institution: INST,
-          };
-          results.push(listing);
+          });
         });
       }
 
-      console.log(`[scraper] MIT: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
-      console.error(`[scraper] MIT failed: ${err?.message}`);
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
   },

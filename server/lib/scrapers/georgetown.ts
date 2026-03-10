@@ -8,21 +8,22 @@ export const georgetownScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
     try {
-      const urls = [
-        `${BASE}/technologies/`,
-        `${BASE}/technologies/?page=2`,
-      ];
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
+
+      const urls = [
+        `${BASE}/technologies/`,
+        `${BASE}/industry/available-technologies/`,
+      ];
 
       for (const url of urls) {
         const $ = await fetchHtml(url);
         if (!$) continue;
 
-        $("article, .views-row, .technology, .listing").each((_, el) => {
+        $("article, .views-row, .technology, .tech-item, li.result").each((_, el) => {
           const titleEl = $(el).find("h2 a, h3 a, .title a").first();
           const title = cleanText(titleEl.text());
-          if (!title || seen.has(title)) return;
+          if (!title || title.length < 10 || seen.has(title)) return;
           seen.add(title);
           const href = titleEl.attr("href") ?? "";
           results.push({
@@ -34,10 +35,10 @@ export const georgetownScraper: InstitutionScraper = {
         });
       }
 
-      console.log(`[scraper] Georgetown: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
-      console.error(`[scraper] Georgetown failed: ${err?.message}`);
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
   },

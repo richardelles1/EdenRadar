@@ -8,36 +8,48 @@ export const uchicagoScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
     try {
-      const urls = [
-        `${BASE}/programs-and-services/available-technologies/`,
-        `${BASE}/programs-and-services/available-technologies/?page=2`,
-      ];
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      for (const url of urls) {
-        const $ = await fetchHtml(url);
-        if (!$) continue;
-
-        $("article, .views-row, .technology, .listing-item, .post").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
-          const title = cleanText(titleEl.text());
-          if (!title || seen.has(title)) return;
-          seen.add(title);
-          const href = titleEl.attr("href") ?? "";
-          results.push({
-            title,
-            description: cleanText($(el).find("p, .summary").first().text()) || title,
-            url: href ? resolveUrl(BASE, href) : BASE,
-            institution: INST,
-          });
-        });
+      const url = `${BASE}/innovation-commercialization/technologies/`;
+      const $ = await fetchHtml(url);
+      if (!$) {
+        console.log(`[scraper] ${INST}: 0 listings (unreachable)`);
+        return [];
       }
 
-      console.log(`[scraper] UChicago: ${results.length} listings`);
+      $("a[href*='technologypublisher.com/techcase']").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const title = cleanText($(el).closest(".pc---image-color__card, article, .card, li").find("h2, h3, h4, .title, img[alt]").first().attr("alt") || $(el).text() || "");
+        const resolvedTitle = title.length > 10 ? title : cleanText($(el).text());
+        if (!resolvedTitle || resolvedTitle.length < 10 || seen.has(resolvedTitle)) return;
+        seen.add(resolvedTitle);
+        results.push({
+          title: resolvedTitle,
+          description: resolvedTitle,
+          url: href,
+          institution: INST,
+        });
+      });
+
+      $(".pc---image-color__card").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href.includes("technologypublisher")) return;
+        const titleText = cleanText($(el).find("img").attr("alt") || $(el).text() || "");
+        if (!titleText || titleText.length < 10 || seen.has(href)) return;
+        seen.add(href);
+        results.push({
+          title: titleText,
+          description: titleText,
+          url: href,
+          institution: INST,
+        });
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
-      console.error(`[scraper] UChicago failed: ${err?.message}`);
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
   },

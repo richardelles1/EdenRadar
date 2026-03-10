@@ -8,21 +8,22 @@ export const columbiaScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
     try {
-      const urls = [
-        `${BASE}/explore-technologies/`,
-        `${BASE}/explore-technologies/?page=2`,
-      ];
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
+
+      const urls = [
+        `${BASE}/technologies/`,
+        `${BASE}/technologies/?page=1`,
+      ];
 
       for (const url of urls) {
         const $ = await fetchHtml(url);
         if (!$) continue;
 
-        $("article, .views-row, .technology, .tech-card, .post").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a, a.tech-title").first();
+        $("article, .views-row, .technology, .tech-card, .listing-item").each((_, el) => {
+          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
           const title = cleanText(titleEl.text());
-          if (!title || seen.has(title)) return;
+          if (!title || title.length < 10 || seen.has(title)) return;
           seen.add(title);
           const href = titleEl.attr("href") ?? "";
           results.push({
@@ -34,10 +35,10 @@ export const columbiaScraper: InstitutionScraper = {
         });
       }
 
-      console.log(`[scraper] Columbia: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
-      console.error(`[scraper] Columbia failed: ${err?.message}`);
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
   },
