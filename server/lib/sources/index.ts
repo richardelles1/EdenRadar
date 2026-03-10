@@ -4,6 +4,8 @@ import { searchMedrxiv } from "./medrxiv";
 import { searchClinicalTrials } from "./clinicaltrials";
 import { searchPatents } from "./patents";
 import { searchTechTransfer } from "./techtransfer/index";
+import { searchNihReporter } from "./nih_reporter";
+import { searchOpenAlex } from "./openalex";
 import type { RawSignal } from "../types";
 
 export { type RawPaper } from "./pubmed";
@@ -15,7 +17,9 @@ export type SourceKey =
   | "medrxiv"
   | "clinicaltrials"
   | "patents"
-  | "techtransfer";
+  | "techtransfer"
+  | "nih_reporter"
+  | "openalex";
 
 export interface DataSource {
   id: SourceKey;
@@ -76,8 +80,20 @@ export const dataSources: Record<SourceKey, DataSource> = {
   techtransfer: {
     id: "techtransfer",
     label: "Tech Transfer",
-    description: "University technology licensing offices (8 institutions)",
+    description: "University technology licensing offices (18 institutions, ~144 listings)",
     search: searchTechTransfer,
+  },
+  nih_reporter: {
+    id: "nih_reporter",
+    label: "NIH Reporter",
+    description: "NIH-funded research projects (2023–2025) — leading-edge funded science",
+    search: searchNihReporter,
+  },
+  openalex: {
+    id: "openalex",
+    label: "OpenAlex",
+    description: "Open scholarly database — broader journal coverage beyond PubMed",
+    search: searchOpenAlex,
   },
 };
 
@@ -89,7 +105,7 @@ export function getSource(key: string): DataSource {
 export async function collectAllSignals(
   query: string,
   sourceKeys: SourceKey[],
-  maxPerSource = 8
+  maxPerSource = 12
 ): Promise<RawSignal[]> {
   const selectedSources = sourceKeys
     .filter((k) => k in dataSources)

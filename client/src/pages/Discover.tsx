@@ -35,7 +35,7 @@ type SearchHistoryResponse = {
   history: SearchHistory[];
 };
 
-const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer"];
+const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 const MODALITIES = [

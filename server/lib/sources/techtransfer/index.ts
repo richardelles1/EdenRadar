@@ -7,6 +7,16 @@ import { getBroadListings } from "./broad";
 import { getJohnsHopkinsListings } from "./johnshopkins";
 import { getHarvardListings } from "./harvard";
 import { getEmoryListings } from "./emory";
+import { getWarfListings } from "./warf";
+import { getColumbiaListings } from "./columbia";
+import { getPennListings } from "./penn";
+import { getDukeListings } from "./duke";
+import { getNorthwesternListings } from "./northwestern";
+import { getUcsdListings } from "./ucsd";
+import { getVanderbiltListings } from "./vanderbilt";
+import { getUtSouthwesternListings } from "./ut_southwestern";
+import { getWeillCornellListings } from "./weill_cornell";
+import { getBaylorListings } from "./baylor";
 
 export interface TechTransferAdapter {
   institution: string;
@@ -22,6 +32,16 @@ const adapters: TechTransferAdapter[] = [
   { institution: "Johns Hopkins University", getListings: getJohnsHopkinsListings },
   { institution: "Harvard University", getListings: getHarvardListings },
   { institution: "Emory University", getListings: getEmoryListings },
+  { institution: "Wisconsin Alumni Research Foundation (WARF)", getListings: getWarfListings },
+  { institution: "Columbia University", getListings: getColumbiaListings },
+  { institution: "University of Pennsylvania", getListings: getPennListings },
+  { institution: "Duke University", getListings: getDukeListings },
+  { institution: "Northwestern University", getListings: getNorthwesternListings },
+  { institution: "UC San Diego", getListings: getUcsdListings },
+  { institution: "Vanderbilt University", getListings: getVanderbiltListings },
+  { institution: "UT Southwestern Medical Center", getListings: getUtSouthwesternListings },
+  { institution: "Weill Cornell Medicine", getListings: getWeillCornellListings },
+  { institution: "Baylor College of Medicine", getListings: getBaylorListings },
 ];
 
 function matchesQuery(signal: RawSignal, query: string): boolean {

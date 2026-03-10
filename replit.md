@@ -9,14 +9,16 @@ AI-powered biotech asset matchmaking platform. Ingests signals from multiple sou
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
-- **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer
+- **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
 
 ### Key Design Decisions
-- **Unified `RawSignal` type**: All 6 data sources convert their output to `RawSignal[]` — a common envelope that feeds the pipeline
+- **Unified `RawSignal` type**: All 8 data sources convert their output to `RawSignal[]` — a common envelope that feeds the pipeline
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Three-tier model strategy**: gpt-4o-mini for paper/preprint/trial extraction; gpt-4o for patent + tech_transfer extraction (higher quality for dense text) + report/dossier narratives; mini fallback on gpt-4o errors
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
-- **Tech Transfer**: Adapter pattern with curated seed data (8 institutions). Future live scraping swappable per-adapter.
+- **Tech Transfer**: Adapter pattern with curated seed data (18 institutions, ~144 listings). Future live scraping swappable per-adapter.
+- **NIH Reporter**: Live API (api.reporter.nih.gov/v2) for NIH-funded research projects (2023–2025) — no API key required, leading-edge signal of funded science before it becomes papers.
+- **OpenAlex**: Live API (api.openalex.org) for scholarly papers beyond PubMed coverage — no API key, 3-year rolling window, broader journal coverage.
 - **ClinicalTrials structured passthrough**: Known structured fields (indication, stage, owner, owner_type) applied directly before/after LLM extraction to prevent re-extraction errors
 - **No nanoid**: Uses `crypto.randomUUID()` (built-in Node.js) for ID generation
 - **PDF export**: @media print CSS block hides nav/buttons, forces white background, page-break control. Print buttons on Dossier + Report pages.

@@ -42,14 +42,14 @@ const buyerProfileSchema = z.object({
 const searchBodySchema = z.object({
   query: z.string().min(1).max(500),
   sources: z.array(z.string()).default(ALL_SOURCES),
-  maxPerSource: z.number().int().min(1).max(15).default(8),
+  maxPerSource: z.number().int().min(1).max(20).default(12),
   buyerProfile: buyerProfileSchema,
 });
 
 const reportBodySchema = z.object({
   query: z.string().min(1).max(500),
   sources: z.array(z.string()).default(ALL_SOURCES),
-  maxPerSource: z.number().int().min(1).max(10).default(6),
+  maxPerSource: z.number().int().min(1).max(15).default(8),
   buyerProfile: buyerProfileSchema,
 });
 
