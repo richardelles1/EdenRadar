@@ -1,4 +1,4 @@
-import { Link } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import {
@@ -10,6 +10,7 @@ import {
   Database,
   BrainCircuit,
   ChevronRight,
+  LogIn,
 } from "lucide-react";
 
 function EdenSVG() {
@@ -184,6 +185,13 @@ const STEPS = [
 ];
 
 export default function Landing() {
+  const [, navigate] = useLocation();
+
+  function handleEnterPortal() {
+    localStorage.setItem("eden-portal", "true");
+    navigate("/scout");
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
@@ -232,26 +240,25 @@ export default function Landing() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <Link href="/discover">
-                    <Button
-                      size="lg"
-                      className="gap-2 text-base font-semibold h-12 px-7"
-                      data-testid="button-cta-discover"
-                    >
-                      Start Discovering
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                  </Link>
-                  <Link href="/pipeline">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="gap-2 text-base h-12 px-7 border-border"
-                      data-testid="button-cta-pipeline"
-                    >
-                      View Pipeline
-                    </Button>
-                  </Link>
+                  <Button
+                    size="lg"
+                    className="gap-2 text-base font-semibold h-12 px-7"
+                    onClick={handleEnterPortal}
+                    data-testid="button-cta-enter-portal"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Enter Portal
+                  </Button>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="gap-2 text-base h-12 px-7 border-border"
+                    onClick={handleEnterPortal}
+                    data-testid="button-cta-launch"
+                  >
+                    Launch Scout
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
                 </div>
 
                 <div className="flex items-center gap-6 pt-2">
@@ -351,16 +358,15 @@ export default function Landing() {
                 Start discovering drug assets from thousands of research papers — structured,
                 filtered, and ready to export.
               </p>
-              <Link href="/discover">
-                <Button
-                  size="lg"
-                  className="gap-2 font-semibold h-12 px-8"
-                  data-testid="button-footer-cta"
-                >
-                  Launch Discovery
-                  <ArrowRight className="w-4 h-4" />
-                </Button>
-              </Link>
+              <Button
+                size="lg"
+                className="gap-2 font-semibold h-12 px-8"
+                onClick={handleEnterPortal}
+                data-testid="button-footer-cta"
+              >
+                <LogIn className="w-4 h-4" />
+                Enter Portal
+              </Button>
             </div>
           </div>
         </section>
@@ -375,17 +381,13 @@ export default function Landing() {
             <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
           </div>
           <nav className="flex items-center gap-4">
-            {[
-              { href: "/", label: "Home" },
-              { href: "/discover", label: "Discover" },
-              { href: "/pipeline", label: "Pipeline" },
-            ].map((l) => (
-              <Link key={l.href} href={l.href}>
-                <span className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
-                  {l.label}
-                </span>
-              </Link>
-            ))}
+            <button
+              onClick={handleEnterPortal}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-portal"
+            >
+              Enter Portal
+            </button>
           </nav>
         </div>
       </footer>
