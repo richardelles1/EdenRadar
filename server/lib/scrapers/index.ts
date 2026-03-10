@@ -57,6 +57,20 @@ import {
   iowaStateScraper,
   tgenScraper,
   wsuScraper,
+  arizonaScraper,
+  pennStateScraper,
+  rutgersScraper,
+  stevensScraper,
+  rpiScraper,
+  stonyBrookScraper,
+  cincinnatiScraper,
+  buffaloScraper,
+  rowanScraper,
+  georgemasonScraper,
+  umaineScraper,
+  binghamtonScraper,
+  uscScraper,
+  oregonStateScraper,
 } from "./new-institutions";
 
 export { ScrapedListing, InstitutionScraper };
@@ -119,6 +133,20 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   iowaStateScraper,
   tgenScraper,
   wsuScraper,
+  arizonaScraper,
+  pennStateScraper,
+  rutgersScraper,
+  stevensScraper,
+  rpiScraper,
+  stonyBrookScraper,
+  cincinnatiScraper,
+  buffaloScraper,
+  rowanScraper,
+  georgemasonScraper,
+  umaineScraper,
+  binghamtonScraper,
+  uscScraper,
+  oregonStateScraper,
 ];
 
 async function runWithConcurrency<T>(

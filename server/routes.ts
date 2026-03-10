@@ -323,6 +323,20 @@ export async function registerRoutes(
         iowastate: "Iowa State University",
         tgen: "Translational Genomics Research Institute",
         wsu: "Washington State University",
+        arizona: "University of Arizona",
+        pennstate: "Penn State University",
+        rutgers: "Rutgers University",
+        stevens: "Stevens Institute of Technology",
+        rpi: "Rensselaer Polytechnic Institute",
+        stonybrook: "Stony Brook University",
+        cincinnati: "University of Cincinnati",
+        buffalo: "University at Buffalo",
+        rowan: "Rowan University",
+        georgemason: "George Mason University",
+        umaine: "University of Maine",
+        binghamton: "Binghamton University",
+        usc: "University of Southern California",
+        oregonstate: "Oregon State University",
       };
       const name = SLUG_TO_NAME[req.params.slug];
       if (!name) return res.status(404).json({ error: "Institution not found" });

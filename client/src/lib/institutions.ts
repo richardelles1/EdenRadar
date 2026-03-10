@@ -65,6 +65,20 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "iowastate", name: "Iowa State University", city: "Ames, IA", ttoName: "Iowa State University Research Foundation", website: "https://isurftech.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Delivery", "Biosensors"] },
   { slug: "tgen", name: "Translational Genomics Research Institute", city: "Phoenix, AZ", ttoName: "TGen Technology Transfer", website: "https://tgen.technologypublisher.com", specialties: ["Genomics", "Oncology", "Rare Disease"] },
   { slug: "wsu", name: "Washington State University", city: "Pullman, WA", ttoName: "WSU Office of Commercialization", website: "https://wsu.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Delivery", "Biosensors"] },
+  { slug: "arizona", name: "University of Arizona", city: "Tucson, AZ", ttoName: "Tech Launch Arizona", website: "https://arizona.technologypublisher.com", specialties: ["Oncology", "Drug Discovery", "Optics"] },
+  { slug: "pennstate", name: "Penn State University", city: "University Park, PA", ttoName: "Penn State Office of TT", website: "https://pennstate.technologypublisher.com", specialties: ["Biomaterials", "Drug Delivery", "Biosensors"] },
+  { slug: "rutgers", name: "Rutgers University", city: "New Brunswick, NJ", ttoName: "Rutgers Office of Research Commercialization", website: "https://rutgers.technologypublisher.com", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"] },
+  { slug: "stevens", name: "Stevens Institute of Technology", city: "Hoboken, NJ", ttoName: "Stevens TTO", website: "https://stevens.technologypublisher.com", specialties: ["Bioelectronics", "Biosensors", "Drug Delivery"] },
+  { slug: "rpi", name: "Rensselaer Polytechnic Institute", city: "Troy, NY", ttoName: "RPI Office of TT", website: "https://rpi.technologypublisher.com", specialties: ["Biomaterials", "Drug Delivery", "Bioelectronics"] },
+  { slug: "stonybrook", name: "Stony Brook University", city: "Stony Brook, NY", ttoName: "Stony Brook TTO", website: "https://stonybrook.technologypublisher.com", specialties: ["Oncology", "Drug Discovery", "Neuroscience"] },
+  { slug: "cincinnati", name: "University of Cincinnati", city: "Cincinnati, OH", ttoName: "UC Office of Technology Transfer", website: "https://uc.technologypublisher.com", specialties: ["Oncology", "Drug Delivery", "Cardiovascular"] },
+  { slug: "buffalo", name: "University at Buffalo", city: "Buffalo, NY", ttoName: "UB Technology Transfer", website: "https://buffalo.technologypublisher.com", specialties: ["Oncology", "Drug Discovery", "Neuroscience"] },
+  { slug: "rowan", name: "Rowan University", city: "Glassboro, NJ", ttoName: "Rowan Innovation Ventures", website: "https://rowan.technologypublisher.com", specialties: ["Biomaterials", "Drug Delivery", "Diagnostics"] },
+  { slug: "georgemason", name: "George Mason University", city: "Fairfax, VA", ttoName: "Mason Enterprise Center", website: "https://mason.technologypublisher.com", specialties: ["Biosensors", "Drug Delivery", "Bioelectronics"] },
+  { slug: "umaine", name: "University of Maine", city: "Orono, ME", ttoName: "UMaine Office of Innovation", website: "https://umaine.technologypublisher.com", specialties: ["Biomaterials", "Agricultural Biotech", "Drug Delivery"] },
+  { slug: "binghamton", name: "Binghamton University", city: "Binghamton, NY", ttoName: "Binghamton TTO", website: "https://binghamton.technologypublisher.com", specialties: ["Oncology", "Drug Discovery", "Biosensors"] },
+  { slug: "usc", name: "University of Southern California", city: "Los Angeles, CA", ttoName: "USC Stevens Center for Innovation", website: "https://usc.technologypublisher.com", specialties: ["Neuroscience", "Drug Delivery", "Oncology"] },
+  { slug: "oregonstate", name: "Oregon State University", city: "Corvallis, OR", ttoName: "OSU Office for Commercialization", website: "https://oregonstate.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Biomaterials"] },
 ];
 
 export const BLOCKED_SLUGS = new Set([

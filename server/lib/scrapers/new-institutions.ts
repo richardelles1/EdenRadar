@@ -173,3 +173,87 @@ export const wsuScraper = createTechPublisherScraper(
   "Washington State University",
   { selector: "a[href*='/techcase']", maxPg: 80 }
 );
+
+export const arizonaScraper = createTechPublisherScraper(
+  "arizona",
+  "University of Arizona",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
+);
+
+export const pennStateScraper = createTechPublisherScraper(
+  "pennstate",
+  "Penn State University",
+  { maxPg: 80 }
+);
+
+export const rutgersScraper = createTechPublisherScraper(
+  "rutgers",
+  "Rutgers University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
+);
+
+export const stevensScraper = createTechPublisherScraper(
+  "stevens",
+  "Stevens Institute of Technology",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 30 }
+);
+
+export const rpiScraper = createTechPublisherScraper(
+  "rpi",
+  "Rensselaer Polytechnic Institute",
+  { maxPg: 50 }
+);
+
+export const stonyBrookScraper = createTechPublisherScraper(
+  "stonybrook",
+  "Stony Brook University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 50 }
+);
+
+export const cincinnatiScraper = createTechPublisherScraper(
+  "uc",
+  "University of Cincinnati",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 50 }
+);
+
+export const buffaloScraper = createTechPublisherScraper(
+  "buffalo",
+  "University at Buffalo",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 50 }
+);
+
+export const rowanScraper = createTechPublisherScraper(
+  "rowan",
+  "Rowan University",
+  { maxPg: 30 }
+);
+
+export const georgemasonScraper = createTechPublisherScraper(
+  "mason",
+  "George Mason University",
+  { maxPg: 50 }
+);
+
+export const umaineScraper = createTechPublisherScraper(
+  "umaine",
+  "University of Maine",
+  { maxPg: 30 }
+);
+
+export const binghamtonScraper = createTechPublisherScraper(
+  "binghamton",
+  "Binghamton University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 50 }
+);
+
+export const uscScraper = createTechPublisherScraper(
+  "usc",
+  "University of Southern California",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
+);
+
+export const oregonStateScraper = createTechPublisherScraper(
+  "oregonstate",
+  "Oregon State University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
+);

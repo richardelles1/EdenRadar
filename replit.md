@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 57 institution TTO websites (expanded from 28).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 71 institution TTO websites (expanded from 57).
 
 ## Architecture
 
