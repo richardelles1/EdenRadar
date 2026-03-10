@@ -12,7 +12,10 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2 } from "lucide-react";
+import { FileBarChart2, Loader2, Globe } from "lucide-react";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
@@ -34,6 +37,19 @@ type SavedAssetsResponse = {
 };
 
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
+
+const COVERED_INSTITUTIONS = [
+  "Stanford University", "MIT", "Harvard University", "Johns Hopkins University",
+  "University of California San Francisco", "Duke University", "Columbia University",
+  "University of Pennsylvania", "Northwestern University", "Cornell University",
+  "UC Berkeley", "University of Washington", "Washington University in St. Louis",
+  "University of Michigan", "Mayo Clinic", "Scripps Research",
+  "Salk Institute", "MD Anderson Cancer Center",
+  "University of Pittsburgh", "University of Chicago",
+  "Yale University", "Vanderbilt University", "Emory University",
+  "Boston University", "Georgetown University", "University of Texas",
+  "Case Western Reserve University", "University of Colorado",
+];
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 const MODALITIES = [
@@ -73,14 +89,14 @@ function RadarOverlay({ sources }: { sources: string[] }) {
           <div
             className="absolute inset-0 rounded-full"
             style={{
-              background: "conic-gradient(from 0deg, transparent 250deg, hsl(183 85% 52% / 0.06) 290deg, hsl(183 85% 52% / 0.3) 360deg)",
+              background: "conic-gradient(from 0deg, transparent 250deg, hsl(142 65% 48% / 0.06) 290deg, hsl(142 65% 48% / 0.3) 360deg)",
             }}
           />
         </div>
         <div className="absolute inset-0 flex items-center justify-center">
           <div
             className="w-px h-1/2 origin-bottom"
-            style={{ background: "linear-gradient(to top, hsl(183 85% 60% / 0.9), transparent)" }}
+            style={{ background: "linear-gradient(to top, hsl(142 65% 55% / 0.9), transparent)" }}
           />
         </div>
         <div className="w-2 h-2 rounded-full bg-primary glow-pulse absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
@@ -136,6 +152,7 @@ export default function Discover() {
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [dateFilter, setDateFilter] = useState<string>("all");
+  const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(DEFAULT_BUYER_PROFILE);
   const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SOURCE_KEYS);
 
@@ -164,6 +181,7 @@ export default function Discover() {
       setInstitutionFilter("all");
       setSortMode("score");
       setDateFilter("all");
+      setMinScore(0);
       if (data.assets.length === 0) {
         toast({ title: "No assets found", description: "Try a different query or enable more sources." });
       }
@@ -274,7 +292,7 @@ export default function Discover() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "helixradar-assets.json";
+    a.download = "edenradar-assets.json";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -291,7 +309,7 @@ export default function Discover() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "helixradar-assets.csv";
+    a.download = "edenradar-assets.csv";
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -319,11 +337,12 @@ export default function Discover() {
       const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
       const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
       const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
+      const scoreOk = minScore === 0 || asset.score >= minScore;
       const dateOk = dateFilter === "all" || (() => {
         const d = parseDateLoose(asset.latest_signal_date);
         return d !== null && d >= cutoff;
       })();
-      return stageOk && modalityOk && institutionOk && dateOk;
+      return stageOk && modalityOk && institutionOk && scoreOk && dateOk;
     });
     if (sortMode === "recency") {
       results = [...results].sort((a, b) => {
@@ -333,7 +352,7 @@ export default function Discover() {
       });
     }
     return results;
-  }, [searchResults, stageFilter, modalityFilter, institutionFilter, dateFilter, sortMode]);
+  }, [searchResults, stageFilter, modalityFilter, institutionFilter, dateFilter, sortMode, minScore]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
@@ -386,6 +405,31 @@ export default function Discover() {
               </Button>
             </div>
 
+            <div className="max-w-3xl mx-auto flex items-center justify-end">
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors cursor-default select-none"
+                      data-testid="coverage-indicator"
+                    >
+                      <Globe className="w-3 h-3 shrink-0" />
+                      <span>{COVERED_INSTITUTIONS.length} institutions · {ALL_SOURCE_KEYS.length} sources covered</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-[300px] p-3">
+                    <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      {COVERED_INSTITUTIONS.map((inst) => (
+                        <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-primary mt-2">New institutions added weekly.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
 
             <SourceSelector sources={sources} selected={selectedSources} onToggle={handleToggleSource} />
@@ -400,6 +444,22 @@ export default function Discover() {
           {showControls && (
             <div className="px-4 sm:px-6 pb-3">
               <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Score</span>
+                  <Select value={String(minScore)} onValueChange={(v) => setMinScore(Number(v))} data-testid="filter-score-select">
+                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[110px] focus:ring-0 focus:ring-offset-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Any Score</SelectItem>
+                      <SelectItem value="60">≥ 60</SelectItem>
+                      <SelectItem value="70">≥ 70</SelectItem>
+                      <SelectItem value="80">≥ 80</SelectItem>
+                      <SelectItem value="90">≥ 90</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Sort</span>
                   <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">

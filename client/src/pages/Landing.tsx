@@ -12,112 +12,86 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-function HelixSVG() {
-  const cx = 80;
-  const amplitude = 52;
-  const period = 72;
-  const height = 360;
-  const steps = 180;
-  const rungEvery = 9;
-
-  const strand1Points: string[] = [];
-  const strand2Points: string[] = [];
-
-  for (let i = 0; i <= steps; i++) {
-    const y = (i / steps) * height;
-    const angle = (y / period) * 2 * Math.PI;
-    const x1 = cx + amplitude * Math.sin(angle);
-    const x2 = cx - amplitude * Math.sin(angle);
-    strand1Points.push(`${i === 0 ? "M" : "L"} ${x1.toFixed(1)} ${y.toFixed(1)}`);
-    strand2Points.push(`${i === 0 ? "M" : "L"} ${x2.toFixed(1)} ${y.toFixed(1)}`);
-  }
-
-  const rungs: { y: number; x1: number; x2: number; opacity: number }[] = [];
-  for (let i = rungEvery; i < steps; i += rungEvery) {
-    const y = (i / steps) * height;
-    const angle = (y / period) * 2 * Math.PI;
-    const x1 = cx + amplitude * Math.sin(angle);
-    const x2 = cx - amplitude * Math.sin(angle);
-    const sinVal = Math.abs(Math.sin(angle));
-    rungs.push({ y, x1, x2, opacity: 0.2 + sinVal * 0.5 });
-  }
-
-  const dots: { x: number; y: number; r: number; strand: number }[] = [];
-  for (let i = 0; i <= steps; i += rungEvery) {
-    const y = (i / steps) * height;
-    const angle = (y / period) * 2 * Math.PI;
-    const sinVal = Math.sin(angle);
-    dots.push({ x: cx + amplitude * sinVal, y, r: 2.5 + Math.abs(sinVal) * 1.5, strand: 0 });
-    dots.push({ x: cx - amplitude * sinVal, y, r: 2.5 + Math.abs(sinVal) * 1.5, strand: 1 });
-  }
+function EdenSVG() {
+  const branches = [
+    { y: 52,  dir: -1, ox: 80, tipX: 14,  tipY: 40,  r: 5.5, delay: "0s" },
+    { y: 102, dir:  1, ox: 80, tipX: 148, tipY: 90,  r: 4.5, delay: "0.45s" },
+    { y: 157, dir: -1, ox: 80, tipX: 12,  tipY: 145, r: 6.0, delay: "0.9s" },
+    { y: 210, dir:  1, ox: 80, tipX: 150, tipY: 198, r: 4.0, delay: "1.35s" },
+    { y: 262, dir: -1, ox: 80, tipX: 18,  tipY: 250, r: 5.0, delay: "1.8s" },
+    { y: 310, dir:  1, ox: 80, tipX: 147, tipY: 298, r: 4.5, delay: "2.25s" },
+    { y: 358, dir: -1, ox: 80, tipX: 22,  tipY: 347, r: 3.5, delay: "2.7s" },
+  ];
 
   return (
-    <svg
-      viewBox={`0 0 ${cx * 2} ${height}`}
-      className="w-full h-full"
-      style={{ overflow: "visible" }}
-    >
+    <svg viewBox="0 0 160 380" className="w-full h-full" style={{ overflow: "visible" }}>
       <defs>
-        <linearGradient id="strand1Grad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="hsl(183 85% 60%)" stopOpacity="0.1" />
-          <stop offset="30%" stopColor="hsl(183 85% 60%)" stopOpacity="0.9" />
-          <stop offset="70%" stopColor="hsl(250 80% 65%)" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="hsl(250 80% 65%)" stopOpacity="0.1" />
+        <linearGradient id="stemGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stopColor="hsl(142 70% 55%)" stopOpacity="0.15" />
+          <stop offset="20%"  stopColor="hsl(142 65% 52%)" stopOpacity="0.88" />
+          <stop offset="80%"  stopColor="hsl(155 60% 46%)" stopOpacity="0.88" />
+          <stop offset="100%" stopColor="hsl(155 55% 42%)" stopOpacity="0.15" />
         </linearGradient>
-        <linearGradient id="strand2Grad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="hsl(250 80% 65%)" stopOpacity="0.1" />
-          <stop offset="30%" stopColor="hsl(250 80% 65%)" stopOpacity="0.9" />
-          <stop offset="70%" stopColor="hsl(183 85% 60%)" stopOpacity="0.9" />
-          <stop offset="100%" stopColor="hsl(183 85% 60%)" stopOpacity="0.1" />
-        </linearGradient>
-        <filter id="glow">
-          <feGaussianBlur stdDeviation="2" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
+        <radialGradient id="nodeGrad" cx="50%" cy="50%" r="50%">
+          <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
+          <stop offset="60%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.95" />
+          <stop offset="100%" stopColor="hsl(142 58% 40%)" stopOpacity="0.55" />
+        </radialGradient>
+        <filter id="leafGlow">
+          <feGaussianBlur stdDeviation="2.5" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+        <filter id="stemGlow">
+          <feGaussianBlur stdDeviation="1" result="blur" />
+          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
         </filter>
       </defs>
 
-      {rungs.map((r, i) => (
-        <line
-          key={i}
-          x1={r.x1}
-          y1={r.y}
-          x2={r.x2}
-          y2={r.y}
-          stroke="hsl(183 85% 65%)"
-          strokeWidth="1"
-          strokeOpacity={r.opacity}
+      <circle cx="80" cy="190" r="75"  fill="none" stroke="hsl(142 55% 45%)" strokeOpacity="0.07" strokeWidth="1" />
+      <circle cx="80" cy="190" r="145" fill="none" stroke="hsl(142 55% 45%)" strokeOpacity="0.04" strokeWidth="1" />
+
+      <path
+        d="M 80 378 C 73 348, 87 318, 80 288 C 73 258, 87 228, 80 198 C 73 168, 87 138, 80 108 C 73 78, 87 48, 80 18"
+        fill="none"
+        stroke="url(#stemGrad)"
+        strokeWidth="2.5"
+        filter="url(#stemGlow)"
+      />
+
+      {branches.map((b, i) => (
+        <path
+          key={`branch-${i}`}
+          d={`M ${b.ox} ${b.y} C ${b.ox + b.dir * 22} ${b.y - 4}, ${b.tipX + b.dir * -18} ${b.tipY + 4}, ${b.tipX} ${b.tipY}`}
+          fill="none"
+          stroke="hsl(142 62% 48%)"
+          strokeWidth="1.5"
+          strokeOpacity={i % 2 === 0 ? 0.75 : 0.68}
         />
       ))}
 
-      <path
-        d={strand1Points.join(" ")}
-        fill="none"
-        stroke="url(#strand1Grad)"
-        strokeWidth="2"
-        filter="url(#glow)"
-      />
-      <path
-        d={strand2Points.join(" ")}
-        fill="none"
-        stroke="url(#strand2Grad)"
-        strokeWidth="2"
-        filter="url(#glow)"
-      />
+      {branches.map((b, i) => (
+        <circle key={`junc-${i}`} cx={b.ox} cy={b.y} r={2} fill="hsl(142 65% 58%)" fillOpacity="0.55" />
+      ))}
 
-      {dots.map((d, i) => (
+      {branches.map((b, i) => (
         <circle
-          key={i}
-          cx={d.x}
-          cy={d.y}
-          r={d.r}
-          fill={d.strand === 0 ? "hsl(183 85% 65%)" : "hsl(250 80% 68%)"}
-          fillOpacity="0.85"
-          filter="url(#glow)"
+          key={`node-${i}`}
+          cx={b.tipX}
+          cy={b.tipY}
+          r={b.r}
+          fill="url(#nodeGrad)"
+          filter="url(#leafGlow)"
+          className="eden-node"
+          style={{ animationDelay: b.delay }}
         />
       ))}
+
+      <circle cx={8}   cy={44}  r={1.8} fill="hsl(142 65% 62%)" fillOpacity="0.38" />
+      <circle cx={144} cy={96}  r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.32" />
+      <circle cx={6}   cy={150} r={2.0} fill="hsl(142 65% 62%)" fillOpacity="0.38" />
+      <circle cx={146} cy={204} r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.30" />
+      <circle cx={12}  cy={255} r={1.8} fill="hsl(142 65% 62%)" fillOpacity="0.35" />
+      <circle cx={143} cy={304} r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.28" />
     </svg>
   );
 }
@@ -143,7 +117,7 @@ function RadarGraphic() {
           className="absolute inset-0 rounded-full"
           style={{
             background:
-              "conic-gradient(from 0deg, transparent 260deg, hsl(183 85% 52% / 0.08) 300deg, hsl(183 85% 52% / 0.35) 360deg)",
+              "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.08) 300deg, hsl(142 65% 48% / 0.35) 360deg)",
           }}
         />
       </div>
@@ -151,7 +125,7 @@ function RadarGraphic() {
         <div
           className="w-0.5 h-1/2 origin-bottom"
           style={{
-            background: "linear-gradient(to top, hsl(183 85% 60% / 0.9), transparent)",
+            background: "linear-gradient(to top, hsl(142 65% 55% / 0.9), transparent)",
           }}
         />
       </div>
@@ -179,7 +153,7 @@ const FEATURES = [
     icon: Database,
     title: "Multi-Source Intelligence",
     description:
-      "Built to ingest PubMed today, with ClinicalTrials.gov, bioRxiv, Europe PMC, and patent databases next.",
+      "Ingests PubMed, ClinicalTrials.gov, bioRxiv, medRxiv, patents, NIH Reporter, OpenAlex, and 28 tech transfer offices.",
   },
   {
     icon: Download,
@@ -199,7 +173,7 @@ const STEPS = [
     num: "02",
     title: "AI reads the literature",
     description:
-      "HelixRadar fetches recent papers and runs each abstract through GPT-4o-mini to extract structured drug asset data.",
+      "EdenRadar fetches signals from 8 live sources and runs each through GPT-4o-mini to extract structured drug asset data.",
   },
   {
     num: "03",
@@ -221,14 +195,14 @@ export default function Landing() {
               className="absolute top-0 right-0 w-1/2 h-full opacity-5"
               style={{
                 background:
-                  "radial-gradient(ellipse at 80% 20%, hsl(183 85% 52%) 0%, transparent 60%)",
+                  "radial-gradient(ellipse at 80% 20%, hsl(142 65% 48%) 0%, transparent 60%)",
               }}
             />
             <div
               className="absolute bottom-0 left-0 w-1/3 h-1/2 opacity-5"
               style={{
                 background:
-                  "radial-gradient(ellipse at 20% 80%, hsl(250 80% 65%) 0%, transparent 60%)",
+                  "radial-gradient(ellipse at 20% 80%, hsl(90 60% 55%) 0%, transparent 60%)",
               }}
             />
           </div>
@@ -252,7 +226,7 @@ export default function Landing() {
                     </span>
                   </h1>
                   <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                    HelixRadar scans biomedical literature and uses AI to extract structured drug
+                    EdenRadar scans the biotech research landscape and uses AI to extract structured drug
                     asset intelligence — target, modality, stage, and indication — in seconds.
                   </p>
                 </div>
@@ -283,8 +257,8 @@ export default function Landing() {
                 <div className="flex items-center gap-6 pt-2">
                   {[
                     { value: "10M+", label: "Papers indexed" },
-                    { value: "6", label: "Data sources" },
-                    { value: "~3s", label: "Per extraction" },
+                    { value: "8", label: "Data sources" },
+                    { value: "28", label: "TTOs covered" },
                   ].map((stat) => (
                     <div key={stat.label} className="text-center sm:text-left">
                       <div
@@ -304,9 +278,9 @@ export default function Landing() {
                   <RadarGraphic />
                 </div>
                 <div className="relative z-10 w-44 h-96">
-                  <div className="w-full h-full helix-scroll" style={{ height: "200%" }}>
-                    <HelixSVG />
-                    <HelixSVG />
+                  <div className="w-full h-full garden-scroll" style={{ height: "200%" }}>
+                    <EdenSVG />
+                    <EdenSVG />
                   </div>
                 </div>
               </div>
@@ -396,7 +370,7 @@ export default function Landing() {
         <div className="max-w-screen-xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-foreground text-sm">
-              Helix<span className="text-primary">Radar</span>
+              Eden<span className="text-primary">Radar</span>
             </span>
             <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
           </div>

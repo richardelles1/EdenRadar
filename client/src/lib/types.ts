@@ -50,6 +50,7 @@ export interface ScoredAsset {
   score_breakdown: ScoreBreakdown;
   matching_tags: string[];
   confidence: "high" | "medium" | "low";
+  contact_office?: string;
   signals: RawSignal[];
 }
 

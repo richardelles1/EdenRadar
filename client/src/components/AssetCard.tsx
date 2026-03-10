@@ -143,6 +143,24 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               </p>
             </div>
           )}
+          {asset.source_types?.includes("tech_transfer") && asset.contact_office && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">TTO Contact</span>
+              <p className="mt-0.5">
+                <a
+                  href={asset.source_urls?.[0] ?? "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary text-xs font-medium flex items-center gap-1 hover:underline truncate"
+                  data-testid={`link-tto-contact-${asset.id}`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <ExternalLink className="w-3 h-3 shrink-0" />
+                  {asset.contact_office}
+                </a>
+              </p>
+            </div>
+          )}
         </div>
 
         {hasWhyItMatters && (

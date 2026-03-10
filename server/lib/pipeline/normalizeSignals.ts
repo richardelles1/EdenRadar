@@ -98,6 +98,7 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
           matching_tags: [],
           evidence_count: 1,
           confidence: "low",
+          contact_office: signal.source_type === "tech_transfer" ? (signal.metadata?.contact_office as string | undefined) : undefined,
           signals: [signal],
         };
         return applyStructuredOverrides(fallback, signal);
@@ -123,6 +124,7 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
         matching_tags: extracted.matching_tags ?? [],
         evidence_count: 1,
         confidence: inferConfidence(extracted, signal),
+        contact_office: signal.source_type === "tech_transfer" ? (signal.metadata?.contact_office as string | undefined) : undefined,
         signals: [signal],
       };
 

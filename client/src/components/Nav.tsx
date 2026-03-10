@@ -1,6 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Bookmark, Moon, Sun, Dna, Radar } from "lucide-react";
+import { Bookmark, Moon, Sun, Sprout, Radar } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
@@ -31,10 +31,10 @@ export function Nav({ onOpenSaved }: NavProps) {
           <Link href="/">
             <div className="flex items-center gap-2.5 cursor-pointer select-none" data-testid="link-home-logo">
               <div className="relative w-7 h-7 rounded-md bg-primary flex items-center justify-center overflow-hidden">
-                <Dna className="w-4 h-4 text-primary-foreground" />
+                <Sprout className="w-4 h-4 text-primary-foreground" />
               </div>
               <span className="font-bold text-foreground text-base tracking-tight">
-                Helix<span className="text-primary">Radar</span>
+                Eden<span className="text-primary">Radar</span>
               </span>
             </div>
           </Link>
