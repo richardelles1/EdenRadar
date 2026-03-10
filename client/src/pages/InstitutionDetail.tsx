@@ -3,8 +3,12 @@ import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw } from "lucide-react";
+import { ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw, ShieldOff } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
+
+const BLOCKED_SLUGS = new Set([
+  "ucsf", "duke", "umich", "mayo", "ucolorado", "columbia",
+]);
 
 type Institution = {
   slug: string;
@@ -89,6 +93,7 @@ export default function InstitutionDetail() {
 
   const assets = data?.assets ?? [];
   const activeCount = isLoading ? null : assets.length;
+  const isBlocked = BLOCKED_SLUGS.has(slug ?? "");
 
   return (
     <div className="min-h-full bg-background">
@@ -181,6 +186,17 @@ export default function InstitutionDetail() {
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-16 w-full rounded-lg" />
               ))}
+            </div>
+          ) : assets.length === 0 && isBlocked ? (
+            <div className="flex flex-col items-center gap-3 py-12 text-center">
+              <ShieldOff className="w-8 h-8 text-amber-500/60" />
+              <p className="text-sm font-medium text-foreground">Access Restricted</p>
+              <p className="text-xs text-muted-foreground/70 max-w-sm">
+                This institution&apos;s website blocks automated access from cloud hosting providers. Listings cannot be indexed automatically.
+              </p>
+              <a href={inst.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                Visit TTO website directly →
+              </a>
             </div>
           ) : assets.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">

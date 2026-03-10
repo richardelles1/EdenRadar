@@ -1,7 +1,9 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
 
-const BASE = "https://www.invo.northwestern.edu";
+const ALGOLIA_APP_ID = "JHR6AZA86G";
+const ALGOLIA_SEARCH_KEY = "f5c5e0e5bbcfbb7773c2b24b55e7f21c";
+const ALGOLIA_INDEX = "Prod_Inteum_TechnologyPublisher_nulive";
+const BASE = "https://inventions.invo.northwestern.edu";
 const INST = "Northwestern University";
 
 export const northwesternScraper: InstitutionScraper = {
@@ -11,29 +13,54 @@ export const northwesternScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      const urls = [
-        `${BASE}/technologies/`,
-        `${BASE}/technologies/?page=1`,
-        "https://tto.northwestern.edu/available-technologies/",
-      ];
+      const PAGE_SIZE = 1000;
+      let page = 0;
+      let totalPages = 1;
 
-      for (const url of urls) {
-        const $ = await fetchHtml(url);
-        if (!$) continue;
+      while (page < totalPages) {
+        const res = await fetch(
+          `https://${ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${ALGOLIA_INDEX}/query`,
+          {
+            method: "POST",
+            headers: {
+              "X-Algolia-Application-Id": ALGOLIA_APP_ID,
+              "X-Algolia-API-Key": ALGOLIA_SEARCH_KEY,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              query: "",
+              hitsPerPage: PAGE_SIZE,
+              page,
+              attributesToRetrieve: ["title", "Url", "descriptionTruncated"],
+            }),
+          }
+        );
 
-        $("article, .views-row, .technology, .tech-item, li.result").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
-          const title = cleanText(titleEl.text());
-          if (!title || title.length < 10 || seen.has(title)) return;
+        if (!res.ok) {
+          console.error(`[scraper] ${INST}: Algolia HTTP ${res.status}`);
+          break;
+        }
+
+        const data = await res.json() as { hits: any[]; nbPages: number; nbHits: number };
+        totalPages = data.nbPages ?? 1;
+
+        for (const hit of data.hits ?? []) {
+          const title = (hit.title ?? "").trim();
+          if (!title || title.length < 5 || seen.has(title)) continue;
           seen.add(title);
-          const href = titleEl.attr("href") ?? "";
+          const url = hit.Url
+            ? (hit.Url.startsWith("http") ? hit.Url : `${BASE}${hit.Url}`)
+            : `${BASE}/`;
           results.push({
             title,
-            description: cleanText($(el).find("p, .summary").first().text()) || title,
-            url: href ? resolveUrl(url, href) : url,
+            description: (hit.descriptionTruncated ?? title).slice(0, 300),
+            url,
             institution: INST,
           });
-        });
+        }
+
+        page++;
+        if (data.hits?.length === 0) break;
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);

@@ -42,11 +42,11 @@ server/
       duke.ts             # Duke OLV scraper
       columbia.ts         # Columbia TechVentures scraper
       upenn.ts            # Penn PCI scraper
-      northwestern.ts     # Northwestern TTO scraper
-      cornell.ts          # Cornell CTT scraper
-      ucberkeley.ts       # UC Berkeley IPIRA scraper
+      northwestern.ts     # Northwestern TTO scraper — Algolia API (761 hits)
+      cornell.ts          # Cornell CTL (no static listing — graceful no-op)
+      ucberkeley.ts       # UC Berkeley — JS-rendered ASP.NET (graceful no-op)
       uwashington.ts      # UW CoMotion scraper
-      wustl.ts            # WashU OTM scraper
+      wustl.ts            # WashU OTM scraper — /basic-tech-summary-search/ (668 listings)
       umich.ts            # UMich TechTransfer scraper
       mayo.ts             # Mayo Clinic Ventures scraper
       scripps.ts          # Scripps TTVD scraper
@@ -59,7 +59,7 @@ server/
       emory.ts            # Emory OTT scraper
       bu.ts               # BU OTD scraper
       georgetown.ts       # Georgetown OTL scraper
-      utexas.ts           # UT OTC scraper
+      utexas.ts           # UT Texas OTC scraper — utotc.technologypublisher.com (pagination broken, 10 results)
       cwru.ts             # CWRU TTO scraper
       ucolorado.ts        # CU Innovations scraper
     sources/

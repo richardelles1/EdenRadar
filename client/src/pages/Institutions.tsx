@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Building2, Search } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Building2, Search, ShieldOff } from "lucide-react";
 
 type Institution = {
   slug: string;
@@ -49,6 +50,10 @@ const INSTITUTIONS: Institution[] = [
 
 export { INSTITUTIONS };
 
+const BLOCKED_SLUGS = new Set([
+  "ucsf", "duke", "umich", "mayo", "ucolorado", "columbia",
+]);
+
 const SPECIALTY_COLORS: Record<string, string> = {
   "Oncology": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
   "Neuroscience": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
@@ -75,6 +80,9 @@ function InstitutionCard({
   count: number | null;
   countsLoading: boolean;
 }) {
+  const isBlocked = BLOCKED_SLUGS.has(inst.slug);
+  const showRestricted = !countsLoading && isBlocked && !count;
+
   return (
     <div
       className="flex flex-col gap-3 p-5 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
@@ -84,10 +92,23 @@ function InstitutionCard({
         <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
           <Building2 className="w-4 h-4 text-primary" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="font-semibold text-foreground leading-tight">{inst.name}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">{inst.city}</p>
         </div>
+        {showRestricted && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 cursor-help shrink-0">
+                <ShieldOff className="w-2.5 h-2.5" />
+                Restricted
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              This institution&apos;s website blocks automated access from cloud hosting providers
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">{inst.ttoName}</p>
@@ -110,6 +131,8 @@ function InstitutionCard({
             <Skeleton className="h-3 w-16 inline-block" />
           ) : count !== null && count > 0 ? (
             <><span className="font-semibold text-foreground">{count}</span> active listings</>
+          ) : showRestricted ? (
+            <span className="italic text-muted-foreground/60">Access restricted</span>
           ) : (
             <span className="italic text-muted-foreground/60">—</span>
           )}

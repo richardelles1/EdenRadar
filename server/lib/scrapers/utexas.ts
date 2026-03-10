@@ -1,7 +1,7 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText } from "./utils";
 
-const BASE = "https://research.utexas.edu";
+const BASE = "https://utotc.technologypublisher.com";
 const INST = "University of Texas";
 
 export const utexasScraper: InstitutionScraper = {
@@ -11,30 +11,27 @@ export const utexasScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      const urls = [
-        `${BASE}/ott/`,
-        `${BASE}/ott/technologies/`,
-        "https://uttech.utexas.edu/available-technologies/",
-      ];
-
-      for (const url of urls) {
+      for (let pg = 0; pg <= 60; pg++) {
+        const url = `${BASE}/SearchResults.aspx?type=Tech&q=&pg=${pg}`;
         const $ = await fetchHtml(url);
-        if (!$) continue;
+        if (!$) break;
 
-        $("article, .views-row, .technology, .tech-item, li.result").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
-          const title = cleanText(titleEl.text());
+        let pageCount = 0;
+        $("a.technology_title, h2 a[href*='/technology/']").each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const title = cleanText($(el).text());
           if (!title || title.length < 10 || seen.has(title)) return;
           seen.add(title);
-          const href = titleEl.attr("href") ?? "";
-          const base = new URL(url).origin;
+          pageCount++;
           results.push({
             title,
-            description: cleanText($(el).find("p, .summary").first().text()) || title,
-            url: href ? resolveUrl(base, href) : base,
+            description: title,
+            url: href.startsWith("http") ? href : `${BASE}${href}`,
             institution: INST,
           });
         });
+
+        if (pageCount === 0) break;
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);

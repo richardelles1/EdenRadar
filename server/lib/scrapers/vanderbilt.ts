@@ -1,7 +1,7 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText } from "./utils";
 
-const BASE = "https://ctt.vanderbilt.edu";
+const BASE = "https://vanderbilt.technologypublisher.com";
 const INST = "Vanderbilt University";
 
 export const vanderbiltScraper: InstitutionScraper = {
@@ -11,28 +11,27 @@ export const vanderbiltScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      const urls = [
-        `${BASE}/available-technologies/`,
-        `${BASE}/available-technologies/?page=1`,
-      ];
-
-      for (const url of urls) {
+      for (let pg = 0; pg <= 50; pg++) {
+        const url = `${BASE}/SearchResults.aspx?type=Tech&q=&pg=${pg}`;
         const $ = await fetchHtml(url);
-        if (!$) continue;
+        if (!$) break;
 
-        $("article, .views-row, .technology, .tech-item, li.result").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
-          const title = cleanText(titleEl.text());
+        let pageCount = 0;
+        $("h2 a[href*='/technology/']").each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const title = cleanText($(el).text());
           if (!title || title.length < 10 || seen.has(title)) return;
           seen.add(title);
-          const href = titleEl.attr("href") ?? "";
+          pageCount++;
           results.push({
             title,
-            description: cleanText($(el).find("p, .summary").first().text()) || title,
-            url: href ? resolveUrl(BASE, href) : BASE,
+            description: title,
+            url: href.startsWith("http") ? href : `${BASE}${href}`,
             institution: INST,
           });
         });
+
+        if (pageCount === 0) break;
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);

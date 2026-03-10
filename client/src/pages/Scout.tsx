@@ -116,6 +116,8 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
     );
   }
 
+  const updatedCount = (statusData.totalFound ?? 0) - (statusData.newCount ?? 0);
+
   return (
     <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-primary/15 bg-primary/5" data-testid="scan-status-bar">
       <div className="flex items-center gap-2 text-xs">
@@ -127,12 +129,17 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
         <span className="text-muted-foreground">
           <span className="text-foreground font-medium">{statusData.totalFound}</span> assets indexed
         </span>
-        {statusData.newCount > 0 && (
+        {statusData.newCount > 0 ? (
           <>
             <span className="text-muted-foreground/50">·</span>
             <span className="text-primary font-medium">+{statusData.newCount} new</span>
           </>
-        )}
+        ) : updatedCount > 0 ? (
+          <>
+            <span className="text-muted-foreground/50">·</span>
+            <span className="text-muted-foreground">{updatedCount} refreshed</span>
+          </>
+        ) : null}
       </div>
       <Button
         size="sm"

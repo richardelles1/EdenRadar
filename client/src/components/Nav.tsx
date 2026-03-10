@@ -20,8 +20,8 @@ export function Nav({ onOpenSaved }: NavProps) {
 
   const navLinks = [
     { href: "/", label: "Home" },
-    { href: "/discover", label: "Discover" },
-    { href: "/pipeline", label: "Pipeline" },
+    { href: "/scout", label: "Scout" },
+    { href: "/assets", label: "Assets" },
   ];
 
   return (
@@ -94,15 +94,15 @@ export function Nav({ onOpenSaved }: NavProps) {
               )}
             </Button>
           ) : (
-            <Link href="/pipeline">
+            <Link href="/assets">
               <Button
                 variant="outline"
                 size="sm"
                 className="gap-2 h-8 border-card-border relative"
-                data-testid="button-nav-pipeline"
+                data-testid="button-nav-assets"
               >
                 <Bookmark className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline text-xs">Pipeline</span>
+                <span className="hidden sm:inline text-xs">Assets</span>
                 {savedCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-bold">
                     {savedCount}
