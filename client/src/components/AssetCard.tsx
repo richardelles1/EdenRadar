@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
   Bookmark, BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
-  FlaskConical, FileText, Building2, Key, ArrowRight,
+  FlaskConical, FileText, Building2, Key, ArrowRight, CalendarDays,
 } from "lucide-react";
 import { ScoreBadge } from "./ScoreBadge";
 import { SourceBadge } from "./SourceBadge";
@@ -34,6 +34,16 @@ const MODALITY_COLORS: Record<string, string> = {
   "cell therapy": "bg-sky-500/15 text-sky-400 border-sky-500/30",
   protac: "bg-violet-500/15 text-violet-400 border-violet-500/30",
 };
+
+function formatSignalDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
+  const yearMatch = dateStr.match(/^(\d{4})/);
+  return yearMatch ? yearMatch[1] : "";
+}
 
 function getBadgeClass(map: Record<string, string>, value: string, fallback = "bg-muted text-muted-foreground border-border"): string {
   if (!value) return fallback;
@@ -168,13 +178,15 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               Available
             </span>
           )}
-          <span className="text-[11px] text-muted-foreground truncate">
-            {asset.evidence_count > 1
-              ? `${asset.evidence_count} signals`
-              : asset.latest_signal_date
-              ? new Date(asset.latest_signal_date).getFullYear() || asset.latest_signal_date
-              : ""}
-          </span>
+          {asset.evidence_count > 1 && (
+            <span className="text-[10px] text-muted-foreground shrink-0">{asset.evidence_count} signals</span>
+          )}
+          {asset.latest_signal_date && (
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0" data-testid={`text-date-${asset.id}`}>
+              <CalendarDays className="w-3 h-3 shrink-0 text-muted-foreground/60" />
+              {formatSignalDate(asset.latest_signal_date)}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {asset.source_urls?.[0] && (

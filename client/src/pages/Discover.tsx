@@ -4,14 +4,16 @@ import { useLocation } from "wouter";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { SavedAssetsPanel } from "@/components/SavedAssetsPanel";
-import { SearchHistoryPanel } from "@/components/SearchHistoryPanel";
 import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { Nav } from "@/components/Nav";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { X, FileBarChart2, Loader2 } from "lucide-react";
-import type { SavedAsset, SearchHistory } from "@shared/schema";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { FileBarChart2, Loader2 } from "lucide-react";
+import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 
@@ -31,10 +33,6 @@ type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
 
-type SearchHistoryResponse = {
-  history: SearchHistory[];
-};
-
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
@@ -42,6 +40,23 @@ const MODALITIES = [
   "small molecule", "antibody", "car-t", "gene therapy",
   "mrna therapy", "peptide", "bispecific antibody", "adc", "cell therapy", "protac",
 ];
+
+function getCutoffDate(filter: string): Date {
+  const now = Date.now();
+  if (filter === "30d") return new Date(now - 30 * 24 * 60 * 60 * 1000);
+  if (filter === "90d") return new Date(now - 90 * 24 * 60 * 60 * 1000);
+  if (filter === "1y") return new Date(now - 365 * 24 * 60 * 60 * 1000);
+  return new Date(0);
+}
+
+function parseDateLoose(dateStr: string | undefined): Date | null {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) return d;
+  const yearMatch = dateStr.match(/^(\d{4})/);
+  if (yearMatch) return new Date(`${yearMatch[1]}-07-01`);
+  return null;
+}
 
 function RadarOverlay({ sources }: { sources: string[] }) {
   return (
@@ -116,14 +131,16 @@ export default function Discover() {
   const [currentQuery, setCurrentQuery] = useState("");
   const [inputQuery, setInputQuery] = useState("");
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
-  const [stageFilter, setStageFilter] = useState<string | null>(null);
-  const [modalityFilter, setModalityFilter] = useState<string | null>(null);
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [modalityFilter, setModalityFilter] = useState<string>("all");
+  const [institutionFilter, setInstitutionFilter] = useState<string>("all");
+  const [sortMode, setSortMode] = useState<"score" | "recency">("score");
+  const [dateFilter, setDateFilter] = useState<string>("all");
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(DEFAULT_BUYER_PROFILE);
   const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SOURCE_KEYS);
 
   const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
-  const { data: historyData } = useQuery<SearchHistoryResponse>({ queryKey: ["/api/search-history"] });
 
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
@@ -142,9 +159,11 @@ export default function Discover() {
     onSuccess: (data) => {
       setSearchResults(data.assets);
       setHasSearched(true);
-      setStageFilter(null);
-      setModalityFilter(null);
-      qc.invalidateQueries({ queryKey: ["/api/search-history"] });
+      setStageFilter("all");
+      setModalityFilter("all");
+      setInstitutionFilter("all");
+      setSortMode("score");
+      setDateFilter("all");
       if (data.assets.length === 0) {
         toast({ title: "No assets found", description: "Try a different query or enable more sources." });
       }
@@ -219,7 +238,6 @@ export default function Discover() {
 
   const savedAssets = savedData?.assets ?? [];
   const sources = sourcesData?.sources ?? ALL_SOURCE_KEYS.map((id) => ({ id, label: id }));
-  const history = historyData?.history ?? [];
 
   const savedAssetIds = new Set(savedAssets.map((a) => a.pmid ?? a.assetName).filter(Boolean) as string[]);
 
@@ -236,10 +254,6 @@ export default function Discover() {
       return;
     }
     reportMutation.mutate({ query });
-  };
-
-  const handleSelectHistoryQuery = (query: string) => {
-    setInputQuery(query);
   };
 
   const handleUnsave = (id: string) => {
@@ -282,14 +296,6 @@ export default function Discover() {
     URL.revokeObjectURL(url);
   };
 
-  const filteredResults = useMemo(() => {
-    return searchResults.filter((asset) => {
-      const stageOk = !stageFilter || asset.development_stage?.toLowerCase() === stageFilter;
-      const modalityOk = !modalityFilter || asset.modality?.toLowerCase() === modalityFilter;
-      return stageOk && modalityOk;
-    });
-  }, [searchResults, stageFilter, modalityFilter]);
-
   const availableStages = useMemo(
     () => STAGES.filter((s) => searchResults.some((a) => a.development_stage?.toLowerCase() === s)),
     [searchResults]
@@ -298,8 +304,38 @@ export default function Discover() {
     () => MODALITIES.filter((m) => searchResults.some((a) => a.modality?.toLowerCase() === m)),
     [searchResults]
   );
+  const availableInstitutions = useMemo(() => {
+    const seen = new Set<string>();
+    return searchResults
+      .map((a) => a.institution)
+      .filter((inst): inst is string => !!inst && inst !== "unknown" && inst.length > 2)
+      .filter((inst) => { if (seen.has(inst)) return false; seen.add(inst); return true; })
+      .sort();
+  }, [searchResults]);
 
-  const hasFilters = stageFilter !== null || modalityFilter !== null;
+  const filteredResults = useMemo(() => {
+    const cutoff = getCutoffDate(dateFilter);
+    let results = searchResults.filter((asset) => {
+      const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
+      const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
+      const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
+      const dateOk = dateFilter === "all" || (() => {
+        const d = parseDateLoose(asset.latest_signal_date);
+        return d !== null && d >= cutoff;
+      })();
+      return stageOk && modalityOk && institutionOk && dateOk;
+    });
+    if (sortMode === "recency") {
+      results = [...results].sort((a, b) => {
+        const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
+        const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
+        return db - da;
+      });
+    }
+    return results;
+  }, [searchResults, stageFilter, modalityFilter, institutionFilter, dateFilter, sortMode]);
+
+  const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
   return (
@@ -353,12 +389,6 @@ export default function Discover() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
 
             <SourceSelector sources={sources} selected={selectedSources} onToggle={handleToggleSource} />
-
-            {history.length > 0 && (
-              <div className="max-w-3xl mx-auto">
-                <SearchHistoryPanel history={history} onSelectQuery={(q) => handleSelectHistoryQuery(q)} />
-              </div>
-            )}
           </div>
 
           {searchMutation.isPending && (
@@ -367,68 +397,88 @@ export default function Discover() {
             </div>
           )}
 
-          {!searchMutation.isPending && hasSearched && searchResults.length > 0 && (availableStages.length > 0 || availableModalities.length > 0) && (
-            <div className="px-4 sm:px-6 pb-3 space-y-2">
-              {availableStages.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide w-16 shrink-0">Stage</span>
-                  {availableStages.map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => setStageFilter(stageFilter === s ? null : s)}
-                      className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
-                        stageFilter === s
-                          ? "border-primary bg-primary/15 text-primary font-medium"
-                          : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                      }`}
-                      data-testid={`filter-stage-${s.replace(/\s+/g, "-")}`}
-                    >
-                      {s}
-                    </button>
-                  ))}
+          {showControls && (
+            <div className="px-4 sm:px-6 pb-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Sort</span>
+                  <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
+                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[130px] focus:ring-0 focus:ring-offset-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="score">Best Match</SelectItem>
+                      <SelectItem value="recency">Newest First</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-              {availableModalities.length > 0 && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide w-16 shrink-0">Modality</span>
-                  {availableModalities.map((m) => (
-                    <button
-                      key={m}
-                      onClick={() => setModalityFilter(modalityFilter === m ? null : m)}
-                      className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
-                        modalityFilter === m
-                          ? "border-primary bg-primary/15 text-primary font-medium"
-                          : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                      }`}
-                      data-testid={`filter-modality-${m.replace(/\s+/g, "-")}`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                  {hasFilters && (
-                    <button
-                      onClick={() => { setStageFilter(null); setModalityFilter(null); }}
-                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                      data-testid="button-clear-filters"
-                    >
-                      <X className="w-3 h-3" />
-                      Clear
-                    </button>
-                  )}
+
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Date</span>
+                  <Select value={dateFilter} onValueChange={setDateFilter} data-testid="select-date">
+                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[120px] focus:ring-0 focus:ring-offset-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="30d">Last 30 Days</SelectItem>
+                      <SelectItem value="90d">Last 90 Days</SelectItem>
+                      <SelectItem value="1y">Last Year</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
-              {hasFilters && availableModalities.length === 0 && (
-                <div className="flex">
-                  <button
-                    onClick={() => { setStageFilter(null); setModalityFilter(null); }}
-                    className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-all duration-150"
-                    data-testid="button-clear-filters"
-                  >
-                    <X className="w-3 h-3" />
-                    Clear
-                  </button>
-                </div>
-              )}
+
+                {availableStages.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Stage</span>
+                    <Select value={stageFilter} onValueChange={setStageFilter} data-testid="filter-stage-select">
+                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[130px] focus:ring-0 focus:ring-offset-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Stages</SelectItem>
+                        {availableStages.map((s) => (
+                          <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {availableModalities.length > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Modality</span>
+                    <Select value={modalityFilter} onValueChange={setModalityFilter} data-testid="filter-modality-select">
+                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[150px] focus:ring-0 focus:ring-offset-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Modalities</SelectItem>
+                        {availableModalities.map((m) => (
+                          <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {availableInstitutions.length > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Institution</span>
+                    <Select value={institutionFilter} onValueChange={setInstitutionFilter} data-testid="filter-institution-select">
+                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[160px] focus:ring-0 focus:ring-offset-0">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Institutions</SelectItem>
+                        {availableInstitutions.map((inst) => (
+                          <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
