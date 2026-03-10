@@ -1,0 +1,87 @@
+I'm really excited about where this platform is heading. I think it could serve not only founders and established biopharma companies but also researchers in a meaningful way. Below are some thoughts on improving the current portal and how I think we could structure two distinct user experiences to unlock better revenue streams.
+ 
+1: Improving the Current "Scout" Portal
+Goal: Help users find the needle in the haystack.
+Portal Name
+I really like the "Rader" part—it conveys scanning, detection, and discovery in a way that feels intuitive.
+I'm less sure about "Halix." It feels a bit ambiguous to me and could refer to too many things, which might make it less clear and memorable for users.
+A couple of suggestions I've been thinking about:
+• EdenRader – I like the imagery of a "garden" of early-stage research, with "Rader" scanning everything within it. It feels approachable yet purposeful.
+• CortexRader – "Cortex" suggests intelligence, which aligns nicely with our AI-driven platform. I feel like it implies smart, sophisticated scanning of the research landscape.
+Data Coverage Indicator
+I feel like data coverage is one of the most important aspects of this idea. If we add a small globe icon next to the search bar that says:
+Coverage: 208 TTOs
+With a tooltip like:
+"We add new tech transfer offices weekly. Your search currently covers [X] universities, including [list a few major ones]."
+I think this would manage expectations while also highlighting our momentum. It turns a potential limitation into something we can be proud of.
+Supercharge Search & Filtering
+Since we're searching eight different sources, I worry about duplication and noise. How do we prevent that?
+I suggest we add a filter sidebar that lets users limit results to specific sources (if they want)—like "Stanford TTO only" or "NIH Grants only." I feel like this gives users the flexibility to search the entire research garden or just one section, depending on what they need.
+Beyond text filters, here are some ideas I'd love to explore in the future:
+• Filter by Readiness Score – e.g., show only studies with a score above 80. I think our scoring model is a huge differentiator, so let's put it front and center.
+• Filter by Commercial Vector – e.g., "Small Molecules" or "Cell Therapies." This feels essential for pharma users.
+• Filter by Top Institution – Let users see which universities are most active in a specific therapeutic area. I think this adds a layer of strategic insight.
+Contact Info:
+I also think we should make it easy for users to extract contact information—emails, university names, etc.—so they can actually connect with researchers for collaboration. If we don't facilitate that connection, we're leaving value on the table.
+ 
+Part 2: Designing Two Portals on the Same Website
+I feel like this is where we can really build something sustainable. Two portals, one platform, multiple revenue streams.
+Portal A: The "Researcher" Portal (Low-Cost, Assistive Tool)
+I'm thinking we could call this ResearchCompass or any other name that aligns with the scope of this portal.
+Goal: I want this to become an indispensable AI-powered assistant for academics—something they use daily.
+Core Features (to start):
+1. AI-Powered Literature Summaries – I think this alone would save researchers hours each week.
+2. Grant Writing Assistant – Maybe a future goal, but I want to keep it on our radar.
+3. "Find a Collaborator" Search – I love this idea. Let researchers find others working on similar topics within our onboarded universities. They can see potential collaborators, not just assets to buy.
+4. Personalized "Research Briefing" – A weekly email digest summarizing new pre-prints, grants, or TTO disclosures that match their field. I feel like this builds habit and loyalty.
+Pricing: I'm thinking a low-cost subscription around $35/month/person for unlimited access and advanced features. Imagine if a university buys a subscription for multiple departments!
+ 
+Portal B: The "Asset Scout" Portal (Premium, Deal-Flow Engine)
+This is really our refined current portal—but tailored specifically for BD&L professionals, VCs, and founders.
+Goal: I want this to become the definitive source for out-licensing opportunities.
+Name Idea: I've been calling it DealFinder in my head—it feels direct and clear and most importantly-it speaks business.
+Core Features I'd love to build:
+1. "Deal Flow Alerts" – Let users set saved searches (e.g., "Cell therapies for solid tumors from top-20 research universities"). When a new matching asset enters the system, they get an email alert with an executive summary. I feel like this alone would justify the subscription price.
+2. "Savable" & "Trackable" Assets – Users should be able to create lists (e.g., "Oncology Q3 Review") and set reminders to check on an asset in 6 months. I think this keeps them coming back.
+3. TTO Office Intelligence – A dashboard showing which TTOs are most active, their strengths, and how quickly they move. For example: "Stanford has disclosed 15 new immuno-oncology assets in the last 6 months." I feel like this turns data into real intelligence.
+4. Direct Connect (Optional Premium) – A concierge service or in-app messaging feature to request introductions to TTOs or PIs. If we can facilitate that connection, we become indispensable.
+ 
+Summary: My Two-Pronged Strategy Idea
+I've been thinking about this as EdenRader or CortexRader as the umbrella brand, with two distinct portals underneath.
+Feature
+
+Portal A: ResearchCompass
+
+Portal B: DealFinder
+
+Target User
+
+PhD Students, Postdocs, Professors
+
+Biz Dev, VCs, Entrepreneurs
+
+Core Need
+
+Save time reading, find grants, find collaborators
+
+Find and evaluate acquisition/licensing targets
+
+Key Function
+
+PDF Summarizer, Grant Assistant, Collaborator Search
+
+Advanced Filters, Readiness Score, Deal Alerts
+
+AI Focus
+
+Explanation & Comprehension
+
+Evaluation & Prioritization
+
+Pricing Model
+
+$35/month Subscription
+
+Higher Subscription / Enterprise License
+
+ 
