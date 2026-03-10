@@ -1,0 +1,366 @@
+Yes — that framing is right:
+	•	8 source types
+	•	28 tech transfer offices inside the Tech Transfer source family
+
+So in product language:
+
+8 source categories · 28 university TTOs indexed
+
+That’s cleaner than making TTOs sound like separate source types.
+
+Now for the file tree after login — this is where we want to be disciplined, because this product can get messy fast.
+
+Product structure after login
+
+After auth, I’d structure Eden Radar around four core surfaces:
+	1.	Scout — search and discovery
+	2.	Assets — saved / tracked assets
+	3.	Reports — generated opportunity briefs and buyer reports
+	4.	Research Network — researcher / TTO / institution records
+	5.	Account / Workspace — user settings, alerts, saved theses
+
+That gives you a clean spine.
+
+⸻
+
+Recommended app file tree
+
+Assuming Next.js App Router + Supabase auth, I’d do this:
+
+/app
+  /(marketing)
+    page.tsx
+    about/page.tsx
+    pricing/page.tsx
+    demo/page.tsx
+
+  /(auth)
+    login/page.tsx
+    signup/page.tsx
+    forgot-password/page.tsx
+
+  /(dashboard)
+    layout.tsx
+    page.tsx                       // post-login home / overview
+
+    scout/
+      page.tsx                     // main search experience
+      loading.tsx
+      [searchId]/
+        page.tsx                   // optional saved search session
+
+    assets/
+      page.tsx                     // saved / tracked assets list
+      [assetId]/
+        page.tsx                   // asset dossier page
+
+    reports/
+      page.tsx                     // report library
+      [reportId]/
+        page.tsx                   // full report view
+
+    alerts/
+      page.tsx                     // saved alerts / radar alerts
+
+    institutions/
+      page.tsx                     // institution/TTO directory
+      [institutionId]/
+        page.tsx                   // institution intelligence page
+
+    researchers/
+      page.tsx                     // researcher / PI directory
+      [researcherId]/
+        page.tsx                   // researcher profile page
+
+    thesis/
+      page.tsx                     // buyer thesis manager
+      [thesisId]/
+        page.tsx                   // individual saved thesis
+
+    workspace/
+      page.tsx                     // org/workspace settings
+      members/page.tsx
+      billing/page.tsx
+
+    settings/
+      page.tsx                     // user settings
+
+    bookmarks/
+      page.tsx                     // quick saves / bookmarks
+
+    onboarding/
+      page.tsx                     // first-run buyer setup
+
+  /api
+    auth/
+      callback/route.ts
+
+    scout/
+      search/route.ts
+      suggest/route.ts
+      filters/route.ts
+
+    assets/
+      save/route.ts
+      track/route.ts
+      dossier/route.ts
+      claim/route.ts
+
+    reports/
+      generate/route.ts
+      list/route.ts
+      export/route.ts
+
+    alerts/
+      create/route.ts
+      update/route.ts
+      delete/route.ts
+
+    institutions/
+      list/route.ts
+      detail/route.ts
+
+    researchers/
+      list/route.ts
+      detail/route.ts
+      invite/route.ts
+
+    thesis/
+      create/route.ts
+      update/route.ts
+      list/route.ts
+
+    ingestion/
+      pubmed/route.ts
+      biorxiv/route.ts
+      medrxiv/route.ts
+      trials/route.ts
+      patents/route.ts
+      tech-transfer/route.ts
+      nih-reporter/route.ts
+      openalex/route.ts
+
+
+⸻
+
+Supporting folders
+
+These matter just as much:
+
+/components
+  auth/
+    LoginForm.tsx
+    SignupForm.tsx
+
+  dashboard/
+    Sidebar.tsx
+    Topbar.tsx
+    CoverageBadge.tsx
+    SourceBadge.tsx
+
+  scout/
+    SearchBar.tsx
+    BuyerThesisPanel.tsx
+    SourceFilterBar.tsx
+    ReadinessFilter.tsx
+    SearchResultsGrid.tsx
+    SearchResultCard.tsx
+
+  assets/
+    AssetCard.tsx
+    AssetHeader.tsx
+    AssetScoreBreakdown.tsx
+    AssetSignalList.tsx
+    SaveAssetButton.tsx
+    TrackAssetButton.tsx
+
+  reports/
+    ReportCard.tsx
+    ReportHeader.tsx
+    OpportunityTable.tsx
+    ExportReportButton.tsx
+
+  institutions/
+    InstitutionCard.tsx
+    InstitutionStats.tsx
+    TTOCoverageTable.tsx
+
+  researchers/
+    ResearcherCard.tsx
+    ContactPanel.tsx
+
+  alerts/
+    AlertForm.tsx
+    AlertCard.tsx
+
+/lib
+  auth/
+    getUser.ts
+    getWorkspace.ts
+    requireUser.ts
+
+  supabase/
+    client.ts
+    server.ts
+    middleware.ts
+
+  scout/
+    collectSignals.ts
+    normalizeSignals.ts
+    clusterAssets.ts
+    scoreAssets.ts
+    rankAssets.ts
+
+  sources/
+    pubmed.ts
+    biorxiv.ts
+    medrxiv.ts
+    clinicaltrials.ts
+    patents.ts
+    techTransfer/
+      index.ts
+      stanford.ts
+      mit.ts
+      oxford.ts
+      ucsf.ts
+      michigan.ts
+
+    nihReporter.ts
+    openalex.ts
+
+  reports/
+    generateReport.ts
+    generateDossier.ts
+    exportPdf.ts
+
+  alerts/
+    matchAlerts.ts
+    sendAlertEmail.ts
+
+  institutions/
+    summarizeInstitution.ts
+
+  researchers/
+    extractContacts.ts
+
+  scoring/
+    readinessScore.ts
+    licensabilityScore.ts
+    noveltyScore.ts
+    fitScore.ts
+
+  llm/
+    extractAsset.ts
+    summarizeAsset.ts
+    generateWhyItMatters.ts
+    generateReportNarrative.ts
+
+  types/
+    asset.ts
+    signal.ts
+    institution.ts
+    researcher.ts
+    report.ts
+    thesis.ts
+    alert.ts
+
+/hooks
+  useScoutSearch.ts
+  useSavedAssets.ts
+  useAlerts.ts
+  useBuyerThesis.ts
+
+/store
+  scoutStore.ts
+  thesisStore.ts
+  workspaceStore.ts
+
+
+⸻
+
+What the logged-in nav should be
+
+Keep it simple. I’d make the sidebar:
+
+Scout
+Assets
+Reports
+Alerts
+Institutions
+Researchers
+Workspace
+Settings
+
+That’s clean and expandable.
+
+⸻
+
+What should happen immediately after login
+
+Do not dump users onto a blank dashboard.
+
+Route them like this:
+
+First-time user
+
+/onboarding
+
+Collect:
+	•	therapeutic areas
+	•	modality preferences
+	•	stage preferences
+	•	university vs company preference
+	•	alert interest
+
+Then save a default buyer thesis.
+
+Returning user
+
+/scout
+
+Open directly into the engine.
+
+That keeps momentum high.
+
+⸻
+
+My opinion on the most important logged-in pages
+
+If we’re being ruthless, the most important post-login pages are only these 5:
+
+/scout
+/assets/[assetId]
+/reports/[reportId]
+/alerts
+/institutions/[institutionId]
+
+Everything else is support structure.
+
+⸻
+
+The biggest structural rule
+
+After login, everything should be organized around objects, not pages:
+	•	Asset
+	•	Institution
+	•	Researcher
+	•	Report
+	•	Buyer Thesis
+	•	Alert
+
+That keeps the platform coherent as it grows.
+
+⸻
+
+My CTO recommendation
+
+Build post-login in this order:
+	1.	/scout
+	2.	/assets/[assetId]
+	3.	/reports/[reportId]
+	4.	/alerts
+	5.	/institutions/[institutionId]
+
+That gives you the whole spine without wandering into pretty-dashboard land.
+
+Next move: I’d map the Supabase tables to match this exact tree so Replit doesn’t invent chaos.
