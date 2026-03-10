@@ -1,0 +1,136 @@
+import { Skeleton } from "@/components/ui/skeleton";
+import { AssetCard } from "./AssetCard";
+import { FlaskConical, SearchX, Microscope } from "lucide-react";
+import type { Asset } from "@shared/schema";
+
+type SearchResultsProps = {
+  assets: Asset[];
+  isLoading: boolean;
+  hasSearched: boolean;
+  query?: string;
+  savedAssetIds: Set<string>;
+  onSave: (asset: Asset) => void;
+  onUnsave: (pmid?: string, assetName?: string) => void;
+};
+
+function LoadingSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="border border-card-border rounded-lg p-5 bg-card flex flex-col gap-3">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 flex-1">
+              <Skeleton className="w-8 h-8 rounded-md" />
+              <Skeleton className="h-4 flex-1" />
+            </div>
+            <Skeleton className="w-8 h-8 rounded-md" />
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-20 rounded-sm" />
+            <Skeleton className="h-5 w-24 rounded-sm" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-10" />
+              <Skeleton className="h-4 w-24" />
+            </div>
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-14" />
+              <Skeleton className="h-4 w-20" />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-full" />
+            <Skeleton className="h-3 w-3/4" />
+          </div>
+          <div className="border-t border-card-border pt-3 flex items-center justify-between">
+            <div className="space-y-1">
+              <Skeleton className="h-3 w-32" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-4 w-10" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SearchResults({ assets, isLoading, hasSearched, query, savedAssetIds, onSave, onUnsave }: SearchResultsProps) {
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Microscope className="w-4 h-4 animate-pulse text-primary" />
+          <span>Analyzing research papers with AI...</span>
+        </div>
+        <LoadingSkeleton />
+      </div>
+    );
+  }
+
+  if (!hasSearched) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+          <FlaskConical className="w-8 h-8 text-primary" />
+        </div>
+        <div>
+          <h3 className="text-lg font-semibold text-foreground mb-1">Start Your Discovery</h3>
+          <p className="text-muted-foreground text-sm max-w-sm">
+            Search biomedical literature and let AI extract structured drug asset intelligence from research papers.
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+          {["Oncology", "Rare Disease", "Metabolic", "CNS", "Inflammation"].map((area) => (
+            <span key={area} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
+              {area}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (assets.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+        <div className="w-14 h-14 rounded-2xl bg-muted/50 flex items-center justify-center">
+          <SearchX className="w-7 h-7 text-muted-foreground" />
+        </div>
+        <div>
+          <h3 className="text-base font-semibold text-foreground mb-1">No assets found</h3>
+          <p className="text-muted-foreground text-sm">
+            No extractable drug assets found for <span className="text-foreground font-medium">"{query}"</span>.
+            Try refining your query.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const savedKey = (asset: Asset) => asset.pmid ?? asset.asset_name;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Found <span className="text-foreground font-semibold">{assets.length}</span> drug asset{assets.length !== 1 ? "s" : ""} from
+          {query ? <> "<span className="text-foreground">{query}</span>"</> : " your search"}
+        </p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {assets.map((asset, idx) => (
+          <AssetCard
+            key={`${asset.pmid ?? idx}-${asset.asset_name}`}
+            asset={asset}
+            isSaved={savedAssetIds.has(savedKey(asset))}
+            onSave={onSave}
+            onUnsave={onUnsave}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
