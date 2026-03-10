@@ -2,9 +2,29 @@ import OpenAI from "openai";
 import type { RawPaper } from "./sources/index";
 import type { Asset } from "@shared/schema";
 
+if (!process.env.OPENAI_API_KEY) {
+  console.warn("WARNING: OPENAI_API_KEY is not set. AI extraction will fail.");
+}
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+function isFatalOpenAIError(err: unknown): boolean {
+  if (err instanceof OpenAI.AuthenticationError) return true;
+  if (err instanceof OpenAI.PermissionDeniedError) return true;
+  if (err instanceof OpenAI.RateLimitError) return true;
+  if (err instanceof OpenAI.BadRequestError) return false;
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    msg.includes("401") ||
+    msg.includes("403") ||
+    msg.includes("Incorrect API key") ||
+    msg.includes("invalid_api_key") ||
+    msg.includes("quota") ||
+    msg.includes("insufficient_quota")
+  );
+}
 
 async function extractAssetFromPaper(paper: RawPaper): Promise<Asset | null> {
   if (!paper.abstract || paper.abstract === "No abstract available.") return null;
@@ -52,6 +72,9 @@ ${paper.abstract}`;
       pmid: paper.pmid,
     };
   } catch (err) {
+    if (isFatalOpenAIError(err)) {
+      throw err;
+    }
     console.error("Extraction error for paper", paper.pmid, err);
     return null;
   }
@@ -61,7 +84,7 @@ async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
   concurrency: number
 ): Promise<T[]> {
-  const results: T[] = [];
+  const results: T[] = new Array(tasks.length);
   let index = 0;
 
   async function runNext(): Promise<void> {

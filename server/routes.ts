@@ -4,6 +4,18 @@ import { storage } from "./storage";
 import { getSource, dataSources } from "./lib/sources/index";
 import { extractAssetsFromPapers } from "./lib/extractor";
 import { z } from "zod";
+import OpenAI from "openai";
+
+function friendlyOpenAIError(err: unknown): string {
+  if (err instanceof OpenAI.AuthenticationError || (err instanceof Error && (err.message.includes("401") || err.message.includes("invalid_api_key") || err.message.includes("Incorrect API key")))) {
+    return "OpenAI API key is invalid. Please check the OPENAI_API_KEY secret in your Replit settings.";
+  }
+  if (err instanceof OpenAI.RateLimitError || (err instanceof Error && (err.message.includes("429") || err.message.includes("quota") || err.message.includes("insufficient_quota")))) {
+    return "OpenAI quota exceeded or rate limited. Please check your OpenAI account billing.";
+  }
+  if (err instanceof Error) return err.message;
+  return "Search failed. Please try again.";
+}
 
 const searchBodySchema = z.object({
   query: z.string().min(1).max(500),
@@ -56,7 +68,7 @@ export async function registerRoutes(
       return res.json({ assets, query, source, papersFound: papers.length });
     } catch (err: any) {
       console.error("Search error:", err);
-      return res.status(500).json({ error: err.message ?? "Search failed" });
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
     }
   });
 
