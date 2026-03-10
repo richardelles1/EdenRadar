@@ -368,38 +368,57 @@ export default function Discover() {
           )}
 
           {!searchMutation.isPending && hasSearched && searchResults.length > 0 && (availableStages.length > 0 || availableModalities.length > 0) && (
-            <div className="px-4 sm:px-6 pb-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide shrink-0">Filter:</span>
-                {availableStages.map((s) => (
-                  <button
-                    key={s}
-                    onClick={() => setStageFilter(stageFilter === s ? null : s)}
-                    className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
-                      stageFilter === s
-                        ? "border-primary bg-primary/15 text-primary font-medium"
-                        : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                    }`}
-                    data-testid={`filter-stage-${s.replace(/\s+/g, "-")}`}
-                  >
-                    {s}
-                  </button>
-                ))}
-                {availableModalities.map((m) => (
-                  <button
-                    key={m}
-                    onClick={() => setModalityFilter(modalityFilter === m ? null : m)}
-                    className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
-                      modalityFilter === m
-                        ? "border-primary bg-primary/15 text-primary font-medium"
-                        : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                    }`}
-                    data-testid={`filter-modality-${m.replace(/\s+/g, "-")}`}
-                  >
-                    {m}
-                  </button>
-                ))}
-                {hasFilters && (
+            <div className="px-4 sm:px-6 pb-3 space-y-2">
+              {availableStages.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide w-16 shrink-0">Stage</span>
+                  {availableStages.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setStageFilter(stageFilter === s ? null : s)}
+                      className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
+                        stageFilter === s
+                          ? "border-primary bg-primary/15 text-primary font-medium"
+                          : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      }`}
+                      data-testid={`filter-stage-${s.replace(/\s+/g, "-")}`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {availableModalities.length > 0 && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs text-muted-foreground font-semibold uppercase tracking-wide w-16 shrink-0">Modality</span>
+                  {availableModalities.map((m) => (
+                    <button
+                      key={m}
+                      onClick={() => setModalityFilter(modalityFilter === m ? null : m)}
+                      className={`text-xs px-3 py-1 rounded-full border transition-all duration-150 capitalize ${
+                        modalityFilter === m
+                          ? "border-primary bg-primary/15 text-primary font-medium"
+                          : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      }`}
+                      data-testid={`filter-modality-${m.replace(/\s+/g, "-")}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                  {hasFilters && (
+                    <button
+                      onClick={() => { setStageFilter(null); setModalityFilter(null); }}
+                      className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-all duration-150"
+                      data-testid="button-clear-filters"
+                    >
+                      <X className="w-3 h-3" />
+                      Clear
+                    </button>
+                  )}
+                </div>
+              )}
+              {hasFilters && availableModalities.length === 0 && (
+                <div className="flex">
                   <button
                     onClick={() => { setStageFilter(null); setModalityFilter(null); }}
                     className="flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border border-destructive/30 bg-destructive/5 text-destructive hover:bg-destructive/10 transition-all duration-150"
@@ -408,8 +427,8 @@ export default function Discover() {
                     <X className="w-3 h-3" />
                     Clear
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -16,7 +16,7 @@ AI-powered biotech asset matchmaking platform. Ingests signals from multiple sou
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Three-tier model strategy**: gpt-4o-mini for paper/preprint/trial extraction; gpt-4o for patent + tech_transfer extraction (higher quality for dense text) + report/dossier narratives; mini fallback on gpt-4o errors
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
-- **Tech Transfer**: Adapter pattern with curated seed data (18 institutions, ~144 listings). Future live scraping swappable per-adapter.
+- **Tech Transfer**: Adapter pattern with curated seed data (28 institutions, ~224 listings). Future live scraping swappable per-adapter.
 - **NIH Reporter**: Live API (api.reporter.nih.gov/v2) for NIH-funded research projects (2023–2025) — no API key required, leading-edge signal of funded science before it becomes papers.
 - **OpenAlex**: Live API (api.openalex.org) for scholarly papers beyond PubMed coverage — no API key, 3-year rolling window, broader journal coverage.
 - **ClinicalTrials structured passthrough**: Known structured fields (indication, stage, owner, owner_type) applied directly before/after LLM extraction to prevent re-extraction errors
