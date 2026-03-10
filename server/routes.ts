@@ -1,26 +1,60 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { getSource, dataSources } from "./lib/sources/index";
-import { extractAssetsFromPapers } from "./lib/extractor";
+import { dataSources, collectAllSignals, type SourceKey } from "./lib/sources/index";
+import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
+import { clusterAssets } from "./lib/pipeline/clusterAssets";
+import { scoreAssets } from "./lib/pipeline/scoreAssets";
+import { generateReport } from "./lib/pipeline/generateReport";
+import { generateDossier } from "./lib/pipeline/generateDossier";
+import { isFatalOpenAIError } from "./lib/llm";
+import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import OpenAI from "openai";
 
 function friendlyOpenAIError(err: unknown): string {
-  if (err instanceof OpenAI.AuthenticationError || (err instanceof Error && (err.message.includes("401") || err.message.includes("invalid_api_key") || err.message.includes("Incorrect API key")))) {
-    return "OpenAI API key is invalid. Please check the OPENAI_API_KEY secret in your Replit settings.";
-  }
-  if (err instanceof OpenAI.RateLimitError || (err instanceof Error && (err.message.includes("429") || err.message.includes("quota") || err.message.includes("insufficient_quota")))) {
-    return "OpenAI quota exceeded or rate limited. Please check your OpenAI account billing.";
+  if (isFatalOpenAIError(err)) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("401") || msg.includes("invalid_api_key") || msg.includes("Incorrect API key")) {
+      return "OpenAI API key is invalid. Please check the OPENAI_API_KEY secret in your Replit settings.";
+    }
+    if (msg.includes("429") || msg.includes("quota") || msg.includes("insufficient_quota")) {
+      return "OpenAI quota exceeded or rate limited. Please check your OpenAI account billing.";
+    }
   }
   if (err instanceof Error) return err.message;
   return "Search failed. Please try again.";
 }
 
+const ALL_SOURCES: SourceKey[] = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer"];
+
+const buyerProfileSchema = z.object({
+  therapeutic_areas: z.array(z.string()).default([]),
+  modalities: z.array(z.string()).default([]),
+  preferred_stages: z.array(z.string()).default([]),
+  excluded_stages: z.array(z.string()).default([]),
+  owner_type_preference: z.enum(["university", "company", "any"]).default("any"),
+  freshness_days: z.number().int().min(1).max(3650).default(365),
+  indication_keywords: z.array(z.string()).default([]),
+  target_keywords: z.array(z.string()).default([]),
+  notes: z.string().default(""),
+}).optional();
+
 const searchBodySchema = z.object({
   query: z.string().min(1).max(500),
-  source: z.string().default("pubmed"),
-  maxResults: z.number().int().min(1).max(20).default(10),
+  sources: z.array(z.string()).default(ALL_SOURCES),
+  maxPerSource: z.number().int().min(1).max(15).default(8),
+  buyerProfile: buyerProfileSchema,
+});
+
+const reportBodySchema = z.object({
+  query: z.string().min(1).max(500),
+  sources: z.array(z.string()).default(ALL_SOURCES),
+  maxPerSource: z.number().int().min(1).max(10).default(6),
+  buyerProfile: buyerProfileSchema,
+});
+
+const dossierBodySchema = z.object({
+  asset: z.any(),
 });
 
 const saveAssetBodySchema = z.object({
@@ -38,6 +72,18 @@ const saveAssetBodySchema = z.object({
   pmid: z.string().optional(),
 });
 
+const DEFAULT_BUYER_PROFILE: BuyerProfile = {
+  therapeutic_areas: [],
+  modalities: [],
+  preferred_stages: [],
+  excluded_stages: [],
+  owner_type_preference: "any",
+  freshness_days: 365,
+  indication_keywords: [],
+  target_keywords: [],
+  notes: "",
+};
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -53,21 +99,77 @@ export async function registerRoutes(
 
   app.post("/api/search", async (req, res) => {
     try {
-      const { query, source, maxResults } = searchBodySchema.parse(req.body);
-      const dataSource = getSource(source);
-      const papers = await dataSource.search(query, maxResults);
+      const { query, sources, maxPerSource, buyerProfile } = searchBodySchema.parse(req.body);
+      const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
+      const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
 
-      if (papers.length === 0) {
-        await storage.createSearchHistory({ query, source, resultCount: 0 });
-        return res.json({ assets: [], query, source, papersFound: 0 });
+      const signals = await collectAllSignals(query, effectiveSources, maxPerSource);
+
+      if (signals.length === 0) {
+        await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
+        return res.json({ assets: [], query, sources: effectiveSources, signalsFound: 0 });
       }
 
-      const assets = await extractAssetsFromPapers(papers);
-      await storage.createSearchHistory({ query, source, resultCount: assets.length });
+      const normalized = await normalizeSignals(signals);
+      const clustered = clusterAssets(normalized);
+      const profile = buyerProfile ?? DEFAULT_BUYER_PROFILE;
+      const scored = await scoreAssets(clustered, profile);
 
-      return res.json({ assets, query, source, papersFound: papers.length });
+      await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: scored.length });
+
+      return res.json({
+        assets: scored,
+        query,
+        sources: effectiveSources,
+        signalsFound: signals.length,
+        assetsFound: scored.length,
+      });
     } catch (err: any) {
       console.error("Search error:", err);
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
+  app.post("/api/report", async (req, res) => {
+    try {
+      const { query, sources, maxPerSource, buyerProfile } = reportBodySchema.parse(req.body);
+      const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
+      const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
+      const profile = buyerProfile ?? DEFAULT_BUYER_PROFILE;
+
+      const signals = await collectAllSignals(query, effectiveSources, maxPerSource);
+      if (signals.length === 0) {
+        return res.json({
+          title: `HelixRadar Report: ${query}`,
+          executive_summary: "No signals found for this query.",
+          buyer_profile_summary: "",
+          top_assets: [],
+          narrative: "",
+          query,
+          generated_at: new Date().toISOString(),
+        });
+      }
+
+      const normalized = await normalizeSignals(signals);
+      const clustered = clusterAssets(normalized);
+      const scored = await scoreAssets(clustered, profile);
+      const report = await generateReport(scored, query, profile);
+
+      return res.json(report);
+    } catch (err: any) {
+      console.error("Report error:", err);
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
+  app.post("/api/dossier", async (req, res) => {
+    try {
+      const { asset } = dossierBodySchema.parse(req.body);
+      if (!asset) return res.status(400).json({ error: "Asset required" });
+      const dossier = await generateDossier(asset as ScoredAsset);
+      return res.json(dossier);
+    } catch (err: any) {
+      console.error("Dossier error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
     }
   });

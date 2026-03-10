@@ -2,16 +2,15 @@ import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Bookmark, BookmarkCheck, ExternalLink, ChevronDown, ChevronUp, FlaskConical } from "lucide-react";
-import type { Asset, SavedAsset } from "@shared/schema";
-
-type AssetCardProps = {
-  asset: Asset;
-  isSaved?: boolean;
-  onSave?: (asset: Asset) => void;
-  onUnsave?: (pmid?: string, assetName?: string) => void;
-  savedId?: number;
-};
+import {
+  Bookmark, BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
+  FlaskConical, FileText, Building2, Key, ArrowRight,
+} from "lucide-react";
+import { ScoreBadge } from "./ScoreBadge";
+import { SourceBadge } from "./SourceBadge";
+import type { ScoredAsset } from "@/lib/types";
+import type { SavedAsset } from "@shared/schema";
+import { useLocation } from "wouter";
 
 const STAGE_COLORS: Record<string, string> = {
   discovery: "bg-violet-500/15 text-violet-400 border-violet-500/30",
@@ -31,49 +30,72 @@ const MODALITY_COLORS: Record<string, string> = {
   "mrna therapy": "bg-orange-500/15 text-orange-400 border-orange-500/30",
   peptide: "bg-pink-500/15 text-pink-400 border-pink-500/30",
   "bispecific antibody": "bg-purple-500/15 text-purple-400 border-purple-500/30",
+  adc: "bg-lime-500/15 text-lime-400 border-lime-500/30",
+  "cell therapy": "bg-sky-500/15 text-sky-400 border-sky-500/30",
+  protac: "bg-violet-500/15 text-violet-400 border-violet-500/30",
 };
 
 function getBadgeClass(map: Record<string, string>, value: string, fallback = "bg-muted text-muted-foreground border-border"): string {
   if (!value) return fallback;
-  const key = value.toLowerCase().trim();
-  return map[key] ?? fallback;
+  return map[value.toLowerCase().trim()] ?? fallback;
 }
 
-export function AssetCard({ asset, isSaved, onSave, onUnsave, savedId }: AssetCardProps) {
+type AssetCardProps = {
+  asset: ScoredAsset;
+  isSaved?: boolean;
+  onSave?: (asset: ScoredAsset) => void;
+  onUnsave?: (id: string, assetName?: string) => void;
+};
+
+export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [, setLocation] = useLocation();
 
   const stageClass = getBadgeClass(STAGE_COLORS, asset.development_stage);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
 
+  const hasOwner = asset.owner_name && asset.owner_name !== "unknown";
+  const hasInstitution = asset.institution && asset.institution !== "unknown" && asset.institution !== asset.owner_name;
+  const licensingAvailable = (asset.licensing_status ?? "").toLowerCase().includes("available");
+  const hasWhyItMatters = asset.why_it_matters && asset.why_it_matters.length > 10;
+
+  const handleViewDossier = () => {
+    sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
+    setLocation(`/asset/${asset.id}`);
+  };
+
   return (
     <Card
       className="group border border-card-border bg-card hover:border-primary/40 transition-all duration-300 flex flex-col overflow-hidden"
-      data-testid={`asset-card-${asset.pmid ?? asset.asset_name}`}
+      data-testid={`asset-card-${asset.id}`}
     >
       <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
               <FlaskConical className="w-4 h-4 text-primary" />
             </div>
-            <h3 className="font-semibold text-foreground text-sm leading-tight truncate" data-testid={`text-asset-name-${asset.pmid}`}>
+            <h3 className="font-semibold text-foreground text-sm leading-tight truncate" data-testid={`text-asset-name-${asset.id}`}>
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
             </h3>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 w-8 h-8 hover:bg-primary/10"
-            onClick={() => isSaved ? onUnsave?.(asset.pmid, asset.asset_name) : onSave?.(asset)}
-            data-testid={`button-save-${asset.pmid ?? asset.asset_name}`}
-            title={isSaved ? "Remove from saved" : "Save asset"}
-          >
-            {isSaved ? (
-              <BookmarkCheck className="w-4 h-4 text-primary" />
-            ) : (
-              <Bookmark className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-            )}
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="sm" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-8 h-8 hover:bg-primary/10"
+              onClick={() => isSaved ? onUnsave?.(asset.id, asset.asset_name) : onSave?.(asset)}
+              data-testid={`button-save-${asset.id}`}
+              title={isSaved ? "Remove from saved" : "Save asset"}
+            >
+              {isSaved ? (
+                <BookmarkCheck className="w-4 h-4 text-primary" />
+              ) : (
+                <Bookmark className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+              )}
+            </Button>
+          </div>
         </div>
 
         <div className="flex flex-wrap gap-1.5">
@@ -83,59 +105,102 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave, savedId }: AssetCa
           <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${modalityClass}`}>
             {asset.modality !== "unknown" ? asset.modality : "Modality Unknown"}
           </span>
+          {asset.source_types?.map((st) => (
+            <SourceBadge key={st} sourceType={st} />
+          ))}
         </div>
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
           <div>
             <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Target</span>
-            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-target-${asset.pmid}`}>
+            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-target-${asset.id}`}>
               {asset.target !== "unknown" ? asset.target : "—"}
             </p>
           </div>
           <div>
             <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Indication</span>
-            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-indication-${asset.pmid}`}>
-              {asset.disease_indication !== "unknown" ? asset.disease_indication : "—"}
+            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-indication-${asset.id}`}>
+              {asset.indication !== "unknown" ? asset.indication : "—"}
             </p>
           </div>
-        </div>
-
-        <div>
-          <p className={`text-xs text-muted-foreground leading-relaxed ${!expanded ? "line-clamp-3" : ""}`}>
-            {asset.summary}
-          </p>
-          {asset.summary.length > 150 && (
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="mt-1 text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
-            >
-              {expanded ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show more</>}
-            </button>
+          {hasOwner && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Owner</span>
+              <p className="text-foreground font-medium mt-0.5 truncate flex items-center gap-1" data-testid={`text-owner-${asset.id}`}>
+                <Building2 className="w-3 h-3 shrink-0 text-muted-foreground" />
+                {asset.owner_name}
+                {hasInstitution && <span className="text-muted-foreground font-normal">· {asset.institution}</span>}
+              </p>
+            </div>
           )}
         </div>
+
+        {hasWhyItMatters && (
+          <div className="bg-primary/5 border border-primary/15 rounded-md px-3 py-2">
+            <p className="text-[11px] text-primary/80 leading-relaxed italic" data-testid={`text-why-matters-${asset.id}`}>
+              "{asset.why_it_matters}"
+            </p>
+          </div>
+        )}
+
+        {!hasWhyItMatters && asset.summary && (
+          <div>
+            <p className={`text-xs text-muted-foreground leading-relaxed ${!expanded ? "line-clamp-3" : ""}`}>
+              {asset.summary}
+            </p>
+            {asset.summary.length > 150 && (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="mt-1 text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+              >
+                {expanded ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show more</>}
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      <div className="border-t border-card-border px-5 py-3 flex items-center justify-between gap-2">
-        <div className="min-w-0 flex-1">
-          <p className="text-[11px] text-muted-foreground truncate" data-testid={`text-source-${asset.pmid}`}>
-            {asset.source_journal} · {asset.publication_year}
-          </p>
-          <p className="text-[11px] text-muted-foreground/70 truncate mt-0.5">
-            via {asset.source_name}
-          </p>
+      <div className="border-t border-card-border px-4 py-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          {licensingAvailable && (
+            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-sm px-1.5 py-0.5 font-semibold shrink-0">
+              <Key className="w-2.5 h-2.5" />
+              Available
+            </span>
+          )}
+          <span className="text-[11px] text-muted-foreground truncate">
+            {asset.evidence_count > 1
+              ? `${asset.evidence_count} signals`
+              : asset.latest_signal_date
+              ? new Date(asset.latest_signal_date).getFullYear() || asset.latest_signal_date
+              : ""}
+          </span>
         </div>
-        {asset.source_url && (
-          <a
-            href={asset.source_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
-            data-testid={`link-source-${asset.pmid}`}
+        <div className="flex items-center gap-2 shrink-0">
+          {asset.source_urls?.[0] && (
+            <a
+              href={asset.source_urls[0]}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+              data-testid={`link-source-${asset.id}`}
+            >
+              <ExternalLink className="w-3 h-3" />
+              View
+            </a>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-[11px] px-2 text-muted-foreground hover:text-primary gap-1"
+            onClick={handleViewDossier}
+            data-testid={`button-dossier-${asset.id}`}
           >
-            <ExternalLink className="w-3 h-3" />
-            View
-          </a>
-        )}
+            <FileText className="w-3 h-3" />
+            Dossier
+            <ArrowRight className="w-3 h-3" />
+          </Button>
+        </div>
       </div>
     </Card>
   );

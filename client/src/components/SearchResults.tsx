@@ -1,16 +1,16 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetCard } from "./AssetCard";
 import { FlaskConical, SearchX, Microscope } from "lucide-react";
-import type { Asset } from "@shared/schema";
+import type { ScoredAsset } from "@/lib/types";
 
 type SearchResultsProps = {
-  assets: Asset[];
+  assets: ScoredAsset[];
   isLoading: boolean;
   hasSearched: boolean;
   query?: string;
   savedAssetIds: Set<string>;
-  onSave: (asset: Asset) => void;
-  onUnsave: (pmid?: string, assetName?: string) => void;
+  onSave: (asset: ScoredAsset) => void;
+  onUnsave: (id: string, assetName?: string) => void;
 };
 
 function LoadingSkeleton() {
@@ -23,11 +23,12 @@ function LoadingSkeleton() {
               <Skeleton className="w-8 h-8 rounded-md" />
               <Skeleton className="h-4 flex-1" />
             </div>
-            <Skeleton className="w-8 h-8 rounded-md" />
+            <Skeleton className="w-14 h-6 rounded-md" />
           </div>
           <div className="flex gap-2">
             <Skeleton className="h-5 w-20 rounded-sm" />
             <Skeleton className="h-5 w-24 rounded-sm" />
+            <Skeleton className="h-5 w-16 rounded-sm" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -39,17 +40,10 @@ function LoadingSkeleton() {
               <Skeleton className="h-4 w-20" />
             </div>
           </div>
-          <div className="space-y-1.5">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-3/4" />
-          </div>
+          <Skeleton className="h-12 w-full rounded-md" />
           <div className="border-t border-card-border pt-3 flex items-center justify-between">
-            <div className="space-y-1">
-              <Skeleton className="h-3 w-32" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-4 w-10" />
+            <Skeleton className="h-3 w-20" />
+            <Skeleton className="h-6 w-20 rounded" />
           </div>
         </div>
       ))}
@@ -63,7 +57,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
       <div className="space-y-4">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Microscope className="w-4 h-4 animate-pulse text-primary" />
-          <span>Analyzing research papers with AI...</span>
+          <span>Scanning sources and scoring assets...</span>
         </div>
         <LoadingSkeleton />
       </div>
@@ -79,11 +73,11 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         <div>
           <h3 className="text-lg font-semibold text-foreground mb-1">Start Your Discovery</h3>
           <p className="text-muted-foreground text-sm max-w-sm">
-            Search biomedical literature and let AI extract structured drug asset intelligence from research papers.
+            Search across PubMed, preprint servers, ClinicalTrials.gov, patents, and tech transfer offices — scored and ranked for your buyer thesis.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-          {["Oncology", "Rare Disease", "Metabolic", "CNS", "Inflammation"].map((area) => (
+          {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "NLRP3 inflammasome", "AAV gene therapy"].map((area) => (
             <span key={area} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
               {area}
             </span>
@@ -110,22 +104,23 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
     );
   }
 
-  const savedKey = (asset: Asset) => asset.pmid ?? asset.asset_name;
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Found <span className="text-foreground font-semibold">{assets.length}</span> drug asset{assets.length !== 1 ? "s" : ""} from
-          {query ? <> "<span className="text-foreground">{query}</span>"</> : " your search"}
+        <p className="text-sm text-muted-foreground" data-testid="results-count">
+          <span className="text-foreground font-semibold">{assets.length}</span> ranked asset{assets.length !== 1 ? "s" : ""} found
+          {query ? <> for "<span className="text-foreground">{query}</span>"</> : ""}
+        </p>
+        <p className="text-xs text-muted-foreground hidden sm:block">
+          Sorted by match score ↓
         </p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        {assets.map((asset, idx) => (
+        {assets.map((asset) => (
           <AssetCard
-            key={`${asset.pmid ?? idx}-${asset.asset_name}`}
+            key={asset.id}
             asset={asset}
-            isSaved={savedAssetIds.has(savedKey(asset))}
+            isSaved={savedAssetIds.has(asset.id)}
             onSave={onSave}
             onUnsave={onUnsave}
           />

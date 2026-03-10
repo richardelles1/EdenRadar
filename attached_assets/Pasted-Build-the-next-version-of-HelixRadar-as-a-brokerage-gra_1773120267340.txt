@@ -1,0 +1,700 @@
+Build the next version of HelixRadar as a brokerage-grade biotech asset matchmaking platform.
+
+HelixRadar is not just a scientific search engine. It is a platform that helps identify under-the-radar, potentially licensable biotech assets and match them to the interests of large pharma, mid-sized pharma, small pharma, venture investors, and biotech founders.
+
+The core business goal is to act as a matchmaker between research-originated assets and commercial buyers.
+
+This product should ingest signals from multiple scientific, clinical, IP, and university innovation sources, normalize those signals into structured asset records, score each asset for matchmaking value, and generate buyer-facing opportunity briefs and reports.
+
+The current app already exists. Expand it substantially.
+
+Do not rebuild from scratch. Extend the existing HelixRadar app.
+
+Do not add commentary. Implement the product.
+
+⸻
+
+Product Goal
+
+HelixRadar should answer:
+	•	What are the most promising under-the-radar biotech assets?
+	•	Which of them appear early, novel, and commercially relevant?
+	•	Which appear licensable or likely reachable?
+	•	Which fit a specific buyer thesis?
+
+The app should prioritize brokerage value, not raw search volume.
+
+The system should treat:
+	•	papers
+	•	preprints
+	•	trials
+	•	patents
+	•	university licensing listings
+
+as evidence signals
+
+and treat the asset as the core object.
+
+⸻
+
+Core Product Model
+
+HelixRadar should be structured around four layers:
+
+1. Signal Ingestion
+
+Pull records from multiple relevant external sources.
+
+2. Asset Normalization
+
+Convert heterogeneous records into a common asset schema.
+
+3. Matchmaking Scoring
+
+Score each asset based on novelty, freshness, fit, licensability, readiness, and competition.
+
+4. Buyer-Facing Outputs
+
+Produce:
+	•	ranked search results
+	•	asset dossiers
+	•	buyer-specific match reports
+
+⸻
+
+Data Sources to Support
+
+Implement ingestion modules for the following sources.
+
+1. PubMed
+
+Use PubMed for scientific literature and mechanism/evidence discovery.
+
+Module:
+lib/sources/pubmed.ts
+
+Fields to extract:
+	•	title
+	•	abstract
+	•	authors
+	•	journal
+	•	publication_date
+	•	source_url
+
+2. bioRxiv
+
+Use bioRxiv for early preprint discovery.
+
+Module:
+lib/sources/biorxiv.ts
+
+Fields to extract:
+	•	title
+	•	abstract
+	•	authors
+	•	posted_date
+	•	source_url
+
+3. medRxiv
+
+Use medRxiv for clinical/preclinical preprint signals.
+
+Module:
+lib/sources/medrxiv.ts
+
+Fields to extract:
+	•	title
+	•	abstract
+	•	authors
+	•	posted_date
+	•	source_url
+
+4. ClinicalTrials.gov
+
+Use ClinicalTrials.gov for stage validation and sponsor visibility.
+
+Module:
+lib/sources/clinicaltrials.ts
+
+Fields to extract:
+	•	study_title
+	•	sponsor
+	•	phase
+	•	condition
+	•	intervention_name
+	•	status
+	•	start_date
+	•	source_url
+
+5. Patent Source
+
+Add a patent ingestion module using whichever public patent source is most feasible to implement now.
+
+Module:
+lib/sources/patents.ts
+
+Fields to extract:
+	•	patent_title
+	•	abstract
+	•	assignee
+	•	filing_date
+	•	publication_date
+	•	patent_number
+	•	source_url
+
+6. University Tech Transfer Listings
+
+This is extremely important. Add a module for university-origin innovation listings.
+
+Module:
+lib/sources/techtransfer.ts
+
+For now implement a scalable pattern that supports multiple institutions through adapters.
+
+Start with a configurable adapter design that can support university-specific parsers.
+
+Create adapter files such as:
+	•	lib/sources/techtransfer/stanford.ts
+	•	lib/sources/techtransfer/mit.ts
+	•	lib/sources/techtransfer/oxford.ts
+
+Even if some institutions require placeholder parsers initially, structure the system now so it can scale cleanly.
+
+Fields to extract:
+	•	listing_title
+	•	summary
+	•	institution
+	•	licensing_status
+	•	contact_or_office
+	•	posted_date
+	•	source_url
+
+⸻
+
+Canonical Data Model
+
+Create a canonical normalized Asset model.
+
+Each source record should be transformed into or attached to an asset.
+
+Create TypeScript types in:
+lib/types.ts
+
+Define the following core types:
+
+RawSignal
+
+A raw piece of evidence from any source.
+
+Fields:
+	•	id
+	•	source_type
+	•	title
+	•	text
+	•	authors_or_owner
+	•	institution_or_sponsor
+	•	date
+	•	stage_hint
+	•	url
+	•	metadata
+
+Asset
+
+The central object in the system.
+
+Fields:
+	•	id
+	•	asset_name
+	•	target
+	•	modality
+	•	indication
+	•	development_stage
+	•	owner_name
+	•	owner_type
+	•	institution
+	•	patent_status
+	•	licensing_status
+	•	summary
+	•	evidence_count
+	•	source_types
+	•	source_urls
+	•	latest_signal_date
+	•	score
+	•	score_breakdown
+	•	matching_tags
+	•	confidence
+	•	signals
+
+BuyerProfile
+
+A structured buyer thesis used for matchmaking.
+
+Fields:
+	•	therapeutic_areas
+	•	modalities
+	•	preferred_stages
+	•	excluded_stages
+	•	geography
+	•	prefers_university_assets
+	•	prefers_company_assets
+	•	target_keywords
+	•	indication_keywords
+	•	notes
+
+ScoreBreakdown
+
+Fields:
+	•	novelty_score
+	•	freshness_score
+	•	readiness_score
+	•	licensability_score
+	•	fit_score
+	•	competition_score
+	•	total_score
+
+⸻
+
+System Behavior
+
+The platform should not return raw documents as the main result.
+
+It should:
+	1.	ingest raw signals
+	2.	normalize them
+	3.	cluster and merge related signals into candidate assets
+	4.	score those assets
+	5.	present ranked opportunity records
+
+⸻
+
+Search and Matchmaking UX
+
+Expand the UI beyond a plain keyword search.
+
+Create a discovery screen that includes:
+
+Search Input
+
+A simple text query for broad exploration
+
+Buyer Thesis Filters
+
+Structured filters such as:
+	•	therapeutic area
+	•	modality
+	•	development stage
+	•	source type
+	•	owner type
+	•	freshness window
+	•	institution preference
+	•	only show likely licensable opportunities
+
+Search Intent
+
+The user should be able to choose between:
+	•	Explore Assets
+	•	Generate Match Report
+	•	Generate Asset Dossier
+
+⸻
+
+Main UI Surfaces
+
+Create or extend the following app routes.
+
+/
+
+Main discovery dashboard
+
+Sections:
+	•	top navigation with HelixRadar branding
+	•	search + thesis form
+	•	source filters
+	•	ranked asset cards
+	•	ability to open full asset dossier
+	•	ability to generate buyer-specific report
+
+/asset/[id]
+
+Asset detail page
+
+Show:
+	•	asset summary
+	•	target
+	•	modality
+	•	stage
+	•	indication
+	•	owner / institution
+	•	likely licensing status
+	•	score breakdown
+	•	supporting evidence signals
+	•	source links
+	•	rationale for why this asset may matter commercially
+
+/report
+
+Buyer report view
+
+This should render a structured report page based on:
+	•	keyword query
+	•	buyer profile
+	•	ranked assets
+
+The report should feel like a commercial intelligence brief.
+
+Include:
+	•	report title
+	•	buyer thesis summary
+	•	top opportunities
+	•	rationale for ranking
+	•	evidence by source
+	•	risks / caveats
+
+⸻
+
+Required Components
+
+Create or update components such as:
+	•	SearchBar.tsx
+	•	BuyerProfileForm.tsx
+	•	SourceFilterBar.tsx
+	•	AssetCard.tsx
+	•	ScoreBadge.tsx
+	•	ScoreBreakdownCard.tsx
+	•	SignalList.tsx
+	•	ReportHeader.tsx
+	•	TopOpportunityCard.tsx
+
+Asset cards should clearly display:
+	•	asset name
+	•	target
+	•	modality
+	•	indication
+	•	stage
+	•	institution / owner
+	•	source badges
+	•	total score
+	•	a short “why this matters” snippet
+
+⸻
+
+API Design
+
+Create or update these API routes.
+
+POST /api/search
+
+Input:
+	•	query
+	•	buyerProfile
+	•	filters
+
+Behavior:
+	•	call all relevant source modules in parallel
+	•	aggregate raw signals
+	•	normalize into assets
+	•	score assets
+	•	return ranked assets
+
+POST /api/report
+
+Input:
+	•	query
+	•	buyerProfile
+	•	filters
+
+Behavior:
+	•	call search pipeline
+	•	select top opportunities
+	•	generate report summary and rationale using the LLM
+	•	return structured report payload
+
+POST /api/dossier
+
+Input:
+	•	asset or asset_id
+
+Behavior:
+	•	generate a detailed asset dossier using available normalized data and signals
+
+⸻
+
+Pipeline Modules
+
+Create a clean pipeline under lib/pipeline/.
+
+Required modules:
+	•	collectSignals.ts
+	•	normalizeSignals.ts
+	•	clusterAssets.ts
+	•	scoreAssets.ts
+	•	generateReport.ts
+	•	generateDossier.ts
+
+collectSignals.ts
+
+Calls all source modules in parallel and returns RawSignal[].
+
+normalizeSignals.ts
+
+Uses deterministic parsing plus LLM extraction to convert raw text into structured candidate asset attributes.
+
+Extract:
+	•	asset_name
+	•	target
+	•	modality
+	•	indication
+	•	development_stage
+	•	owner / institution
+	•	licensing hints
+	•	patent hints
+
+clusterAssets.ts
+
+Merge related signals into candidate assets.
+
+Use heuristics such as:
+	•	similar asset_name
+	•	similar target
+	•	same owner/institution
+	•	overlapping indication
+	•	shared drug/intervention names
+
+This does not have to be perfect. It just needs to produce useful grouped candidate assets.
+
+scoreAssets.ts
+
+Apply matchmaking scoring.
+
+generateReport.ts
+
+Use the ranked assets plus buyer profile to generate a buyer-facing report.
+
+generateDossier.ts
+
+Use one asset plus its supporting signals to generate a detailed commercial opportunity brief.
+
+⸻
+
+LLM Usage
+
+Use the LLM for extraction, summarization, ranking rationale, dossier generation, and report generation.
+
+Do not use the LLM as the only logic layer. Combine it with deterministic logic.
+
+Create a module:
+lib/llm.ts
+
+Create helper functions:
+	•	extractAssetFromSignal()
+	•	summarizeAsset()
+	•	generateWhyItMatters()
+	•	generateReportNarrative()
+	•	generateDossierNarrative()
+
+Extraction Prompt Requirements
+
+For each signal, the LLM should extract structured fields:
+	•	asset_name
+	•	target
+	•	modality
+	•	indication
+	•	development_stage
+	•	owner_name
+	•	owner_type
+	•	licensing_status
+	•	patent_status
+	•	summary
+	•	matching_tags
+	•	confidence
+
+If a field is unknown, return "unknown".
+
+Report Narrative Requirements
+
+The generated report should sound like a commercial biotech intelligence brief, not a generic AI summary.
+
+It should explain:
+	•	why these assets were selected
+	•	how they fit the buyer profile
+	•	which signals support them
+	•	what the likely risks or unknowns are
+
+⸻
+
+Scoring Model
+
+Implement a first-pass deterministic scoring engine.
+
+Each asset should receive:
+
+Novelty Score
+
+Higher when:
+	•	signal is recent
+	•	limited source count but strong evidence
+	•	preprint or university-origin signals appear early
+	•	less evidence of broad commercial saturation
+
+Freshness Score
+
+Higher when:
+	•	recent publication / posting / filing date
+	•	recent signal activity
+
+Readiness Score
+
+Higher when:
+	•	strong preclinical evidence
+	•	trial-stage confirmation
+	•	patent presence
+	•	multiple corroborating signals
+
+Licensability Score
+
+Higher when:
+	•	university or academic ownership
+	•	explicit licensing listing
+	•	no obvious large pharma ownership
+	•	contactable innovation office
+	•	tech transfer source present
+
+Fit Score
+
+Higher when:
+	•	target, modality, indication, and stage align closely with the buyer profile
+
+Competition Score
+
+This should penalize assets that appear overly crowded or already dominated by obvious major players.
+Use whatever proxies are feasible now:
+	•	many highly similar recent signals
+	•	obvious large commercial sponsors
+	•	later-stage crowded assets
+
+Total Score
+
+Weighted sum of the above.
+
+Return a full score breakdown for transparency.
+
+⸻
+
+Brokerage-Oriented Logic
+
+This is the key product behavior.
+
+The system should explicitly attempt to surface assets that are:
+	•	promising
+	•	early enough to matter
+	•	commercially relevant
+	•	plausibly reachable
+
+HelixRadar should prioritize:
+	•	university-origin assets
+	•	newly published or newly posted assets
+	•	assets with fresh patent or preprint activity
+	•	assets that fit a buyer’s thesis
+	•	assets that are not obviously already swallowed by large pharma
+
+The system should avoid behaving like a general paper search engine.
+
+⸻
+
+Asset Dossier Requirements
+
+The asset dossier should feel premium and buyer-ready.
+
+It should include:
+	•	asset title
+	•	one-paragraph executive summary
+	•	target / modality / indication / stage
+	•	institution or owner
+	•	licensing indicators
+	•	why it may matter commercially
+	•	evidence signals with links
+	•	risks / unknowns
+	•	suggested next commercial angle
+
+This is one of the most important monetizable surfaces.
+
+⸻
+
+Report Requirements
+
+The report should feel like something a client would pay for.
+
+Example title style:
+	•	Top Under-the-Radar Oncology Assets for Mid-Cap Pharma BD
+	•	Recent University-Owned Metabolic Disease Opportunities
+	•	Fresh Preclinical RNA Assets Matching Buyer Thesis
+
+The report page should include:
+	•	executive summary
+	•	buyer profile summary
+	•	top ranked assets
+	•	why they fit
+	•	source support
+	•	confidence and risks
+
+⸻
+
+UI Styling Direction
+
+Keep the existing HelixRadar product feel, but make the platform feel more premium and intelligence-oriented.
+
+Visual priorities:
+	•	clean dark or neutral biotech dashboard aesthetic
+	•	clear hierarchy
+	•	polished cards
+	•	compact but legible data presentation
+	•	strong use of badges for source types and scoring
+	•	report pages should feel exportable and investor-grade
+
+⸻
+
+Performance Constraints
+
+Because this is still an early prototype:
+	•	dynamic fetching is acceptable
+	•	no auth yet
+	•	no database yet
+	•	no background jobs yet
+
+But structure the code so it can later support:
+	•	persistence
+	•	paywall
+	•	saved reports
+	•	internal LLM orchestration
+	•	company-specific fallback search / access
+
+Do not hardcode the architecture in a way that blocks later expansion.
+
+⸻
+
+Future-Ready Design
+
+Even though no database is needed yet, design the code so the normalized asset model and report outputs can later be stored.
+
+Keep source modules isolated.
+
+Keep pipeline modules isolated.
+
+Keep scoring logic isolated.
+
+Keep LLM prompts isolated.
+
+⸻
+
+Final Objective
+
+After this implementation, HelixRadar should be able to:
+	1.	accept a broad biotech search and buyer profile
+	2.	pull evidence from multiple relevant sources
+	3.	normalize that evidence into candidate assets
+	4.	score assets by brokerage relevance
+	5.	display ranked opportunities
+	6.	generate asset dossiers
+	7.	generate buyer-specific intelligence reports
+
+The result should feel like the beginning of a real biotech asset matchmaking platform, not just a search demo.

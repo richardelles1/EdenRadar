@@ -7,6 +7,8 @@ import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Discover from "@/pages/Discover";
 import Pipeline from "@/pages/Pipeline";
+import AssetDossier from "@/pages/AssetDossier";
+import Report from "@/pages/Report";
 import { useEffect } from "react";
 
 function ThemeInit() {
@@ -27,6 +29,8 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/discover" component={Discover} />
       <Route path="/pipeline" component={Pipeline} />
+      <Route path="/asset/:id" component={AssetDossier} />
+      <Route path="/report" component={Report} />
       <Route component={NotFound} />
     </Switch>
   );

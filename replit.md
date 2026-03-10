@@ -1,6 +1,6 @@
-# HelixRadar
+# HelixRadar v2
 
-AI-powered biotech asset discovery platform that extracts structured drug asset intelligence from scientific literature.
+AI-powered biotech asset matchmaking platform. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports).
 
 ## Architecture
 
@@ -8,61 +8,100 @@ AI-powered biotech asset discovery platform that extracts structured drug asset 
 - **Frontend**: React + Vite + TailwindCSS + Shadcn UI (wouter routing, TanStack Query)
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Drizzle ORM
-- **AI**: OpenAI gpt-4o-mini for structured extraction (uses `OPENAI_API_KEY` env var)
-- **Data Source**: PubMed E-utilities API (extensible to other sources)
+- **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
+- **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer
 
 ### Key Design Decisions
-- **Extensible data source architecture**: `server/lib/sources/index.ts` defines a `DataSource` interface. PubMed is the first implementation. To add a new source (ClinicalTrials.gov, bioRxiv, etc.), implement the interface and register it in the `dataSources` registry.
-- **AI extraction**: Each paper abstract is passed to OpenAI with a structured JSON extraction prompt. Returns asset_name, target, modality, development_stage, disease_indication, summary. Fatal OpenAI errors (auth, quota) are rethrown and surface as user-visible error messages.
-- **No database for search results**: Results are ephemeral (per-request). Only saved assets and search history are persisted.
+- **Unified `RawSignal` type**: All 6 data sources convert their output to `RawSignal[]` — a common envelope that feeds the pipeline
+- **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
+- **Two-tier model strategy**: gpt-4o-mini for per-signal extraction (bulk, cheap); gpt-4o for report + dossier (single-shot, premium quality)
+- **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
+- **Tech Transfer**: Adapter pattern with curated seed data (Stanford/MIT/Oxford). Future live scraping swappable per-adapter.
+- **No nanoid**: Uses `crypto.randomUUID()` (built-in Node.js) for ID generation
 
 ### Folder Structure
 ```
 server/
   lib/
+    types.ts              # Canonical types: RawSignal, ScoredAsset, BuyerProfile, ScoreBreakdown
+    llm.ts                # LLM interface — extractAssetFromSignal (mini), generateWhyItMatters (mini), generateReportNarrative (4o), generateDossierNarrative (4o)
     sources/
-      index.ts        # DataSource interface + registry (add new sources here)
-      pubmed.ts       # PubMed E-utilities implementation
-    extractor.ts      # OpenAI-powered structured data extraction
-  routes.ts           # API routes (/api/search, /api/saved-assets, /api/search-history)
-  storage.ts          # Database CRUD via Drizzle
-  db.ts               # Drizzle + pg pool setup
+      index.ts            # collectAllSignals() fan-out + DataSource registry (all 6 sources)
+      pubmed.ts           # PubMed E-utilities → RawSignal[]
+      biorxiv.ts          # bioRxiv API (last 90 days, client-side keyword filter)
+      medrxiv.ts          # medRxiv API (same pattern as bioRxiv)
+      clinicaltrials.ts   # ClinicalTrials.gov API v2
+      patents.ts          # USPTO PatentsView API (free, no key)
+      techtransfer/
+        index.ts          # TechTransferAdapter interface + getTechTransferSignals()
+        stanford.ts       # 8 curated Stanford OTL listings
+        mit.ts            # 8 curated MIT TLO listings
+        oxford.ts         # 8 curated Oxford University Innovation listings
+    pipeline/
+      normalizeSignals.ts # RawSignal[] → Partial<ScoredAsset>[] via LLM extraction (concurrency=3)
+      clusterAssets.ts    # Groups similar assets by name/target/indication/owner similarity
+      scoreAssets.ts      # Deterministic 6-dimension scoring + generateWhyItMatters for top 10
+      generateReport.ts   # Calls generateReportNarrative (gpt-4o) → ReportPayload
+      generateDossier.ts  # Calls generateDossierNarrative (gpt-4o) → DossierPayload
+    extractor.ts          # Legacy single-source extractor (kept for backward compat)
+  routes.ts               # POST /api/search (full pipeline), POST /api/report, POST /api/dossier
 
 client/src/
+  lib/
+    types.ts              # Client-side mirror of server types (ScoredAsset, BuyerProfile, etc.)
   pages/
-    Landing.tsx       # / — hero landing page with animated helix + radar
-    Discover.tsx      # /discover — search interface with filter chips
-    Pipeline.tsx      # /pipeline — kanban view of saved assets by clinical stage
+    Landing.tsx           # / — animated DNA helix + radar landing page
+    Discover.tsx          # /discover — multi-source search, buyer profile, source toggles, report button
+    Pipeline.tsx          # /pipeline — kanban saved assets by stage
+    AssetDossier.tsx      # /asset/:id — premium dossier view with score breakdown + evidence signals
+    Report.tsx            # /report — buyer intelligence report with ranked assets + narrative
   components/
-    Nav.tsx           # Shared sticky navigation across all pages
-    SearchBar.tsx     # Search input + source selector + example queries
-    SearchResults.tsx # Results grid with loading/empty states
-    AssetCard.tsx     # Drug asset card + saved asset card
-    SavedAssetsPanel.tsx    # Right sidebar for saved assets
-    SearchHistoryPanel.tsx  # Recent search bubbles
+    Nav.tsx
+    SearchBar.tsx
+    SearchResults.tsx     # Updated to use ScoredAsset[]
+    AssetCard.tsx         # Updated: ScoreBadge, SourceBadge, owner info, "View Dossier" button
+    SavedAssetsPanel.tsx
+    SearchHistoryPanel.tsx
+    ScoreBadge.tsx        # Colored score badge (0-100) with score breakdown tooltip
+    ScoreBreakdownCard.tsx # 6-dimension score breakdown with progress bars
+    SourceBadge.tsx        # Color-coded source type pill (paper/preprint/trial/patent/tech_transfer)
+    BuyerProfileForm.tsx   # Collapsible buyer thesis form with multi-select chips and keyword inputs
 
-shared/schema.ts      # Drizzle schema: searchHistory, savedAssets tables + Asset type
+shared/schema.ts          # Drizzle schema: searchHistory, savedAssets tables
 ```
 
 ### Pages
-- **`/`** — Landing page with animated SVG DNA double helix + spinning radar graphic, feature highlights, CTA to Discover
-- **`/discover`** — Full search interface: query input, source selector, example queries, radar sweep loading animation, filter chips (by stage/modality), results grid, saved assets sidebar
-- **`/pipeline`** — Kanban pipeline view: saved assets organized into columns by development stage (Discovery → Preclinical → Phase 1 → Phase 2 → Phase 3 → Approved), with JSON/CSV export
+- **`/`** — Landing with animated DNA helix + spinning radar, CTA to Discover
+- **`/discover`** — Multi-source search with buyer thesis configuration, source toggles, scored asset grid, "Match Report" button, "View Dossier" per card
+- **`/pipeline`** — Kanban of saved assets by clinical stage with JSON/CSV export
+- **`/asset/:id`** — Premium dossier: score breakdown, evidence signals, commercial why-it-matters, "Generate Full Dossier" (GPT-4o)
+- **`/report`** — Buyer intelligence report: exec summary, buyer thesis, ranked top assets, AI narrative analysis
+
+### API Routes
+- `GET /api/sources` — list all available source modules
+- `POST /api/search` — `{ query, sources[], maxPerSource, buyerProfile? }` → `ScoredAsset[]` (full pipeline)
+- `POST /api/report` — same body as search → `ReportPayload` (includes GPT-4o narrative)
+- `POST /api/dossier` — `{ asset: ScoredAsset }` → `DossierPayload` (GPT-4o commercial brief)
+- `GET/POST /api/saved-assets` — saved asset CRUD
+- `GET /api/search-history` — recent searches
+
+### Scoring Dimensions (0–100 each)
+| Dimension | Weight | Signal |
+|-----------|--------|--------|
+| Novelty | 20% | Preprint/university sources, low evidence count = high novelty |
+| Freshness | 15% | Days since latest signal (≤30 days = 100) |
+| Readiness | 15% | Clinical stage + patent/trial presence |
+| Licensability | 25% | University ownership + tech transfer + "available" licensing status |
+| Buyer Fit | 15% | Alignment with BuyerProfile thesis (0 if no profile provided) |
+| Competition | 10% | Inverted: large pharma sponsor or late-stage = penalty |
 
 ### Visual Theme
 - Deep-space navy dark mode (`--background: 222 47% 6%`) + electric cyan primary (`--primary: 183 85% 52%`)
-- Gradient text: `.gradient-text` (dark) / `.gradient-text-light` (light)
 - CSS animations: `radar-sweep` (4s spin), `helix-scroll` (12s translateY), `glow-pulse`
 
 ### Database Tables
-- `search_history`: Persists query, source, result_count, created_at
-- `saved_assets`: Full asset data including all AI-extracted fields + source metadata
-
-## Adding New Data Sources
-
-1. Create `server/lib/sources/[source-name].ts` implementing `search(query, maxResults): Promise<RawPaper[]>`
-2. Add to the `dataSources` registry in `server/lib/sources/index.ts`
-3. The frontend will automatically show the new source in the dropdown
+- `search_history`: query, source, result_count, created_at
+- `saved_assets`: full asset data from saved search results
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (auto-provided by Replit)
