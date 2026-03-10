@@ -152,8 +152,8 @@ export default function Report() {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full">
-        <div className="flex items-center justify-between mb-6">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full" data-testid="print-target">
+        <div className="flex items-center justify-between mb-6 no-print">
           <Button
             variant="ghost"
             size="sm"

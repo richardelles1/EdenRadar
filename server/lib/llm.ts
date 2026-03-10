@@ -23,13 +23,55 @@ export function isFatalOpenAIError(err: unknown): boolean {
   );
 }
 
-export async function extractAssetFromSignal(
-  signal: RawSignal
-): Promise<Partial<ScoredAsset> | null> {
-  const text = signal.text?.trim();
-  if (!text || text === "No abstract available.") return null;
+function buildExtractionPrompt(signal: RawSignal, text: string): string {
+  if (signal.source_type === "patent") {
+    return `You are a biotech patent analyst. Extract structured drug asset information from the following patent record.
 
-  const prompt = `You are a biotech intelligence analyst. Extract structured drug asset information from the following ${signal.source_type} record.
+IMPORTANT PATENT EXTRACTION RULES:
+- asset_name: Look in the patent TITLE for the compound class or drug name (e.g. "KRAS G12C inhibitors", "Anti-PD-1 antibody"). Do NOT use "method", "composition", "compound", or "formula" as the asset name. Extract the specific therapeutic agent class.
+- target: The molecular or biological target (e.g. "KRAS G12C", "PD-1", "HER2"). Find it in the title or description.
+- modality: The therapy type based on context clues in the description.
+- indication: The disease or condition stated in the patent purpose.
+- development_stage: For patents, typically "discovery" or "preclinical" unless clinical data is mentioned.
+- owner_name: Use the ASSIGNEE name provided in the metadata/institution field — do not guess.
+- owner_type: "company" if assignee is a pharma/biotech company; "university" if a university or research institution.
+- licensing_status: "unknown" for most patents unless explicitly stated as available.
+- patent_status: "patented" (it is a granted patent record).
+- summary: 2-3 sentences describing mechanism, target, and intended disease indication.
+- matching_tags: 3-5 relevant keyword tags.
+
+Return ONLY valid JSON. If you cannot determine a field with reasonable confidence, use "unknown".
+
+Source type: patent
+Assignee/Owner: ${signal.institution_or_sponsor || signal.authors_or_owner}
+Title: ${signal.title}
+Abstract/Description: ${text.slice(0, 2000)}`;
+  }
+
+  if (signal.source_type === "tech_transfer") {
+    return `You are a biotech licensing analyst. Extract structured drug asset information from the following university technology transfer listing.
+
+Return ONLY valid JSON with these fields:
+- asset_name: The specific drug, compound, platform, or therapy name as described (string)
+- target: The molecular or biological target (string)
+- modality: therapy type — one of: "small molecule", "antibody", "CAR-T", "gene therapy", "mRNA therapy", "peptide", "bispecific antibody", "ADC", "cell therapy", "oncolytic virus", "RNA interference", "antisense oligonucleotide", "protein", "vaccine", "other" (string)
+- indication: disease or condition being addressed (string)
+- development_stage: one of: "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved" (string)
+- owner_name: the university or institution name (string)
+- owner_type: "university"
+- institution: the university or institution name (string)
+- licensing_status: "available" (tech transfer listings are explicitly available for licensing)
+- patent_status: use the metadata hint if available, otherwise "patent pending" (string)
+- summary: 2-3 sentence summary of the mechanism and commercial significance (string)
+- matching_tags: array of 3-5 relevant keyword tags
+
+Source type: tech_transfer
+Institution: ${signal.institution_or_sponsor}
+Title: ${signal.title}
+Description: ${text.slice(0, 2000)}`;
+  }
+
+  return `You are a biotech intelligence analyst. Extract structured drug asset information from the following ${signal.source_type} record.
 
 Return ONLY valid JSON with these fields:
 - asset_name: specific drug, compound, therapy, or platform name (string; "unknown" if unclear)
@@ -50,10 +92,27 @@ Institution/Sponsor: ${signal.institution_or_sponsor}
 Owner/Author: ${signal.authors_or_owner}
 Title: ${signal.title}
 Text: ${text.slice(0, 2000)}`;
+}
+
+function selectModel(signal: RawSignal): { client: OpenAI; model: string } {
+  if (signal.source_type === "patent" || signal.source_type === "tech_transfer") {
+    return { client: clientFull, model: "gpt-4o" };
+  }
+  return { client: clientMini, model: "gpt-4o-mini" };
+}
+
+export async function extractAssetFromSignal(
+  signal: RawSignal
+): Promise<Partial<ScoredAsset> | null> {
+  const text = signal.text?.trim();
+  if (!text || text === "No abstract available.") return null;
+
+  const prompt = buildExtractionPrompt(signal, text);
+  const { client, model } = selectModel(signal);
 
   try {
-    const response = await clientMini.chat.completions.create({
-      model: "gpt-4o-mini",
+    const response = await client.chat.completions.create({
+      model,
       messages: [{ role: "user", content: prompt }],
       response_format: { type: "json_object" },
       temperature: 0.1,
@@ -79,6 +138,36 @@ Text: ${text.slice(0, 2000)}`;
     };
   } catch (err) {
     if (isFatalOpenAIError(err)) throw err;
+    if (model === "gpt-4o") {
+      try {
+        const fallbackPrompt = buildExtractionPrompt(signal, text);
+        const fallback = await clientMini.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: fallbackPrompt }],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+        });
+        const fc = fallback.choices[0]?.message?.content;
+        if (!fc) return null;
+        const fp = JSON.parse(fc);
+        return {
+          asset_name: fp.asset_name ?? "unknown",
+          target: fp.target ?? "unknown",
+          modality: fp.modality ?? "unknown",
+          indication: fp.indication ?? "unknown",
+          development_stage: fp.development_stage ?? "unknown",
+          owner_name: fp.owner_name ?? signal.institution_or_sponsor ?? "unknown",
+          owner_type: fp.owner_type ?? "unknown",
+          institution: fp.institution ?? signal.institution_or_sponsor ?? "unknown",
+          licensing_status: fp.licensing_status ?? "unknown",
+          patent_status: fp.patent_status ?? "unknown",
+          summary: fp.summary ?? "",
+          matching_tags: Array.isArray(fp.matching_tags) ? fp.matching_tags : [],
+        };
+      } catch {
+        return null;
+      }
+    }
     console.error("extractAssetFromSignal error:", err);
     return null;
   }

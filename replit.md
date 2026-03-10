@@ -14,10 +14,12 @@ AI-powered biotech asset matchmaking platform. Ingests signals from multiple sou
 ### Key Design Decisions
 - **Unified `RawSignal` type**: All 6 data sources convert their output to `RawSignal[]` — a common envelope that feeds the pipeline
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
-- **Two-tier model strategy**: gpt-4o-mini for per-signal extraction (bulk, cheap); gpt-4o for report + dossier (single-shot, premium quality)
+- **Three-tier model strategy**: gpt-4o-mini for paper/preprint/trial extraction; gpt-4o for patent + tech_transfer extraction (higher quality for dense text) + report/dossier narratives; mini fallback on gpt-4o errors
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
-- **Tech Transfer**: Adapter pattern with curated seed data (Stanford/MIT/Oxford). Future live scraping swappable per-adapter.
+- **Tech Transfer**: Adapter pattern with curated seed data (8 institutions). Future live scraping swappable per-adapter.
+- **ClinicalTrials structured passthrough**: Known structured fields (indication, stage, owner, owner_type) applied directly before/after LLM extraction to prevent re-extraction errors
 - **No nanoid**: Uses `crypto.randomUUID()` (built-in Node.js) for ID generation
+- **PDF export**: @media print CSS block hides nav/buttons, forces white background, page-break control. Print buttons on Dossier + Report pages.
 
 ### Folder Structure
 ```
@@ -28,8 +30,8 @@ server/
     sources/
       index.ts            # collectAllSignals() fan-out + DataSource registry (all 6 sources)
       pubmed.ts           # PubMed E-utilities → RawSignal[]
-      biorxiv.ts          # bioRxiv API (last 90 days, client-side keyword filter)
-      medrxiv.ts          # medRxiv API (same pattern as bioRxiv)
+      biorxiv.ts          # bioRxiv via Europe PMC full-text search (PPR source, no date ceiling)
+      medrxiv.ts          # medRxiv via Europe PMC full-text search (PPR source, no date ceiling)
       clinicaltrials.ts   # ClinicalTrials.gov API v2
       patents.ts          # USPTO PatentsView API (free, no key)
       techtransfer/
@@ -37,6 +39,11 @@ server/
         stanford.ts       # 8 curated Stanford OTL listings
         mit.ts            # 8 curated MIT TLO listings
         oxford.ts         # 8 curated Oxford University Innovation listings
+        ucsf.ts           # 8 curated UCSF Innovation Ventures listings
+        broad.ts          # 8 curated Broad Institute Technology listings
+        johnshopkins.ts   # 8 curated Johns Hopkins Technology Ventures listings
+        harvard.ts        # 8 curated Harvard OTD listings
+        emory.ts          # 8 curated Emory OTT listings
     pipeline/
       normalizeSignals.ts # RawSignal[] → Partial<ScoredAsset>[] via LLM extraction (concurrency=3)
       clusterAssets.ts    # Groups similar assets by name/target/indication/owner similarity

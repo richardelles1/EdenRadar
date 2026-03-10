@@ -40,12 +40,45 @@ function inferConfidence(extracted: Partial<ScoredAsset>, signal: RawSignal): "h
   return "low";
 }
 
+function applyStructuredOverrides(
+  asset: Partial<ScoredAsset>,
+  signal: RawSignal
+): Partial<ScoredAsset> {
+  if (signal.source_type !== "clinical_trial") return asset;
+
+  const conditions = signal.metadata?.conditions as string[] | undefined;
+  const ownerType = signal.metadata?.owner_type as string | undefined;
+  const interventionOtherName = signal.metadata?.intervention_other_name as string | undefined;
+
+  return {
+    ...asset,
+    indication:
+      conditions && conditions.length > 0
+        ? conditions.slice(0, 3).join(", ")
+        : asset.indication ?? "unknown",
+    development_stage: signal.stage_hint && signal.stage_hint !== "unknown"
+      ? signal.stage_hint
+      : asset.development_stage ?? "unknown",
+    owner_name: signal.institution_or_sponsor || asset.owner_name || "unknown",
+    owner_type:
+      ownerType === "university" || ownerType === "company"
+        ? (ownerType as "university" | "company")
+        : asset.owner_type ?? "unknown",
+    institution: signal.institution_or_sponsor || asset.institution || "unknown",
+    asset_name:
+      interventionOtherName && interventionOtherName !== "unknown"
+        ? interventionOtherName
+        : asset.asset_name ?? "unknown",
+    licensing_status: "unknown",
+  };
+}
+
 export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<ScoredAsset>[]> {
   const tasks = signals.map((signal) => async (): Promise<Partial<ScoredAsset>> => {
     try {
       const extracted = await extractAssetFromSignal(signal);
       if (!extracted) {
-        return {
+        const fallback: Partial<ScoredAsset> = {
           id: crypto.randomUUID().slice(0,8),
           asset_name: signal.title.slice(0, 80) || "unknown",
           indication: "unknown",
@@ -67,9 +100,10 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
           confidence: "low",
           signals: [signal],
         };
+        return applyStructuredOverrides(fallback, signal);
       }
 
-      return {
+      const merged: Partial<ScoredAsset> = {
         id: crypto.randomUUID().slice(0,8),
         asset_name: extracted.asset_name ?? "unknown",
         target: extracted.target ?? "unknown",
@@ -91,9 +125,11 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
         confidence: inferConfidence(extracted, signal),
         signals: [signal],
       };
+
+      return applyStructuredOverrides(merged, signal);
     } catch (err) {
       if (isFatalOpenAIError(err)) throw err;
-      return {
+      const errFallback: Partial<ScoredAsset> = {
         id: crypto.randomUUID().slice(0,8),
         asset_name: signal.title.slice(0, 80) || "unknown",
         indication: "unknown",
@@ -115,6 +151,7 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
         confidence: "low",
         signals: [signal],
       };
+      return applyStructuredOverrides(errFallback, signal);
     }
   });
 

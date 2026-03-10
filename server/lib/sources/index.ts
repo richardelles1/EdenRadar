@@ -34,7 +34,7 @@ async function pubmedToSignals(query: string, maxResults = 10): Promise<RawSigna
       text: p.abstract,
       authors_or_owner: "",
       institution_or_sponsor: "",
-      date: p.year,
+      date: p.date || p.year,
       stage_hint: "unknown",
       url: p.url,
       metadata: { pmid: p.pmid, journal: p.journal, year: p.year },
@@ -52,13 +52,13 @@ export const dataSources: Record<SourceKey, DataSource> = {
   biorxiv: {
     id: "biorxiv",
     label: "bioRxiv",
-    description: "Biology preprint server (last 90 days)",
+    description: "Biology preprints via Europe PMC full-text search",
     search: searchBiorxiv,
   },
   medrxiv: {
     id: "medrxiv",
     label: "medRxiv",
-    description: "Clinical/health sciences preprint server (last 90 days)",
+    description: "Clinical/health sciences preprints via Europe PMC full-text search",
     search: searchMedrxiv,
   },
   clinicaltrials: {
@@ -76,7 +76,7 @@ export const dataSources: Record<SourceKey, DataSource> = {
   techtransfer: {
     id: "techtransfer",
     label: "Tech Transfer",
-    description: "University technology licensing offices",
+    description: "University technology licensing offices (8 institutions)",
     search: searchTechTransfer,
   },
 };

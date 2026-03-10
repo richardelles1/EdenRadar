@@ -229,3 +229,110 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ============================================================
+   PRINT STYLES — Dossier and Report pages
+   ============================================================ */
+@media print {
+  @page {
+    margin: 18mm 16mm;
+    size: A4;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+    font-size: 11pt;
+  }
+
+  nav,
+  .no-print {
+    display: none !important;
+  }
+
+  .gradient-text,
+  .gradient-text-light {
+    -webkit-text-fill-color: #111111 !important;
+    background: none !important;
+    color: #111111 !important;
+  }
+
+  [data-testid="print-target"] {
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .rounded-xl,
+  .rounded-lg {
+    border-radius: 4px !important;
+  }
+
+  .bg-card,
+  .bg-background,
+  .bg-muted {
+    background-color: #ffffff !important;
+  }
+
+  .bg-primary\/5,
+  .bg-primary\/10 {
+    background-color: #f0f8ff !important;
+  }
+
+  .text-muted-foreground {
+    color: #444444 !important;
+  }
+
+  .text-foreground {
+    color: #111111 !important;
+  }
+
+  .text-primary {
+    color: #0070a8 !important;
+  }
+
+  .border-card-border,
+  .border-primary\/20,
+  .border-primary\/15 {
+    border-color: #cccccc !important;
+  }
+
+  .space-y-6 > * + * {
+    margin-top: 16pt !important;
+  }
+
+  .space-y-4 > * + * {
+    margin-top: 10pt !important;
+  }
+
+  .space-y-3 > * + * {
+    margin-top: 8pt !important;
+  }
+
+  .grid.sm\\:grid-cols-3 {
+    display: block !important;
+  }
+
+  [data-testid^="report-asset-"] {
+    page-break-inside: avoid;
+  }
+
+  [data-testid="dossier-narrative-panel"] {
+    page-break-inside: avoid;
+  }
+
+  .score-badge,
+  [data-testid="score-badge"] {
+    page-break-inside: avoid;
+  }
+
+  a {
+    color: #0070a8 !important;
+    text-decoration: underline;
+  }
+}

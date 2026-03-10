@@ -2,6 +2,11 @@ import type { RawSignal } from "../../types";
 import { getStanfordListings } from "./stanford";
 import { getMitListings } from "./mit";
 import { getOxfordListings } from "./oxford";
+import { getUcsfListings } from "./ucsf";
+import { getBroadListings } from "./broad";
+import { getJohnsHopkinsListings } from "./johnshopkins";
+import { getHarvardListings } from "./harvard";
+import { getEmoryListings } from "./emory";
 
 export interface TechTransferAdapter {
   institution: string;
@@ -12,6 +17,11 @@ const adapters: TechTransferAdapter[] = [
   { institution: "Stanford University", getListings: getStanfordListings },
   { institution: "MIT", getListings: getMitListings },
   { institution: "University of Oxford", getListings: getOxfordListings },
+  { institution: "UCSF", getListings: getUcsfListings },
+  { institution: "Broad Institute", getListings: getBroadListings },
+  { institution: "Johns Hopkins University", getListings: getJohnsHopkinsListings },
+  { institution: "Harvard University", getListings: getHarvardListings },
+  { institution: "Emory University", getListings: getEmoryListings },
 ];
 
 function matchesQuery(signal: RawSignal, query: string): boolean {

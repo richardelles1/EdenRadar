@@ -36,6 +36,7 @@ export async function searchClinicalTrials(query: string, maxResults = 10): Prom
         "Phase",
         "Condition",
         "InterventionName",
+        "InterventionOtherName",
         "BriefSummary",
         "StartDate",
         "PrimaryCompletionDate",
@@ -61,6 +62,10 @@ export async function searchClinicalTrials(query: string, maxResults = 10): Prom
       const nctId = id.nctId ?? "";
       const phase = Array.isArray(design.phases) ? design.phases[0] : design.phases ?? "";
       const interventionNames = interventions.map((i: any) => i.interventionName).join(", ");
+      const interventionOtherNames = interventions
+        .flatMap((i: any) => Array.isArray(i.interventionOtherNames) ? i.interventionOtherNames : [])
+        .filter(Boolean)
+        .join(", ");
       const conditionStr = conditions.join(", ");
 
       return {
@@ -81,6 +86,7 @@ export async function searchClinicalTrials(query: string, maxResults = 10): Prom
           phase,
           conditions,
           interventions: interventionNames,
+          intervention_other_name: interventionOtherNames || interventionNames || "unknown",
         },
       };
     });
