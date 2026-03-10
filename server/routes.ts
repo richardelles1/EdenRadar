@@ -10,6 +10,7 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
+import { runIngestionPipeline, isIngestionRunning } from "./lib/ingestion";
 
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
@@ -223,6 +224,83 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
+    }
+  });
+
+  app.post("/api/ingest/run", async (_req, res) => {
+    if (isIngestionRunning()) {
+      const lastRun = await storage.getLastIngestionRun();
+      return res.json({ message: "Ingestion already in progress", status: "running", runId: lastRun?.id });
+    }
+    res.json({ message: "Ingestion started" });
+    runIngestionPipeline().catch((err) => {
+      console.error("[ingestion] Background run failed:", err);
+    });
+  });
+
+  app.get("/api/ingest/status", async (_req, res) => {
+    try {
+      const lastRun = await storage.getLastIngestionRun();
+      if (!lastRun) {
+        return res.json({ status: "never_run", totalFound: 0, newCount: 0, ranAt: null });
+      }
+      const running = isIngestionRunning();
+      return res.json({
+        ...lastRun,
+        status: running ? "running" : lastRun.status,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch status" });
+    }
+  });
+
+  app.get("/api/institutions/counts", async (_req, res) => {
+    try {
+      const counts = await storage.getInstitutionAssetCounts();
+      res.json(counts);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch counts" });
+    }
+  });
+
+  app.get("/api/institutions/:slug/assets", async (req, res) => {
+    try {
+      const SLUG_TO_NAME: Record<string, string> = {
+        stanford: "Stanford University",
+        mit: "MIT",
+        harvard: "Harvard University",
+        jhu: "Johns Hopkins University",
+        ucsf: "University of California San Francisco",
+        duke: "Duke University",
+        columbia: "Columbia University",
+        upenn: "University of Pennsylvania",
+        northwestern: "Northwestern University",
+        cornell: "Cornell University",
+        ucberkeley: "UC Berkeley",
+        uwashington: "University of Washington",
+        wustl: "Washington University in St. Louis",
+        umich: "University of Michigan",
+        mayo: "Mayo Clinic",
+        scripps: "Scripps Research",
+        salk: "Salk Institute for Biological Studies",
+        mdanderson: "MD Anderson Cancer Center",
+        upitt: "University of Pittsburgh",
+        uchicago: "University of Chicago",
+        yale: "Yale University",
+        vanderbilt: "Vanderbilt University",
+        emory: "Emory University",
+        bu: "Boston University",
+        georgetown: "Georgetown University",
+        utexas: "University of Texas",
+        cwru: "Case Western Reserve University",
+        ucolorado: "University of Colorado",
+      };
+      const name = SLUG_TO_NAME[req.params.slug];
+      if (!name) return res.status(404).json({ error: "Institution not found" });
+      const assets = await storage.getIngestedAssetsByInstitution(name);
+      res.json({ assets, institution: name });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
     }
   });
 

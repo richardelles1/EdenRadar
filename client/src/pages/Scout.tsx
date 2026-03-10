@@ -11,10 +11,11 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
+import type { IngestionRun } from "@shared/schema";
 import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
@@ -34,6 +35,119 @@ type SourcesResponse = {
 type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
+
+type IngestStatus = IngestionRun & { status: string } | { status: "never_run"; totalFound: 0; newCount: 0; ranAt: null };
+
+function formatRelativeTime(dt: Date | string | null): string {
+  if (!dt) return "unknown";
+  const d = new Date(dt);
+  const now = Date.now();
+  const diff = now - d.getTime();
+  const hours = Math.floor(diff / 3600000);
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: statusData } = useQuery<IngestStatus>({
+    queryKey: ["/api/ingest/status"],
+    refetchInterval: (query) => {
+      const data = query.state.data as IngestStatus | undefined;
+      return data?.status === "running" ? 3000 : 30000;
+    },
+    staleTime: 0,
+  });
+
+  const scanMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ingest/run", {});
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/ingest/status"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Scan failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const isRunning = statusData?.status === "running" || scanMutation.isPending;
+
+  const handleScan = () => {
+    scanMutation.mutate();
+    onRefresh();
+  };
+
+  if (!statusData || statusData.status === "never_run") {
+    return (
+      <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-amber-500/20 bg-amber-500/5" data-testid="scan-status-bar">
+        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-medium">Sources not yet indexed</span>
+          <span className="hidden sm:inline text-muted-foreground">— run a full scan to pull real listings from all 28 TTOs</span>
+        </div>
+        <Button
+          size="sm"
+          className="h-7 text-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
+          onClick={handleScan}
+          disabled={isRunning}
+          data-testid="button-run-scan"
+        >
+          {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+          Run Full Scan
+        </Button>
+      </div>
+    );
+  }
+
+  if (isRunning) {
+    return (
+      <div className="max-w-3xl mx-auto flex items-center gap-3 px-3.5 py-2 rounded-lg border border-primary/20 bg-primary/5" data-testid="scan-status-bar">
+        <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+        <span className="text-xs text-primary font-medium">Scanning all TTO sources…</span>
+        <span className="text-xs text-muted-foreground">This takes a few minutes</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-primary/15 bg-primary/5" data-testid="scan-status-bar">
+      <div className="flex items-center gap-2 text-xs">
+        <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
+        <span className="text-muted-foreground">
+          Last scan: <span className="text-foreground font-medium">{formatRelativeTime(statusData.ranAt)}</span>
+        </span>
+        <span className="text-muted-foreground/50">·</span>
+        <span className="text-muted-foreground">
+          <span className="text-foreground font-medium">{statusData.totalFound}</span> assets indexed
+        </span>
+        {statusData.newCount > 0 && (
+          <>
+            <span className="text-muted-foreground/50">·</span>
+            <span className="text-primary font-medium">+{statusData.newCount} new</span>
+          </>
+        )}
+      </div>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-7 text-xs shrink-0 border-primary/30 text-primary hover:bg-primary/5"
+        onClick={handleScan}
+        disabled={isRunning}
+        data-testid="button-refresh-scan"
+      >
+        <RefreshCw className="w-3 h-3 mr-1.5" />
+        Refresh
+      </Button>
+    </div>
+  );
+}
 
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
@@ -140,6 +254,7 @@ export default function Scout() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const [scanTick, setScanTick] = useState(0);
 
   const [searchResults, setSearchResults] = useState<ScoredAsset[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
@@ -401,6 +516,8 @@ export default function Scout() {
                 </span>
               </Button>
             </div>
+
+            <ScanStatusBar onRefresh={() => setScanTick((t) => t + 1)} />
 
             <div className="max-w-3xl mx-auto flex items-center justify-end">
               <TooltipProvider>

@@ -1,0 +1,73 @@
+import { storage } from "../storage";
+import { runAllScrapers } from "./scrapers/index";
+
+export function makeFingerprint(title: string, institution: string): string {
+  return `${title.toLowerCase().trim()}|${institution.toLowerCase().trim()}`;
+}
+
+export interface IngestionResult {
+  totalFound: number;
+  newCount: number;
+  runId: number;
+}
+
+let ingestionRunning = false;
+
+export function isIngestionRunning(): boolean {
+  return ingestionRunning;
+}
+
+export async function runIngestionPipeline(): Promise<IngestionResult> {
+  if (ingestionRunning) {
+    console.log("[ingestion] Already running, skipping.");
+    const lastRun = await storage.getLastIngestionRun();
+    return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
+  }
+
+  ingestionRunning = true;
+  const run = await storage.createIngestionRun();
+  console.log(`[ingestion] Run #${run.id} started`);
+
+  try {
+    const listings = await runAllScrapers();
+    console.log(`[ingestion] Scraped ${listings.length} total listings`);
+
+    let newCount = 0;
+    for (const listing of listings) {
+      if (!listing.title || !listing.institution) continue;
+      const fingerprint = makeFingerprint(listing.title, listing.institution);
+      try {
+        const { isNew } = await storage.upsertIngestedAsset(fingerprint, {
+          assetName: listing.title,
+          institution: listing.institution,
+          summary: listing.description || listing.title,
+          sourceUrl: listing.url || null,
+          sourceType: "tech_transfer",
+          developmentStage: listing.stage ?? "unknown",
+          runId: run.id,
+        });
+        if (isNew) newCount++;
+      } catch (err: any) {
+        console.error(`[ingestion] Failed to upsert asset "${listing.title}": ${err?.message}`);
+      }
+    }
+
+    await storage.updateIngestionRun(run.id, {
+      status: "completed",
+      totalFound: listings.length,
+      newCount,
+    });
+
+    console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
+    return { totalFound: listings.length, newCount, runId: run.id };
+  } catch (err: any) {
+    console.error(`[ingestion] Run #${run.id} failed:`, err);
+    await storage.updateIngestionRun(run.id, {
+      status: "failed",
+      errorMessage: err?.message ?? "Unknown error",
+    });
+    return { totalFound: 0, newCount: 0, runId: run.id };
+  } finally {
+    ingestionRunning = false;
+  }
+}

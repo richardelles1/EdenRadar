@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { schedule as cronSchedule } from "node-cron";
+import { runIngestionPipeline } from "./lib/ingestion";
 
 const app = express();
 const httpServer = createServer(app);
@@ -84,6 +86,16 @@ app.use((req, res, next) => {
     const { setupVite } = await import("./vite");
     await setupVite(httpServer, app);
   }
+
+  cronSchedule("0 8 * * *", async () => {
+    log("[cron] Starting daily ingestion run...", "cron");
+    try {
+      const result = await runIngestionPipeline();
+      log(`[cron] Daily ingestion complete: ${result.totalFound} assets, ${result.newCount} new`, "cron");
+    } catch (err: any) {
+      log(`[cron] Daily ingestion failed: ${err?.message}`, "cron");
+    }
+  });
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.

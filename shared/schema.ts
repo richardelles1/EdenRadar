@@ -1,4 +1,4 @@
-import { sql, relations } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { pgTable, text, varchar, serial, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -72,3 +72,44 @@ export const assetSchema = z.object({
 });
 
 export type Asset = z.infer<typeof assetSchema>;
+
+export const ingestionRuns = pgTable("ingestion_runs", {
+  id: serial("id").primaryKey(),
+  ranAt: timestamp("ran_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  totalFound: integer("total_found").notNull().default(0),
+  newCount: integer("new_count").notNull().default(0),
+  status: text("status").notNull().default("running"),
+  errorMessage: text("error_message"),
+});
+
+export const insertIngestionRunSchema = createInsertSchema(ingestionRuns).omit({
+  id: true,
+  ranAt: true,
+});
+export type InsertIngestionRun = z.infer<typeof insertIngestionRunSchema>;
+export type IngestionRun = typeof ingestionRuns.$inferSelect;
+
+export const ingestedAssets = pgTable("ingested_assets", {
+  id: serial("id").primaryKey(),
+  fingerprint: text("fingerprint").notNull().unique(),
+  assetName: text("asset_name").notNull(),
+  target: text("target").notNull().default("unknown"),
+  modality: text("modality").notNull().default("unknown"),
+  developmentStage: text("development_stage").notNull().default("unknown"),
+  indication: text("indication").notNull().default("unknown"),
+  institution: text("institution").notNull(),
+  sourceType: text("source_type").notNull().default("tech_transfer"),
+  summary: text("summary").notNull(),
+  sourceUrl: text("source_url"),
+  firstSeenAt: timestamp("first_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastSeenAt: timestamp("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  runId: integer("run_id").notNull(),
+});
+
+export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets).omit({
+  id: true,
+  firstSeenAt: true,
+  lastSeenAt: true,
+});
+export type InsertIngestedAsset = z.infer<typeof insertIngestedAssetSchema>;
+export type IngestedAsset = typeof ingestedAssets.$inferSelect;

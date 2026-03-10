@@ -1,6 +1,6 @@
-# HelixRadar v2
+# EdenRadar v2
 
-AI-powered biotech asset matchmaking platform. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes all 28 institution TTO websites.
 
 ## Architecture
 
@@ -10,108 +10,117 @@ AI-powered biotech asset matchmaking platform. Ingests signals from multiple sou
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
+- **TTO Scraping**: cheerio-based real scrapers for all 28 institutions; daily cron at 8AM; manual Refresh button
+
+### Portal Gate
+- `localStorage.getItem('eden-portal')` = "true" to be inside the app
+- `DashboardLayout` redirects to `/` if flag missing
+- Set by "Enter Portal" on Landing page; cleared by "Exit Portal" in Sidebar
 
 ### Key Design Decisions
-- **Unified `RawSignal` type**: All 8 data sources convert their output to `RawSignal[]` — a common envelope that feeds the pipeline
+- **Unified `RawSignal` type**: All 8 data sources convert their output to `RawSignal[]`
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
-- **Three-tier model strategy**: gpt-4o-mini for paper/preprint/trial extraction; gpt-4o for patent + tech_transfer extraction (higher quality for dense text) + report/dossier narratives; mini fallback on gpt-4o errors
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
-- **Tech Transfer**: Adapter pattern with curated seed data (28 institutions, ~224 listings). Future live scraping swappable per-adapter.
-- **NIH Reporter**: Live API (api.reporter.nih.gov/v2) for NIH-funded research projects (2023–2025) — no API key required, leading-edge signal of funded science before it becomes papers.
-- **OpenAlex**: Live API (api.openalex.org) for scholarly papers beyond PubMed coverage — no API key, 3-year rolling window, broader journal coverage.
-- **ClinicalTrials structured passthrough**: Known structured fields (indication, stage, owner, owner_type) applied directly before/after LLM extraction to prevent re-extraction errors
-- **No nanoid**: Uses `crypto.randomUUID()` (built-in Node.js) for ID generation
-- **PDF export**: @media print CSS block hides nav/buttons, forces white background, page-break control. Print buttons on Dossier + Report pages.
+- **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
+- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 28 TTOs with concurrency=5, upserts to DB, diffs for new
+- **Daily cron**: `node-cron` at 8:00 AM runs ingestion automatically
 
 ### Folder Structure
 ```
 server/
   lib/
-    types.ts              # Canonical types: RawSignal, ScoredAsset, BuyerProfile, ScoreBreakdown
-    llm.ts                # LLM interface — extractAssetFromSignal (mini), generateWhyItMatters (mini), generateReportNarrative (4o), generateDossierNarrative (4o)
+    ingestion.ts          # runIngestionPipeline() — scrape all TTOs, upsert to DB, track new
+    scrapers/
+      types.ts            # ScrapedListing, InstitutionScraper interfaces
+      utils.ts            # fetchHtml (cheerio), cleanText, resolveUrl helpers
+      index.ts            # runAllScrapers() with concurrency=5
+      stanford.ts         # Stanford TechFinder scraper
+      mit.ts              # MIT TLO scraper
+      harvard.ts          # Harvard OTD scraper
+      ucsf.ts             # UCSF Innovation Ventures scraper
+      jhu.ts              # Johns Hopkins Ventures scraper
+      duke.ts             # Duke OLV scraper
+      columbia.ts         # Columbia TechVentures scraper
+      upenn.ts            # Penn PCI scraper
+      northwestern.ts     # Northwestern TTO scraper
+      cornell.ts          # Cornell CTT scraper
+      ucberkeley.ts       # UC Berkeley IPIRA scraper
+      uwashington.ts      # UW CoMotion scraper
+      wustl.ts            # WashU OTM scraper
+      umich.ts            # UMich TechTransfer scraper
+      mayo.ts             # Mayo Clinic Ventures scraper
+      scripps.ts          # Scripps TTVD scraper
+      salk.ts             # Salk Institute scraper
+      mdanderson.ts       # MD Anderson TTO scraper
+      upitt.ts            # Pitt Innovation scraper
+      uchicago.ts         # UChicago Polsky Center scraper
+      yale.ts             # Yale OCR scraper
+      vanderbilt.ts       # Vanderbilt CTT scraper
+      emory.ts            # Emory OTT scraper
+      bu.ts               # BU OTD scraper
+      georgetown.ts       # Georgetown OTL scraper
+      utexas.ts           # UT OTC scraper
+      cwru.ts             # CWRU TTO scraper
+      ucolorado.ts        # CU Innovations scraper
     sources/
-      index.ts            # collectAllSignals() fan-out + DataSource registry (all 6 sources)
-      pubmed.ts           # PubMed E-utilities → RawSignal[]
-      biorxiv.ts          # bioRxiv via Europe PMC full-text search (PPR source, no date ceiling)
-      medrxiv.ts          # medRxiv via Europe PMC full-text search (PPR source, no date ceiling)
-      clinicaltrials.ts   # ClinicalTrials.gov API v2
-      patents.ts          # USPTO PatentsView API (free, no key)
-      techtransfer/
-        index.ts          # TechTransferAdapter interface + getTechTransferSignals()
-        stanford.ts       # 8 curated Stanford OTL listings
-        mit.ts            # 8 curated MIT TLO listings
-        oxford.ts         # 8 curated Oxford University Innovation listings
-        ucsf.ts           # 8 curated UCSF Innovation Ventures listings
-        broad.ts          # 8 curated Broad Institute Technology listings
-        johnshopkins.ts   # 8 curated Johns Hopkins Technology Ventures listings
-        harvard.ts        # 8 curated Harvard OTD listings
-        emory.ts          # 8 curated Emory OTT listings
+      index.ts            # collectAllSignals() fan-out + DataSource registry
+      pubmed.ts, biorxiv.ts, medrxiv.ts, clinicaltrials.ts, patents.ts, techtransfer/
     pipeline/
-      normalizeSignals.ts # RawSignal[] → Partial<ScoredAsset>[] via LLM extraction (concurrency=3)
-      clusterAssets.ts    # Groups similar assets by name/target/indication/owner similarity
-      scoreAssets.ts      # Deterministic 6-dimension scoring + generateWhyItMatters for top 10
-      generateReport.ts   # Calls generateReportNarrative (gpt-4o) → ReportPayload
-      generateDossier.ts  # Calls generateDossierNarrative (gpt-4o) → DossierPayload
-    extractor.ts          # Legacy single-source extractor (kept for backward compat)
-  routes.ts               # POST /api/search (full pipeline), POST /api/report, POST /api/dossier
+      normalizeSignals.ts, clusterAssets.ts, scoreAssets.ts, generateReport.ts, generateDossier.ts
+  routes.ts               # All API routes
+  storage.ts              # DatabaseStorage implementing IStorage
 
 client/src/
-  lib/
-    types.ts              # Client-side mirror of server types (ScoredAsset, BuyerProfile, etc.)
   pages/
-    Landing.tsx           # / — animated DNA helix + radar landing page
-    Discover.tsx          # /discover — multi-source search, buyer profile, source toggles, report button
-    Pipeline.tsx          # /pipeline — kanban saved assets by stage
-    AssetDossier.tsx      # /asset/:id — premium dossier view with score breakdown + evidence signals
-    Report.tsx            # /report — buyer intelligence report with ranked assets + narrative
-  components/
-    Nav.tsx
-    SearchBar.tsx
-    SearchResults.tsx     # Updated to use ScoredAsset[]
-    AssetCard.tsx         # Updated: ScoreBadge, SourceBadge, owner info, "View Dossier" button
-    SavedAssetsPanel.tsx
-    SearchHistoryPanel.tsx
-    ScoreBadge.tsx        # Colored score badge (0-100) with score breakdown tooltip
-    ScoreBreakdownCard.tsx # 6-dimension score breakdown with progress bars
-    SourceBadge.tsx        # Color-coded source type pill (paper/preprint/trial/patent/tech_transfer)
-    BuyerProfileForm.tsx   # Collapsible buyer thesis form with multi-select chips and keyword inputs
+    Landing.tsx           # / — Enter Portal CTA
+    Scout.tsx             # /scout — search + ScanStatusBar + Refresh button
+    Assets.tsx            # /assets — saved pipeline (kanban)
+    Institutions.tsx      # /institutions — 28 TTO cards with live counts
+    InstitutionDetail.tsx # /institutions/:slug — real ingested listings
+    Reports.tsx           # /reports — mock report cards
+    Alerts.tsx            # /alerts — mock alerts + Create Alert drawer
+    AssetDossier.tsx      # /asset/:id — dossier view
+    Report.tsx            # /report — buyer intelligence report
 
-shared/schema.ts          # Drizzle schema: searchHistory, savedAssets tables
+shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets
 ```
 
 ### Pages
-- **`/`** — Landing with animated DNA helix + spinning radar, CTA to Discover
-- **`/discover`** — Multi-source search with buyer thesis configuration, source toggles, scored asset grid, "Match Report" button, "View Dossier" per card
-- **`/pipeline`** — Kanban of saved assets by clinical stage with JSON/CSV export
-- **`/asset/:id`** — Premium dossier: score breakdown, evidence signals, commercial why-it-matters, "Generate Full Dossier" (GPT-4o)
-- **`/report`** — Buyer intelligence report: exec summary, buyer thesis, ranked top assets, AI narrative analysis
+- **`/`** — Landing with EdenSVG botanical icon, Enter Portal CTA
+- **`/scout`** — Multi-source search with scan status banner, buyer thesis, source toggles, scored asset grid
+- **`/assets`** — Saved pipeline kanban by clinical stage
+- **`/institutions`** — 28 TTO cards with live listing counts from DB
+- **`/institutions/:slug`** — Real ingested listings for an institution (or empty state)
+- **`/reports`** — Mock report cards
+- **`/alerts`** — Mock alerts with Create Alert sheet drawer
+- **`/asset/:id`** — Full dossier with score breakdown
+- **`/report`** — Buyer intelligence report
 
 ### API Routes
-- `GET /api/sources` — list all available source modules
-- `POST /api/search` — `{ query, sources[], maxPerSource, buyerProfile? }` → `ScoredAsset[]` (full pipeline)
-- `POST /api/report` — same body as search → `ReportPayload` (includes GPT-4o narrative)
-- `POST /api/dossier` — `{ asset: ScoredAsset }` → `DossierPayload` (GPT-4o commercial brief)
+- `GET /api/sources` — list available source modules
+- `POST /api/search` — full pipeline search → `ScoredAsset[]`
+- `POST /api/report` — GPT-4o market report
+- `POST /api/dossier` — GPT-4o dossier brief
 - `GET/POST /api/saved-assets` — saved asset CRUD
-- `GET /api/search-history` — recent searches
-
-### Scoring Dimensions (0–100 each)
-| Dimension | Weight | Signal |
-|-----------|--------|--------|
-| Novelty | 20% | Preprint/university sources, low evidence count = high novelty |
-| Freshness | 15% | Days since latest signal (≤30 days = 100) |
-| Readiness | 15% | Clinical stage + patent/trial presence |
-| Licensability | 25% | University ownership + tech transfer + "available" licensing status |
-| Buyer Fit | 15% | Alignment with BuyerProfile thesis (0 if no profile provided) |
-| Competition | 10% | Inverted: large pharma sponsor or late-stage = penalty |
-
-### Visual Theme
-- Deep-space navy dark mode (`--background: 222 47% 6%`) + electric cyan primary (`--primary: 183 85% 52%`)
-- CSS animations: `radar-sweep` (4s spin), `helix-scroll` (12s translateY), `glow-pulse`
+- `DELETE /api/saved-assets/:id`
+- `GET /api/search-history`
+- `POST /api/ingest/run` — trigger TTO scrape pipeline (async, non-blocking)
+- `GET /api/ingest/status` — last run status (never_run | running | completed | failed)
+- `GET /api/institutions/counts` — `Record<string, number>` count per institution
+- `GET /api/institutions/:slug/assets` — ingested assets for an institution
 
 ### Database Tables
 - `search_history`: query, source, result_count, created_at
 - `saved_assets`: full asset data from saved search results
+- `ingestion_runs`: id, ran_at, total_found, new_count, status, error_message
+- `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, run_id
+
+### Visual Theme
+- Botanical green: `--primary: 142 52% 36%` (light) / `142 65% 48%` (dark)
+- Dark mode: `--background: 222 47% 6%`
+- CSS animations: `radar-sweep`, `helix-scroll`, `glow-pulse`
 
 ## Environment Variables
-- `DATABASE_URL`: PostgreSQL connection string (auto-provided by Replit)
-- `OPENAI_API_KEY`: OpenAI API key (user's own key, set as Replit secret)
+- `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
+- `OPENAI_API_KEY`: OpenAI API key (Replit secret)
+- `SESSION_SECRET`: Session encryption secret
