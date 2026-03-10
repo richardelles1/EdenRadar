@@ -286,7 +286,6 @@ export async function registerRoutes(
         mdanderson: "MD Anderson Cancer Center",
         upitt: "University of Pittsburgh",
         uchicago: "University of Chicago",
-        yale: "Yale University",
         vanderbilt: "Vanderbilt University",
         emory: "Emory University",
         bu: "Boston University",
@@ -337,6 +336,13 @@ export async function registerRoutes(
         binghamton: "Binghamton University",
         usc: "University of Southern California",
         oregonstate: "Oregon State University",
+        gsu: "Georgia State University",
+        northeastern: "Northeastern University",
+        uvm: "University of Vermont",
+        usd: "University of South Dakota",
+        txstate: "Texas State University",
+        yale: "Yale University",
+        purdue: "Purdue University",
       };
       const name = SLUG_TO_NAME[req.params.slug];
       if (!name) return res.status(404).json({ error: "Institution not found" });

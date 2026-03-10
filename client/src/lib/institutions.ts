@@ -28,7 +28,6 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "mdanderson", name: "MD Anderson Cancer Center", city: "Houston, TX", ttoName: "MD Anderson TTO", website: "https://www.mdanderson.org/research/departments-labs-institutes/programs-centers/technology-commercialization.html", specialties: ["Oncology", "Immunotherapy", "CAR-T"] },
   { slug: "upitt", name: "University of Pittsburgh", city: "Pittsburgh, PA", ttoName: "Pitt Innovation Institute", website: "https://www.innovation.pitt.edu", specialties: ["Regenerative Medicine", "Oncology", "Organ Transplant"] },
   { slug: "uchicago", name: "University of Chicago", city: "Chicago, IL", ttoName: "UChicago Polsky Center", website: "https://polsky.uchicago.edu/programs-and-services/george-shultz-innovation-fund", specialties: ["Immunology", "Drug Delivery", "Oncology"] },
-  { slug: "yale", name: "Yale University", city: "New Haven, CT", ttoName: "Yale OCS", website: "https://ocr.yale.edu", specialties: ["Oncology", "Immunotherapy", "Structural Biology"] },
   { slug: "vanderbilt", name: "Vanderbilt University", city: "Nashville, TN", ttoName: "Vanderbilt Center for Technology Transfer", website: "https://ctt.vanderbilt.edu", specialties: ["Small Molecules", "Metabolic Disease", "Infectious Disease"] },
   { slug: "emory", name: "Emory University", city: "Atlanta, GA", ttoName: "Emory OTT", website: "https://ott.emory.edu", specialties: ["Infectious Disease", "Neuroscience", "Vaccines"] },
   { slug: "bu", name: "Boston University", city: "Boston, MA", ttoName: "BU Technology Development", website: "https://www.bu.edu/otd", specialties: ["Oncology", "Drug Delivery", "Rare Disease"] },
@@ -79,6 +78,13 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "binghamton", name: "Binghamton University", city: "Binghamton, NY", ttoName: "Binghamton TTO", website: "https://binghamton.technologypublisher.com", specialties: ["Oncology", "Drug Discovery", "Biosensors"] },
   { slug: "usc", name: "University of Southern California", city: "Los Angeles, CA", ttoName: "USC Stevens Center for Innovation", website: "https://usc.technologypublisher.com", specialties: ["Neuroscience", "Drug Delivery", "Oncology"] },
   { slug: "oregonstate", name: "Oregon State University", city: "Corvallis, OR", ttoName: "OSU Office for Commercialization", website: "https://oregonstate.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Biomaterials"] },
+  { slug: "gsu", name: "Georgia State University", city: "Atlanta, GA", ttoName: "GSU Office of Technology Transfer", website: "https://gsu.technologypublisher.com", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"] },
+  { slug: "northeastern", name: "Northeastern University", city: "Boston, MA", ttoName: "Northeastern TTO", website: "https://nu.technologypublisher.com", specialties: ["Drug Delivery", "Biosensors", "Bioelectronics"] },
+  { slug: "uvm", name: "University of Vermont", city: "Burlington, VT", ttoName: "UVM Office of Technology Commercialization", website: "https://uvm.technologypublisher.com", specialties: ["Metabolic Disease", "Oncology", "Drug Discovery"] },
+  { slug: "usd", name: "University of South Dakota", city: "Vermillion, SD", ttoName: "USD Office of Research", website: "https://usd.technologypublisher.com", specialties: ["Drug Discovery", "Diagnostics", "Rare Disease"] },
+  { slug: "txstate", name: "Texas State University", city: "San Marcos, TX", ttoName: "Texas State TTO", website: "https://txstate.technologypublisher.com", specialties: ["Drug Delivery", "Biosensors", "Materials Science"] },
+  { slug: "yale", name: "Yale University", city: "New Haven, CT", ttoName: "Yale OCS", website: "https://ventures.yale.edu/yale-technologies", specialties: ["Oncology", "Immunotherapy", "Structural Biology"] },
+  { slug: "purdue", name: "Purdue University", city: "West Lafayette, IN", ttoName: "Purdue Research Foundation OTC", website: "https://licensing.prf.org/products", specialties: ["Drug Delivery", "Bioelectronics", "Agricultural Biotech"] },
 ];
 
 export const BLOCKED_SLUGS = new Set([

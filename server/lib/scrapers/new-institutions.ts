@@ -257,3 +257,33 @@ export const oregonStateScraper = createTechPublisherScraper(
   "Oregon State University",
   { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
 );
+
+export const gsuScraper = createTechPublisherScraper(
+  "gsu",
+  "Georgia State University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 50 }
+);
+
+export const northeasternScraper = createTechPublisherScraper(
+  "nu",
+  "Northeastern University",
+  { maxPg: 50 }
+);
+
+export const uvmScraper = createTechPublisherScraper(
+  "uvm",
+  "University of Vermont",
+  { selector: "a[href*='/techcase']", maxPg: 30 }
+);
+
+export const usdScraper = createTechPublisherScraper(
+  "usd",
+  "University of South Dakota",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 20 }
+);
+
+export const txstateScraper = createTechPublisherScraper(
+  "txstate",
+  "Texas State University",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 30 }
+);

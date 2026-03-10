@@ -11,6 +11,7 @@ import { northwesternScraper } from "./northwestern";
 import { cornellScraper } from "./cornell";
 import { ucBerkeleyScraper } from "./ucberkeley";
 import { uwashingtonScraper } from "./uwashington";
+import { purdueRFScraper } from "./purdue";
 import { wustlScraper } from "./wustl";
 import { umichScraper } from "./umich";
 import { mayoScraper } from "./mayo";
@@ -71,6 +72,11 @@ import {
   binghamtonScraper,
   uscScraper,
   oregonStateScraper,
+  gsuScraper,
+  northeasternScraper,
+  uvmScraper,
+  usdScraper,
+  txstateScraper,
 } from "./new-institutions";
 
 export { ScrapedListing, InstitutionScraper };
@@ -147,6 +153,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   binghamtonScraper,
   uscScraper,
   oregonStateScraper,
+  gsuScraper,
+  northeasternScraper,
+  uvmScraper,
+  usdScraper,
+  txstateScraper,
+  purdueRFScraper,
 ];
 
 async function runWithConcurrency<T>(

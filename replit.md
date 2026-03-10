@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 71 institution TTO websites (expanded from 57).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 79 institution TTO websites (expanded progressively from 57 → 71 → 79).
 
 ## Architecture
 
@@ -10,7 +10,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 57 institutions (28 original + 29 via TechPublisher factory); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 79 institutions (28 original + 43 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD); daily cron at 8AM; manual Refresh button
 
 ### Portal Gate
 - `localStorage.getItem('eden-portal')` = "true" to be inside the app
@@ -22,7 +22,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
 - **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
-- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 57 TTOs with concurrency=5, upserts to DB, diffs for new
+- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 79 TTOs with concurrency=5, upserts to DB, diffs for new
 - **Daily cron**: `node-cron` at 8:00 AM runs ingestion automatically
 
 ### Folder Structure
@@ -44,7 +44,7 @@ server/
       upenn.ts            # Penn PCI scraper
       northwestern.ts     # Northwestern TTO scraper — Algolia API (761 hits)
       cornell.ts          # Cornell CTL (no static listing — graceful no-op)
-      ucberkeley.ts       # UC Berkeley — JS-rendered ASP.NET (graceful no-op)
+      ucberkeley.ts       # UC Berkeley — sitemap-driven NCD page scraper (3,770 tech pages → 1,678 assets)
       uwashington.ts      # UW CoMotion scraper
       wustl.ts            # WashU OTM scraper — /basic-tech-summary-search/ (668 listings)
       umich.ts            # UMich TechTransfer scraper
@@ -54,7 +54,9 @@ server/
       mdanderson.ts       # MD Anderson TTO scraper
       upitt.ts            # Pitt Innovation scraper
       uchicago.ts         # UChicago Polsky Center scraper
-      yale.ts             # Yale OCR scraper
+      yale.ts             # Yale — Drupal node ID → cheerio scraper (25 pages, 248 assets)
+      purdue.ts           # Purdue RF — REST API (licensing.prf.org/client/products/search, 1,601 assets)
+      new-institutions.ts # TechPublisher factory scrapers: 43 institutions (all 3 selector variants)
       vanderbilt.ts       # Vanderbilt CTT scraper
       emory.ts            # Emory OTT scraper
       bu.ts               # BU OTD scraper
@@ -89,7 +91,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/`** — Landing with EdenSVG botanical icon, Enter Portal CTA
 - **`/scout`** — Multi-source search with scan status banner, buyer thesis, source toggles, scored asset grid
 - **`/assets`** — Saved pipeline kanban by clinical stage
-- **`/institutions`** — 57 TTO cards with live listing counts from DB (29 new via TechPublisher factory)
+- **`/institutions`** — 79 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Real ingested listings for an institution (or empty state)
 - **`/reports`** — Mock report cards
 - **`/alerts`** — Mock alerts with Create Alert sheet drawer
