@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Search, Loader2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,6 +15,8 @@ type Source = {
 };
 
 type SearchBarProps = {
+  query: string;
+  onQueryChange: (q: string) => void;
   onSearch: (query: string, source: string) => void;
   isLoading: boolean;
   sources: Source[];
@@ -32,9 +33,7 @@ const EXAMPLE_QUERIES = [
   "PD-1 checkpoint inhibitor melanoma",
 ];
 
-export function SearchBar({ onSearch, isLoading, sources, selectedSource, onSourceChange }: SearchBarProps) {
-  const [query, setQuery] = useState("");
-
+export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sources, selectedSource, onSourceChange }: SearchBarProps) {
   const currentSource = sources.find((s) => s.id === selectedSource);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,11 +41,6 @@ export function SearchBar({ onSearch, isLoading, sources, selectedSource, onSour
     if (query.trim() && !isLoading) {
       onSearch(query.trim(), selectedSource);
     }
-  };
-
-  const handleExample = (q: string) => {
-    setQuery(q);
-    onSearch(q, selectedSource);
   };
 
   return (
@@ -57,7 +51,7 @@ export function SearchBar({ onSearch, isLoading, sources, selectedSource, onSour
           <Input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search biotech assets (e.g. KRAS inhibitors pancreatic cancer)"
             className="pl-10 h-11 bg-card border-card-border focus:border-primary/60 text-sm"
             data-testid="input-search"
@@ -112,9 +106,9 @@ export function SearchBar({ onSearch, isLoading, sources, selectedSource, onSour
         {EXAMPLE_QUERIES.map((q) => (
           <button
             key={q}
-            onClick={() => handleExample(q)}
+            onClick={() => onQueryChange(q)}
             className="text-xs px-3 py-1.5 rounded-full border border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
-            data-testid={`button-example-query`}
+            data-testid="button-example-query"
             disabled={isLoading}
           >
             {q}

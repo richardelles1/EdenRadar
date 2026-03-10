@@ -38,6 +38,7 @@ export default function Home() {
   const [searchResults, setSearchResults] = useState<Asset[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState("");
+  const [inputQuery, setInputQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState("pubmed");
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
 
@@ -121,7 +122,13 @@ export default function Home() {
 
   const handleSearch = (query: string, source: string) => {
     setCurrentQuery(query);
+    setInputQuery(query);
     searchMutation.mutate({ query, source });
+  };
+
+  const handleSelectHistoryQuery = (query: string, source: string) => {
+    setInputQuery(query);
+    setSelectedSource(source);
   };
 
   const handleUnsave = (pmid?: string, assetName?: string) => {
@@ -217,6 +224,8 @@ export default function Home() {
             </div>
 
             <SearchBar
+              query={inputQuery}
+              onQueryChange={setInputQuery}
               onSearch={handleSearch}
               isLoading={searchMutation.isPending}
               sources={sources}
@@ -228,10 +237,7 @@ export default function Home() {
               <div className="max-w-3xl mx-auto mt-5">
                 <SearchHistoryPanel
                   history={history}
-                  onRerunSearch={(query, source) => {
-                    setSelectedSource(source);
-                    handleSearch(query, source);
-                  }}
+                  onSelectQuery={handleSelectHistoryQuery}
                 />
               </div>
             )}

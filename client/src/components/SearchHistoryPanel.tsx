@@ -5,10 +5,10 @@ import { formatDistanceToNow } from "date-fns";
 
 type SearchHistoryPanelProps = {
   history: SearchHistory[];
-  onRerunSearch: (query: string, source: string) => void;
+  onSelectQuery: (query: string, source: string) => void;
 };
 
-export function SearchHistoryPanel({ history, onRerunSearch }: SearchHistoryPanelProps) {
+export function SearchHistoryPanel({ history, onSelectQuery }: SearchHistoryPanelProps) {
   if (history.length === 0) return null;
 
   return (
@@ -21,7 +21,7 @@ export function SearchHistoryPanel({ history, onRerunSearch }: SearchHistoryPane
         {history.slice(0, 8).map((entry) => (
           <button
             key={entry.id}
-            onClick={() => onRerunSearch(entry.query, entry.source)}
+            onClick={() => onSelectQuery(entry.query, entry.source)}
             className="group flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-card-border bg-card text-xs text-muted-foreground hover:text-foreground hover:border-primary/40 transition-all duration-200"
             data-testid={`button-history-${entry.id}`}
             title={`${entry.resultCount} assets · ${formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}`}
