@@ -1,0 +1,420 @@
+import { Link } from "wouter";
+import { Button } from "@/components/ui/button";
+import { Nav } from "@/components/Nav";
+import {
+  ArrowRight,
+  FlaskConical,
+  Layers,
+  Download,
+  Zap,
+  Database,
+  BrainCircuit,
+  ChevronRight,
+} from "lucide-react";
+
+function HelixSVG() {
+  const cx = 80;
+  const amplitude = 52;
+  const period = 72;
+  const height = 360;
+  const steps = 180;
+  const rungEvery = 9;
+
+  const strand1Points: string[] = [];
+  const strand2Points: string[] = [];
+
+  for (let i = 0; i <= steps; i++) {
+    const y = (i / steps) * height;
+    const angle = (y / period) * 2 * Math.PI;
+    const x1 = cx + amplitude * Math.sin(angle);
+    const x2 = cx - amplitude * Math.sin(angle);
+    strand1Points.push(`${i === 0 ? "M" : "L"} ${x1.toFixed(1)} ${y.toFixed(1)}`);
+    strand2Points.push(`${i === 0 ? "M" : "L"} ${x2.toFixed(1)} ${y.toFixed(1)}`);
+  }
+
+  const rungs: { y: number; x1: number; x2: number; opacity: number }[] = [];
+  for (let i = rungEvery; i < steps; i += rungEvery) {
+    const y = (i / steps) * height;
+    const angle = (y / period) * 2 * Math.PI;
+    const x1 = cx + amplitude * Math.sin(angle);
+    const x2 = cx - amplitude * Math.sin(angle);
+    const sinVal = Math.abs(Math.sin(angle));
+    rungs.push({ y, x1, x2, opacity: 0.2 + sinVal * 0.5 });
+  }
+
+  const dots: { x: number; y: number; r: number; strand: number }[] = [];
+  for (let i = 0; i <= steps; i += rungEvery) {
+    const y = (i / steps) * height;
+    const angle = (y / period) * 2 * Math.PI;
+    const sinVal = Math.sin(angle);
+    dots.push({ x: cx + amplitude * sinVal, y, r: 2.5 + Math.abs(sinVal) * 1.5, strand: 0 });
+    dots.push({ x: cx - amplitude * sinVal, y, r: 2.5 + Math.abs(sinVal) * 1.5, strand: 1 });
+  }
+
+  return (
+    <svg
+      viewBox={`0 0 ${cx * 2} ${height}`}
+      className="w-full h-full"
+      style={{ overflow: "visible" }}
+    >
+      <defs>
+        <linearGradient id="strand1Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="hsl(183 85% 60%)" stopOpacity="0.1" />
+          <stop offset="30%" stopColor="hsl(183 85% 60%)" stopOpacity="0.9" />
+          <stop offset="70%" stopColor="hsl(250 80% 65%)" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="hsl(250 80% 65%)" stopOpacity="0.1" />
+        </linearGradient>
+        <linearGradient id="strand2Grad" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor="hsl(250 80% 65%)" stopOpacity="0.1" />
+          <stop offset="30%" stopColor="hsl(250 80% 65%)" stopOpacity="0.9" />
+          <stop offset="70%" stopColor="hsl(183 85% 60%)" stopOpacity="0.9" />
+          <stop offset="100%" stopColor="hsl(183 85% 60%)" stopOpacity="0.1" />
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+      </defs>
+
+      {rungs.map((r, i) => (
+        <line
+          key={i}
+          x1={r.x1}
+          y1={r.y}
+          x2={r.x2}
+          y2={r.y}
+          stroke="hsl(183 85% 65%)"
+          strokeWidth="1"
+          strokeOpacity={r.opacity}
+        />
+      ))}
+
+      <path
+        d={strand1Points.join(" ")}
+        fill="none"
+        stroke="url(#strand1Grad)"
+        strokeWidth="2"
+        filter="url(#glow)"
+      />
+      <path
+        d={strand2Points.join(" ")}
+        fill="none"
+        stroke="url(#strand2Grad)"
+        strokeWidth="2"
+        filter="url(#glow)"
+      />
+
+      {dots.map((d, i) => (
+        <circle
+          key={i}
+          cx={d.x}
+          cy={d.y}
+          r={d.r}
+          fill={d.strand === 0 ? "hsl(183 85% 65%)" : "hsl(250 80% 68%)"}
+          fillOpacity="0.85"
+          filter="url(#glow)"
+        />
+      ))}
+    </svg>
+  );
+}
+
+function RadarGraphic() {
+  return (
+    <div className="relative w-64 h-64 flex items-center justify-center">
+      {[1, 0.75, 0.5, 0.3].map((scale, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full border border-primary/20"
+          style={{
+            width: `${scale * 100}%`,
+            height: `${scale * 100}%`,
+          }}
+        />
+      ))}
+      <div
+        className="absolute inset-0 rounded-full overflow-hidden radar-sweep"
+        style={{ transformOrigin: "center center" }}
+      >
+        <div
+          className="absolute inset-0 rounded-full"
+          style={{
+            background:
+              "conic-gradient(from 0deg, transparent 260deg, hsl(183 85% 52% / 0.08) 300deg, hsl(183 85% 52% / 0.35) 360deg)",
+          }}
+        />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div
+          className="w-0.5 h-1/2 origin-bottom"
+          style={{
+            background: "linear-gradient(to top, hsl(183 85% 60% / 0.9), transparent)",
+          }}
+        />
+      </div>
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+        <div className="w-2.5 h-2.5 rounded-full bg-primary glow-pulse" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-full h-px bg-primary/10" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="w-px h-full bg-primary/10" />
+      </div>
+    </div>
+  );
+}
+
+const FEATURES = [
+  {
+    icon: BrainCircuit,
+    title: "AI-Powered Extraction",
+    description:
+      "GPT-4o-mini reads each abstract and structures asset name, target, modality, stage, and indication automatically.",
+  },
+  {
+    icon: Database,
+    title: "Multi-Source Intelligence",
+    description:
+      "Built to ingest PubMed today, with ClinicalTrials.gov, bioRxiv, Europe PMC, and patent databases next.",
+  },
+  {
+    icon: Download,
+    title: "Export-Ready Data",
+    description:
+      "Save assets to your pipeline and export structured JSON or CSV for downstream analysis, CRMs, or spreadsheets.",
+  },
+];
+
+const STEPS = [
+  {
+    num: "01",
+    title: "Type a search query",
+    description: "Enter any biomedical topic — a target, disease, modality, or combination.",
+  },
+  {
+    num: "02",
+    title: "AI reads the literature",
+    description:
+      "HelixRadar fetches recent papers and runs each abstract through GPT-4o-mini to extract structured drug asset data.",
+  },
+  {
+    num: "03",
+    title: "Build your pipeline",
+    description:
+      "Save promising assets, filter by stage or modality, and export when you're ready to act.",
+  },
+];
+
+export default function Landing() {
+  return (
+    <div className="min-h-screen bg-background flex flex-col">
+      <Nav />
+
+      <main className="flex-1">
+        <section className="relative overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none">
+            <div
+              className="absolute top-0 right-0 w-1/2 h-full opacity-5"
+              style={{
+                background:
+                  "radial-gradient(ellipse at 80% 20%, hsl(183 85% 52%) 0%, transparent 60%)",
+              }}
+            />
+            <div
+              className="absolute bottom-0 left-0 w-1/3 h-1/2 opacity-5"
+              style={{
+                background:
+                  "radial-gradient(ellipse at 20% 80%, hsl(250 80% 65%) 0%, transparent 60%)",
+              }}
+            />
+          </div>
+
+          <div className="max-w-screen-xl mx-auto px-6 pt-20 pb-16">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              <div className="space-y-8">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5">
+                  <Zap className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-xs font-semibold text-primary tracking-wide uppercase">
+                    AI-Powered Biotech Intelligence
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.08]">
+                    <span className="text-foreground">Turn Research Into</span>
+                    <br />
+                    <span className="gradient-text dark:gradient-text gradient-text-light">
+                      Pipeline Intelligence
+                    </span>
+                  </h1>
+                  <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
+                    HelixRadar scans biomedical literature and uses AI to extract structured drug
+                    asset intelligence — target, modality, stage, and indication — in seconds.
+                  </p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                  <Link href="/discover">
+                    <Button
+                      size="lg"
+                      className="gap-2 text-base font-semibold h-12 px-7"
+                      data-testid="button-cta-discover"
+                    >
+                      Start Discovering
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </Link>
+                  <Link href="/pipeline">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="gap-2 text-base h-12 px-7 border-border"
+                      data-testid="button-cta-pipeline"
+                    >
+                      View Pipeline
+                    </Button>
+                  </Link>
+                </div>
+
+                <div className="flex items-center gap-6 pt-2">
+                  {[
+                    { value: "10M+", label: "Papers indexed" },
+                    { value: "6", label: "Data sources" },
+                    { value: "~3s", label: "Per extraction" },
+                  ].map((stat) => (
+                    <div key={stat.label} className="text-center sm:text-left">
+                      <div
+                        className="text-2xl font-bold gradient-text dark:gradient-text gradient-text-light"
+                        data-testid={`stat-${stat.label.replace(" ", "-")}`}
+                      >
+                        {stat.value}
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="hidden lg:flex items-center justify-center relative">
+                <div className="absolute inset-0 flex items-center justify-center opacity-60">
+                  <RadarGraphic />
+                </div>
+                <div className="relative z-10 w-44 h-96">
+                  <div className="w-full h-full helix-scroll" style={{ height: "200%" }}>
+                    <HelixSVG />
+                    <HelixSVG />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="border-y border-border bg-card/40">
+          <div className="max-w-screen-xl mx-auto px-6 py-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
+              {FEATURES.map((f) => (
+                <div
+                  key={f.title}
+                  className="flex flex-col gap-4 p-6 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
+                  data-testid={`feature-card-${f.title.replace(/\s+/g, "-").toLowerCase()}`}
+                >
+                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+                    <f.icon className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-foreground mb-1.5">{f.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{f.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        <section className="max-w-screen-xl mx-auto px-6 py-20">
+          <div className="text-center mb-14">
+            <h2 className="text-3xl font-bold text-foreground mb-3">How it works</h2>
+            <p className="text-muted-foreground max-w-md mx-auto">
+              From query to structured pipeline intelligence in three steps.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+            <div className="hidden md:block absolute top-8 left-1/3 right-1/3 h-px bg-border" />
+            {STEPS.map((step, i) => (
+              <div key={step.num} className="flex flex-col items-center text-center gap-4">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-full border-2 border-primary/40 bg-primary/5 flex items-center justify-center">
+                    <span className="text-xl font-bold text-primary">{step.num}</span>
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <ChevronRight className="w-4 h-4 text-primary/30 absolute -right-6 top-1/2 -translate-y-1/2 hidden md:block" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground mb-2">{step.title}</h3>
+                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
+                    {step.description}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="border-t border-border bg-card/40">
+          <div className="max-w-screen-xl mx-auto px-6 py-16 text-center">
+            <div className="max-w-xl mx-auto space-y-6">
+              <FlaskConical className="w-10 h-10 text-primary mx-auto" />
+              <h2 className="text-3xl font-bold text-foreground">
+                Ready to scan the literature?
+              </h2>
+              <p className="text-muted-foreground">
+                Start discovering drug assets from thousands of research papers — structured,
+                filtered, and ready to export.
+              </p>
+              <Link href="/discover">
+                <Button
+                  size="lg"
+                  className="gap-2 font-semibold h-12 px-8"
+                  data-testid="button-footer-cta"
+                >
+                  Launch Discovery
+                  <ArrowRight className="w-4 h-4" />
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer className="border-t border-border py-6">
+        <div className="max-w-screen-xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-foreground text-sm">
+              Helix<span className="text-primary">Radar</span>
+            </span>
+            <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
+          </div>
+          <nav className="flex items-center gap-4">
+            {[
+              { href: "/", label: "Home" },
+              { href: "/discover", label: "Discover" },
+              { href: "/pipeline", label: "Pipeline" },
+            ].map((l) => (
+              <Link key={l.href} href={l.href}>
+                <span className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+                  {l.label}
+                </span>
+              </Link>
+            ))}
+          </nav>
+        </div>
+      </footer>
+    </div>
+  );
+}

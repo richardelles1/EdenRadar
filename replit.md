@@ -8,12 +8,12 @@ AI-powered biotech asset discovery platform that extracts structured drug asset 
 - **Frontend**: React + Vite + TailwindCSS + Shadcn UI (wouter routing, TanStack Query)
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Drizzle ORM
-- **AI**: OpenAI via Replit AI Integrations (gpt-4o-mini for structured extraction)
+- **AI**: OpenAI gpt-4o-mini for structured extraction (uses `OPENAI_API_KEY` env var)
 - **Data Source**: PubMed E-utilities API (extensible to other sources)
 
 ### Key Design Decisions
 - **Extensible data source architecture**: `server/lib/sources/index.ts` defines a `DataSource` interface. PubMed is the first implementation. To add a new source (ClinicalTrials.gov, bioRxiv, etc.), implement the interface and register it in the `dataSources` registry.
-- **AI extraction**: Each paper abstract is passed to OpenAI with a structured JSON extraction prompt. Returns asset_name, target, modality, development_stage, disease_indication, summary.
+- **AI extraction**: Each paper abstract is passed to OpenAI with a structured JSON extraction prompt. Returns asset_name, target, modality, development_stage, disease_indication, summary. Fatal OpenAI errors (auth, quota) are rethrown and surface as user-visible error messages.
 - **No database for search results**: Results are ephemeral (per-request). Only saved assets and search history are persisted.
 
 ### Folder Structure
@@ -29,8 +29,12 @@ server/
   db.ts               # Drizzle + pg pool setup
 
 client/src/
-  pages/Home.tsx      # Main search page
+  pages/
+    Landing.tsx       # / — hero landing page with animated helix + radar
+    Discover.tsx      # /discover — search interface with filter chips
+    Pipeline.tsx      # /pipeline — kanban view of saved assets by clinical stage
   components/
+    Nav.tsx           # Shared sticky navigation across all pages
     SearchBar.tsx     # Search input + source selector + example queries
     SearchResults.tsx # Results grid with loading/empty states
     AssetCard.tsx     # Drug asset card + saved asset card
@@ -39,6 +43,16 @@ client/src/
 
 shared/schema.ts      # Drizzle schema: searchHistory, savedAssets tables + Asset type
 ```
+
+### Pages
+- **`/`** — Landing page with animated SVG DNA double helix + spinning radar graphic, feature highlights, CTA to Discover
+- **`/discover`** — Full search interface: query input, source selector, example queries, radar sweep loading animation, filter chips (by stage/modality), results grid, saved assets sidebar
+- **`/pipeline`** — Kanban pipeline view: saved assets organized into columns by development stage (Discovery → Preclinical → Phase 1 → Phase 2 → Phase 3 → Approved), with JSON/CSV export
+
+### Visual Theme
+- Deep-space navy dark mode (`--background: 222 47% 6%`) + electric cyan primary (`--primary: 183 85% 52%`)
+- Gradient text: `.gradient-text` (dark) / `.gradient-text-light` (light)
+- CSS animations: `radar-sweep` (4s spin), `helix-scroll` (12s translateY), `glow-pulse`
 
 ### Database Tables
 - `search_history`: Persists query, source, result_count, created_at
@@ -52,5 +66,4 @@ shared/schema.ts      # Drizzle schema: searchHistory, savedAssets tables + Asse
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (auto-provided by Replit)
-- `AI_INTEGRATIONS_OPENAI_API_KEY`: OpenAI API key (via Replit AI Integrations)
-- `AI_INTEGRATIONS_OPENAI_BASE_URL`: OpenAI base URL (via Replit AI Integrations)
+- `OPENAI_API_KEY`: OpenAI API key (user's own key, set as Replit secret)
