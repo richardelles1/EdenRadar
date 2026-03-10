@@ -1,0 +1,299 @@
+Build a prototype web application called HelixRadar.
+
+HelixRadar is an AI-powered biotech asset discovery platform that helps biotech founders, venture investors, and pharma business development teams discover potential drug assets from scientific literature.
+
+The goal of this prototype is to demonstrate that HelixRadar can:
+	1.	Accept a biotech discovery query from a user.
+	2.	Retrieve relevant research papers from PubMed.
+	3.	Use OpenAI to extract structured drug asset information from paper abstracts.
+	4.	Display potential drug assets in a clean discovery interface.
+
+This prototype should be simple and run entirely inside a Next.js full-stack application. Do not use Python, FastAPI, Supabase, or any database. All data should be fetched and processed dynamically.
+
+⸻
+
+Technology Stack
+
+Frontend:
+	•	Next.js (App Router)
+	•	React
+	•	TailwindCSS
+
+Backend:
+	•	Next.js API Routes (TypeScript)
+
+AI:
+	•	OpenAI API
+
+External Data Source:
+	•	PubMed API (NCBI E-utilities)
+
+The application must run locally in Replit and be deployable later to Vercel.
+
+⸻
+
+Application Overview
+
+HelixRadar converts biomedical research papers into structured drug asset opportunities.
+
+Users should be able to search for scientific topics such as:
+	•	KRAS inhibitor pancreatic cancer
+	•	solid tumor CAR-T therapy
+	•	GLP-1 receptor agonist obesity
+	•	mRNA cancer vaccine
+
+The system retrieves papers related to the query and converts them into structured asset cards.
+
+⸻
+
+Folder Structure
+
+Create the following project structure:
+
+helixradar
+  app
+    page.tsx
+  app/api/search
+    route.ts
+  components
+    SearchBar.tsx
+    AssetCard.tsx
+  lib
+    pubmed.ts
+    extractor.ts
+  styles
+
+
+⸻
+
+Frontend Interface
+
+Create a simple modern UI using TailwindCSS.
+
+Main page layout:
+
+Top navigation bar:
+	•	Text logo: HelixRadar
+
+Main section:
+
+Centered search bar with placeholder:
+
+“Search biotech assets (example: KRAS inhibitors pancreatic cancer)”
+
+Below the search bar display search results in a responsive grid of asset cards.
+
+Each card must display:
+	•	Asset Name
+	•	Target
+	•	Modality
+	•	Development Stage
+	•	Disease Indication
+	•	Evidence Source
+	•	Short Summary
+
+Cards should look like a biotech intelligence dashboard.
+
+⸻
+
+Search Flow
+	1.	User enters a query.
+	2.	Frontend sends a POST request to /api/search.
+	3.	Backend retrieves relevant papers from PubMed.
+	4.	Abstracts are analyzed by OpenAI.
+	5.	Backend returns structured asset objects.
+	6.	Frontend renders asset cards.
+
+⸻
+
+API Route
+
+Create an API route:
+
+/api/search
+
+Method: POST
+
+Input body:
+
+{
+  query: string
+}
+
+Example:
+
+{
+  query: "KRAS inhibitor pancreatic cancer"
+}
+
+The route should:
+	1.	Call PubMed to search for papers.
+	2.	Retrieve the top 10 abstracts.
+	3.	Send each abstract to OpenAI for structured extraction.
+	4.	Return structured asset objects.
+
+⸻
+
+PubMed Integration
+
+Create lib/pubmed.ts.
+
+Step 1: Search PubMed for paper IDs.
+
+Endpoint:
+
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi
+
+Parameters:
+
+db=pubmed
+term={query}
+retmax=10
+retmode=json
+
+Extract the list of paper IDs.
+
+Step 2: Fetch paper details.
+
+Endpoint:
+
+https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi
+
+Parameters:
+
+db=pubmed
+id={paper_ids}
+retmode=xml
+
+Extract:
+	•	title
+	•	abstract
+	•	journal
+	•	publication year
+
+Return an array of paper objects.
+
+⸻
+
+AI Extraction
+
+Create lib/extractor.ts.
+
+For each paper abstract send a request to OpenAI.
+
+Prompt template:
+
+Analyze the following biomedical research abstract.
+
+Extract structured information describing a potential drug asset.
+
+Return JSON with the following fields:
+
+asset_name
+target
+modality
+development_stage
+disease_indication
+summary
+
+If a field cannot be determined return “unknown”.
+
+Example modality values:
+
+small molecule
+antibody
+CAR-T
+gene therapy
+mRNA therapy
+
+Example development stage values:
+
+discovery
+preclinical
+phase 1
+phase 2
+phase 3
+
+Abstract:
+
+{abstract}
+
+⸻
+
+Asset Object Structure
+
+Each extracted asset must return:
+
+{
+  asset_name: string,
+  target: string,
+  modality: string,
+  development_stage: string,
+  disease_indication: string,
+  summary: string,
+  source_title: string,
+  source_journal: string,
+  publication_year: string
+}
+
+
+⸻
+
+API Response Format
+
+The /api/search route should return:
+
+{
+  assets: Asset[]
+}
+
+Limit results to the top 10 papers.
+
+⸻
+
+Frontend Rendering
+
+Create a React component AssetCard.
+
+Display:
+
+Asset Name
+Target
+Modality
+Stage
+Disease
+Evidence Source
+Summary
+
+Render cards in a responsive grid.
+
+⸻
+
+User Flow
+	1.	User opens HelixRadar homepage.
+	2.	User enters a biotech search query.
+	3.	Frontend calls /api/search.
+	4.	Backend retrieves PubMed papers.
+	5.	Abstracts are analyzed by OpenAI.
+	6.	Backend returns structured asset objects.
+	7.	Frontend displays asset cards.
+
+⸻
+
+Prototype Constraints
+	•	No authentication.
+	•	No database.
+	•	No caching.
+	•	Only analyze the first 10 PubMed results.
+
+Focus on validating the discovery engine.
+
+⸻
+
+Final Goal
+
+After launching the prototype a user should be able to type:
+
+KRAS inhibitor pancreatic cancer
+
+and HelixRadar should return structured cards describing potential drug assets extracted from biomedical research papers.
