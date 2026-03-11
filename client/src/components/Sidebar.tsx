@@ -47,7 +47,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="h-14 flex items-center px-4 border-b border-border shrink-0">
-        <Link href="/scout">
+        <Link href="/">
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none"
             data-testid="sidebar-logo"

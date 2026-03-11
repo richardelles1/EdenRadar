@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
@@ -329,10 +329,19 @@ export default function Scout() {
   const [, setLocation] = useLocation();
   const [scanTick, setScanTick] = useState(0);
 
-  const [searchResults, setSearchResults] = useState<ScoredAsset[]>([]);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [currentQuery, setCurrentQuery] = useState("");
-  const [inputQuery, setInputQuery] = useState("");
+  function ssGet<T>(key: string, fallback: T): T {
+    try {
+      const raw = sessionStorage.getItem(key);
+      return raw ? (JSON.parse(raw) as T) : fallback;
+    } catch {
+      return fallback;
+    }
+  }
+
+  const [searchResults, setSearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-results", []));
+  const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
+  const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
+  const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [modalityFilter, setModalityFilter] = useState<string>("all");
@@ -340,8 +349,18 @@ export default function Scout() {
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
-  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(DEFAULT_BUYER_PROFILE);
-  const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SOURCE_KEYS);
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
+  const [selectedSources, setSelectedSources] = useState<string[]>(() => ssGet("scout-sources", ALL_SOURCE_KEYS));
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem("scout-results", JSON.stringify(searchResults));
+      sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
+      sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
+      sessionStorage.setItem("scout-buyer-profile", JSON.stringify(buyerProfile));
+      sessionStorage.setItem("scout-sources", JSON.stringify(selectedSources));
+    } catch {}
+  }, [searchResults, hasSearched, currentQuery, buyerProfile, selectedSources]);
 
   const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });

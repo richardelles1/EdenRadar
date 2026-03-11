@@ -25,10 +25,10 @@ const DIMS = [
 ];
 
 function scoreColor(score: number) {
-  if (score >= 75) return { bar: "bg-emerald-500", text: "text-emerald-400" };
-  if (score >= 55) return { bar: "bg-amber-500", text: "text-amber-400" };
-  if (score >= 35) return { bar: "bg-orange-500", text: "text-orange-400" };
-  return { bar: "bg-rose-500", text: "text-rose-400" };
+  if (score >= 75) return { bar: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400" };
+  if (score >= 55) return { bar: "bg-amber-500", text: "text-amber-700 dark:text-amber-400" };
+  if (score >= 35) return { bar: "bg-orange-500", text: "text-orange-700 dark:text-orange-400" };
+  return { bar: "bg-rose-500", text: "text-rose-700 dark:text-rose-400" };
 }
 
 export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdownCardProps) {

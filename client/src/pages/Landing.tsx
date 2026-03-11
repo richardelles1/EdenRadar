@@ -239,26 +239,35 @@ export default function Landing() {
                   </p>
                 </div>
 
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    size="lg"
-                    className="gap-2 text-base font-semibold h-12 px-7"
-                    onClick={handleEnterPortal}
-                    data-testid="button-cta-enter-portal"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Enter Portal
-                  </Button>
-                  <Button
-                    size="lg"
-                    variant="outline"
-                    className="gap-2 text-base h-12 px-7 border-border"
-                    onClick={handleEnterPortal}
-                    data-testid="button-cta-launch"
-                  >
-                    Launch Scout
-                    <ArrowRight className="w-4 h-4" />
-                  </Button>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      size="lg"
+                      className="gap-2 text-base font-semibold h-12 px-7"
+                      onClick={handleEnterPortal}
+                      data-testid="button-cta-enter-portal"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Enter Portal
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground text-center">Scout · Reports · Saved Assets · Alerts</p>
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <Button
+                      size="lg"
+                      variant="outline"
+                      className="gap-2 text-base h-12 px-7 border-border"
+                      onClick={() => {
+                        localStorage.setItem("eden-portal", "true");
+                        window.location.href = "/scout";
+                      }}
+                      data-testid="button-cta-launch"
+                    >
+                      Launch Scout
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground text-center">Jump straight to asset discovery</p>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-6 pt-2">

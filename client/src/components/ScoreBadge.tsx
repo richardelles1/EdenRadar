@@ -15,10 +15,10 @@ interface ScoreBadgeProps {
 }
 
 function scoreColor(score: number): { bg: string; text: string; ring: string } {
-  if (score >= 75) return { bg: "bg-emerald-500/15", text: "text-emerald-400", ring: "ring-emerald-500/30" };
-  if (score >= 55) return { bg: "bg-amber-500/15", text: "text-amber-400", ring: "ring-amber-500/30" };
-  if (score >= 35) return { bg: "bg-orange-500/15", text: "text-orange-400", ring: "ring-orange-500/30" };
-  return { bg: "bg-rose-500/15", text: "text-rose-400", ring: "ring-rose-500/30" };
+  if (score >= 75) return { bg: "bg-emerald-500/15", text: "text-emerald-700 dark:text-emerald-400", ring: "ring-emerald-500/30" };
+  if (score >= 55) return { bg: "bg-amber-500/15", text: "text-amber-700 dark:text-amber-400", ring: "ring-amber-500/30" };
+  if (score >= 35) return { bg: "bg-orange-500/15", text: "text-orange-700 dark:text-orange-400", ring: "ring-orange-500/30" };
+  return { bg: "bg-rose-500/15", text: "text-rose-700 dark:text-rose-400", ring: "ring-rose-500/30" };
 }
 
 const BREAKDOWN_LABELS: Record<string, string> = {

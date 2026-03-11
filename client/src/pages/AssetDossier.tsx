@@ -16,12 +16,12 @@ import {
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
 
 const STAGE_COLORS: Record<string, string> = {
-  discovery: "bg-violet-500/15 text-violet-400 border-violet-500/30",
-  preclinical: "bg-amber-500/15 text-amber-400 border-amber-500/30",
-  "phase 1": "bg-cyan-500/15 text-cyan-400 border-cyan-500/30",
-  "phase 2": "bg-sky-500/15 text-sky-400 border-sky-500/30",
-  "phase 3": "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  approved: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+  discovery: "bg-violet-500/15 text-violet-700 dark:text-violet-400 border-violet-500/30",
+  preclinical: "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  "phase 1": "bg-cyan-500/15 text-cyan-700 dark:text-cyan-400 border-cyan-500/30",
+  "phase 2": "bg-sky-500/15 text-sky-700 dark:text-sky-400 border-sky-500/30",
+  "phase 3": "bg-blue-500/15 text-blue-700 dark:text-blue-400 border-blue-500/30",
+  approved: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
 };
 
 function parseMarkdown(text: string): React.ReactNode[] {
@@ -135,7 +135,7 @@ export default function AssetDossier() {
                     {asset.development_stage}
                   </span>
                   {licensingAvailable && (
-                    <span className="inline-flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2.5 py-1 font-semibold">
+                    <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2.5 py-1 font-semibold">
                       <Key className="w-3 h-3" />
                       Available for Licensing
                     </span>
@@ -289,8 +289,8 @@ export default function AssetDossier() {
               <div className="rounded-xl border border-card-border bg-card p-4">
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Confidence</h3>
                 <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  asset.confidence === "high" ? "bg-emerald-500/15 text-emerald-400" :
-                  asset.confidence === "medium" ? "bg-amber-500/15 text-amber-400" :
+                  asset.confidence === "high" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
+                  asset.confidence === "medium" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" :
                   "bg-muted text-muted-foreground"
                 }`}>
                   <Shield className="w-3 h-3" />

@@ -69,7 +69,7 @@ function TopAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
             </p>
           )}
           {licensingAvailable && (
-            <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+            <span className="text-[10px] text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
               <Key className="w-2.5 h-2.5" />
               Available
             </span>
