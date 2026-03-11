@@ -1,5 +1,17 @@
 import { createTechPublisherScraper } from "./techpublisher";
+import type { InstitutionScraper, ScrapedListing } from "./types";
 
+function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
+  return {
+    institution,
+    async scrape(): Promise<ScrapedListing[]> {
+      console.log(`[scraper] ${institution}: skipped — ${reason}`);
+      return [];
+    },
+  };
+}
+
+// ── Verified working TechPublisher scrapers ──────────────────────────────
 export const princetonScraper = createTechPublisherScraper(
   "puotl",
   "Princeton University",
@@ -324,123 +336,133 @@ export const idahoScraper = createTechPublisherScraper(
   { maxPg: 30 }
 );
 
-// ── New US Institutions ───────────────────────────────────────────────────
-export const fsuScraper = createTechPublisherScraper("fsu", "Florida State University", { maxPg: 50 });
-export const ucfScraper = createTechPublisherScraper("ucf", "University of Central Florida", { maxPg: 50 });
-export const fiuScraper = createTechPublisherScraper("fiu", "Florida International University", { maxPg: 30 });
-export const tamuScraper = createTechPublisherScraper("tamu", "Texas A&M University", { maxPg: 80 });
-export const riceScraper = createTechPublisherScraper("rice", "Rice University", { maxPg: 50 });
-export const uhoustonScraper = createTechPublisherScraper("uh", "University of Houston", { maxPg: 50 });
-export const texasTechScraper = createTechPublisherScraper("texastech", "Texas Tech University", { maxPg: 50 });
-export const untScraper = createTechPublisherScraper("unt", "University of North Texas", { maxPg: 30 });
-export const baylorScraper = createTechPublisherScraper("baylor", "Baylor University", { maxPg: 30 });
-export const portlandStateScraper = createTechPublisherScraper("psu", "Portland State University", { maxPg: 30 });
-export const umontanaScraper = createTechPublisherScraper("umontana", "University of Montana", { maxPg: 30 });
-export const montanaStateScraper = createTechPublisherScraper("montanastate", "Montana State University", { maxPg: 30 });
-export const unmScraper = createTechPublisherScraper("unm", "University of New Mexico", { maxPg: 50 });
-export const nmsuScraper = createTechPublisherScraper("nmsu", "New Mexico State University", { maxPg: 30 });
-export const unrScraper = createTechPublisherScraper("unr", "University of Nevada, Reno", { maxPg: 30 });
-export const unlvScraper = createTechPublisherScraper("unlv", "University of Nevada, Las Vegas", { maxPg: 30 });
-export const usuScraper = createTechPublisherScraper("usu", "Utah State University", { maxPg: 30 });
-export const byuScraper = createTechPublisherScraper("byu", "Brigham Young University", { maxPg: 50 });
+// ── New US: verified working TechPublisher slugs ─────────────────────────
 export const uafScraper = createTechPublisherScraper("uaf", "University of Alaska Fairbanks", { maxPg: 20 });
-export const uaaScraper = createTechPublisherScraper("uaa", "University of Alaska Anchorage", { maxPg: 20 });
-export const undScraper = createTechPublisherScraper("und", "University of North Dakota", { maxPg: 30 });
-export const ndsuScraper = createTechPublisherScraper("ndsu", "North Dakota State University", { maxPg: 30 });
 export const sdstateScraper = createTechPublisherScraper("sdstate", "South Dakota State University", { maxPg: 30 });
-export const indianaScraper = createTechPublisherScraper("indiana", "Indiana University", { maxPg: 50 });
-export const notredameScraper = createTechPublisherScraper("notredame", "University of Notre Dame", { maxPg: 50 });
-export const warfScraper = createTechPublisherScraper("warf", "University of Wisconsin", { maxPg: 80 });
-export const auburnScraper = createTechPublisherScraper("auburn", "Auburn University", { maxPg: 50 });
-export const ugaScraper = createTechPublisherScraper("uga", "University of Georgia", { maxPg: 50 });
-export const uarkansasScraper = createTechPublisherScraper("uarkansas", "University of Arkansas", { maxPg: 50 });
-export const uamsScraper = createTechPublisherScraper("uams", "University of Arkansas for Medical Sciences", { maxPg: 30 });
 export const olemissScraper = createTechPublisherScraper("olemiss", "University of Mississippi", { maxPg: 30 });
-export const udelScraper = createTechPublisherScraper("udel", "University of Delaware", { maxPg: 50 });
-export const templeScraper = createTechPublisherScraper("temple", "Temple University", { maxPg: 50 });
-export const drexelScraper = createTechPublisherScraper("drexel", "Drexel University", { maxPg: 50 });
-export const bucknellScraper = createTechPublisherScraper("bucknell", "Bucknell University", { maxPg: 20 });
-export const sunyalbanyScraper = createTechPublisherScraper("sunyalbany", "SUNY Albany", { maxPg: 30 });
-export const uconnScraper = createTechPublisherScraper("uconn", "University of Connecticut", { maxPg: 50 });
-export const dartmouthScraper = createTechPublisherScraper("dartmouth", "Dartmouth College", { maxPg: 30 });
-export const brandeisScraper = createTechPublisherScraper("brandeis", "Brandeis University", { maxPg: 30 });
-export const unhScraper = createTechPublisherScraper("unh", "University of New Hampshire", { maxPg: 30 });
-export const uriScraper = createTechPublisherScraper("uri", "University of Rhode Island", { maxPg: 30 });
-export const mountsinaiScraper = createTechPublisherScraper("mountsinai", "Icahn School of Medicine at Mount Sinai", { maxPg: 50 });
-export const caltechScraper = createTechPublisherScraper("caltech", "California Institute of Technology", { maxPg: 50 });
-export const asuScraper = createTechPublisherScraper("asu", "Arizona State University", { maxPg: 80 });
-export const uillinoisScraper = createTechPublisherScraper("uillinois", "University of Illinois", { maxPg: 80 });
 
-// ── International Institutions ────────────────────────────────────────────
-// UK
-export const oxfordScraper = createTechPublisherScraper("oxford", "University of Oxford", { maxPg: 80 });
-export const cambridgeScraper = createTechPublisherScraper("cambridge", "University of Cambridge", { maxPg: 80 });
-export const imperialScraper = createTechPublisherScraper("imperial", "Imperial College London", { maxPg: 80 });
-export const uclScraper = createTechPublisherScraper("ucl", "University College London", { maxPg: 80 });
-export const manchesterScraper = createTechPublisherScraper("manchester", "University of Manchester", { maxPg: 80 });
-export const edinburghScraper = createTechPublisherScraper("edinburgh", "University of Edinburgh", { maxPg: 80 });
-export const bristolScraper = createTechPublisherScraper("bristol", "University of Bristol", { maxPg: 50 });
-export const glasgowScraper = createTechPublisherScraper("glasgow", "University of Glasgow", { maxPg: 50 });
-export const birminghamScraper = createTechPublisherScraper("birmingham", "University of Birmingham", { maxPg: 50 });
-export const nottinghamScraper = createTechPublisherScraper("nottingham", "University of Nottingham", { maxPg: 50 });
+// ── New US: verified working TechPublisher slugs (international) ─────────
 export const leedsScraper = createTechPublisherScraper("leeds", "University of Leeds", { maxPg: 50 });
-export const sheffieldScraper = createTechPublisherScraper("sheffield", "University of Sheffield", { maxPg: 50 });
 export const southamptonScraper = createTechPublisherScraper("southampton", "University of Southampton", { maxPg: 50 });
-export const warwickScraper = createTechPublisherScraper("warwick", "University of Warwick", { maxPg: 50 });
-export const kclScraper = createTechPublisherScraper("kcl", "King's College London", { maxPg: 50 });
-// Switzerland
-export const ethzurichScraper = createTechPublisherScraper("ethzurich", "ETH Zurich", { maxPg: 80 });
-export const epflScraper = createTechPublisherScraper("epfl", "EPFL", { maxPg: 80 });
-export const ubaselScraper = createTechPublisherScraper("ubasel", "University of Basel", { maxPg: 50 });
-export const ulausanneScraper = createTechPublisherScraper("ulausanne", "University of Lausanne", { maxPg: 50 });
-export const ugenevaScaper = createTechPublisherScraper("ugeneva", "University of Geneva", { maxPg: 50 });
-export const uzurichScraper = createTechPublisherScraper("uzurich", "University of Zurich", { maxPg: 50 });
-// Benelux
-export const kuleuvenScraper = createTechPublisherScraper("kuleuven", "KU Leuven", { maxPg: 80 });
-export const ugentScraper = createTechPublisherScraper("ugent", "Ghent University", { maxPg: 50 });
-export const groningenScraper = createTechPublisherScraper("groningen", "University of Groningen", { maxPg: 50 });
-export const uamsterdamScraper = createTechPublisherScraper("uamsterdam", "University of Amsterdam", { maxPg: 50 });
-export const vuamsterdamScraper = createTechPublisherScraper("vuamsterdam", "Vrije Universiteit Amsterdam", { maxPg: 50 });
-export const leidenScraper = createTechPublisherScraper("leiden", "Leiden University", { maxPg: 50 });
-// Nordic
-export const karolinskaScaper = createTechPublisherScraper("karolinska", "Karolinska Institutet", { maxPg: 80 });
-export const inven2Scraper = createTechPublisherScraper("inven2", "University of Oslo", { maxPg: 50 });
-export const visScraper = createTechPublisherScraper("vis", "University of Bergen", { maxPg: 30 });
-export const ntnuScraper = createTechPublisherScraper("ntnu", "NTNU", { maxPg: 50 });
-export const ucphScraper = createTechPublisherScraper("ucph", "University of Copenhagen", { maxPg: 50 });
-export const aarhusScraper = createTechPublisherScraper("aarhus", "Aarhus University", { maxPg: 50 });
-export const dtuScraper = createTechPublisherScraper("dtu", "Technical University of Denmark", { maxPg: 50 });
-export const lundScraper = createTechPublisherScraper("lund", "Lund University", { maxPg: 50 });
-export const chalmersScraper = createTechPublisherScraper("chalmers", "Chalmers University of Technology", { maxPg: 50 });
-export const gothenburgScraper = createTechPublisherScraper("gothenburg", "University of Gothenburg", { maxPg: 50 });
-export const helsinkiScraper = createTechPublisherScraper("helsinki", "University of Helsinki", { maxPg: 50 });
-export const aaltoScraper = createTechPublisherScraper("aalto", "Aalto University", { maxPg: 50 });
-// Germany
-export const tumScraper = createTechPublisherScraper("tum", "Technical University of Munich", { maxPg: 80 });
-export const lmuScraper = createTechPublisherScraper("lmu", "Ludwig Maximilian University of Munich", { maxPg: 50 });
-export const rwthScraper = createTechPublisherScraper("rwth", "RWTH Aachen University", { maxPg: 50 });
-export const ufreiburgScraper = createTechPublisherScraper("ufreiburg", "University of Freiburg", { maxPg: 50 });
-export const ubonnScraper = createTechPublisherScraper("ubonn", "University of Bonn", { maxPg: 50 });
-export const ucologneScraper = createTechPublisherScraper("ucologne", "University of Cologne", { maxPg: 50 });
-export const utubingenScraper = createTechPublisherScraper("utubingen", "University of Tübingen", { maxPg: 50 });
-export const heidelbergScraper = createTechPublisherScraper("heidelberg", "University of Heidelberg", { maxPg: 50 });
-// Israel
-export const weizmannScraper = createTechPublisherScraper("weizmann", "Weizmann Institute of Science", { maxPg: 50 });
-export const technionScraper = createTechPublisherScraper("technion", "Technion – Israel Institute of Technology", { maxPg: 50 });
-// Canada
-export const utorontoScraper = createTechPublisherScraper("utoronto", "University of Toronto", { maxPg: 80 });
-export const mcgillScraper = createTechPublisherScraper("mcgill", "McGill University", { maxPg: 80 });
-export const ubcScraper = createTechPublisherScraper("ubc", "University of British Columbia", { maxPg: 80 });
-export const ucalgaryScraper = createTechPublisherScraper("ucalgary", "University of Calgary", { maxPg: 50 });
 export const usaskScraper = createTechPublisherScraper("usask", "University of Saskatchewan", { maxPg: 30 });
-export const umanitobaScraper = createTechPublisherScraper("umanitoba", "University of Manitoba", { maxPg: 30 });
-export const uvicScraper = createTechPublisherScraper("uvic", "University of Victoria", { maxPg: 30 });
-export const sfuScraper = createTechPublisherScraper("sfu", "Simon Fraser University", { maxPg: 30 });
-// Asia-Pacific
-export const umelbourneScraper = createTechPublisherScraper("umelbourne", "University of Melbourne", { maxPg: 80 });
-export const monashScraper = createTechPublisherScraper("monash", "Monash University", { maxPg: 80 });
-export const usydneyScraper = createTechPublisherScraper("usydney", "University of Sydney", { maxPg: 80 });
-export const uniquestScraper = createTechPublisherScraper("uniquest", "University of Queensland", { maxPg: 80 });
-export const nusScraper = createTechPublisherScraper("nus", "National University of Singapore", { maxPg: 80 });
-export const hkustScraper = createTechPublisherScraper("hkust", "Hong Kong University of Science and Technology", { maxPg: 50 });
-export const hkuScraper = createTechPublisherScraper("hku", "University of Hong Kong", { maxPg: 50 });
+
+// ── New US: no TechPublisher portal (stubs) ──────────────────────────────
+export const fsuScraper = createStubScraper("Florida State University");
+export const ucfScraper = createStubScraper("University of Central Florida");
+export const fiuScraper = createStubScraper("Florida International University");
+export const tamuScraper = createStubScraper("Texas A&M University");
+export const riceScraper = createStubScraper("Rice University");
+export const uhoustonScraper = createStubScraper("University of Houston");
+export const texasTechScraper = createStubScraper("Texas Tech University");
+export const untScraper = createStubScraper("University of North Texas");
+export const baylorScraper = createStubScraper("Baylor University");
+export const portlandStateScraper = createStubScraper("Portland State University");
+export const umontanaScraper = createStubScraper("University of Montana");
+export const montanaStateScraper = createStubScraper("Montana State University");
+export const unmScraper = createStubScraper("University of New Mexico");
+export const nmsuScraper = createStubScraper("New Mexico State University");
+export const unrScraper = createStubScraper("University of Nevada, Reno");
+export const unlvScraper = createStubScraper("University of Nevada, Las Vegas");
+export const usuScraper = createStubScraper("Utah State University");
+export const byuScraper = createStubScraper("Brigham Young University");
+export const uaaScraper = createStubScraper("University of Alaska Anchorage");
+export const undScraper = createStubScraper("University of North Dakota");
+export const ndsuScraper = createStubScraper("North Dakota State University");
+export const indianaScraper = createStubScraper("Indiana University");
+export const notredameScraper = createStubScraper("University of Notre Dame");
+export const warfScraper = createStubScraper("University of Wisconsin");
+export const auburnScraper = createStubScraper("Auburn University");
+export const ugaScraper = createStubScraper("University of Georgia");
+export const uarkansasScraper = createStubScraper("University of Arkansas");
+export const uamsScraper = createStubScraper("University of Arkansas for Medical Sciences");
+export const udelScraper = createStubScraper("University of Delaware");
+export const templeScraper = createStubScraper("Temple University");
+export const drexelScraper = createStubScraper("Drexel University");
+export const bucknellScraper = createStubScraper("Bucknell University");
+export const sunyalbanyScraper = createStubScraper("SUNY Albany");
+export const uconnScraper = createStubScraper("University of Connecticut");
+export const dartmouthScraper = createStubScraper("Dartmouth College");
+export const brandeisScraper = createStubScraper("Brandeis University");
+export const unhScraper = createStubScraper("University of New Hampshire");
+export const uriScraper = createStubScraper("University of Rhode Island");
+export const mountsinaiScraper = createStubScraper("Icahn School of Medicine at Mount Sinai");
+export const caltechScraper = createStubScraper("California Institute of Technology");
+export const asuScraper = createStubScraper("Arizona State University");
+export const uillinoisScraper = createStubScraper("University of Illinois");
+
+// ── International: UK ────────────────────────────────────────────────────
+export const oxfordScraper = createStubScraper("University of Oxford");
+export const cambridgeScraper = createStubScraper("University of Cambridge");
+export const imperialScraper = createStubScraper("Imperial College London");
+export const uclScraper = createStubScraper("University College London");
+export const manchesterScraper = createStubScraper("University of Manchester");
+export const edinburghScraper = createStubScraper("University of Edinburgh");
+export const bristolScraper = createStubScraper("University of Bristol");
+export const glasgowScraper = createStubScraper("University of Glasgow");
+export const birminghamScraper = createStubScraper("University of Birmingham");
+export const nottinghamScraper = createStubScraper("University of Nottingham");
+export const sheffieldScraper = createStubScraper("University of Sheffield");
+export const warwickScraper = createStubScraper("University of Warwick");
+export const kclScraper = createStubScraper("King's College London");
+
+// ── International: Switzerland ───────────────────────────────────────────
+export const ethzurichScraper = createStubScraper("ETH Zurich");
+export const epflScraper = createStubScraper("EPFL");
+export const ubaselScraper = createStubScraper("University of Basel");
+export const ulausanneScraper = createStubScraper("University of Lausanne");
+export const ugenevaScaper = createStubScraper("University of Geneva");
+export const uzurichScraper = createStubScraper("University of Zurich");
+
+// ── International: Benelux ───────────────────────────────────────────────
+export const kuleuvenScraper = createStubScraper("KU Leuven");
+export const ugentScraper = createStubScraper("Ghent University");
+export const groningenScraper = createStubScraper("University of Groningen");
+export const uamsterdamScraper = createStubScraper("University of Amsterdam");
+export const vuamsterdamScraper = createStubScraper("Vrije Universiteit Amsterdam");
+export const leidenScraper = createStubScraper("Leiden University");
+
+// ── International: Nordic ────────────────────────────────────────────────
+export const karolinskaScaper = createStubScraper("Karolinska Institutet");
+export const inven2Scraper = createStubScraper("University of Oslo");
+export const visScraper = createStubScraper("University of Bergen");
+export const ntnuScraper = createStubScraper("NTNU");
+export const ucphScraper = createStubScraper("University of Copenhagen");
+export const aarhusScraper = createStubScraper("Aarhus University");
+export const dtuScraper = createStubScraper("Technical University of Denmark");
+export const lundScraper = createStubScraper("Lund University");
+export const chalmersScraper = createStubScraper("Chalmers University of Technology");
+export const gothenburgScraper = createStubScraper("University of Gothenburg");
+export const helsinkiScraper = createStubScraper("University of Helsinki");
+export const aaltoScraper = createStubScraper("Aalto University");
+
+// ── International: Germany ───────────────────────────────────────────────
+export const tumScraper = createStubScraper("Technical University of Munich");
+export const lmuScraper = createStubScraper("Ludwig Maximilian University of Munich");
+export const rwthScraper = createStubScraper("RWTH Aachen University");
+export const ufreiburgScraper = createStubScraper("University of Freiburg");
+export const ubonnScraper = createStubScraper("University of Bonn");
+export const ucologneScraper = createStubScraper("University of Cologne");
+export const utubingenScraper = createStubScraper("University of Tübingen");
+export const heidelbergScraper = createStubScraper("University of Heidelberg");
+
+// ── International: Israel ────────────────────────────────────────────────
+export const weizmannScraper = createStubScraper("Weizmann Institute of Science");
+export const technionScraper = createStubScraper("Technion – Israel Institute of Technology");
+
+// ── International: Canada ────────────────────────────────────────────────
+export const utorontoScraper = createStubScraper("University of Toronto");
+export const mcgillScraper = createStubScraper("McGill University");
+export const ubcScraper = createStubScraper("University of British Columbia");
+export const ucalgaryScraper = createStubScraper("University of Calgary");
+export const umanitobaScraper = createStubScraper("University of Manitoba");
+export const uvicScraper = createStubScraper("University of Victoria");
+export const sfuScraper = createStubScraper("Simon Fraser University");
+
+// ── International: Asia-Pacific ──────────────────────────────────────────
+export const umelbourneScraper = createStubScraper("University of Melbourne");
+export const monashScraper = createStubScraper("Monash University");
+export const usydneyScraper = createStubScraper("University of Sydney");
+export const uniquestScraper = createStubScraper("University of Queensland");
+export const nusScraper = createStubScraper("National University of Singapore");
+export const hkustScraper = createStubScraper("Hong Kong University of Science and Technology");
+export const hkuScraper = createStubScraper("University of Hong Kong");

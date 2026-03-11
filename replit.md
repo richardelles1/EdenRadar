@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 87+ institution TTO websites (expanded progressively from 57 → 71 → 79 → 86 → 88).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline covering 195 institutions globally (88 with active scrapers, remainder stubbed pending custom scraper development).
 
 ## Architecture
 
@@ -10,7 +10,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 88 institutions (28 original + 49 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD + UMN elucid REST API + Flintbox factory for Georgetown/Cornell/UMich/Georgia Tech); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 88 institutions with active TechPublisher/custom scrapers; 107 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
 - **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
 - **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — uses confirmed working API: `GET /api/v1/technologies?organizationId={id}&organizationAccessKey={key}&per_page=500` with `X-Requested-With: XMLHttpRequest` header; response is JSON:API format (`data[].attributes.name`); Georgetown returns 111, Cornell returns 1,114 assets
 - **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
@@ -49,7 +49,7 @@ server/
       northwestern.ts     # Northwestern TTO scraper — Algolia API (761 hits)
       cornell.ts          # Cornell CTL (no static listing — graceful no-op)
       ucberkeley.ts       # UC Berkeley — sitemap-driven NCD page scraper (3,770 tech pages → 1,678 assets)
-      uwashington.ts      # UW CoMotion scraper
+      uwashington.ts      # UW CoMotion stub (no public listing page)
       wustl.ts            # WashU OTM scraper — /basic-tech-summary-search/ (668 listings)
       umich.ts            # UMich TechTransfer scraper
       mayo.ts             # Mayo Clinic Ventures scraper
@@ -60,7 +60,7 @@ server/
       uchicago.ts         # UChicago Polsky Center scraper
       yale.ts             # Yale — Drupal node ID → cheerio scraper (25 pages, 248 assets)
       purdue.ts           # Purdue RF — REST API (licensing.prf.org/client/products/search, 1,601 assets)
-      new-institutions.ts # TechPublisher factory scrapers: 43 institutions (all 3 selector variants)
+      new-institutions.ts # TechPublisher factory (43 verified) + stubs for ~100 institutions without TechPublisher portals
       vanderbilt.ts       # Vanderbilt CTT scraper
       emory.ts            # Emory OTT scraper
       bu.ts               # BU OTD scraper
@@ -95,7 +95,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/`** — Landing with EdenSVG botanical icon, Enter Portal CTA
 - **`/scout`** — Multi-source search with scan status banner, buyer thesis, source toggles, scored asset grid
 - **`/assets`** — Saved pipeline kanban by clinical stage
-- **`/institutions`** — 86 TTO cards with live listing counts from DB
+- **`/institutions`** — 195 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Ingested listings with sort (Newest First / Best Commercial / A-Z / Z-A), search filter, modality/stage tags via title-signal parser, commercial score badge, expandable detail panel per asset
 - **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
 - **`/reports`** — Mock report cards
