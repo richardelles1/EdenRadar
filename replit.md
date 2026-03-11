@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 86 institution TTO websites (expanded progressively from 57 → 71 → 79 → 86).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 87+ institution TTO websites (expanded progressively from 57 → 71 → 79 → 86 → 88).
 
 ## Architecture
 
@@ -10,7 +10,11 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 86 institutions (28 original + 49 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD + UMN elucid REST API); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 88 institutions (28 original + 49 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD + UMN elucid REST API + Flintbox factory for Georgetown/Cornell/UMich/Georgia Tech); daily cron at 8AM; manual Refresh button
+- **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
+- **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — tries API endpoints then HTML parsing; gracefully returns [] with clear log for SPA-only institutions
+- **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
+- **Georgia Tech added**: New institution entry (gatech.flintbox.com, org 186) with dedicated Flintbox scraper
 
 ### Portal Gate
 - `localStorage.getItem('eden-portal')` = "true" to be inside the app

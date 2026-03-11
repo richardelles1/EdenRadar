@@ -1,11 +1,6 @@
-import type { InstitutionScraper, ScrapedListing } from "./types";
+import { createFlintboxScraper } from "./flintbox";
 
-const INST = "Georgetown University";
-
-export const georgetownScraper: InstitutionScraper = {
-  institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: technology portal (otl.georgetown.edu) uses a JavaScript SPA — no static listings available`);
-    return [];
-  },
-};
+export const georgetownScraper = createFlintboxScraper(
+  { slug: "georgetown", orgId: 75, accessKey: "cd205aca-b649-4103-83b5-e48e69e48a87" },
+  "Georgetown University"
+);

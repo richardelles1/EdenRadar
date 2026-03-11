@@ -1,11 +1,6 @@
-import type { InstitutionScraper, ScrapedListing } from "./types";
+import { createFlintboxScraper } from "./flintbox";
 
-const INST = "Cornell University";
-
-export const cornellScraper: InstitutionScraper = {
-  institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: CTL (ctl.cornell.edu) has no paginated technology listing — only featured items and express licensing categories`);
-    return [];
-  },
-};
+export const cornellScraper = createFlintboxScraper(
+  { slug: "cornell", orgId: 25, accessKey: "09e7e6cd-845f-4bab-b079-58afbc2d2094" },
+  "Cornell University"
+);

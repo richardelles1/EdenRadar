@@ -26,6 +26,7 @@ import { vanderbiltScraper } from "./vanderbilt";
 import { emoryScraper } from "./emory";
 import { buScraper } from "./bu";
 import { georgetownScraper } from "./georgetown";
+import { gatechScraper } from "./gatech";
 import { utexasScraper } from "./utexas";
 import { cwruScraper } from "./cwru";
 import { ucoloradoScraper } from "./ucolorado";
@@ -114,6 +115,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   emoryScraper,
   buScraper,
   georgetownScraper,
+  gatechScraper,
   utexasScraper,
   cwruScraper,
   ucoloradoScraper,

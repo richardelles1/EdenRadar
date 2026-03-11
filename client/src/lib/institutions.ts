@@ -21,7 +21,8 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "ucberkeley", name: "UC Berkeley", city: "Berkeley, CA", ttoName: "UC Berkeley Intellectual Property Office", website: "https://ipira.berkeley.edu", specialties: ["CRISPR", "Synthetic Biology", "Drug Discovery"] },
   { slug: "uwashington", name: "University of Washington", city: "Seattle, WA", ttoName: "UW CoMotion", website: "https://comotion.uw.edu", specialties: ["Neuroscience", "Oncology", "Structural Biology"] },
   { slug: "wustl", name: "Washington University in St. Louis", city: "St. Louis, MO", ttoName: "WashU OTM", website: "https://otm.wustl.edu", specialties: ["Neuroscience", "Metabolic Disease", "Immunology"] },
-  { slug: "umich", name: "University of Michigan", city: "Ann Arbor, MI", ttoName: "U-M Tech Transfer", website: "https://techtransfer.umich.edu", specialties: ["Cardiovascular", "Gene Therapy", "Oncology"] },
+  { slug: "umich", name: "University of Michigan", city: "Ann Arbor, MI", ttoName: "U-M Tech Transfer", website: "https://umich.flintbox.com", specialties: ["Cardiovascular", "Gene Therapy", "Oncology"] },
+  { slug: "gatech", name: "Georgia Institute of Technology", city: "Atlanta, GA", ttoName: "Georgia Tech VentureLab", website: "https://gatech.flintbox.com", specialties: ["Robotics", "Advanced Materials", "Biomedical Engineering"] },
   { slug: "mayo", name: "Mayo Clinic", city: "Rochester, MN", ttoName: "Mayo Clinic Ventures", website: "https://ventures.mayoclinic.org", specialties: ["Diagnostics", "Oncology", "Rare Disease"] },
   { slug: "scripps", name: "Scripps Research", city: "La Jolla, CA", ttoName: "Scripps Research TTVD", website: "https://www.scripps.edu/science-and-medicine/ttvd", specialties: ["Drug Discovery", "Antibody Engineering", "Oncology"] },
   { slug: "salk", name: "Salk Institute", city: "La Jolla, CA", ttoName: "Salk TTO", website: "https://www.salk.edu/partnerships-commercialization", specialties: ["Gene Regulation", "Oncology", "Aging"] },
@@ -95,5 +96,5 @@ export const INSTITUTIONS: Institution[] = [
 ];
 
 export const BLOCKED_SLUGS = new Set([
-  "ucsf", "duke", "umich", "mayo", "ucolorado", "columbia",
+  "ucsf", "duke", "mayo", "ucolorado", "columbia",
 ]);
