@@ -12,7 +12,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
 - **TTO Scraping**: cheerio-based real scrapers for 88 institutions (28 original + 49 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD + UMN elucid REST API + Flintbox factory for Georgetown/Cornell/UMich/Georgia Tech); daily cron at 8AM; manual Refresh button
 - **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
-- **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — tries API endpoints then HTML parsing; gracefully returns [] with clear log for SPA-only institutions
+- **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — uses confirmed working API: `GET /api/v1/technologies?organizationId={id}&organizationAccessKey={key}&per_page=500` with `X-Requested-With: XMLHttpRequest` header; response is JSON:API format (`data[].attributes.name`); Georgetown returns 111, Cornell returns 1,114 assets
 - **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
 - **Georgia Tech added**: New institution entry (gatech.flintbox.com, org 186) with dedicated Flintbox scraper
 
