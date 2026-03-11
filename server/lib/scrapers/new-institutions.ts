@@ -287,3 +287,39 @@ export const txstateScraper = createTechPublisherScraper(
   "Texas State University",
   { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 30 }
 );
+
+export const miamiScraper = createTechPublisherScraper(
+  "miami",
+  "University of Miami",
+  { maxPg: 50 }
+);
+
+export const upstateScraper = createTechPublisherScraper(
+  "upstate",
+  "SUNY Upstate Medical University",
+  { maxPg: 30 }
+);
+
+export const sunyScraper = createTechPublisherScraper(
+  "suny",
+  "SUNY System",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 20 }
+);
+
+export const alabamaScraper = createTechPublisherScraper(
+  "ua",
+  "University of Alabama",
+  { maxPg: 50 }
+);
+
+export const wyomingScraper = createTechPublisherScraper(
+  "uwyo",
+  "University of Wyoming",
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 20 }
+);
+
+export const idahoScraper = createTechPublisherScraper(
+  "uidaho",
+  "University of Idaho",
+  { maxPg: 30 }
+);

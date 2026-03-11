@@ -85,6 +85,13 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "txstate", name: "Texas State University", city: "San Marcos, TX", ttoName: "Texas State TTO", website: "https://txstate.technologypublisher.com", specialties: ["Drug Delivery", "Biosensors", "Materials Science"] },
   { slug: "yale", name: "Yale University", city: "New Haven, CT", ttoName: "Yale OCS", website: "https://ventures.yale.edu/yale-technologies", specialties: ["Oncology", "Immunotherapy", "Structural Biology"] },
   { slug: "purdue", name: "Purdue University", city: "West Lafayette, IN", ttoName: "Purdue Research Foundation OTC", website: "https://licensing.prf.org/products", specialties: ["Drug Delivery", "Bioelectronics", "Agricultural Biotech"] },
+  { slug: "umn", name: "University of Minnesota", city: "Minneapolis, MN", ttoName: "University of Minnesota Technology Commercialization", website: "https://license.umn.edu/products", specialties: ["Oncology", "Neuroscience", "Gene Therapy"] },
+  { slug: "miami", name: "University of Miami", city: "Miami, FL", ttoName: "UM Office of Technology Transfer", website: "https://miami.technologypublisher.com", specialties: ["Oncology", "Immunology", "Drug Discovery"] },
+  { slug: "upstate", name: "SUNY Upstate Medical University", city: "Syracuse, NY", ttoName: "Upstate Medical TTO", website: "https://upstate.technologypublisher.com", specialties: ["Oncology", "Rare Disease", "Diagnostics"] },
+  { slug: "suny", name: "SUNY System", city: "Albany, NY", ttoName: "SUNY Research Foundation", website: "https://suny.technologypublisher.com", specialties: ["Drug Discovery", "Biosensors", "Biomaterials"] },
+  { slug: "alabama", name: "University of Alabama", city: "Tuscaloosa, AL", ttoName: "UA Office of Technology Transfer", website: "https://ua.technologypublisher.com", specialties: ["Drug Delivery", "Oncology", "Materials Science"] },
+  { slug: "wyoming", name: "University of Wyoming", city: "Laramie, WY", ttoName: "UW Technology Transfer", website: "https://uwyo.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Energy"] },
+  { slug: "idaho", name: "University of Idaho", city: "Moscow, ID", ttoName: "UI Office of Technology Transfer", website: "https://uidaho.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Biosensors"] },
 ];
 
 export const BLOCKED_SLUGS = new Set([

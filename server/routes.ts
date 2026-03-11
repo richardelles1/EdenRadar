@@ -343,6 +343,13 @@ export async function registerRoutes(
         txstate: "Texas State University",
         yale: "Yale University",
         purdue: "Purdue University",
+        umn: "University of Minnesota",
+        miami: "University of Miami",
+        upstate: "SUNY Upstate Medical University",
+        suny: "SUNY System",
+        alabama: "University of Alabama",
+        wyoming: "University of Wyoming",
+        idaho: "University of Idaho",
       };
       const name = SLUG_TO_NAME[req.params.slug];
       if (!name) return res.status(404).json({ error: "Institution not found" });

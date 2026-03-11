@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 79 institution TTO websites (expanded progressively from 57 → 71 → 79).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline that scrapes 86 institution TTO websites (expanded progressively from 57 → 71 → 79 → 86).
 
 ## Architecture
 
@@ -10,7 +10,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 79 institutions (28 original + 43 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 86 institutions (28 original + 49 via TechPublisher factory + Yale Drupal/cheerio + Purdue REST API + UC Berkeley sitemap/NCD + UMN elucid REST API); daily cron at 8AM; manual Refresh button
 
 ### Portal Gate
 - `localStorage.getItem('eden-portal')` = "true" to be inside the app
@@ -22,7 +22,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
 - **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
-- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 79 TTOs with concurrency=5, upserts to DB, diffs for new
+- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 86 TTOs with concurrency=5, upserts to DB, diffs for new
 - **Daily cron**: `node-cron` at 8:00 AM runs ingestion automatically
 
 ### Folder Structure
@@ -91,7 +91,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/`** — Landing with EdenSVG botanical icon, Enter Portal CTA
 - **`/scout`** — Multi-source search with scan status banner, buyer thesis, source toggles, scored asset grid
 - **`/assets`** — Saved pipeline kanban by clinical stage
-- **`/institutions`** — 79 TTO cards with live listing counts from DB
+- **`/institutions`** — 86 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Real ingested listings for an institution (or empty state)
 - **`/reports`** — Mock report cards
 - **`/alerts`** — Mock alerts with Create Alert sheet drawer
