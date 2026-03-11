@@ -11,6 +11,8 @@ import { northwesternScraper } from "./northwestern";
 import { cornellScraper } from "./cornell";
 import { ucBerkeleyScraper } from "./ucberkeley";
 import { uwashingtonScraper } from "./uwashington";
+import { cambridgeScraper as cambridgeCustomScraper } from "./cambridge";
+import { uillinoisScraper as uillinoisCustomScraper } from "./uillinois";
 import { purdueRFScraper } from "./purdue";
 import { umnScraper } from "./umn";
 import { wustlScraper } from "./wustl";
@@ -130,10 +132,8 @@ import {
   mountsinaiScraper,
   caltechScraper,
   asuScraper,
-  uillinoisScraper,
   // International – UK
   oxfordScraper,
-  cambridgeScraper,
   imperialScraper,
   uclScraper,
   manchesterScraper,
@@ -338,10 +338,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   mountsinaiScraper,
   caltechScraper,
   asuScraper,
-  uillinoisScraper,
+  uillinoisCustomScraper,
   // International – UK
   oxfordScraper,
-  cambridgeScraper,
+  cambridgeCustomScraper,
   imperialScraper,
   uclScraper,
   manchesterScraper,

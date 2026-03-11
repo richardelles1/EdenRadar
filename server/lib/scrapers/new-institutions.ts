@@ -388,11 +388,9 @@ export const uriScraper = createStubScraper("University of Rhode Island");
 export const mountsinaiScraper = createStubScraper("Icahn School of Medicine at Mount Sinai");
 export const caltechScraper = createStubScraper("California Institute of Technology");
 export const asuScraper = createStubScraper("Arizona State University");
-export const uillinoisScraper = createStubScraper("University of Illinois");
 
 // ── International: UK ────────────────────────────────────────────────────
 export const oxfordScraper = createStubScraper("University of Oxford");
-export const cambridgeScraper = createStubScraper("University of Cambridge");
 export const imperialScraper = createStubScraper("Imperial College London");
 export const uclScraper = createStubScraper("University College London");
 export const manchesterScraper = createStubScraper("University of Manchester");

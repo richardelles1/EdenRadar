@@ -46,6 +46,7 @@ function InstitutionCard({
 }) {
   const isBlocked = BLOCKED_SLUGS.has(inst.slug);
   const showRestricted = !countsLoading && isBlocked && !count;
+  const showNoPortal = !countsLoading && inst.noPublicPortal && !count && !isBlocked;
 
   return (
     <div
@@ -73,6 +74,19 @@ function InstitutionCard({
             </TooltipContent>
           </Tooltip>
         )}
+        {showNoPortal && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-500/10 text-slate-500 dark:text-slate-400 border border-slate-500/20 cursor-help shrink-0">
+                <ShieldOff className="w-2.5 h-2.5" />
+                No portal
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-xs text-xs">
+              This institution does not have a public technology listing portal available for scanning
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
 
       <p className="text-xs text-muted-foreground">{inst.ttoName}</p>
@@ -97,6 +111,8 @@ function InstitutionCard({
             <><span className="font-semibold text-foreground">{count}</span> active listings</>
           ) : showRestricted ? (
             <span className="italic text-muted-foreground/60">Access restricted</span>
+          ) : showNoPortal ? (
+            <span className="italic text-muted-foreground/60">No public portal</span>
           ) : (
             <span className="italic text-muted-foreground/60">—</span>
           )}
