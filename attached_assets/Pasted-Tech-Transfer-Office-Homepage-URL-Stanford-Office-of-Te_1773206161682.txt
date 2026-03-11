@@ -1,0 +1,116 @@
+Tech Transfer Office,Homepage URL
+Stanford Office of Technology Licensing,https://otl.stanford.edu/
+MIT Technology Licensing Office,https://tlo.mit.edu/
+Harvard Office of Technology Development,https://otd.harvard.edu/
+Oxford University Innovation,https://innovation.ox.ac.uk/
+Cambridge Enterprise,https://www.enterprise.cam.ac.uk/
+UCSF Innovation Ventures,https://innovation.ucsf.edu/
+Columbia Technology Ventures,https://techventures.columbia.edu/
+Johns Hopkins Technology Ventures,https://ventures.jhu.edu/
+Penn Center for Innovation (University of Pennsylvania),https://pci.upenn.edu/
+Yale Office of Cooperative Research,https://ocr.yale.edu/
+UCLA Technology Development Group,https://tdg.ucla.edu/
+UC Berkeley IPIRA,https://ipira.berkeley.edu/
+University of Michigan Innovation Partnerships,https://innovationpartnerships.umich.edu/
+Northwestern Innovation and New Ventures Office,https://invo.northwestern.edu/
+University of Chicago Polsky Center Technology Transfer,https://polsky.uchicago.edu/
+Caltech Office of Technology Transfer,https://techtransfer.caltech.edu/
+Duke Office for Translation & Commercialization,https://otc.duke.edu/
+Cornell Center for Technology Licensing,https://ctl.cornell.edu/
+Princeton Office of Technology Licensing,https://otl.princeton.edu/
+University of Washington CoMotion,https://comotion.uw.edu/
+University of Wisconsin WARF,https://www.warf.org/
+University of Toronto Innovations & Partnerships,https://research.utoronto.ca/partnerships-commercialization
+Karolinska Institutet Innovations,https://ki.se/en/innovation
+ETH Zurich Technology Transfer,https://transfer.ethz.ch/
+EPFL Technology Transfer Office,https://tto.epfl.ch/
+Imperial College Enterprise,https://www.imperial.ac.uk/enterprise/
+UCL Business,https://www.uclb.com/
+Weizmann Institute Yeda Technology Transfer,https://yeda.weizmann.ac.il/
+Technion Technology Transfer (T3),https://t3.technion.ac.il/
+National University of Singapore Industry Liaison Office,https://ilo.nus.edu.sg/
+Georgia Tech Office of Technology Licensing,https://licensing.research.gatech.edu/
+University of Texas Discovery to Impact,https://discovery.utexas.edu/
+University of Minnesota Technology Commercialization,https://research.umn.edu/units/techcomm
+University of Utah Technology Licensing Office,https://tlo.utah.edu/
+Boston University Technology Development,https://www.bu.edu/techtransfer/
+Arizona State University Skysong Innovations,https://skysonginnovations.com/
+University of Rochester UR Ventures,https://ventures.rochester.edu/
+Carnegie Mellon Center for Technology Transfer,https://www.cmu.edu/cttec/
+University of Maryland Office of Technology Commercialization,https://otc.umd.edu/
+University of Colorado Venture Partners,https://venturepartners.colorado.edu/
+University of Illinois Office of Technology Management,https://otm.illinois.edu/
+Penn State Office of Technology Transfer,https://ott.psu.edu/
+Ohio State Technology Commercialization Office,https://tco.osu.edu/
+University of Pittsburgh Innovation Institute,https://www.innovation.pitt.edu/
+Vanderbilt Center for Technology Transfer,https://www.vanderbilt.edu/cttc/
+University of North Carolina Office of Technology Commercialization,https://otc.unc.edu/
+Emory Office of Technology Transfer,https://ott.emory.edu/
+University of Arizona Tech Launch Arizona,https://techlaunch.arizona.edu/
+Michigan State Technologies,https://technologies.msu.edu/
+Rutgers Office of Research Commercialization,https://orc.rutgers.edu/
+Indiana University Innovation & Commercialization Office,https://innovation.iu.edu/
+Notre Dame IDEA Center Technology Transfer,https://ideacenter.nd.edu/
+Case Western Reserve Technology Transfer,https://case.edu/research/technology-transfer
+Icahn School of Medicine at Mount Sinai Technology Transfer,https://icahn.mssm.edu/research/technology-transfer
+University of Calgary Technology Transfer,https://research.ucalgary.ca/
+McGill Innovation + Partnerships,https://www.mcgill.ca/research/researchers/commercialization
+University of British Columbia UILO,https://uilo.ubc.ca/
+University of Melbourne Research Innovation,https://research.unimelb.edu.au/
+Monash University Commercialisation,https://commercialisation.monash.edu/
+University of Sydney Commercial Development,https://www.sydney.edu.au/research/industry-and-community/commercialisation.html
+University of Queensland UniQuest,https://uniquest.com.au/
+University of Copenhagen Technology Transfer Office,https://techtransfer.ku.dk/
+Leiden University Knowledge Transfer Office,https://www.universiteitleiden.nl/en/research/knowledge-transfer
+University of Zurich Technology Transfer,https://www.uzh.ch/en/research/technologytransfer.html
+Heidelberg University Technology Transfer,https://www.uni-heidelberg.de/en/research/transfer
+KU Leuven Research & Development,https://lrd.kuleuven.be/
+Ghent University TechTransfer,https://www.ugent.be/techtransfer
+University of Barcelona Knowledge Transfer Office,https://www.ub.edu/ott/en
+University of Tokyo Technology Licensing Organization,https://todai-tlo.co.jp/en/
+Kyoto University Innovation Capital,https://www.kyoto-unicap.co.jp/
+Osaka University Industry Liaison Office,https://www.ilo.osaka-u.ac.jp/
+Seoul National University Technology Transfer Center,https://snuotc.snu.ac.kr/
+KAIST Technology Licensing Office,https://tlo.kaist.ac.kr/
+Tsinghua University Technology Transfer Office,https://www.tsinghua.edu.cn/en/
+Peking University Technology Transfer Office,https://english.pku.edu.cn/
+Shanghai Jiao Tong University Technology Transfer Center,https://www.sjtu.edu.cn/
+Hong Kong University Technology Transfer Office,https://tto.hku.hk/
+HKUST Knowledge Transfer Office,https://kto.hkust.edu.hk/
+University of Manchester Innovation Factory,https://www.uominnovationfactory.com/
+University of Edinburgh Commercialisation Service,https://www.ed.ac.uk/research/innovation
+University of Bristol Research & Enterprise Development,https://www.bristol.ac.uk/red/
+University of Glasgow Technology Transfer Office,https://www.gla.ac.uk/research/enterprise/
+University of Birmingham Enterprise,https://www.birmingham.ac.uk/business/university-enterprise
+University of Nottingham Research & Innovation,https://www.nottingham.ac.uk/research/innovation
+University of Leeds Commercialisation Team,https://business.leeds.ac.uk/research-innovation
+University of Sheffield Commercialisation Office,https://www.sheffield.ac.uk/commercialisation
+University of Southampton Research & Innovation Services,https://www.southampton.ac.uk/research-innovation
+University of Warwick Innovation Group,https://warwick.ac.uk/services/innovations
+King's College London Commercialisation Institute,https://www.kcl.ac.uk/research/commercialisation
+University of Basel Technology Transfer,https://www.unibas.ch/en/Research/Technology-Transfer.html
+University of Lausanne Innovation & Partnerships,https://www.unil.ch/innovation
+University of Geneva Technology Transfer,https://www.unige.ch/research/innovation
+University of Groningen Knowledge Transfer Office,https://www.rug.nl/research/innovation
+University of Amsterdam Innovation Exchange,https://www.ixamsterdam.nl/
+Vrije Universiteit Amsterdam Knowledge Transfer Office,https://vu.nl/en/research/knowledge-transfer
+University of Helsinki Innovation Services,https://www.helsinki.fi/en/research/services-for-researchers/innovation-services
+Stockholm University Innovation,https://www.su.se/innovation
+Technical University of Munich TUM ForTe,https://www.forte.tum.de/
+LMU Munich Technology Transfer Office,https://www.en.uni-muenchen.de/research/innovation
+RWTH Aachen Innovation GmbH,https://www.innovation.rwth-aachen.de/
+University of Bonn Technology Transfer,https://www.uni-bonn.de/en/research-and-teaching/research-profile/transfer
+University of Freiburg Technology Transfer Office,https://www.uni-freiburg.de/research/innovation
+University of Cologne Technology Transfer Office,https://innovation.uni-koeln.de/
+University of Tübingen Technology Transfer,https://uni-tuebingen.de/en/research/transfer/
+University of Vienna Technology Transfer Office,https://www.univie.ac.at/en/research/innovation
+University of Oslo Technology Transfer (Inven2),https://inven2.com/
+University of Bergen Technology Transfer (VIS),https://visinnovasjon.no/
+University of Copenhagen Innovation Hub,https://innovation.ku.dk/
+Aarhus University Technology Transfer Office,https://techtransfer.au.dk/
+Technical University of Denmark Technology Transfer,https://techtransfer.dtu.dk/
+University of Gothenburg Innovation Office,https://www.gu.se/en/innovation
+Chalmers Ventures Technology Transfer,https://chalmersventures.com/
+Lund University Innovation Office,https://www.lunduniversity.lu.se/research/innovation
+University of Helsinki Commercialization Office,https://www.helsinki.fi/en/research/innovation-services
+University of Tampere Innovation Services,https://www.tuni.fi/en/research/innovation-services
