@@ -38,7 +38,7 @@ type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
 
-type ScrapingProgress = { done: number; total: number; found: number };
+type ScrapingProgress = { done: number; total: number; found: number; active?: string[] };
 type IngestStatus = IngestionRun & { status: string } | { status: "never_run"; totalFound: 0; newCount: 0; ranAt: null };
 
 function formatRelativeTime(dt: Date | string | null): string {
@@ -123,6 +123,7 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
 
   if (isRunning) {
     const hasProgress = scrapingProgress.total > 0;
+    const activeInstitutions = scrapingProgress.active ?? [];
     return (
       <div className="max-w-3xl mx-auto px-3.5 py-2.5 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5" data-testid="scan-status-bar">
         <div className="flex items-center justify-between gap-3">
@@ -158,6 +159,12 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
           className="h-1.5 bg-primary/10"
           data-testid="progress-bar"
         />
+        {!isSaving && activeInstitutions.length > 0 && (
+          <p className="text-[10px] text-muted-foreground/70 truncate" data-testid="progress-active-institutions">
+            <span className="font-medium text-muted-foreground">Now:</span>{" "}
+            {activeInstitutions.join(" · ")}
+          </p>
+        )}
       </div>
     );
   }

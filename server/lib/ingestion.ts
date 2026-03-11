@@ -14,7 +14,7 @@ export interface IngestionResult {
 
 let ingestionRunning = false;
 let enrichingCount = 0;
-let scrapingProgress = { done: 0, total: 0, found: 0 };
+let scrapingProgress = { done: 0, total: 0, found: 0, active: [] as string[] };
 let upsertProgress = { done: 0, total: 0 };
 
 export function isIngestionRunning(): boolean {
@@ -25,7 +25,7 @@ export function getEnrichingCount(): number {
   return enrichingCount;
 }
 
-export function getScrapingProgress(): { done: number; total: number; found: number } {
+export function getScrapingProgress(): { done: number; total: number; found: number; active: string[] } {
   return { ...scrapingProgress };
 }
 
@@ -41,14 +41,14 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
   }
 
   ingestionRunning = true;
-  scrapingProgress = { done: 0, total: 0, found: 0 };
+  scrapingProgress = { done: 0, total: 0, found: 0, active: [] };
   upsertProgress = { done: 0, total: 0 };
   const run = await storage.createIngestionRun();
   console.log(`[ingestion] Run #${run.id} started`);
 
   try {
-    const listings = await runAllScrapers((done, total, found) => {
-      scrapingProgress = { done, total, found };
+    const listings = await runAllScrapers((done, total, found, active) => {
+      scrapingProgress = { done, total, found, active };
     });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
@@ -91,7 +91,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
 
-    scrapingProgress = { done: 0, total: 0, found: 0 };
+    scrapingProgress = { done: 0, total: 0, found: 0, active: [] };
     upsertProgress = { done: 0, total: 0 };
     ingestionRunning = false;
 
@@ -135,7 +135,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     return { totalFound: 0, newCount: 0, runId: run.id };
   } finally {
     ingestionRunning = false;
-    scrapingProgress = { done: 0, total: 0, found: 0 };
+    scrapingProgress = { done: 0, total: 0, found: 0, active: [] };
     upsertProgress = { done: 0, total: 0 };
   }
 }

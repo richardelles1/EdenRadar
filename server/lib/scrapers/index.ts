@@ -442,16 +442,25 @@ async function runWithConcurrency<T>(
 }
 
 export async function runAllScrapers(
-  onProgress?: (done: number, total: number, listingsFound: number) => void
+  onProgress?: (done: number, total: number, listingsFound: number, active: string[]) => void
 ): Promise<ScrapedListing[]> {
   console.log(`[scrapers] Starting scrape for ${ALL_SCRAPERS.length} institutions...`);
 
   let listingsFound = 0;
-  const tasks = ALL_SCRAPERS.map((scraper) => () => scraper.scrape());
+  const activeInstitutions = new Set<string>();
+
+  const tasks = ALL_SCRAPERS.map((scraper) => async () => {
+    activeInstitutions.add(scraper.institution);
+    try {
+      return await scraper.scrape();
+    } finally {
+      activeInstitutions.delete(scraper.institution);
+    }
+  });
 
   const results = await runWithConcurrency(tasks, 5, (_taskIndex, result, done, total) => {
     listingsFound += (result as ScrapedListing[]).length;
-    onProgress?.(done, total, listingsFound);
+    onProgress?.(done, total, listingsFound, [...activeInstitutions]);
   });
 
   const allListings = results.flat();
