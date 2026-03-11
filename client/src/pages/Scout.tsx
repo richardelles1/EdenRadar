@@ -56,11 +56,13 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: statusData } = useQuery<IngestStatus>({
+  const { data: statusData } = useQuery<IngestStatus & { enrichingCount?: number }>({
     queryKey: ["/api/ingest/status"],
     refetchInterval: (query) => {
-      const data = query.state.data as IngestStatus | undefined;
-      return data?.status === "running" ? 3000 : 30000;
+      const data = query.state.data as (IngestStatus & { enrichingCount?: number }) | undefined;
+      if (data?.status === "running") return 3000;
+      if ((data?.enrichingCount ?? 0) > 0) return 5000;
+      return 30000;
     },
     staleTime: 0,
   });
@@ -79,6 +81,7 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
   });
 
   const isRunning = statusData?.status === "running" || scanMutation.isPending;
+  const enrichingCount = statusData?.enrichingCount ?? 0;
 
   const handleScan = () => {
     scanMutation.mutate();
@@ -141,6 +144,12 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
             <span className="text-muted-foreground">{updatedCount} refreshed</span>
           </>
         ) : null}
+        {enrichingCount > 0 && (
+          <span className="flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-medium">
+            <Loader2 className="w-2.5 h-2.5 animate-spin" />
+            Enriching {enrichingCount.toLocaleString()} assets…
+          </span>
+        )}
       </div>
       <Button
         size="sm"

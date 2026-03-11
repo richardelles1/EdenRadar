@@ -5,9 +5,11 @@ export type Institution = {
   ttoName: string;
   website: string;
   specialties: string[];
+  continent?: string;
 };
 
 export const INSTITUTIONS: Institution[] = [
+  // ── Tier-1 US Research Universities ──────────────────────────────────────
   { slug: "stanford", name: "Stanford University", city: "Palo Alto, CA", ttoName: "Stanford OTT", website: "https://ottech.stanford.edu", specialties: ["Oncology", "Neuroscience", "Gene Therapy"] },
   { slug: "mit", name: "MIT", city: "Cambridge, MA", ttoName: "MIT Technology Licensing Office", website: "https://tlo.mit.edu", specialties: ["Bioelectronics", "Drug Delivery", "Immunology"] },
   { slug: "harvard", name: "Harvard University", city: "Boston, MA", ttoName: "Harvard OTD", website: "https://otd.harvard.edu", specialties: ["Oncology", "Gene Editing", "Immunotherapy"] },
@@ -93,6 +95,136 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "alabama", name: "University of Alabama", city: "Tuscaloosa, AL", ttoName: "UA Office of Technology Transfer", website: "https://ua.technologypublisher.com", specialties: ["Drug Delivery", "Oncology", "Materials Science"] },
   { slug: "wyoming", name: "University of Wyoming", city: "Laramie, WY", ttoName: "UW Technology Transfer", website: "https://uwyo.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Energy"] },
   { slug: "idaho", name: "University of Idaho", city: "Moscow, ID", ttoName: "UI Office of Technology Transfer", website: "https://uidaho.technologypublisher.com", specialties: ["Agricultural Biotech", "Drug Discovery", "Biosensors"] },
+
+  // ── New US Institutions ───────────────────────────────────────────────────
+  // Florida
+  { slug: "fsu", name: "Florida State University", city: "Tallahassee, FL", ttoName: "FSU Office of Commercialization", website: "https://commercialization.fsu.edu", specialties: ["Drug Discovery", "Neuroscience", "Materials Science"] },
+  { slug: "ucf", name: "University of Central Florida", city: "Orlando, FL", ttoName: "UCF Office of Technology Transfer", website: "https://tt.research.ucf.edu", specialties: ["Bioelectronics", "Drug Delivery", "Diagnostics"] },
+  { slug: "fiu", name: "Florida International University", city: "Miami, FL", ttoName: "FIU Office of Technology Management", website: "https://research.fiu.edu/otm", specialties: ["Oncology", "Biosensors", "Drug Delivery"] },
+  // Texas
+  { slug: "tamu", name: "Texas A&M University", city: "College Station, TX", ttoName: "Texas A&M Innovation Partners", website: "https://innovationpartners.tamu.edu", specialties: ["Agricultural Biotech", "Drug Delivery", "Oncology"] },
+  { slug: "rice", name: "Rice University", city: "Houston, TX", ttoName: "Rice University OTT", website: "https://ott.rice.edu", specialties: ["Drug Delivery", "Bioelectronics", "Oncology"] },
+  { slug: "uhouston", name: "University of Houston", city: "Houston, TX", ttoName: "UH Office of Technology Transfer", website: "https://www.uh.edu/research/technology-transfer", specialties: ["Drug Discovery", "Biosensors", "Oncology"] },
+  { slug: "texastech", name: "Texas Tech University", city: "Lubbock, TX", ttoName: "Texas Tech Innovation Hub", website: "https://www.depts.ttu.edu/research/commercialization", specialties: ["Drug Discovery", "Biomaterials", "Agricultural Biotech"] },
+  { slug: "unt", name: "University of North Texas", city: "Denton, TX", ttoName: "UNT Innovation & Commercialization", website: "https://research.unt.edu/innovation", specialties: ["Drug Discovery", "Biomaterials", "Diagnostics"] },
+  { slug: "baylor", name: "Baylor University", city: "Waco, TX", ttoName: "Baylor Commercialization Office", website: "https://research.baylor.edu/commercialization", specialties: ["Drug Discovery", "Oncology", "Neuroscience"] },
+  // Pacific NW
+  { slug: "portlandstate", name: "Portland State University", city: "Portland, OR", ttoName: "PSU Innovation & Commercialization", website: "https://www.pdx.edu/research/innovation-commercialization", specialties: ["Biosensors", "Drug Delivery", "Biomaterials"] },
+  // Mountain West
+  { slug: "umontana", name: "University of Montana", city: "Missoula, MT", ttoName: "UM Office of Technology Transfer", website: "https://www.umt.edu/research/technology-transfer", specialties: ["Drug Discovery", "Infectious Disease", "Agricultural Biotech"] },
+  { slug: "montanastate", name: "Montana State University", city: "Bozeman, MT", ttoName: "MSU Technology Transfer", website: "https://www.montana.edu/research/techtransfer", specialties: ["Drug Delivery", "Biosensors", "Agricultural Biotech"] },
+  { slug: "unm", name: "University of New Mexico", city: "Albuquerque, NM", ttoName: "UNM Rainforest Innovations", website: "https://rainforestinnovations.com", specialties: ["Drug Discovery", "Oncology", "Biosensors"] },
+  { slug: "nmsu", name: "New Mexico State University", city: "Las Cruces, NM", ttoName: "NMSU Arrowhead Center", website: "https://arrowheadcenter.nmsu.edu", specialties: ["Agricultural Biotech", "Drug Discovery", "Biosensors"] },
+  { slug: "unr", name: "University of Nevada, Reno", city: "Reno, NV", ttoName: "UNR Office of Technology Transfer", website: "https://www.unr.edu/research/technology-transfer", specialties: ["Drug Discovery", "Neuroscience", "Biosensors"] },
+  { slug: "unlv", name: "University of Nevada, Las Vegas", city: "Las Vegas, NV", ttoName: "UNLV Innovation Office", website: "https://www.unlv.edu/research/innovation", specialties: ["Drug Delivery", "Diagnostics", "Biomaterials"] },
+  { slug: "usu", name: "Utah State University", city: "Logan, UT", ttoName: "USU Innovation Campus", website: "https://innovationcampus.usu.edu", specialties: ["Drug Delivery", "Agricultural Biotech", "Biosensors"] },
+  { slug: "byu", name: "Brigham Young University", city: "Provo, UT", ttoName: "BYU Technology Transfer Office", website: "https://techtransfer.byu.edu", specialties: ["Drug Delivery", "Biosensors", "Biomaterials"] },
+  { slug: "uaf", name: "University of Alaska Fairbanks", city: "Fairbanks, AK", ttoName: "UAF Innovation Office", website: "https://www.uaf.edu/research/innovation", specialties: ["Biosensors", "Drug Discovery", "Environmental Health"] },
+  { slug: "uaa", name: "University of Alaska Anchorage", city: "Anchorage, AK", ttoName: "UAA Innovation Office", website: "https://www.uaa.alaska.edu/research", specialties: ["Diagnostics", "Biosensors", "Environmental Health"] },
+  // Midwest
+  { slug: "und", name: "University of North Dakota", city: "Grand Forks, ND", ttoName: "UND Innovation Office", website: "https://und.edu/research/innovation", specialties: ["Drug Discovery", "Diagnostics", "Rare Disease"] },
+  { slug: "ndsu", name: "North Dakota State University", city: "Fargo, ND", ttoName: "NDSU Technology Transfer", website: "https://www.ndsu.edu/research/techtransfer", specialties: ["Agricultural Biotech", "Drug Delivery", "Biomaterials"] },
+  { slug: "sdstate", name: "South Dakota State University", city: "Brookings, SD", ttoName: "SDSU Innovation Office", website: "https://www.sdstate.edu/research/innovation", specialties: ["Agricultural Biotech", "Drug Delivery", "Diagnostics"] },
+  { slug: "indiana", name: "Indiana University", city: "Bloomington, IN", ttoName: "IU Innovation & Commercialization Office", website: "https://innovation.iu.edu", specialties: ["Drug Discovery", "Oncology", "Neuroscience"] },
+  { slug: "notredame", name: "University of Notre Dame", city: "Notre Dame, IN", ttoName: "Notre Dame IDEA Center", website: "https://ideacenter.nd.edu", specialties: ["Drug Delivery", "Oncology", "Rare Disease"] },
+  { slug: "warf", name: "University of Wisconsin", city: "Madison, WI", ttoName: "Wisconsin Alumni Research Foundation", website: "https://www.warf.org", specialties: ["Drug Discovery", "Gene Therapy", "Oncology"] },
+  // Southeast
+  { slug: "auburn", name: "Auburn University", city: "Auburn, AL", ttoName: "Auburn Commercialization Office", website: "https://www.auburn.edu/research/innovation", specialties: ["Drug Discovery", "Agricultural Biotech", "Biomaterials"] },
+  { slug: "uga", name: "University of Georgia", city: "Athens, GA", ttoName: "UGA Innovation Gateway", website: "https://research.uga.edu/gateway", specialties: ["Infectious Disease", "Agricultural Biotech", "Drug Discovery"] },
+  { slug: "uarkansas", name: "University of Arkansas", city: "Fayetteville, AR", ttoName: "UA Tech Ventures", website: "https://techventures.uark.edu", specialties: ["Agricultural Biotech", "Drug Delivery", "Biomaterials"] },
+  { slug: "uams", name: "University of Arkansas for Medical Sciences", city: "Little Rock, AR", ttoName: "UAMS BioVentures", website: "https://bioventures.uams.edu", specialties: ["Oncology", "Drug Discovery", "Rare Disease"] },
+  { slug: "olemiss", name: "University of Mississippi", city: "Oxford, MS", ttoName: "Ole Miss Research & Innovation", website: "https://research.olemiss.edu/innovation", specialties: ["Drug Discovery", "Pharmaceutics", "Natural Products"] },
+  // Northeast/Mid-Atlantic
+  { slug: "udel", name: "University of Delaware", city: "Newark, DE", ttoName: "UD Office of Technology Transfer", website: "https://www.udel.edu/research/technology-transfer", specialties: ["Drug Delivery", "Biomaterials", "Oncology"] },
+  { slug: "temple", name: "Temple University", city: "Philadelphia, PA", ttoName: "Temple Innovation Office", website: "https://research.temple.edu/innovation", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"] },
+  { slug: "drexel", name: "Drexel University", city: "Philadelphia, PA", ttoName: "Drexel Applied Innovation Office", website: "https://drexel.edu/research/innovation", specialties: ["Biomaterials", "Drug Delivery", "Bioelectronics"] },
+  { slug: "bucknell", name: "Bucknell University", city: "Lewisburg, PA", ttoName: "Bucknell Innovation Office", website: "https://www.bucknell.edu/research/innovation", specialties: ["Drug Delivery", "Biosensors", "Biomaterials"] },
+  { slug: "sunyalbany", name: "SUNY Albany", city: "Albany, NY", ttoName: "SUNY Albany Innovation Office", website: "https://www.albany.edu/research/innovation", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"] },
+  { slug: "uconn", name: "University of Connecticut", city: "Storrs, CT", ttoName: "UConn Technology Commercialization", website: "https://innovation.uconn.edu", specialties: ["Drug Delivery", "Oncology", "Biomaterials"] },
+  { slug: "dartmouth", name: "Dartmouth College", city: "Hanover, NH", ttoName: "Dartmouth Technology Transfer", website: "https://techtransfer.dartmouth.edu", specialties: ["Drug Discovery", "Oncology", "Bioelectronics"] },
+  { slug: "brandeis", name: "Brandeis University", city: "Waltham, MA", ttoName: "Brandeis Office of Technology Licensing", website: "https://www.brandeis.edu/research/innovation", specialties: ["Drug Discovery", "Neuroscience", "Structural Biology"] },
+  { slug: "unh", name: "University of New Hampshire", city: "Durham, NH", ttoName: "UNH Innovation Office", website: "https://www.unh.edu/research/innovation", specialties: ["Drug Discovery", "Agricultural Biotech", "Biomaterials"] },
+  { slug: "uri", name: "University of Rhode Island", city: "Kingston, RI", ttoName: "URI Innovation Office", website: "https://web.uri.edu/research/commercialization", specialties: ["Drug Delivery", "Oncology", "Natural Products"] },
+  { slug: "mountsinai", name: "Icahn School of Medicine at Mount Sinai", city: "New York, NY", ttoName: "Mount Sinai Technology Transfer", website: "https://icahn.mssm.edu/research/technology-transfer", specialties: ["Oncology", "Neuroscience", "Gene Therapy"] },
+  // Other US
+  { slug: "caltech", name: "California Institute of Technology", city: "Pasadena, CA", ttoName: "Caltech Office of Technology Transfer", website: "https://techtransfer.caltech.edu", specialties: ["Drug Delivery", "Bioelectronics", "Gene Editing"] },
+  { slug: "asu", name: "Arizona State University", city: "Tempe, AZ", ttoName: "ASU Skysong Innovations", website: "https://skysonginnovations.com", specialties: ["Drug Discovery", "Diagnostics", "Biomaterials"] },
+  { slug: "uillinois", name: "University of Illinois", city: "Urbana-Champaign, IL", ttoName: "UI Office of Technology Management", website: "https://otm.illinois.edu", specialties: ["Drug Delivery", "Bioelectronics", "Genomics"] },
+
+  // ── Europe ────────────────────────────────────────────────────────────────
+  // UK
+  { slug: "oxford", name: "University of Oxford", city: "Oxford, UK", ttoName: "Oxford University Innovation", website: "https://innovation.ox.ac.uk", specialties: ["Drug Discovery", "Vaccines", "Oncology"], continent: "Europe" },
+  { slug: "cambridge", name: "University of Cambridge", city: "Cambridge, UK", ttoName: "Cambridge Enterprise", website: "https://www.enterprise.cam.ac.uk", specialties: ["Drug Discovery", "Genomics", "Oncology"], continent: "Europe" },
+  { slug: "imperial", name: "Imperial College London", city: "London, UK", ttoName: "Imperial College Enterprise", website: "https://www.imperial.ac.uk/enterprise", specialties: ["Drug Delivery", "Immunology", "Bioelectronics"], continent: "Europe" },
+  { slug: "ucl", name: "University College London", city: "London, UK", ttoName: "UCL Business", website: "https://www.uclb.com", specialties: ["Gene Therapy", "Oncology", "Neuroscience"], continent: "Europe" },
+  { slug: "manchester", name: "University of Manchester", city: "Manchester, UK", ttoName: "Manchester Innovation Factory", website: "https://www.uominnovationfactory.com", specialties: ["Drug Discovery", "Oncology", "Biomaterials"], continent: "Europe" },
+  { slug: "edinburgh", name: "University of Edinburgh", city: "Edinburgh, UK", ttoName: "Edinburgh Commercialisation Service", website: "https://www.ed.ac.uk/research/innovation", specialties: ["Drug Discovery", "Gene Therapy", "Rare Disease"], continent: "Europe" },
+  { slug: "bristol", name: "University of Bristol", city: "Bristol, UK", ttoName: "Bristol Research & Enterprise Development", website: "https://www.bristol.ac.uk/red", specialties: ["Drug Discovery", "Neuroscience", "Oncology"], continent: "Europe" },
+  { slug: "glasgow", name: "University of Glasgow", city: "Glasgow, UK", ttoName: "Glasgow Technology Transfer Office", website: "https://www.gla.ac.uk/research/enterprise", specialties: ["Drug Discovery", "Infectious Disease", "Diagnostics"], continent: "Europe" },
+  { slug: "birmingham", name: "University of Birmingham", city: "Birmingham, UK", ttoName: "Birmingham Enterprise", website: "https://www.birmingham.ac.uk/business/university-enterprise", specialties: ["Drug Discovery", "Oncology", "Immunology"], continent: "Europe" },
+  { slug: "nottingham", name: "University of Nottingham", city: "Nottingham, UK", ttoName: "Nottingham Research & Innovation", website: "https://www.nottingham.ac.uk/research/innovation", specialties: ["Drug Delivery", "Drug Discovery", "Biomaterials"], continent: "Europe" },
+  { slug: "leeds", name: "University of Leeds", city: "Leeds, UK", ttoName: "Leeds Commercialisation Team", website: "https://business.leeds.ac.uk/research-innovation", specialties: ["Drug Delivery", "Biomaterials", "Oncology"], continent: "Europe" },
+  { slug: "sheffield", name: "University of Sheffield", city: "Sheffield, UK", ttoName: "Sheffield Commercialisation Office", website: "https://www.sheffield.ac.uk/commercialisation", specialties: ["Drug Delivery", "Biomaterials", "Gene Therapy"], continent: "Europe" },
+  { slug: "southampton", name: "University of Southampton", city: "Southampton, UK", ttoName: "Southampton Research & Innovation", website: "https://www.southampton.ac.uk/research-innovation", specialties: ["Drug Delivery", "Bioelectronics", "Oncology"], continent: "Europe" },
+  { slug: "warwick", name: "University of Warwick", city: "Coventry, UK", ttoName: "Warwick Innovation Group", website: "https://warwick.ac.uk/services/innovations", specialties: ["Drug Discovery", "Diagnostics", "Biomaterials"], continent: "Europe" },
+  { slug: "kcl", name: "King's College London", city: "London, UK", ttoName: "King's College London Commercialisation Institute", website: "https://www.kcl.ac.uk/research/commercialisation", specialties: ["Drug Discovery", "Oncology", "Neuroscience"], continent: "Europe" },
+  // Switzerland
+  { slug: "ethzurich", name: "ETH Zurich", city: "Zurich, Switzerland", ttoName: "ETH Zurich Technology Transfer", website: "https://transfer.ethz.ch", specialties: ["Drug Delivery", "Bioelectronics", "Gene Editing"], continent: "Europe" },
+  { slug: "epfl", name: "EPFL", city: "Lausanne, Switzerland", ttoName: "EPFL Technology Transfer Office", website: "https://tto.epfl.ch", specialties: ["Drug Delivery", "Bioelectronics", "Oncology"], continent: "Europe" },
+  { slug: "ubasel", name: "University of Basel", city: "Basel, Switzerland", ttoName: "Basel Technology Transfer", website: "https://www.unibas.ch/en/Research/Technology-Transfer.html", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Europe" },
+  { slug: "ulausanne", name: "University of Lausanne", city: "Lausanne, Switzerland", ttoName: "UNIL Innovation & Partnerships", website: "https://www.unil.ch/innovation", specialties: ["Oncology", "Immunology", "Neuroscience"], continent: "Europe" },
+  { slug: "ugeneva", name: "University of Geneva", city: "Geneva, Switzerland", ttoName: "Geneva Technology Transfer", website: "https://www.unige.ch/research/innovation", specialties: ["Drug Discovery", "Infectious Disease", "Oncology"], continent: "Europe" },
+  { slug: "uzurich", name: "University of Zurich", city: "Zurich, Switzerland", ttoName: "UZH Technology Transfer", website: "https://www.uzh.ch/en/research/technologytransfer.html", specialties: ["Oncology", "Neuroscience", "Drug Discovery"], continent: "Europe" },
+  // Benelux
+  { slug: "kuleuven", name: "KU Leuven", city: "Leuven, Belgium", ttoName: "KU Leuven Research & Development", website: "https://lrd.kuleuven.be", specialties: ["Drug Discovery", "Oncology", "Immunology"], continent: "Europe" },
+  { slug: "ugent", name: "Ghent University", city: "Ghent, Belgium", ttoName: "Ghent University TechTransfer", website: "https://www.ugent.be/techtransfer", specialties: ["Drug Discovery", "Oncology", "Agricultural Biotech"], continent: "Europe" },
+  { slug: "groningen", name: "University of Groningen", city: "Groningen, Netherlands", ttoName: "Groningen Knowledge Transfer", website: "https://www.rug.nl/research/innovation", specialties: ["Drug Discovery", "Metabolic Disease", "Oncology"], continent: "Europe" },
+  { slug: "uamsterdam", name: "University of Amsterdam", city: "Amsterdam, Netherlands", ttoName: "Amsterdam Innovation Exchange", website: "https://www.ixamsterdam.nl", specialties: ["Drug Discovery", "Oncology", "Immunology"], continent: "Europe" },
+  { slug: "vuamsterdam", name: "Vrije Universiteit Amsterdam", city: "Amsterdam, Netherlands", ttoName: "VU Knowledge Transfer", website: "https://vu.nl/en/research/knowledge-transfer", specialties: ["Drug Discovery", "Neuroscience", "Oncology"], continent: "Europe" },
+  { slug: "leiden", name: "Leiden University", city: "Leiden, Netherlands", ttoName: "Leiden Knowledge Transfer Office", website: "https://www.universiteitleiden.nl/en/research/knowledge-transfer", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"], continent: "Europe" },
+  // Nordic
+  { slug: "karolinska", name: "Karolinska Institutet", city: "Stockholm, Sweden", ttoName: "Karolinska Innovations", website: "https://ki.se/en/innovation", specialties: ["Oncology", "Neuroscience", "Drug Discovery"], continent: "Europe" },
+  { slug: "inven2", name: "University of Oslo", city: "Oslo, Norway", ttoName: "Inven2 Technology Transfer", website: "https://inven2.com", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Europe" },
+  { slug: "vis", name: "University of Bergen", city: "Bergen, Norway", ttoName: "VIS Innovation", website: "https://visinnovasjon.no", specialties: ["Drug Discovery", "Marine Biotech", "Infectious Disease"], continent: "Europe" },
+  { slug: "ntnu", name: "NTNU", city: "Trondheim, Norway", ttoName: "NTNU Technology Transfer", website: "https://ntnu.edu/tto", specialties: ["Bioelectronics", "Drug Delivery", "Biomaterials"], continent: "Europe" },
+  { slug: "ucph", name: "University of Copenhagen", city: "Copenhagen, Denmark", ttoName: "Copenhagen Tech Transfer", website: "https://techtransfer.ku.dk", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Europe" },
+  { slug: "aarhus", name: "Aarhus University", city: "Aarhus, Denmark", ttoName: "Aarhus Technology Transfer", website: "https://techtransfer.au.dk", specialties: ["Drug Discovery", "Agricultural Biotech", "Oncology"], continent: "Europe" },
+  { slug: "dtu", name: "Technical University of Denmark", city: "Kongens Lyngby, Denmark", ttoName: "DTU Technology Transfer", website: "https://techtransfer.dtu.dk", specialties: ["Bioelectronics", "Drug Delivery", "Diagnostics"], continent: "Europe" },
+  { slug: "lund", name: "Lund University", city: "Lund, Sweden", ttoName: "Lund Innovation Office", website: "https://www.lunduniversity.lu.se/research/innovation", specialties: ["Drug Discovery", "Oncology", "Neuroscience"], continent: "Europe" },
+  { slug: "chalmers", name: "Chalmers University of Technology", city: "Gothenburg, Sweden", ttoName: "Chalmers Ventures", website: "https://chalmersventures.com", specialties: ["Drug Delivery", "Bioelectronics", "Biosensors"], continent: "Europe" },
+  { slug: "gothenburg", name: "University of Gothenburg", city: "Gothenburg, Sweden", ttoName: "Gothenburg Innovation Office", website: "https://www.gu.se/en/innovation", specialties: ["Drug Discovery", "Oncology", "Marine Biotech"], continent: "Europe" },
+  { slug: "helsinki", name: "University of Helsinki", city: "Helsinki, Finland", ttoName: "Helsinki Innovation Services", website: "https://www.helsinki.fi/en/research/services-for-researchers/innovation-services", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"], continent: "Europe" },
+  { slug: "aalto", name: "Aalto University", city: "Espoo, Finland", ttoName: "Aalto Innovation Services", website: "https://www.aalto.fi/en/services/innovation-services", specialties: ["Bioelectronics", "Drug Delivery", "Diagnostics"], continent: "Europe" },
+  // Germany
+  { slug: "tum", name: "Technical University of Munich", city: "Munich, Germany", ttoName: "TUM ForTe Technology Transfer", website: "https://www.forte.tum.de", specialties: ["Drug Delivery", "Bioelectronics", "Oncology"], continent: "Europe" },
+  { slug: "lmu", name: "Ludwig Maximilian University of Munich", city: "Munich, Germany", ttoName: "LMU Munich Innovation Office", website: "https://www.en.uni-muenchen.de/research/innovation", specialties: ["Drug Discovery", "Oncology", "Neuroscience"], continent: "Europe" },
+  { slug: "rwth", name: "RWTH Aachen University", city: "Aachen, Germany", ttoName: "RWTH Aachen Innovation", website: "https://www.innovation.rwth-aachen.de", specialties: ["Bioelectronics", "Drug Delivery", "Biomaterials"], continent: "Europe" },
+  { slug: "ufreiburg", name: "University of Freiburg", city: "Freiburg, Germany", ttoName: "Freiburg Innovation Office", website: "https://www.uni-freiburg.de/research/innovation", specialties: ["Neuroscience", "Drug Discovery", "Oncology"], continent: "Europe" },
+  { slug: "ubonn", name: "University of Bonn", city: "Bonn, Germany", ttoName: "Bonn Technology Transfer", website: "https://www.uni-bonn.de/en/research/transfer", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Europe" },
+  { slug: "ucologne", name: "University of Cologne", city: "Cologne, Germany", ttoName: "Cologne Innovation Office", website: "https://innovation.uni-koeln.de", specialties: ["Drug Discovery", "Oncology", "Metabolic Disease"], continent: "Europe" },
+  { slug: "utubingen", name: "University of Tübingen", city: "Tübingen, Germany", ttoName: "Tübingen Technology Transfer", website: "https://uni-tuebingen.de/en/research/transfer", specialties: ["Drug Discovery", "Neuroscience", "Oncology"], continent: "Europe" },
+  { slug: "heidelberg", name: "University of Heidelberg", city: "Heidelberg, Germany", ttoName: "Heidelberg Technology Transfer", website: "https://www.uni-heidelberg.de/en/research/transfer", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Europe" },
+  // Israel
+  { slug: "weizmann", name: "Weizmann Institute of Science", city: "Rehovot, Israel", ttoName: "Yeda Research and Development", website: "https://yeda.weizmann.ac.il", specialties: ["Drug Discovery", "Oncology", "Immunology"], continent: "Europe" },
+  { slug: "technion", name: "Technion – Israel Institute of Technology", city: "Haifa, Israel", ttoName: "Technion T3 Technology Transfer", website: "https://t3.technion.ac.il", specialties: ["Drug Delivery", "Bioelectronics", "Diagnostics"], continent: "Europe" },
+  // Canada
+  { slug: "utoronto", name: "University of Toronto", city: "Toronto, Canada", ttoName: "U of T Innovations & Partnerships", website: "https://research.utoronto.ca/partnerships-commercialization", specialties: ["Gene Therapy", "Oncology", "Drug Delivery"], continent: "North America" },
+  { slug: "mcgill", name: "McGill University", city: "Montreal, Canada", ttoName: "McGill Innovation + Partnerships", website: "https://www.mcgill.ca/research/researchers/commercialization", specialties: ["Oncology", "Neuroscience", "Drug Discovery"], continent: "North America" },
+  { slug: "ubc", name: "University of British Columbia", city: "Vancouver, Canada", ttoName: "UBC UILO", website: "https://uilo.ubc.ca", specialties: ["Drug Delivery", "Oncology", "Immunology"], continent: "North America" },
+  { slug: "ucalgary", name: "University of Calgary", city: "Calgary, Canada", ttoName: "Calgary Research & Innovation", website: "https://research.ucalgary.ca", specialties: ["Drug Discovery", "Oncology", "Cardiovascular"], continent: "North America" },
+  { slug: "usask", name: "University of Saskatchewan", city: "Saskatoon, Canada", ttoName: "USask Innovation Enterprise", website: "https://research.usask.ca/innovation", specialties: ["Agricultural Biotech", "Drug Discovery", "Vaccines"], continent: "North America" },
+  { slug: "umanitoba", name: "University of Manitoba", city: "Winnipeg, Canada", ttoName: "Manitoba Technology Transfer", website: "https://umanitoba.ca/research/innovation", specialties: ["Drug Discovery", "Infectious Disease", "Agricultural Biotech"], continent: "North America" },
+  { slug: "uvic", name: "University of Victoria", city: "Victoria, Canada", ttoName: "UVic Industry Partnerships", website: "https://www.uvic.ca/research/innovation", specialties: ["Drug Discovery", "Biosensors", "Drug Delivery"], continent: "North America" },
+  { slug: "sfu", name: "Simon Fraser University", city: "Burnaby, Canada", ttoName: "SFU Industry Liaison Office", website: "https://www.sfu.ca/ilo.html", specialties: ["Drug Delivery", "Bioelectronics", "Oncology"], continent: "North America" },
+
+  // ── Asia-Pacific ──────────────────────────────────────────────────────────
+  { slug: "umelbourne", name: "University of Melbourne", city: "Melbourne, Australia", ttoName: "Melbourne Research Innovation", website: "https://research.unimelb.edu.au", specialties: ["Drug Discovery", "Oncology", "Rare Disease"], continent: "Asia-Pacific" },
+  { slug: "monash", name: "Monash University", city: "Melbourne, Australia", ttoName: "Monash University Commercialisation", website: "https://commercialisation.monash.edu", specialties: ["Drug Delivery", "Oncology", "Infectious Disease"], continent: "Asia-Pacific" },
+  { slug: "usydney", name: "University of Sydney", city: "Sydney, Australia", ttoName: "Sydney Commercial Development", website: "https://www.sydney.edu.au/research/industry-and-community/commercialisation.html", specialties: ["Drug Discovery", "Oncology", "Biomaterials"], continent: "Asia-Pacific" },
+  { slug: "uniquest", name: "University of Queensland", city: "Brisbane, Australia", ttoName: "UniQuest", website: "https://uniquest.com.au", specialties: ["Drug Discovery", "Vaccines", "Oncology"], continent: "Asia-Pacific" },
+  { slug: "nus", name: "National University of Singapore", city: "Singapore", ttoName: "NUS Industry Liaison Office", website: "https://ilo.nus.edu.sg", specialties: ["Drug Delivery", "Diagnostics", "Oncology"], continent: "Asia-Pacific" },
+  { slug: "hkust", name: "Hong Kong University of Science and Technology", city: "Hong Kong", ttoName: "HKUST Knowledge Transfer Office", website: "https://kto.hkust.edu.hk", specialties: ["Drug Delivery", "Bioelectronics", "Diagnostics"], continent: "Asia-Pacific" },
+  { slug: "hku", name: "University of Hong Kong", city: "Hong Kong", ttoName: "HKU Technology Transfer Office", website: "https://tto.hku.hk", specialties: ["Drug Discovery", "Oncology", "Infectious Disease"], continent: "Asia-Pacific" },
 ];
 
 export const BLOCKED_SLUGS = new Set([

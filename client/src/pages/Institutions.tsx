@@ -11,6 +11,9 @@ import { INSTITUTIONS, BLOCKED_SLUGS, type Institution } from "@/lib/institution
 
 export { INSTITUTIONS };
 
+type Continent = "All" | "North America" | "Europe" | "Asia-Pacific";
+const CONTINENTS: Continent[] = ["All", "North America", "Europe", "Asia-Pacific"];
+
 const SPECIALTY_COLORS: Record<string, string> = {
   "Oncology": "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20",
   "Neuroscience": "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20",
@@ -26,6 +29,10 @@ const SPECIALTY_COLORS: Record<string, string> = {
 
 function getSpecialtyClass(s: string) {
   return SPECIALTY_COLORS[s] ?? "bg-muted/40 text-muted-foreground border-border";
+}
+
+function institutionContinent(inst: Institution): string {
+  return inst.continent ?? "North America";
 }
 
 function InstitutionCard({
@@ -111,6 +118,7 @@ function InstitutionCard({
 
 export default function Institutions() {
   const [search, setSearch] = useState("");
+  const [continent, setContinent] = useState<Continent>("All");
 
   const { data: countsData, isLoading: countsLoading } = useQuery<Record<string, number>>({
     queryKey: ["/api/institutions/counts"],
@@ -119,39 +127,61 @@ export default function Institutions() {
 
   const noneScanned = !countsLoading && (!countsData || Object.keys(countsData).length === 0);
 
-  const filtered = INSTITUTIONS.filter((i) =>
-    i.name.toLowerCase().includes(search.toLowerCase())
-  );
+  const filtered = INSTITUTIONS.filter((i) => {
+    const matchesContinent = continent === "All" || institutionContinent(i) === continent;
+    const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
+    return matchesContinent && matchesSearch;
+  });
 
   return (
     <div className="min-h-full bg-background">
       <div className="border-b border-border bg-card/30">
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold text-foreground">Institutions</h1>
-                <Badge
-                  variant="secondary"
-                  className="text-[11px] font-semibold bg-primary/10 text-primary border-0"
-                  data-testid="badge-tto-count"
-                >
-                  {INSTITUTIONS.length} TTOs indexed
-                </Badge>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl font-bold text-foreground">Institutions</h1>
+                  <Badge
+                    variant="secondary"
+                    className="text-[11px] font-semibold bg-primary/10 text-primary border-0"
+                    data-testid="badge-tto-count"
+                  >
+                    {filtered.length} TTOs{continent !== "All" ? ` · ${continent}` : " indexed"}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mt-1">
+                  University tech transfer offices tracked and indexed by EdenRadar.
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                University tech transfer offices tracked and indexed by EdenRadar.
-              </p>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Search institutions..."
+                  className="pl-8 h-9 text-sm"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  data-testid="input-search-institutions"
+                />
+              </div>
             </div>
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
-              <Input
-                placeholder="Search institutions..."
-                className="pl-8 h-9 text-sm"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                data-testid="input-search-institutions"
-              />
+
+            {/* Continent toggle */}
+            <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
+              {CONTINENTS.map((c) => (
+                <button
+                  key={c}
+                  onClick={() => setContinent(c)}
+                  data-testid={`filter-continent-${c.toLowerCase().replace(/[^a-z]/g, "-")}`}
+                  className={`px-3 py-1 rounded-full text-xs font-medium border transition-colors duration-150 ${
+                    continent === c
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-transparent text-muted-foreground border-border hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {c}
+                </button>
+              ))}
             </div>
           </div>
         </div>
@@ -167,7 +197,7 @@ export default function Institutions() {
 
         {filtered.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
-            No institutions match &ldquo;{search}&rdquo;
+            No institutions match{search ? ` "${search}"` : ""}{continent !== "All" ? ` in ${continent}` : ""}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

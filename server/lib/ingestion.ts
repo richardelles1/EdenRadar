@@ -13,9 +13,14 @@ export interface IngestionResult {
 }
 
 let ingestionRunning = false;
+let enrichingCount = 0;
 
 export function isIngestionRunning(): boolean {
   return ingestionRunning;
+}
+
+export function getEnrichingCount(): number {
+  return enrichingCount;
 }
 
 export async function runIngestionPipeline(): Promise<IngestionResult> {
@@ -58,6 +63,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
       }
     }
 
+    // Mark run completed BEFORE enrichment so UI unlocks immediately
     await storage.updateIngestionRun(run.id, {
       status: "completed",
       totalFound: listings.length,
@@ -66,10 +72,14 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
 
+    ingestionRunning = false;
+
+    // Enrich in background — non-blocking
     if (newAssets.length > 0) {
+      enrichingCount = newAssets.length;
       console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (irrelevant assets will be removed)...`);
-      try {
-        const enrichments = await enrichBatch(newAssets, 5);
+
+      enrichBatch(newAssets, 25).then(async (enrichments) => {
         let enrichedCount = 0;
         let removedCount = 0;
         const enrichmentEntries = Array.from(enrichments.entries());
@@ -85,11 +95,14 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
           } catch (err: any) {
             console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
           }
+          enrichingCount = Math.max(0, enrichingCount - 1);
         }
+        enrichingCount = 0;
         console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant assets kept, ${removedCount} non-biotech assets removed`);
-      } catch (err: any) {
+      }).catch((err: any) => {
+        enrichingCount = 0;
         console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
-      }
+      });
     }
 
     return { totalFound: listings.length, newCount, runId: run.id };
