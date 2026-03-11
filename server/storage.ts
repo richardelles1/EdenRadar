@@ -204,7 +204,7 @@ export class DatabaseStorage implements IStorage {
         count: sql<number>`count(*)::int`,
       })
       .from(ingestedAssets)
-      .where(eq(ingestedAssets.relevant, true))
+      .where(eq(ingestedAssets.sourceType, "tech_transfer"))
       .groupBy(ingestedAssets.institution);
 
     const result: Record<string, number> = {};
