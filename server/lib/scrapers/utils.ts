@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 
-export async function fetchHtml(url: string, timeoutMs = 20000): Promise<cheerio.CheerioAPI | null> {
+export async function fetchHtml(url: string, timeoutMs = 8000): Promise<cheerio.CheerioAPI | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -26,7 +26,7 @@ export async function fetchHtml(url: string, timeoutMs = 20000): Promise<cheerio
   }
 }
 
-export async function fetchJson<T = any>(url: string, timeoutMs = 20000): Promise<T | null> {
+export async function fetchJson<T = any>(url: string, timeoutMs = 10000): Promise<T | null> {
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
