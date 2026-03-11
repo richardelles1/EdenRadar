@@ -411,7 +411,7 @@ export const udelScraper = createFlintboxScraper(
   "University of Delaware"
 );
 export const templeScraper = createStubScraper("Temple University");
-export const drexelScraper = createStubScraper("Drexel University");
+export const drexelScraper = createTechPublisherScraper("drexelotc", "Drexel University", { maxPg: 50 });
 export const bucknellScraper = createStubScraper("Bucknell University");
 export const sunyalbanyScraper = createStubScraper("SUNY Albany");
 export const uconnScraper = createFlintboxScraper(
