@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -101,6 +101,7 @@ export const ingestedAssets = pgTable("ingested_assets", {
   sourceType: text("source_type").notNull().default("tech_transfer"),
   summary: text("summary").notNull(),
   sourceUrl: text("source_url"),
+  relevant: boolean("relevant").notNull().default(false),
   firstSeenAt: timestamp("first_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   lastSeenAt: timestamp("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   runId: integer("run_id").notNull(),

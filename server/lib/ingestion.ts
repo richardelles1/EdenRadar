@@ -67,20 +67,26 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
 
     if (newAssets.length > 0) {
-      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI...`);
+      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (irrelevant assets will be removed)...`);
       try {
         const enrichments = await enrichBatch(newAssets, 5);
         let enrichedCount = 0;
+        let removedCount = 0;
         const enrichmentEntries = Array.from(enrichments.entries());
         for (const [id, data] of enrichmentEntries) {
           try {
-            await storage.updateIngestedAssetEnrichment(id, data);
-            enrichedCount++;
+            if (!data.biotechRelevant) {
+              await storage.deleteIngestedAsset(id);
+              removedCount++;
+            } else {
+              await storage.updateIngestedAssetEnrichment(id, data);
+              enrichedCount++;
+            }
           } catch (err: any) {
             console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
           }
         }
-        console.log(`[ingestion] Enriched ${enrichedCount}/${newAssets.length} new assets`);
+        console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant assets kept, ${removedCount} non-biotech assets removed`);
       } catch (err: any) {
         console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
       }

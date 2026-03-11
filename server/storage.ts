@@ -6,7 +6,7 @@ import {
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte } from "drizzle-orm";
+import { eq, desc, sql, gte, and } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -27,7 +27,8 @@ export interface IStorage {
   getIngestionRunHistory(limit?: number): Promise<IngestionRun[]>;
 
   upsertIngestedAsset(fingerprint: string, data: Omit<InsertIngestedAsset, "fingerprint">): Promise<{ asset: IngestedAsset; isNew: boolean }>;
-  updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string }): Promise<void>;
+  updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void>;
+  deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
   getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
@@ -114,15 +115,7 @@ export class DatabaseStorage implements IStorage {
     return { asset: inserted, isNew: true };
   }
 
-  async getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]> {
-    return db
-      .select()
-      .from(ingestedAssets)
-      .where(eq(ingestedAssets.institution, institution))
-      .orderBy(desc(ingestedAssets.lastSeenAt));
-  }
-
-  async updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string }): Promise<void> {
+  async updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void> {
     await db
       .update(ingestedAssets)
       .set({
@@ -130,8 +123,21 @@ export class DatabaseStorage implements IStorage {
         modality: data.modality,
         indication: data.indication,
         developmentStage: data.developmentStage,
+        relevant: data.biotechRelevant,
       })
       .where(eq(ingestedAssets.id, id));
+  }
+
+  async deleteIngestedAsset(id: number): Promise<void> {
+    await db.delete(ingestedAssets).where(eq(ingestedAssets.id, id));
+  }
+
+  async getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]> {
+    return db
+      .select()
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.institution, institution), eq(ingestedAssets.relevant, true)))
+      .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
   async getInstitutionAssetCounts(): Promise<Record<string, number>> {
@@ -141,6 +147,7 @@ export class DatabaseStorage implements IStorage {
         count: sql<number>`count(*)::int`,
       })
       .from(ingestedAssets)
+      .where(eq(ingestedAssets.relevant, true))
       .groupBy(ingestedAssets.institution);
 
     const result: Record<string, number> = {};
@@ -157,7 +164,7 @@ export class DatabaseStorage implements IStorage {
         assetName: ingestedAssets.assetName,
       })
       .from(ingestedAssets)
-      .where(gte(ingestedAssets.firstSeenAt, ranAt))
+      .where(and(gte(ingestedAssets.firstSeenAt, ranAt), eq(ingestedAssets.relevant, true)))
       .orderBy(desc(ingestedAssets.firstSeenAt));
 
     const grouped: Record<string, string[]> = {};

@@ -10,6 +10,7 @@ export interface AssetEnrichment {
   modality: string;
   indication: string;
   developmentStage: string;
+  biotechRelevant: boolean;
 }
 
 const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
@@ -28,12 +29,12 @@ export async function enrichAssetTitle(assetName: string): Promise<AssetEnrichme
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
-      max_tokens: 80,
+      max_tokens: 100,
       messages: [
         {
           role: "system",
           content: `Extract biomedical fields from a university TTO technology listing title. Reply with JSON only, no markdown.
-Fields: target (gene/protein/pathway, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown).`,
+Fields: target (gene/protein/pathway, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown), biotechRelevant (true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application).`,
         },
         {
           role: "user",
@@ -50,9 +51,10 @@ Fields: target (gene/protein/pathway, or "unknown"), modality (one of: small mol
       modality: sanitize(parsed.modality, MODALITY_VALUES, "unknown"),
       indication: (parsed.indication ?? "unknown").toLowerCase().trim() || "unknown",
       developmentStage: sanitize(parsed.developmentStage, STAGE_VALUES, "unknown"),
+      biotechRelevant: parsed.biotechRelevant === true,
     };
   } catch {
-    return { target: "unknown", modality: "unknown", indication: "unknown", developmentStage: "unknown" };
+    return { target: "unknown", modality: "unknown", indication: "unknown", developmentStage: "unknown", biotechRelevant: false };
   }
 }
 
