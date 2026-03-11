@@ -375,11 +375,17 @@ export const baylorScraper = createFlintboxScraper(
 export const portlandStateScraper = createStubScraper("Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createStubScraper("Montana State University");
-export const unmScraper = createStubScraper("University of New Mexico");
+export const unmScraper = createFlintboxScraper(
+  { slug: "unm", orgId: 83, accessKey: "d806a16b-e229-4077-81f8-1704ae7099be" },
+  "University of New Mexico"
+);
 export const nmsuScraper = createStubScraper("New Mexico State University");
 export const unrScraper = createStubScraper("University of Nevada, Reno");
 export const unlvScraper = createStubScraper("University of Nevada, Las Vegas");
-export const usuScraper = createStubScraper("Utah State University");
+export const usuScraper = createFlintboxScraper(
+  { slug: "usu", orgId: 198, accessKey: "6af4c512-15e2-4213-bb3f-3b7e904a0e43" },
+  "Utah State University"
+);
 export const byuScraper = createStubScraper("Brigham Young University");
 export const uaaScraper = createStubScraper("University of Alaska Anchorage");
 export const undScraper = createStubScraper("University of North Dakota");
@@ -387,7 +393,10 @@ export const ndsuScraper = createStubScraper("North Dakota State University");
 export const indianaScraper = createStubScraper("Indiana University");
 export const notredameScraper = createStubScraper("University of Notre Dame");
 export const warfScraper = createStubScraper("University of Wisconsin");
-export const auburnScraper = createStubScraper("Auburn University");
+export const auburnScraper = createFlintboxScraper(
+  { slug: "auburn", orgId: 30, accessKey: "7ff46c23-25a2-4e76-9c2a-34f7c5819ab4" },
+  "Auburn University"
+);
 export const ugaScraper = createFlintboxScraper(
   { slug: "uga", orgId: 11, accessKey: "28c03bda-3676-41d6-bf18-22101ac1dbc5" },
   "University of Georgia"
@@ -410,9 +419,15 @@ export const dartmouthScraper = createFlintboxScraper(
   { slug: "dartmouth", orgId: 22, accessKey: "7c57a009-67e1-4f80-bd5f-1fd5d140fdb2" },
   "Dartmouth College"
 );
-export const brandeisScraper = createStubScraper("Brandeis University");
+export const brandeisScraper = createFlintboxScraper(
+  { slug: "brandeis", orgId: 43, accessKey: "0bc51ba1-c4b3-41c2-a762-443373f4df2c" },
+  "Brandeis University"
+);
 export const unhScraper = createStubScraper("University of New Hampshire");
-export const uriScraper = createStubScraper("University of Rhode Island");
+export const uriScraper = createFlintboxScraper(
+  { slug: "uri", orgId: 39, accessKey: "4cfe8cae-7fe8-4d31-a38e-9628d93f4ac0" },
+  "University of Rhode Island"
+);
 export const mountsinaiScraper = createStubScraper("Icahn School of Medicine at Mount Sinai");
 export const caltechScraper = createStubScraper("California Institute of Technology");
 export const asuScraper = createStubScraper("Arizona State University");
@@ -490,7 +505,10 @@ export const ucalgaryScraper = createFlintboxScraper(
   "University of Calgary"
 );
 export const umanitobaScraper = createStubScraper("University of Manitoba");
-export const uvicScraper = createStubScraper("University of Victoria");
+export const uvicScraper = createFlintboxScraper(
+  { slug: "uvic", orgId: 95, accessKey: "7b328428-6bc4-45ad-b80c-9f0531797e59" },
+  "University of Victoria"
+);
 export const sfuScraper = createStubScraper("Simon Fraser University");
 
 // ── International: Asia-Pacific ──────────────────────────────────────────
