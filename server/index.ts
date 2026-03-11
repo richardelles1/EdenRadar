@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { schedule as cronSchedule } from "node-cron";
 import { runIngestionPipeline } from "./lib/ingestion";
+import { storage } from "./storage";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +64,21 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+
+  // On startup, mark any orphaned "running" ingestion runs as "failed"
+  // so the UI never shows a permanent stuck spinner after a server restart
+  try {
+    const lastRun = await storage.getLastIngestionRun();
+    if (lastRun && lastRun.status === "running") {
+      await storage.updateIngestionRun(lastRun.id, {
+        status: "failed",
+        errorMessage: "Server restarted while ingestion was in progress",
+      });
+      log(`[startup] Cleared orphaned ingestion run #${lastRun.id}`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Could not clear orphaned runs: ${err?.message}`, "startup");
+  }
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
