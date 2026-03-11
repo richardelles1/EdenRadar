@@ -254,6 +254,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ingest/delta", async (_req, res) => {
+    try {
+      const lastRun = await storage.getLastIngestionRun();
+      if (!lastRun || lastRun.status !== "completed") {
+        return res.json({ runId: null, ranAt: null, totalNew: 0, byInstitution: [] });
+      }
+      const byInstitution = await storage.getIngestionDelta(lastRun.ranAt);
+      const totalNew = byInstitution.reduce((sum, row) => sum + row.count, 0);
+      return res.json({ runId: lastRun.id, ranAt: lastRun.ranAt, totalNew, byInstitution });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch delta" });
+    }
+  });
+
   app.get("/api/institutions/counts", async (_req, res) => {
     try {
       const counts = await storage.getInstitutionAssetCounts();

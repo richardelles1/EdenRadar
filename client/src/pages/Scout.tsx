@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { SavedAssetsPanel } from "@/components/SavedAssetsPanel";
@@ -90,7 +91,7 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
         <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
           <AlertCircle className="w-3.5 h-3.5 shrink-0" />
           <span className="font-medium">Sources not yet indexed</span>
-          <span className="hidden sm:inline text-muted-foreground">— run a full scan to pull real listings from all 28 TTOs</span>
+          <span className="hidden sm:inline text-muted-foreground">— run a full scan to pull real listings from all {INSTITUTIONS.length} TTOs</span>
         </div>
         <Button
           size="sm"
@@ -158,18 +159,7 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
 
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
-const COVERED_INSTITUTIONS = [
-  "Stanford University", "MIT", "Harvard University", "Johns Hopkins University",
-  "University of California San Francisco", "Duke University", "Columbia University",
-  "University of Pennsylvania", "Northwestern University", "Cornell University",
-  "UC Berkeley", "University of Washington", "Washington University in St. Louis",
-  "University of Michigan", "Mayo Clinic", "Scripps Research",
-  "Salk Institute", "MD Anderson Cancer Center",
-  "University of Pittsburgh", "University of Chicago",
-  "Yale University", "Vanderbilt University", "Emory University",
-  "Boston University", "Georgetown University", "University of Texas",
-  "Case Western Reserve University", "University of Colorado",
-];
+const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 const MODALITIES = [

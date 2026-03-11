@@ -1,5 +1,6 @@
 import { storage } from "../storage";
 import { runAllScrapers } from "./scrapers/index";
+import { enrichBatch } from "./scrapers/enrichAsset";
 
 export function makeFingerprint(title: string, institution: string): string {
   return `${title.toLowerCase().trim()}|${institution.toLowerCase().trim()}`;
@@ -33,11 +34,13 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
     let newCount = 0;
+    const newAssets: { id: number; assetName: string }[] = [];
+
     for (const listing of listings) {
       if (!listing.title || !listing.institution) continue;
       const fingerprint = makeFingerprint(listing.title, listing.institution);
       try {
-        const { isNew } = await storage.upsertIngestedAsset(fingerprint, {
+        const { asset, isNew } = await storage.upsertIngestedAsset(fingerprint, {
           assetName: listing.title,
           institution: listing.institution,
           summary: listing.description || listing.title,
@@ -46,7 +49,10 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
           developmentStage: listing.stage ?? "unknown",
           runId: run.id,
         });
-        if (isNew) newCount++;
+        if (isNew) {
+          newCount++;
+          newAssets.push({ id: asset.id, assetName: asset.assetName });
+        }
       } catch (err: any) {
         console.error(`[ingestion] Failed to upsert asset "${listing.title}": ${err?.message}`);
       }
@@ -59,6 +65,27 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     });
 
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
+
+    if (newAssets.length > 0) {
+      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI...`);
+      try {
+        const enrichments = await enrichBatch(newAssets, 5);
+        let enrichedCount = 0;
+        const enrichmentEntries = Array.from(enrichments.entries());
+        for (const [id, data] of enrichmentEntries) {
+          try {
+            await storage.updateIngestedAssetEnrichment(id, data);
+            enrichedCount++;
+          } catch (err: any) {
+            console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
+          }
+        }
+        console.log(`[ingestion] Enriched ${enrichedCount}/${newAssets.length} new assets`);
+      } catch (err: any) {
+        console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
+      }
+    }
+
     return { totalFound: listings.length, newCount, runId: run.id };
   } catch (err: any) {
     console.error(`[ingestion] Run #${run.id} failed:`, err);

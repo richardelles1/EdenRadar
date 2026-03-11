@@ -6,7 +6,7 @@ import {
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, gte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -27,8 +27,10 @@ export interface IStorage {
   getIngestionRunHistory(limit?: number): Promise<IngestionRun[]>;
 
   upsertIngestedAsset(fingerprint: string, data: Omit<InsertIngestedAsset, "fingerprint">): Promise<{ asset: IngestedAsset; isNew: boolean }>;
+  updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string }): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
+  getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -120,6 +122,18 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
+  async updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string }): Promise<void> {
+    await db
+      .update(ingestedAssets)
+      .set({
+        target: data.target,
+        modality: data.modality,
+        indication: data.indication,
+        developmentStage: data.developmentStage,
+      })
+      .where(eq(ingestedAssets.id, id));
+  }
+
   async getInstitutionAssetCounts(): Promise<Record<string, number>> {
     const rows = await db
       .select({
@@ -134,6 +148,31 @@ export class DatabaseStorage implements IStorage {
       result[row.institution] = row.count;
     }
     return result;
+  }
+
+  async getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]> {
+    const rows = await db
+      .select({
+        institution: ingestedAssets.institution,
+        assetName: ingestedAssets.assetName,
+      })
+      .from(ingestedAssets)
+      .where(gte(ingestedAssets.firstSeenAt, ranAt))
+      .orderBy(desc(ingestedAssets.firstSeenAt));
+
+    const grouped: Record<string, string[]> = {};
+    for (const row of rows) {
+      if (!grouped[row.institution]) grouped[row.institution] = [];
+      grouped[row.institution].push(row.assetName);
+    }
+
+    return Object.entries(grouped)
+      .map(([institution, names]) => ({
+        institution,
+        count: names.length,
+        sampleAssets: names.slice(0, 5),
+      }))
+      .sort((a, b) => b.count - a.count);
   }
 }
 

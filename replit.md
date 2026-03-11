@@ -92,9 +92,9 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/scout`** — Multi-source search with scan status banner, buyer thesis, source toggles, scored asset grid
 - **`/assets`** — Saved pipeline kanban by clinical stage
 - **`/institutions`** — 86 TTO cards with live listing counts from DB
-- **`/institutions/:slug`** — Real ingested listings for an institution (or empty state)
+- **`/institutions/:slug`** — Ingested listings with sort (Newest First / Best Commercial / A-Z / Z-A), search filter, modality/stage tags via title-signal parser, commercial score badge, expandable detail panel per asset
+- **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
 - **`/reports`** — Mock report cards
-- **`/alerts`** — Mock alerts with Create Alert sheet drawer
 - **`/asset/:id`** — Full dossier with score breakdown
 - **`/report`** — Buyer intelligence report
 
