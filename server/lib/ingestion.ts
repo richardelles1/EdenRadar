@@ -15,6 +15,7 @@ export interface IngestionResult {
 let ingestionRunning = false;
 let enrichingCount = 0;
 let scrapingProgress = { done: 0, total: 0, found: 0 };
+let upsertProgress = { done: 0, total: 0 };
 
 export function isIngestionRunning(): boolean {
   return ingestionRunning;
@@ -28,6 +29,10 @@ export function getScrapingProgress(): { done: number; total: number; found: num
   return { ...scrapingProgress };
 }
 
+export function getUpsertProgress(): { done: number; total: number } {
+  return { ...upsertProgress };
+}
+
 export async function runIngestionPipeline(): Promise<IngestionResult> {
   if (ingestionRunning) {
     console.log("[ingestion] Already running, skipping.");
@@ -37,6 +42,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 
   ingestionRunning = true;
   scrapingProgress = { done: 0, total: 0, found: 0 };
+  upsertProgress = { done: 0, total: 0 };
   const run = await storage.createIngestionRun();
   console.log(`[ingestion] Run #${run.id} started`);
 
@@ -46,30 +52,35 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
-    let newCount = 0;
-    const newAssets: { id: number; assetName: string }[] = [];
+    // Build deduplicated listing records for bulk upsert
+    const seen = new Set<string>();
+    const toUpsert = listings
+      .filter((l) => l.title && l.institution)
+      .map((l) => ({
+        fingerprint: makeFingerprint(l.title, l.institution),
+        assetName: l.title,
+        institution: l.institution,
+        summary: l.description || l.title,
+        sourceUrl: l.url || null,
+        sourceType: "tech_transfer" as const,
+        developmentStage: l.stage ?? "unknown",
+        runId: run.id,
+      }))
+      .filter((l) => {
+        if (seen.has(l.fingerprint)) return false;
+        seen.add(l.fingerprint);
+        return true;
+      });
 
-    for (const listing of listings) {
-      if (!listing.title || !listing.institution) continue;
-      const fingerprint = makeFingerprint(listing.title, listing.institution);
-      try {
-        const { asset, isNew } = await storage.upsertIngestedAsset(fingerprint, {
-          assetName: listing.title,
-          institution: listing.institution,
-          summary: listing.description || listing.title,
-          sourceUrl: listing.url || null,
-          sourceType: "tech_transfer",
-          developmentStage: listing.stage ?? "unknown",
-          runId: run.id,
-        });
-        if (isNew) {
-          newCount++;
-          newAssets.push({ id: asset.id, assetName: asset.assetName });
-        }
-      } catch (err: any) {
-        console.error(`[ingestion] Failed to upsert asset "${listing.title}": ${err?.message}`);
-      }
-    }
+    upsertProgress = { done: 0, total: toUpsert.length };
+    console.log(`[ingestion] Saving ${toUpsert.length} unique listings to database...`);
+
+    const { newAssets, totalProcessed } = await storage.bulkUpsertIngestedAssets(toUpsert, (done, total) => {
+      upsertProgress = { done, total };
+    });
+
+    const newCount = newAssets.length;
+    console.log(`[ingestion] Saved ${totalProcessed} listings (${newCount} new)`);
 
     // Mark run completed BEFORE enrichment so UI unlocks immediately
     await storage.updateIngestionRun(run.id, {
@@ -81,6 +92,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
 
     scrapingProgress = { done: 0, total: 0, found: 0 };
+    upsertProgress = { done: 0, total: 0 };
     ingestionRunning = false;
 
     // Enrich in background — non-blocking
@@ -124,5 +136,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     return { totalFound: 0, newCount: 0, runId: run.id };
   } finally {
     ingestionRunning = false;
+    scrapingProgress = { done: 0, total: 0, found: 0 };
+    upsertProgress = { done: 0, total: 0 };
   }
 }

@@ -10,7 +10,7 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress } from "./lib/ingestion";
+import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress } from "./lib/ingestion";
 
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
@@ -250,6 +250,7 @@ export async function registerRoutes(
         status: running ? "running" : lastRun.status,
         enrichingCount: getEnrichingCount(),
         scrapingProgress: getScrapingProgress(),
+        upsertProgress: getUpsertProgress(),
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch status" });

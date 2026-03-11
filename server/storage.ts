@@ -6,7 +6,7 @@ import {
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and } from "drizzle-orm";
+import { eq, desc, sql, gte, and, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -27,6 +27,10 @@ export interface IStorage {
   getIngestionRunHistory(limit?: number): Promise<IngestionRun[]>;
 
   upsertIngestedAsset(fingerprint: string, data: Omit<InsertIngestedAsset, "fingerprint">): Promise<{ asset: IngestedAsset; isNew: boolean }>;
+  bulkUpsertIngestedAssets(
+    listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
+    onProgress?: (done: number, total: number) => void
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string }>; totalProcessed: number }>;
   updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
@@ -113,6 +117,59 @@ export class DatabaseStorage implements IStorage {
       .values({ fingerprint, ...data })
       .returning();
     return { asset: inserted, isNew: true };
+  }
+
+  async bulkUpsertIngestedAssets(
+    listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
+    onProgress?: (done: number, total: number) => void
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string }>; totalProcessed: number }> {
+    const CHUNK = 800;
+    const total = listings.length;
+    const allFingerprints = listings.map((l) => l.fingerprint);
+
+    // 1. Find which fingerprints already exist (chunked SELECT)
+    const existingSet = new Map<string, number>(); // fingerprint -> id
+    for (let i = 0; i < allFingerprints.length; i += CHUNK) {
+      const chunk = allFingerprints.slice(i, i + CHUNK);
+      const rows = await db
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint })
+        .from(ingestedAssets)
+        .where(inArray(ingestedAssets.fingerprint, chunk));
+      for (const row of rows) existingSet.set(row.fingerprint, row.id);
+    }
+
+    const newListings = listings.filter((l) => !existingSet.has(l.fingerprint));
+    const existingListings = listings.filter((l) => existingSet.has(l.fingerprint));
+
+    // 2. Bulk INSERT new listings (chunked)
+    const newAssets: Array<{ id: number; assetName: string }> = [];
+    for (let i = 0; i < newListings.length; i += CHUNK) {
+      const chunk = newListings.slice(i, i + CHUNK);
+      const inserted = await db
+        .insert(ingestedAssets)
+        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
+        .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName });
+      for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName });
+      onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
+    }
+
+    // 3. Bulk UPDATE existing listings (chunked — update lastSeenAt + runId only)
+    const runId = listings[0]?.runId;
+    for (let i = 0; i < existingListings.length; i += CHUNK) {
+      const chunk = existingListings.slice(i, i + CHUNK);
+      const fps = chunk.map((l) => l.fingerprint);
+      await db
+        .update(ingestedAssets)
+        .set({ lastSeenAt: new Date(), runId })
+        .where(inArray(ingestedAssets.fingerprint, fps));
+      onProgress?.(newListings.length + Math.min(i + CHUNK, existingListings.length), total);
+    }
+
+    if (total > 0 && newListings.length === 0 && existingListings.length === 0) {
+      onProgress?.(total, total);
+    }
+
+    return { newAssets, totalProcessed: total };
   }
 
   async updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void> {
