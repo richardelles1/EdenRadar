@@ -26,6 +26,19 @@ const STAGE_PATTERNS: [RegExp, string][] = [
   [/\bdiscovery\b|\blead\s+opt/i, "discovery"],
 ];
 
+const INDICATION_PATTERNS: [RegExp, string][] = [
+  [/\bcancer\b|\btumor\b|\btumour\b|\bcarcinoma\b|\boncology\b|\bleukemia\b|\blymphoma\b|\bmelanoma\b|\bglioma\b|\bsarcoma\b|\bneoplasm\b|\bmalignant\b/i, "Oncology"],
+  [/\bneurodegenerat\b|\balzheimer\b|\bparkinson\b|\b\bals\b|\bamyotrophic\b|\bepilepsy\b|\bseizure\b|\bstroke\b|\bneuropath\b|\bdementia\b/i, "CNS"],
+  [/\bcardiac\b|\bheart\b|\bmyocardial\b|\batherosclerosis\b|\bhypertension\b|\bcoronar\b|\barrhythmia\b|\bheart failure\b/i, "Cardiovascular"],
+  [/\bbacterial\b|\bviral\b|\bantifungal\b|\bantibiotic\b|\bantimicrobial\b|\bpathogen\b|\binfection\b|\bsepsis\b|\bHIV\b|\binfluenza\b|\bSARS\b|\bCOVID\b/i, "Infectious Disease"],
+  [/\bdiabetes\b|\binsulin\b|\bobesity\b|\bfatty liver\b|\bnafld\b|\bmetabolic\b|\bglucose\b|\blipid\b|\bhyperglycemia\b/i, "Metabolic"],
+  [/\brare disease\b|\borphan\b|\bgenetic disorder\b|\bdystrophy\b|\blysosomal\b|\bfabry\b|\bgaucher\b|\bpompe\b/i, "Rare Disease"],
+  [/\blung\b|\bpulmonar\b|\basthma\b|\bcopd\b|\bfibrosis\b|\brespiratory\b|\bbronch\b|\bairway\b/i, "Respiratory"],
+  [/\bautoimmune\b|\binflammation\b|\brheumatoid\b|\blupus\b|\bcrohn\b|\bcolitis\b|\bpsoriasis\b|\bimmunolog\b/i, "Immunology"],
+  [/\bwound\b|\bbone\b|\borthopedic\b|\bcartilage\b|\btendon\b|\bspin\b|\bjoint\b|\bfracture\b/i, "Musculoskeletal"],
+  [/\bophthalmolog\b|\bretinal\b|\bmacular\b|\bglaucoma\b|\bocular\b|\beye\b|\bcorneal\b/i, "Ophthalmology"],
+];
+
 export function detectModality(name: string): string | null {
   for (const [pattern, label] of MODALITY_PATTERNS) {
     if (pattern.test(name)) return label;
@@ -41,33 +54,39 @@ export function detectStage(name: string, dbStage?: string): string | null {
   return null;
 }
 
-function stageReadiness(stage: string | null): number {
-  if (!stage) return 35;
-  const s = stage.toLowerCase();
-  if (s.includes("phase 3")) return 90;
-  if (s.includes("phase 2")) return 80;
-  if (s.includes("phase 1")) return 65;
-  if (s.includes("preclinical")) return 50;
-  if (s.includes("discovery")) return 30;
-  if (s.includes("approved")) return 60;
-  return 35;
+export function detectIndication(name: string): string | null {
+  for (const [pattern, label] of INDICATION_PATTERNS) {
+    if (pattern.test(name)) return label;
+  }
+  return null;
 }
 
-function freshnessScore(firstSeenAt: Date | string): number {
-  const days = Math.floor((Date.now() - new Date(firstSeenAt).getTime()) / 86400000);
-  if (days <= 30) return 100;
-  if (days <= 90) return 85;
-  if (days <= 180) return 65;
-  if (days <= 365) return 45;
-  if (days <= 730) return 25;
-  return 10;
+function stageBonus(stage: string | null): number {
+  if (!stage) return 0;
+  const s = stage.toLowerCase();
+  if (s.includes("phase 3")) return 43;
+  if (s.includes("phase 2")) return 32;
+  if (s.includes("phase 1")) return 22;
+  if (s.includes("preclinical")) return 12;
+  if (s.includes("discovery")) return 5;
+  if (s.includes("approved")) return 20;
+  return 0;
 }
 
 export function computeCommercialScore(asset: IngestedAsset): number {
-  const stage = detectStage(asset.assetName, asset.developmentStage);
-  const readiness = stageReadiness(stage);
-  const freshness = freshnessScore(asset.firstSeenAt);
-  return Math.max(0, Math.min(100, Math.round(readiness * 0.5 + freshness * 0.5)));
+  const name = asset.assetName;
+  const stage = detectStage(name, asset.developmentStage);
+  const modality = detectModality(name);
+  const indication = detectIndication(name);
+  const wordCount = name.trim().split(/\s+/).length;
+
+  let score = 55;
+  score += stageBonus(stage);
+  if (modality) score += 12;
+  if (indication) score += 8;
+  if (wordCount >= 6) score += 5;
+
+  return Math.max(0, Math.min(100, score));
 }
 
 export function formatRelativeTime(dt: Date | string): string {

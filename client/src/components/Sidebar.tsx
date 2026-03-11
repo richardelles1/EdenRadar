@@ -6,6 +6,7 @@ import {
   FileText,
   Bell,
   Building2,
+  Database,
   Sprout,
   Moon,
   Sun,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/institutions", label: "Institutions", icon: Building2 },
+  { href: "/sources", label: "Sources", icon: Database },
 ];
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {

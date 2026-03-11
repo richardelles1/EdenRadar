@@ -13,6 +13,7 @@ import Reports from "@/pages/Reports";
 import Alerts from "@/pages/Alerts";
 import Institutions from "@/pages/Institutions";
 import InstitutionDetail from "@/pages/InstitutionDetail";
+import Sources from "@/pages/Sources";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { useEffect } from "react";
 
@@ -68,6 +69,11 @@ function Router() {
       <Route path="/institutions">
         <DashboardLayout>
           <Institutions />
+        </DashboardLayout>
+      </Route>
+      <Route path="/sources">
+        <DashboardLayout>
+          <Sources />
         </DashboardLayout>
       </Route>
       <Route path="/asset/:id">
