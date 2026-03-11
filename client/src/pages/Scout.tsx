@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle, XCircle, Building2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -37,6 +38,7 @@ type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
 
+type ScrapingProgress = { done: number; total: number; found: number };
 type IngestStatus = IngestionRun & { status: string } | { status: "never_run"; totalFound: 0; newCount: 0; ranAt: null };
 
 function formatRelativeTime(dt: Date | string | null): string {
@@ -56,7 +58,7 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const { data: statusData } = useQuery<IngestStatus & { enrichingCount?: number }>({
+  const { data: statusData } = useQuery<IngestStatus & { enrichingCount?: number; scrapingProgress?: ScrapingProgress }>({
     queryKey: ["/api/ingest/status"],
     refetchInterval: (query) => {
       const data = query.state.data as (IngestStatus & { enrichingCount?: number }) | undefined;
@@ -82,6 +84,10 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
 
   const isRunning = statusData?.status === "running" || scanMutation.isPending;
   const enrichingCount = statusData?.enrichingCount ?? 0;
+  const scrapingProgress = statusData?.scrapingProgress ?? { done: 0, total: 0, found: 0 };
+  const progressPct = scrapingProgress.total > 0
+    ? Math.round((scrapingProgress.done / scrapingProgress.total) * 100)
+    : 0;
 
   const handleScan = () => {
     scanMutation.mutate();
@@ -111,11 +117,36 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
   }
 
   if (isRunning) {
+    const hasProgress = scrapingProgress.total > 0;
     return (
-      <div className="max-w-3xl mx-auto flex items-center gap-3 px-3.5 py-2 rounded-lg border border-primary/20 bg-primary/5" data-testid="scan-status-bar">
-        <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
-        <span className="text-xs text-primary font-medium">Scanning all TTO sources…</span>
-        <span className="text-xs text-muted-foreground">This takes a few minutes</span>
+      <div className="max-w-3xl mx-auto px-3.5 py-2.5 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5" data-testid="scan-status-bar">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+            <span className="text-xs text-primary font-medium">Scanning TTO sources…</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            {hasProgress ? (
+              <>
+                <Building2 className="w-3 h-3" />
+                <span data-testid="progress-institutions">
+                  {scrapingProgress.done.toLocaleString()} / {scrapingProgress.total.toLocaleString()} institutions
+                </span>
+                <span className="text-muted-foreground/40">·</span>
+                <span data-testid="progress-listings">
+                  {scrapingProgress.found.toLocaleString()} listings found
+                </span>
+              </>
+            ) : (
+              <span>Starting up…</span>
+            )}
+          </div>
+        </div>
+        <Progress
+          value={progressPct}
+          className="h-1.5 bg-primary/10"
+          data-testid="progress-bar"
+        />
       </div>
     );
   }

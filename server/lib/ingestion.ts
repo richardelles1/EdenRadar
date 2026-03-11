@@ -14,6 +14,7 @@ export interface IngestionResult {
 
 let ingestionRunning = false;
 let enrichingCount = 0;
+let scrapingProgress = { done: 0, total: 0, found: 0 };
 
 export function isIngestionRunning(): boolean {
   return ingestionRunning;
@@ -21,6 +22,10 @@ export function isIngestionRunning(): boolean {
 
 export function getEnrichingCount(): number {
   return enrichingCount;
+}
+
+export function getScrapingProgress(): { done: number; total: number; found: number } {
+  return { ...scrapingProgress };
 }
 
 export async function runIngestionPipeline(): Promise<IngestionResult> {
@@ -31,11 +36,14 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
   }
 
   ingestionRunning = true;
+  scrapingProgress = { done: 0, total: 0, found: 0 };
   const run = await storage.createIngestionRun();
   console.log(`[ingestion] Run #${run.id} started`);
 
   try {
-    const listings = await runAllScrapers();
+    const listings = await runAllScrapers((done, total, found) => {
+      scrapingProgress = { done, total, found };
+    });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
     let newCount = 0;
@@ -72,6 +80,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 
     console.log(`[ingestion] Run #${run.id} complete: ${listings.length} found, ${newCount} new`);
 
+    scrapingProgress = { done: 0, total: 0, found: 0 };
     ingestionRunning = false;
 
     // Enrich in background — non-blocking

@@ -415,10 +415,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
 
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
-  concurrency: number
+  concurrency: number,
+  onTaskDone?: (taskIndex: number, result: T, doneCount: number, totalCount: number) => void
 ): Promise<T[]> {
   const results: T[] = [];
   let index = 0;
+  let doneCount = 0;
 
   async function worker() {
     while (index < tasks.length) {
@@ -429,6 +431,8 @@ async function runWithConcurrency<T>(
         console.error(`[scrapers] Task ${taskIndex} threw unexpectedly: ${err?.message}`);
         results[taskIndex] = [] as any;
       }
+      doneCount++;
+      onTaskDone?.(taskIndex, results[taskIndex], doneCount, tasks.length);
     }
   }
 
@@ -437,11 +441,18 @@ async function runWithConcurrency<T>(
   return results;
 }
 
-export async function runAllScrapers(): Promise<ScrapedListing[]> {
+export async function runAllScrapers(
+  onProgress?: (done: number, total: number, listingsFound: number) => void
+): Promise<ScrapedListing[]> {
   console.log(`[scrapers] Starting scrape for ${ALL_SCRAPERS.length} institutions...`);
 
+  let listingsFound = 0;
   const tasks = ALL_SCRAPERS.map((scraper) => () => scraper.scrape());
-  const results = await runWithConcurrency(tasks, 5);
+
+  const results = await runWithConcurrency(tasks, 5, (_taskIndex, result, done, total) => {
+    listingsFound += (result as ScrapedListing[]).length;
+    onProgress?.(done, total, listingsFound);
+  });
 
   const allListings = results.flat();
   console.log(`[scrapers] Total listings scraped: ${allListings.length}`);
