@@ -3,6 +3,8 @@ import OpenAI from "openai";
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+  timeout: 8000,
+  maxRetries: 0,
 });
 
 export interface AssetEnrichment {
@@ -60,7 +62,8 @@ Fields: target (gene/protein/pathway, or "unknown"), modality (one of: small mol
 
 export async function enrichBatch(
   items: { id: number; assetName: string }[],
-  concurrency = 5
+  concurrency = 50,
+  onEach?: (id: number, result: AssetEnrichment) => Promise<void>
 ): Promise<Map<number, AssetEnrichment>> {
   const results = new Map<number, AssetEnrichment>();
   let i = 0;
@@ -71,6 +74,9 @@ export async function enrichBatch(
       if (!item) continue;
       const enrichment = await enrichAssetTitle(item.assetName);
       results.set(item.id, enrichment);
+      if (onEach) {
+        try { await onEach(item.id, enrichment); } catch {}
+      }
     }
   }
 

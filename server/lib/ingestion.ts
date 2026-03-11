@@ -34,8 +34,8 @@ export function getUpsertProgress(): { done: number; total: number } {
 }
 
 export async function runIngestionPipeline(): Promise<IngestionResult> {
-  if (ingestionRunning) {
-    console.log("[ingestion] Already running, skipping.");
+  if (ingestionRunning || enrichingCount > 0) {
+    console.log("[ingestion] Already running or enrichment in progress, skipping.");
     const lastRun = await storage.getLastIngestionRun();
     return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
   }
@@ -95,31 +95,30 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     upsertProgress = { done: 0, total: 0 };
     ingestionRunning = false;
 
-    // Enrich in background — non-blocking
+    // Enrich in background — non-blocking, counter decrements per-asset in real time
     if (newAssets.length > 0) {
       enrichingCount = newAssets.length;
-      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (irrelevant assets will be removed)...`);
+      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (concurrency: 50)...`);
 
-      enrichBatch(newAssets, 25).then(async (enrichments) => {
-        let enrichedCount = 0;
-        let removedCount = 0;
-        const enrichmentEntries = Array.from(enrichments.entries());
-        for (const [id, data] of enrichmentEntries) {
-          try {
-            if (!data.biotechRelevant) {
-              await storage.deleteIngestedAsset(id);
-              removedCount++;
-            } else {
-              await storage.updateIngestedAssetEnrichment(id, data);
-              enrichedCount++;
-            }
-          } catch (err: any) {
-            console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
+      let enrichedCount = 0;
+      let removedCount = 0;
+
+      enrichBatch(newAssets, 50, async (id, data) => {
+        try {
+          if (!data.biotechRelevant) {
+            await storage.deleteIngestedAsset(id);
+            removedCount++;
+          } else {
+            await storage.updateIngestedAssetEnrichment(id, data);
+            enrichedCount++;
           }
-          enrichingCount = Math.max(0, enrichingCount - 1);
+        } catch (err: any) {
+          console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
         }
+        enrichingCount = Math.max(0, enrichingCount - 1);
+      }).then(() => {
         enrichingCount = 0;
-        console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant assets kept, ${removedCount} non-biotech assets removed`);
+        console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant, ${removedCount} removed`);
       }).catch((err: any) => {
         enrichingCount = 0;
         console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
