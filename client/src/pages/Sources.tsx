@@ -78,7 +78,7 @@ const DATA_SOURCES = [
     id: "techtransfer",
     name: "Tech Transfer (TTO)",
     category: "Licensing",
-    description: "Live scraper covering 86 university technology transfer offices. Indexes available-for-licensing assets daily.",
+    description: "Live scraper monitoring 195 global institutions. Active feeds from 120+ university TTO portals — indexed continuously.",
     url: "/institutions",
     icon: Building2,
     color: "text-primary bg-primary/10",

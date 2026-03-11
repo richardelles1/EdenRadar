@@ -348,7 +348,7 @@ export const southamptonScraper = createTechPublisherScraper("southampton", "Uni
 export const usaskScraper = createTechPublisherScraper("usask", "University of Saskatchewan", { maxPg: 30 });
 
 // ── New US: no TechPublisher portal (stubs) ──────────────────────────────
-export const fsuScraper = createStubScraper("Florida State University");
+export { fsuScraper } from "./fsu";
 export const ucfScraper = createFlintboxScraper(
   { slug: "ucf", orgId: 82, accessKey: "735da6c7-5d27-4015-bb46-60b45f80225d" },
   "University of Central Florida"
@@ -401,7 +401,10 @@ export const ugaScraper = createFlintboxScraper(
   { slug: "uga", orgId: 11, accessKey: "28c03bda-3676-41d6-bf18-22101ac1dbc5" },
   "University of Georgia"
 );
-export const uarkansasScraper = createStubScraper("University of Arkansas");
+export const uarkansasScraper = createFlintboxScraper(
+  { slug: "uaventures", orgId: 111, accessKey: "55f4e5e8-1c29-4e3d-a981-8c4d663d8472" },
+  "University of Arkansas"
+);
 export const uamsScraper = createStubScraper("University of Arkansas for Medical Sciences");
 export const udelScraper = createFlintboxScraper(
   { slug: "udel", orgId: 93, accessKey: "b3c809cf-2bd5-4b78-8f50-1cac404a5dba" },

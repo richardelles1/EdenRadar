@@ -1,41 +1,47 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
 
-const BASE = "https://olv.duke.edu";
 const INST = "Duke University";
+const BASE = "https://otc.duke.edu";
+const SITEMAP = `${BASE}/pt__technology-sitemap.xml`;
+
+function slugToTitle(slug: string): string {
+  return slug
+    .replace(/\/$/, "")
+    .replace(/-+/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase())
+    .trim();
+}
 
 export const dukeScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
+    console.log(`[scraper] ${INST}: fetching technology sitemap...`);
     try {
+      const res = await fetch(SITEMAP, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+      });
+      if (!res.ok) throw new Error(`sitemap HTTP ${res.status}`);
+      const xml = await res.text();
+
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
-
-      const urls = [
-        `${BASE}/technologies/`,
-        `${BASE}/technologies/?page=1`,
-      ];
-
-      for (const url of urls) {
-        const $ = await fetchHtml(url);
-        if (!$) continue;
-
-        $("article, .views-row, .technology, .tech-item").each((_, el) => {
-          const titleEl = $(el).find("h2 a, h3 a, .title a").first();
-          const title = cleanText(titleEl.text());
-          if (!title || title.length < 10 || seen.has(title)) return;
-          seen.add(title);
-          const href = titleEl.attr("href") ?? "";
+      const re = /<loc>(https:\/\/otc\.duke\.edu\/technologies\/([^<]+)\/)<\/loc>/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(xml)) !== null) {
+        const url = m[1];
+        const slug = m[2];
+        if (!seen.has(slug) && slug !== "") {
+          seen.add(slug);
           results.push({
-            title,
-            description: cleanText($(el).find("p, .summary").first().text()) || title,
-            url: href ? resolveUrl(BASE, href) : BASE,
+            title: slugToTitle(slug),
+            description: "",
+            url,
             institution: INST,
           });
-        });
+        }
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: scraped ${results.length} listings`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

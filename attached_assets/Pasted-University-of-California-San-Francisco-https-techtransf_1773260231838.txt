@@ -1,0 +1,118 @@
+University of California San Francisco	https://techtransfer.universityofcalifornia.edu/Default?RunSearch=true&campus=SF
+Duke University	https://otc.duke.edu/technologies/
+Columbia University	https://inventions.techventures.columbia.edu/search
+Mayo Clinic	https://businessdevelopment.mayoclinic.org/collaborate/
+University of Colorado	https://www.colorado.edu/venturepartners/technology-portfolio
+University of Washington	https://els.comotion.uw.edu/
+University of Michigan	https://available-inventions.umich.edu/products/life-sciences
+Georgia Institute of Technology	https://licensing.research.gatech.edu/technology-licensing
+Scripps Research	https://scripps.edu/technology-development/
+Salk Institute	https://salk.edu/science/technology-development/
+MD Anderson Cancer Center	https://www.mdanderson.org/research/research-resources/office-of-technology-commercialization.html
+Florida State University	https://commercialization.fsu.edu/technologies/
+University of Central Florida	https://licensing.research.ucf.edu/technologies
+Florida International University	https://research.fiu.edu/otm/technologies/
+Texas A&M University	https://innovationpartners.tamu.edu/technologies/
+Rice University	https://riceinnovation.rice.edu/technologies/
+University of Houston	https://uh.edu/research/technology-transfer/technologies/
+Texas Tech University	https://www.depts.ttu.edu/research/commercialization/technologies/
+University of North Texas	https://research.unt.edu/innovation/technologies
+Baylor University	https://research.baylor.edu/commercialization/technologies
+Portland State University	https://www.pdx.edu/research/innovation-commercialization
+University of Montana	https://www.umt.edu/research/technology-transfer/
+Montana State University	https://www.montana.edu/research/techtransfer/
+University of New Mexico	https://rainforestinnovations.com/technologies/
+New Mexico State University	https://arrowheadcenter.nmsu.edu/technologies/
+University of Nevada, Reno	https://www.unr.edu/research/technology-transfer
+University of Nevada, Las Vegas	https://www.unlv.edu/research/innovation
+Utah State University	https://innovationcampus.usu.edu/technologies
+Brigham Young University	https://techtransfer.byu.edu/technologies
+University of Alaska Anchorage	https://www.uaa.alaska.edu/research/
+University of North Dakota	https://und.edu/research/innovation/
+North Dakota State University	https://www.ndsu.edu/research/techtransfer/
+South Dakota State University	https://www.sdstate.edu/research/innovation
+Indiana University	https://innovation.iu.edu/licensing/technologies.html
+University of Notre Dame	https://ideacenter.nd.edu/technologies/
+University of Wisconsin	https://www.warf.org/technologies/
+Auburn University	https://www.auburn.edu/research/innovation/
+University of Georgia	https://research.uga.edu/gateway/technologies/
+University of Arkansas	https://techventures.uark.edu/technologies/
+University of Arkansas for Medical Sciences	https://bioventures.uams.edu/technologies/
+University of Mississippi	https://research.olemiss.edu/innovation/
+University of Delaware	https://www.udel.edu/research/technology-transfer/
+Temple University	https://research.temple.edu/innovation
+Drexel University	https://drexel.edu/research/innovation
+Bucknell University	https://www.bucknell.edu/research/innovation
+SUNY Albany	https://www.albany.edu/research/innovation
+University of Connecticut	https://innovation.uconn.edu/technologies/
+Dartmouth College	https://techtransfer.dartmouth.edu/technologies
+Brandeis University	https://www.brandeis.edu/research/innovation
+University of New Hampshire	https://www.unh.edu/research/innovation
+University of Rhode Island	https://web.uri.edu/research/commercialization/
+Icahn School of Medicine at Mount Sinai	https://icahn.mssm.edu/research/technology-transfer
+California Institute of Technology	https://techtransfer.caltech.edu/technologies
+Arizona State University	https://skysonginnovations.com/technologies/
+University of Illinois	https://otm.illinois.edu/technologies
+University of Oxford	https://innovation.ox.ac.uk/technologies/
+University of Cambridge	https://www.enterprise.cam.ac.uk/technologies/
+Imperial College London	https://www.imperial.ac.uk/enterprise/technologies/
+University College London	https://www.uclb.com/portfolio/
+University of Manchester	https://www.uominnovationfactory.com/technologies/
+University of Edinburgh	https://www.ed.ac.uk/research/innovation/technologies
+University of Bristol	https://www.bristol.ac.uk/red/technologies/
+University of Glasgow	https://www.gla.ac.uk/research/enterprise/
+University of Birmingham	https://www.birmingham.ac.uk/business/university-enterprise
+University of Nottingham	https://www.nottingham.ac.uk/research/innovation
+University of Leeds	https://business.leeds.ac.uk/research-innovation
+University of Sheffield	https://www.sheffield.ac.uk/commercialisation
+University of Warwick	https://warwick.ac.uk/services/innovations
+King's College London	https://www.kcl.ac.uk/research/commercialisation
+ETH Zurich	https://transfer.ethz.ch/technologies/
+EPFL	https://tto.epfl.ch/technologies/
+University of Basel	https://www.unibas.ch/en/Research/Technology-Transfer.html
+University of Lausanne	https://www.unil.ch/innovation
+University of Geneva	https://www.unige.ch/research/innovation
+University of Zurich	https://www.uzh.ch/en/research/technologytransfer.html
+KU Leuven	https://lrd.kuleuven.be/en/technologies
+Ghent University	https://www.ugent.be/techtransfer
+University of Groningen	https://www.rug.nl/research/innovation
+University of Amsterdam	https://www.ixamsterdam.nl/
+Vrije Universiteit Amsterdam	https://vu.nl/en/research/knowledge-transfer
+Leiden University	https://www.universiteitleiden.nl/en/research/knowledge-transfer
+Karolinska Institutet	https://ki.se/en/innovation
+University of Oslo	https://inven2.com/technologies
+University of Bergen	https://visinnovasjon.no/
+NTNU	https://ntnu.edu/tto
+University of Copenhagen	https://techtransfer.ku.dk/
+Aarhus University	https://techtransfer.au.dk/
+Technical University of Denmark	https://techtransfer.dtu.dk/
+Lund University	https://www.lunduniversity.lu.se/research/innovation
+Chalmers University of Technology	https://chalmersventures.com/
+University of Gothenburg	https://www.gu.se/en/innovation
+University of Helsinki	https://www.helsinki.fi/en/research/services-for-researchers/innovation-services
+Aalto University	https://www.aalto.fi/en/services/innovation-services
+Technical University of Munich	https://www.forte.tum.de/en/
+Ludwig Maximilian University of Munich	https://www.en.uni-muenchen.de/research/innovation
+RWTH Aachen University	https://www.innovation.rwth-aachen.de/
+University of Freiburg	https://www.uni-freiburg.de/research/innovation
+University of Bonn	https://www.uni-bonn.de/en/research/transfer
+University of Cologne	https://innovation.uni-koeln.de/
+University of Tübingen	https://uni-tuebingen.de/en/research/transfer/
+University of Heidelberg	https://www.uni-heidelberg.de/en/research/transfer
+Weizmann Institute of Science	https://yeda.weizmann.ac.il/
+Technion – Israel Institute of Technology	https://t3.technion.ac.il/
+University of Toronto	https://research.utoronto.ca/partnerships-commercialization
+McGill University	https://www.mcgill.ca/research/researchers/commercialization
+University of British Columbia	https://uilo.ubc.ca/
+University of Calgary	https://research.ucalgary.ca/
+University of Manitoba	https://umanitoba.ca/research/innovation
+University of Victoria	https://www.uvic.ca/research/innovation
+Simon Fraser University	https://www.sfu.ca/ilo.html
+University of Melbourne	https://research.unimelb.edu.au/
+Monash University	https://commercialisation.monash.edu/
+University of Sydney	https://www.sydney.edu.au/research/industry-and-community/commercialisation.html
+University of Queensland	https://uniquest.com.au/
+National University of Singapore	https://www.nus.edu.sg/enterprise/tti
+Hong Kong University of Science and Technology	https://kto.hkust.edu.hk/
+University of Hong Kong	https://tto.hku.hk/
+Colorado State University	https://csustrata.org/technology-transfer/available-technology/

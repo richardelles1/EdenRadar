@@ -1,11 +1,7 @@
-import type { InstitutionScraper, ScrapedListing } from "./types";
+import { createTechPublisherScraper } from "./techpublisher";
 
-const INST = "Scripps Research";
-
-export const scrippsScraper: InstitutionScraper = {
-  institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: technology licensing pages at scripps.edu return 404 — no public technology listing available`);
-    return [];
-  },
-};
+export const scrippsScraper = createTechPublisherScraper(
+  "scrippsotd",
+  "Scripps Research",
+  { maxPg: 50 }
+);
