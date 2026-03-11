@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle, XCircle } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -116,6 +116,31 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
         <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
         <span className="text-xs text-primary font-medium">Scanning all TTO sources…</span>
         <span className="text-xs text-muted-foreground">This takes a few minutes</span>
+      </div>
+    );
+  }
+
+  if (statusData.status === "failed") {
+    return (
+      <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-destructive/20 bg-destructive/5" data-testid="scan-status-bar">
+        <div className="flex items-center gap-2 text-xs text-destructive">
+          <XCircle className="w-3.5 h-3.5 shrink-0" />
+          <span className="font-medium">Last scan failed</span>
+          {statusData.errorMessage && (
+            <span className="hidden sm:inline text-muted-foreground">— {statusData.errorMessage}</span>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-7 text-xs shrink-0 border-destructive/30 text-destructive hover:bg-destructive/5"
+          onClick={handleScan}
+          disabled={isRunning}
+          data-testid="button-retry-scan"
+        >
+          <RefreshCw className="w-3 h-3 mr-1.5" />
+          Retry
+        </Button>
       </div>
     );
   }

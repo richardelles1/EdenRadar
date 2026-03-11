@@ -423,8 +423,12 @@ async function runWithConcurrency<T>(
   async function worker() {
     while (index < tasks.length) {
       const taskIndex = index++;
-      const result = await tasks[taskIndex]();
-      results[taskIndex] = result;
+      try {
+        results[taskIndex] = await tasks[taskIndex]();
+      } catch (err: any) {
+        console.error(`[scrapers] Task ${taskIndex} threw unexpectedly: ${err?.message}`);
+        results[taskIndex] = [] as any;
+      }
     }
   }
 
