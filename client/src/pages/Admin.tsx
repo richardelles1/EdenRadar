@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Shield, BarChart3, ArrowUp, ArrowDown, Minus, Lock, LogOut, Loader2 } from "lucide-react";
+import { Shield, BarChart3, Lock, LogOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -69,7 +69,7 @@ function formatDate(iso: string) {
 
 function DeltaCell({ current, previous }: { current: number; previous: number }) {
   const diff = current - previous;
-  if (diff === 0) return <span className="text-muted-foreground" data-testid="delta-unchanged"><Minus className="h-3.5 w-3.5 inline" /></span>;
+  if (diff === 0) return <span className="text-muted-foreground" data-testid="delta-unchanged">&mdash;</span>;
   if (diff > 0) return <span className="text-emerald-600 dark:text-emerald-400 font-medium" data-testid="delta-increase">+{diff}</span>;
   return <span className="text-red-500 dark:text-red-400 font-medium" data-testid="delta-decrease">{diff}</span>;
 }

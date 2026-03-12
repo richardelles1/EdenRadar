@@ -278,6 +278,7 @@ export class DatabaseStorage implements IStorage {
     if (runs.length === 0) return { runs: [], matrix: [] };
 
     const runIds = runs.map((r) => r.id);
+
     const rows = await db
       .select({
         runId: scanInstitutionCounts.runId,
@@ -286,6 +287,21 @@ export class DatabaseStorage implements IStorage {
       })
       .from(scanInstitutionCounts)
       .where(inArray(scanInstitutionCounts.runId, runIds));
+
+    const coveredRunIds = new Set(rows.map((r) => r.runId));
+    const uncoveredRunIds = runIds.filter((id) => !coveredRunIds.has(id));
+    if (uncoveredRunIds.length > 0) {
+      const fallbackRows = await db
+        .select({
+          runId: ingestedAssets.runId,
+          institution: ingestedAssets.institution,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(ingestedAssets)
+        .where(inArray(ingestedAssets.runId, uncoveredRunIds))
+        .groupBy(ingestedAssets.runId, ingestedAssets.institution);
+      for (const row of fallbackRows) rows.push(row);
+    }
 
     const instMap: Record<string, Record<number, number>> = {};
     for (const row of rows) {
