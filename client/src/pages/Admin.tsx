@@ -389,6 +389,7 @@ function InstitutionSync({ pw }: { pw: string }) {
       refetchStatus();
       refetchSessions();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix-counts"] });
     },
     onError: (err: Error) => {
       toast({ title: "Push failed", description: err.message, variant: "destructive" });
