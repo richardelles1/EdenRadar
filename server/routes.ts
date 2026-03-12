@@ -497,8 +497,11 @@ export async function registerRoutes(
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const limit = Math.min(parseInt(String(req.query.limit ?? "10"), 10) || 10, 50);
-      const data = await storage.getScanMatrix(limit);
-      res.json(data);
+      const [data, indexedCounts] = await Promise.all([
+        storage.getScanMatrix(limit),
+        storage.getInstitutionAssetCounts(),
+      ]);
+      res.json({ ...data, indexedCounts });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch scan matrix" });
     }

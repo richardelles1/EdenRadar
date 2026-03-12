@@ -60,6 +60,7 @@ interface ScanMatrixData {
   runs: RunMeta[];
   matrix: Array<{ institution: string; counts: number[] }>;
   totalInSystem: number;
+  indexedCounts: Record<string, number>;
 }
 
 function formatDate(iso: string) {
@@ -121,22 +122,26 @@ function ScanTracking({ pw }: { pw: string }) {
     );
   }
 
-  const { runs, matrix, totalInSystem } = data;
+  const { runs, matrix, totalInSystem, indexedCounts } = data;
+  const totalIndexed = Object.values(indexedCounts).reduce((s, c) => s + c, 0);
 
   function exportCsv() {
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
     const headers = [
       "Institution",
+      "Indexed",
       ...(runs.length >= 2 ? ["Delta"] : []),
       ...runs.map((r) => `Run #${r.id} ${formatDate(r.ranAt)} (${r.totalFound} found, ${r.status})`),
     ];
     const totalRow = [
       "Total",
+      String(totalIndexed),
       ...(runs.length >= 2 ? [String(runs[0].totalFound - runs[1].totalFound)] : []),
       ...runs.map((r) => String(r.totalFound)),
     ];
     const rows = matrix.map((row) => [
       escape(row.institution),
+      String(indexedCounts[row.institution] ?? 0),
       ...(runs.length >= 2 ? [String((row.counts[0] ?? 0) - (row.counts[1] ?? 0))] : []),
       ...row.counts.map((c) => String(c)),
     ]);
@@ -163,12 +168,19 @@ function ScanTracking({ pw }: { pw: string }) {
           Export CSV
         </Button>
       </div>
+      <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-muted/20 text-xs text-muted-foreground" data-testid="scan-legend">
+        <span><strong>Raw (Scraped)</strong> = total listings found by scraper before AI filter</span>
+        <span><strong>Indexed</strong> = currently stored in database after AI filter</span>
+      </div>
       <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-border">
             <th className="text-left py-3 px-4 font-semibold text-foreground sticky left-0 bg-card z-10 min-w-[200px]">
               Institution
+            </th>
+            <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Currently stored in database after AI filter" data-testid="header-indexed">
+              Indexed
             </th>
             {runs.length >= 2 && (
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">
@@ -194,6 +206,9 @@ function ScanTracking({ pw }: { pw: string }) {
             <td className="py-2 px-4 font-semibold text-foreground sticky left-0 bg-muted/30 z-10">
               Total
             </td>
+            <td className="text-center py-2 px-3 font-semibold text-foreground" data-testid="total-indexed">
+              {totalIndexed.toLocaleString()}
+            </td>
             {runs.length >= 2 && (
               <td className="text-center py-2 px-3 font-semibold">
                 <DeltaCell
@@ -214,6 +229,9 @@ function ScanTracking({ pw }: { pw: string }) {
             <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`scan-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
               <td className="py-2 px-4 font-medium text-foreground sticky left-0 bg-card z-10 truncate max-w-[250px]" title={row.institution}>
                 {row.institution}
+              </td>
+              <td className={`text-center py-2 px-3 tabular-nums ${(indexedCounts[row.institution] ?? 0) === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`} data-testid={`indexed-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                {(indexedCounts[row.institution] ?? 0) > 0 ? (indexedCounts[row.institution]).toLocaleString() : "\u2014"}
               </td>
               {runs.length >= 2 && (
                 <td className="text-center py-2 px-3">
