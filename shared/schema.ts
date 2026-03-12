@@ -114,3 +114,10 @@ export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets).omit
 });
 export type InsertIngestedAsset = z.infer<typeof insertIngestedAssetSchema>;
 export type IngestedAsset = typeof ingestedAssets.$inferSelect;
+
+export const scanInstitutionCounts = pgTable("scan_institution_counts", {
+  id: serial("id").primaryKey(),
+  runId: integer("run_id").notNull(),
+  institution: text("institution").notNull(),
+  count: integer("count").notNull().default(0),
+});

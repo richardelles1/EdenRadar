@@ -82,7 +82,13 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     const newCount = newAssets.length;
     console.log(`[ingestion] Saved ${totalProcessed} listings (${newCount} new)`);
 
-    // Mark run completed BEFORE enrichment so UI unlocks immediately
+    const instCounts: Record<string, number> = {};
+    for (const l of toUpsert) {
+      instCounts[l.institution] = (instCounts[l.institution] ?? 0) + 1;
+    }
+    await storage.recordScanCounts(run.id, instCounts);
+    console.log(`[ingestion] Recorded scan counts for ${Object.keys(instCounts).length} institutions`);
+
     await storage.updateIngestionRun(run.id, {
       status: "completed",
       totalFound: listings.length,

@@ -11,7 +11,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
 - **TTO Scraping**: cheerio-based real scrapers for 138 institutions with active TechPublisher/custom/in-part/Flintbox/WordPress scrapers; 67 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
-- **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — uses Playwright headless Chromium for scroll-based full-catalogue retrieval (pages 2-N via infinite scroll) with SSR fallback when only 1 page exists (extracts `__NEXT_DATA__` JSON). 19 in-part scrapers active: manchester, kcl, liverpool, durham, ethz, helsinki, aalto, tampere, lmu, rwth, tcd, ulb, toronto, western, queensu, ualberta, griffith, ntu, hawaii (plus mountsinai, indiana, nd, pdx, manitoba). Browser closes after each scrape (stateless).
+- **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — direct API calls to `https://app.in-part.com/api/v3/public/opportunities?portalSubdomain=X&page=N&limit=24` (no Playwright needed). SSR `__NEXT_DATA__` fallback if API empty. 19+ in-part scrapers active. Records per-institution counts to `scan_institution_counts` table.
 - **WordPress API factory**: `createWordPressApiScraper(baseUrl, postType, institution)` — paginates `/wp-json/wp/v2/{postType}?per_page=100&page=N`. Used by ASU/Skysong (~1,317 technologies).
 - **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
 - **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — uses confirmed working API: `GET /api/v1/technologies?organizationId={id}&organizationAccessKey={key}&per_page=500` with `X-Requested-With: XMLHttpRequest` header; response is JSON:API format (`data[].attributes.name`); Georgetown returns 111, Cornell returns 1,114 assets
@@ -85,12 +85,13 @@ client/src/
     Assets.tsx            # /assets — saved pipeline (kanban)
     Institutions.tsx      # /institutions — 28 TTO cards with live counts
     InstitutionDetail.tsx # /institutions/:slug — real ingested listings
+    Admin.tsx             # /admin — admin control panel with password gate and scan tracking
     Reports.tsx           # /reports — mock report cards
     Alerts.tsx            # /alerts — mock alerts + Create Alert drawer
     AssetDossier.tsx      # /asset/:id — dossier view
     Report.tsx            # /report — buyer intelligence report
 
-shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets
+shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets, scanInstitutionCounts
 ```
 
 ### Pages
@@ -100,6 +101,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/institutions`** — 195 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Ingested listings with sort (Newest First / Best Commercial / A-Z / Z-A), search filter, modality/stage tags via title-signal parser, commercial score badge, expandable detail panel per asset
 - **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
+- **`/admin`** — Admin control panel (password: "eden") with scan tracking table showing per-institution counts per run, delta column, sortable
 - **`/reports`** — Mock report cards
 - **`/asset/:id`** — Full dossier with score breakdown
 - **`/report`** — Buyer intelligence report
@@ -112,6 +114,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `GET/POST /api/saved-assets` — saved asset CRUD
 - `DELETE /api/saved-assets/:id`
 - `GET /api/search-history`
+- `GET /api/admin/scan-matrix?pw=eden` — per-institution counts for last N completed runs (password protected)
 - `POST /api/ingest/run` — trigger TTO scrape pipeline (async, non-blocking)
 - `GET /api/ingest/status` — last run status (never_run | running | completed | failed)
 - `GET /api/institutions/counts` — `Record<string, number>` count per institution
@@ -122,6 +125,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `saved_assets`: full asset data from saved search results
 - `ingestion_runs`: id, ran_at, total_found, new_count, status, error_message
 - `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, run_id
+- `scan_institution_counts`: run_id, institution, count — per-institution scrape counts per ingestion run (populated during ingestion)
 
 ### Visual Theme
 - Botanical green: `--primary: 142 52% 36%` (light) / `142 65% 48%` (dark)

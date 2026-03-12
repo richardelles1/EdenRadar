@@ -4,6 +4,7 @@ import {
   savedAssets, type SavedAsset, type InsertSavedAsset,
   ingestionRuns, type IngestionRun, type InsertIngestionRun,
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
+  scanInstitutionCounts,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray } from "drizzle-orm";
@@ -36,6 +37,12 @@ export interface IStorage {
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
   getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
+
+  recordScanCounts(runId: number, counts: Record<string, number>): Promise<void>;
+  getScanMatrix(limit?: number): Promise<{
+    runs: Array<{ id: number; ranAt: Date; totalFound: number; newCount: number; status: string }>;
+    matrix: Array<{ institution: string; counts: number[] }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -237,6 +244,64 @@ export class DatabaseStorage implements IStorage {
         sampleAssets: names.slice(0, 5),
       }))
       .sort((a, b) => b.count - a.count);
+  }
+
+  async recordScanCounts(runId: number, counts: Record<string, number>): Promise<void> {
+    const entries = Object.entries(counts).filter(([, c]) => c > 0);
+    if (entries.length === 0) return;
+    const CHUNK = 500;
+    for (let i = 0; i < entries.length; i += CHUNK) {
+      const chunk = entries.slice(i, i + CHUNK);
+      await db.insert(scanInstitutionCounts).values(
+        chunk.map(([institution, count]) => ({ runId, institution, count }))
+      );
+    }
+  }
+
+  async getScanMatrix(limit = 10): Promise<{
+    runs: Array<{ id: number; ranAt: Date; totalFound: number; newCount: number; status: string }>;
+    matrix: Array<{ institution: string; counts: number[] }>;
+  }> {
+    const runs = await db
+      .select({
+        id: ingestionRuns.id,
+        ranAt: ingestionRuns.ranAt,
+        totalFound: ingestionRuns.totalFound,
+        newCount: ingestionRuns.newCount,
+        status: ingestionRuns.status,
+      })
+      .from(ingestionRuns)
+      .where(eq(ingestionRuns.status, "completed"))
+      .orderBy(desc(ingestionRuns.ranAt))
+      .limit(limit);
+
+    if (runs.length === 0) return { runs: [], matrix: [] };
+
+    const runIds = runs.map((r) => r.id);
+    const rows = await db
+      .select({
+        runId: scanInstitutionCounts.runId,
+        institution: scanInstitutionCounts.institution,
+        count: scanInstitutionCounts.count,
+      })
+      .from(scanInstitutionCounts)
+      .where(inArray(scanInstitutionCounts.runId, runIds));
+
+    const instMap: Record<string, Record<number, number>> = {};
+    for (const row of rows) {
+      if (!instMap[row.institution]) instMap[row.institution] = {};
+      instMap[row.institution][row.runId] = row.count;
+    }
+
+    const matrix = Object.entries(instMap)
+      .map(([institution, runCounts]) => ({
+        institution,
+        counts: runs.map((r) => runCounts[r.id] ?? 0),
+      }))
+      .filter((row) => row.counts.some((c) => c > 0))
+      .sort((a, b) => (b.counts[0] ?? 0) - (a.counts[0] ?? 0));
+
+    return { runs, matrix };
   }
 }
 

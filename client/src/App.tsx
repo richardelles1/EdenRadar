@@ -14,6 +14,7 @@ import Alerts from "@/pages/Alerts";
 import Institutions from "@/pages/Institutions";
 import InstitutionDetail from "@/pages/InstitutionDetail";
 import Sources from "@/pages/Sources";
+import Admin from "@/pages/Admin";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { useEffect } from "react";
 
@@ -86,6 +87,8 @@ function Router() {
           <Report />
         </DashboardLayout>
       </Route>
+
+      <Route path="/admin" component={Admin} />
 
       <Route component={NotFound} />
     </Switch>
