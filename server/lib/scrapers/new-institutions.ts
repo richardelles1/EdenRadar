@@ -587,6 +587,11 @@ export const undScraper: InstitutionScraper = {
 export const ndsuScraper = createTechPublisherScraper("ndsurf", "North Dakota State University", { maxPg: 30 });
 export const indianaScraper = createInPartScraper("iu", "Indiana University");
 export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
+// WARF uses SearchWP with category-based filtering. The search page at
+// /search-results/?searchwp=&search-technology=1 returns NO technology links
+// without a s_tech_category param. Pagination (&pg=N, &paged=N) returns 0
+// results per category — each category dumps all its results on one page.
+// Tested empirically: category iteration is the only working approach.
 export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
   async scrape(): Promise<ScrapedListing[]> {
