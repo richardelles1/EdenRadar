@@ -31,6 +31,7 @@ async function fetchPage(page: number): Promise<UMNResponse> {
       Accept: "application/json",
       Referer: "https://license.umn.edu/products",
     },
+    signal: AbortSignal.timeout(15_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<UMNResponse>;

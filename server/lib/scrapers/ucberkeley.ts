@@ -26,6 +26,7 @@ async function fetchTitle(ncdPath: string): Promise<{ url: string; title: string
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return null;
     const html = await res.text();
@@ -47,6 +48,7 @@ export const ucBerkeleyScraper: InstitutionScraper = {
     try {
       const res = await fetch(SITEMAP_URL, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) throw new Error(`sitemap HTTP ${res.status}`);
       const xml = await res.text();
