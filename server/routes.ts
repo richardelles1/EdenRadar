@@ -693,9 +693,7 @@ export async function registerRoutes(
   ) {
     liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed };
     const CONCURRENCY = 30;
-    const DB_SYNC_INTERVAL = 25;
     let idx = 0;
-    let dbSyncCounter = 0;
 
     async function worker() {
       while (idx < assets.length) {
@@ -728,11 +726,7 @@ export async function registerRoutes(
         }
         await storage.stampEnrichedAt(asset.id);
         liveEnrichment!.processed++;
-        dbSyncCounter++;
-        if (dbSyncCounter >= DB_SYNC_INTERVAL) {
-          dbSyncCounter = 0;
-          await storage.updateEnrichmentJob(jobId, { processed: liveEnrichment!.processed, improved: liveEnrichment!.improved });
-        }
+        await storage.updateEnrichmentJob(jobId, { processed: liveEnrichment!.processed, improved: liveEnrichment!.improved });
       }
     }
 
@@ -774,10 +768,10 @@ export async function registerRoutes(
       });
     }
 
-    const lastJob = await storage.getRunningEnrichmentJob();
+    const lastJob = await storage.getLatestEnrichmentJob();
     if (lastJob) {
       return res.json({
-        status: "running",
+        status: lastJob.status as string,
         jobId: lastJob.id,
         processed: lastJob.processed,
         total: lastJob.total,

@@ -69,6 +69,7 @@ export interface IStorage {
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
+  getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   stampEnrichedAt(assetId: number): Promise<void>;
 }
 
@@ -487,6 +488,11 @@ export class DatabaseStorage implements IStorage {
 
   async getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined> {
     const [row] = await db.select().from(enrichmentJobs).where(eq(enrichmentJobs.status, "running")).orderBy(desc(enrichmentJobs.startedAt)).limit(1);
+    return row;
+  }
+
+  async getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined> {
+    const [row] = await db.select().from(enrichmentJobs).orderBy(desc(enrichmentJobs.startedAt)).limit(1);
     return row;
   }
 
