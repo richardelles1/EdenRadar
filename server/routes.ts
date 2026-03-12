@@ -11,6 +11,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress } from "./lib/ingestion";
+import { ALL_SCRAPERS } from "./lib/scrapers/index";
 
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
@@ -225,6 +226,10 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
     }
+  });
+
+  app.get("/api/scrapers/active", (_req, res) => {
+    res.json({ institutions: ALL_SCRAPERS.map((s) => s.institution) });
   });
 
   app.post("/api/ingest/run", async (_req, res) => {

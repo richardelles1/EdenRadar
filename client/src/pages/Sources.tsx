@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   BookOpen, FlaskConical, Stethoscope, Fingerprint, Microscope,
   DollarSign, Globe, Building2, CheckCircle2, ShieldOff,
-  ArrowUpDown, Search, ExternalLink,
+  ArrowUpDown, Search, ExternalLink, MinusCircle,
 } from "lucide-react";
 import { INSTITUTIONS, BLOCKED_SLUGS } from "@/lib/institutions";
 
@@ -78,7 +78,7 @@ const DATA_SOURCES = [
     id: "techtransfer",
     name: "Tech Transfer (TTO)",
     category: "Licensing",
-    description: "Live scraper monitoring 205 global institutions. Active feeds from 138 university TTO portals — indexed continuously.",
+    description: "Live scraper monitoring 205 global institutions. Active feeds from 143 university TTO portals — scanned daily.",
     url: "/institutions",
     icon: Building2,
     color: "text-primary bg-primary/10",
@@ -94,19 +94,20 @@ const CATEGORY_COLORS: Record<string, string> = {
   Licensing:   "bg-primary/10 text-primary border-primary/20",
 };
 
-type TtoStatus = "active" | "indexed" | "restricted" | "empty";
+type TtoStatus = "active" | "restricted" | "empty" | "nofeed";
 
 const STATUS_CONFIG: Record<TtoStatus, { label: string; color: string; priority: number }> = {
   active:     { label: "Active",      color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20", priority: 0 },
-  indexed:    { label: "Indexed",     color: "bg-primary/10 text-primary border-primary/20",                                    priority: 1 },
-  restricted: { label: "Restricted",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",         priority: 2 },
-  empty:      { label: "Empty",       color: "bg-muted text-muted-foreground border-border",                                    priority: 3 },
+  restricted: { label: "Restricted",  color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",         priority: 1 },
+  empty:      { label: "Empty",       color: "bg-muted text-muted-foreground border-border",                                    priority: 2 },
+  nofeed:     { label: "No Feed",     color: "bg-muted/50 text-muted-foreground/60 border-border/50",                          priority: 3 },
 };
 
-function getTtoStatus(slug: string, count: number): TtoStatus {
+function getTtoStatus(slug: string, count: number, activeSet: Set<string>, instName: string): TtoStatus {
   if (BLOCKED_SLUGS.has(slug)) return "restricted";
-  if (count > 50) return "active";
-  if (count > 0) return "indexed";
+  if (count > 0) return "active";
+  if (activeSet.size > 0 && activeSet.has(instName)) return "empty";
+  if (activeSet.size > 0) return "nofeed";
   return "empty";
 }
 
@@ -117,15 +118,27 @@ export default function Sources() {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const { data: countsData, isLoading } = useQuery<Record<string, number>>({
+  const { data: countsData, isLoading: countsLoading } = useQuery<Record<string, number>>({
     queryKey: ["/api/institutions/counts"],
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: activeData } = useQuery<{ institutions: string[] }>({
+    queryKey: ["/api/scrapers/active"],
+    staleTime: 60 * 60 * 1000,
+  });
+
+  const isLoading = countsLoading;
+
+  const activeSet = useMemo(
+    () => new Set(activeData?.institutions ?? []),
+    [activeData]
+  );
+
   const ttos = useMemo(() => {
     const rows = INSTITUTIONS.map((inst) => {
       const count = countsData?.[inst.name] ?? 0;
-      const status = getTtoStatus(inst.slug, count);
+      const status = getTtoStatus(inst.slug, count, activeSet, inst.name);
       return { ...inst, count, status };
     });
 
@@ -150,20 +163,20 @@ export default function Sources() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [countsData, ttoSearch, sortKey, sortDir]);
+  }, [countsData, activeSet, ttoSearch, sortKey, sortDir]);
 
   const summary = useMemo(() => {
     const all = INSTITUTIONS.map((inst) => {
       const count = countsData?.[inst.name] ?? 0;
-      return getTtoStatus(inst.slug, count);
+      return getTtoStatus(inst.slug, count, activeSet, inst.name);
     });
     return {
       active:     all.filter((s) => s === "active").length,
-      indexed:    all.filter((s) => s === "indexed").length,
       restricted: all.filter((s) => s === "restricted").length,
       empty:      all.filter((s) => s === "empty").length,
+      nofeed:     all.filter((s) => s === "nofeed").length,
     };
-  }, [countsData]);
+  }, [countsData, activeSet]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -238,11 +251,11 @@ export default function Sources() {
                 <p className="text-xs text-muted-foreground mt-1">
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{summary.active} Active</span>
                   <span className="mx-1.5 text-border">·</span>
-                  <span className="text-primary font-semibold">{summary.indexed} Indexed</span>
-                  <span className="mx-1.5 text-border">·</span>
                   <span className="text-amber-600 dark:text-amber-400 font-semibold">{summary.restricted} Restricted</span>
                   <span className="mx-1.5 text-border">·</span>
                   <span className="text-muted-foreground font-semibold">{summary.empty} Empty</span>
+                  <span className="mx-1.5 text-border">·</span>
+                  <span className="text-muted-foreground/60 font-semibold">{summary.nofeed} No Feed</span>
                 </p>
               )}
             </div>
@@ -313,6 +326,7 @@ export default function Sources() {
                   : ttos.map((tto) => {
                       const sc = STATUS_CONFIG[tto.status];
                       const isRestricted = tto.status === "restricted";
+                      const isNoFeed = tto.status === "nofeed";
                       return (
                         <tr
                           key={tto.slug}
@@ -321,7 +335,7 @@ export default function Sources() {
                         >
                           <td className="px-4 py-3">
                             <Link href={`/institutions/${tto.slug}`}>
-                              <span className="font-medium text-foreground group-hover:text-primary transition-colors cursor-pointer text-sm">
+                              <span className={`font-medium group-hover:text-primary transition-colors cursor-pointer text-sm ${isNoFeed ? "text-muted-foreground" : "text-foreground"}`}>
                                 {tto.name}
                               </span>
                             </Link>
@@ -335,6 +349,7 @@ export default function Sources() {
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">
                               {isRestricted && <ShieldOff className="w-3 h-3 text-amber-500 shrink-0" />}
+                              {isNoFeed && <MinusCircle className="w-3 h-3 text-muted-foreground/50 shrink-0" />}
                               <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${sc.color}`}>
                                 {sc.label}
                               </span>

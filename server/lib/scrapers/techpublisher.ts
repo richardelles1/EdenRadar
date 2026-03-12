@@ -12,9 +12,7 @@ export interface TechPublisherOptions {
 }
 
 const CONCURRENCY = 5;
-const DEFAULT_MAX_CATS = 40;
-const DEFAULT_MAX_TECH = 150;
-const DEFAULT_INSTITUTION_TIMEOUT_MS = 90_000;
+const FETCH_TIMEOUT_MS = 15_000;
 
 async function runConcurrent<T>(
   items: T[],
@@ -38,12 +36,9 @@ export function createTechPublisherScraper(
   opts: TechPublisherOptions = {}
 ): InstitutionScraper {
   const base = opts.baseUrl ?? `https://${slug}.technologypublisher.com`;
-  const maxCats = opts.maxCats ?? opts.maxPg ?? DEFAULT_MAX_CATS;
-  const maxTech = opts.maxTech ?? DEFAULT_MAX_TECH;
-  const institutionTimeoutMs = opts.institutionTimeoutMs ?? DEFAULT_INSTITUTION_TIMEOUT_MS;
 
   async function fetchTitle(url: string, signal: AbortSignal): Promise<string | null> {
-    const $ = await fetchHtml(url, 8000, signal);
+    const $ = await fetchHtml(url, FETCH_TIMEOUT_MS, signal);
     if (!$) return null;
     const h1 = cleanText($("h1").first().text());
     if (h1 && h1.length > 5) return h1;
@@ -75,7 +70,7 @@ export function createTechPublisherScraper(
     try {
       const res = await fetch(`${base}/sitemap.xml`, {
         headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
       });
       if (!res.ok) return { techUrls: [], catUrls: [] };
       const xml = await res.text();
@@ -98,7 +93,7 @@ export function createTechPublisherScraper(
     try {
       const res = await fetch(`${base}/RSS.aspx`, {
         headers: { "User-Agent": "Mozilla/5.0" },
-        signal: AbortSignal.any([signal, AbortSignal.timeout(8000)]),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]),
       });
       if (!res.ok) return [];
       const xml = await res.text();
@@ -122,7 +117,11 @@ export function createTechPublisherScraper(
   }
 
   async function scrapeInner(signal: AbortSignal): Promise<ScrapedListing[]> {
-    const { techUrls: sitemapTechUrls, catUrls: sitemapCatUrls } = await parseSitemap(signal);
+    const [{ techUrls: sitemapTechUrls, catUrls: sitemapCatUrls }, rssItems] = await Promise.all([
+      parseSitemap(signal),
+      parseRss(signal),
+    ]);
+
     if (signal.aborted) return [];
 
     const results: ScrapedListing[] = [];
@@ -136,14 +135,21 @@ export function createTechPublisherScraper(
       results.push(item);
     }
 
+    for (const item of rssItems) addResult(item);
+    const rssCount = results.length;
+
     const techSelector = opts.selector ??
       (sitemapTechUrls.some((u) => u.includes("/tech/")) || sitemapCatUrls.length === 0
         ? "a[href*='/tech/'],a[href*='/technology/']"
         : "a[href*='/technology/']");
 
-    const $home = await fetchHtml(`${base}/SearchResults.aspx?type=Tech&q=`, 8000, signal);
-    if (signal.aborted) return results;
+    const $home = await fetchHtml(`${base}/SearchResults.aspx?type=Tech&q=`, FETCH_TIMEOUT_MS, signal);
+    if (signal.aborted) {
+      console.log(`[scraper] ${institution}: ${results.length} listings (aborted after RSS: ${rssCount})`);
+      return results;
+    }
 
+    let catCount = 0;
     if ($home) {
       harvestLinks($home, techSelector, seenUrls, seenTitles, results);
       const homePageCats = new Set<string>();
@@ -155,37 +161,35 @@ export function createTechPublisherScraper(
       });
       sitemapCatUrls.forEach((u) => homePageCats.add(u));
 
-      const allCatUrls = [...homePageCats].slice(0, maxCats);
+      const allCatUrls = [...homePageCats];
       await runConcurrent(allCatUrls, async (catUrl) => {
-        const $c = await fetchHtml(catUrl, 8000, signal);
+        const $c = await fetchHtml(catUrl, FETCH_TIMEOUT_MS, signal);
         if ($c) harvestLinks($c, techSelector, seenUrls, seenTitles, results);
       }, signal);
+      catCount = results.length - rssCount;
     }
 
-    if (signal.aborted) return results;
+    if (signal.aborted) {
+      console.log(`[scraper] ${institution}: ${results.length} listings (aborted — RSS: ${rssCount}, cats: ${catCount})`);
+      return results;
+    }
 
+    let sitemapPageCount = 0;
     if (sitemapTechUrls.length > 0) {
-      const uncovered = sitemapTechUrls
-        .filter((u) => !seenUrls.has(u))
-        .slice(0, maxTech);
+      const uncovered = sitemapTechUrls.filter((u) => !seenUrls.has(u));
       if (uncovered.length > 0) {
         await runConcurrent(uncovered, async (url) => {
           const title = await fetchTitle(url, signal);
           if (title) addResult({ title, description: "", url, institution });
         }, signal);
       }
-      console.log(
-        `[scraper] ${institution}: ${results.length} listings ` +
-        `(sitemap: ${sitemapTechUrls.length} known, ${uncovered.length} fetched individually)`
-      );
-    } else {
-      const rssItems = await parseRss(signal);
-      for (const item of rssItems) addResult(item);
-      console.log(
-        `[scraper] ${institution}: ${results.length} listings ` +
-        `(no sitemap, ${sitemapCatUrls.length} cats + RSS)`
-      );
+      sitemapPageCount = results.length - rssCount - catCount;
     }
+
+    console.log(
+      `[scraper] ${institution}: ${results.length} listings ` +
+      `(RSS: ${rssCount}, cats: ${catCount}, sitemap-pages: ${sitemapPageCount})`
+    );
 
     return results;
   }
@@ -194,11 +198,6 @@ export function createTechPublisherScraper(
     institution,
     async scrape(): Promise<ScrapedListing[]> {
       const controller = new AbortController();
-      const timer = setTimeout(() => {
-        console.warn(`[scraper] ${institution}: hit ${institutionTimeoutMs / 1000}s wall-clock limit, aborting`);
-        controller.abort();
-      }, institutionTimeoutMs);
-
       try {
         return await scrapeInner(controller.signal);
       } catch (err: any) {
@@ -206,8 +205,6 @@ export function createTechPublisherScraper(
           console.error(`[scraper] ${institution} failed: ${err?.message}`);
         }
         return [];
-      } finally {
-        clearTimeout(timer);
       }
     },
   };

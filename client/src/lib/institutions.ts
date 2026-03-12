@@ -241,4 +241,5 @@ export const INSTITUTIONS: Institution[] = [
 
 export const BLOCKED_SLUGS = new Set([
   "mayo",
+  "columbia",
 ]);
