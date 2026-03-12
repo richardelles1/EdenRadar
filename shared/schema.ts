@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -121,3 +121,40 @@ export const scanInstitutionCounts = pgTable("scan_institution_counts", {
   institution: text("institution").notNull(),
   count: integer("count").notNull().default(0),
 });
+
+export const syncSessions = pgTable("sync_sessions", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  institution: text("institution").notNull(),
+  status: text("status").notNull().default("running"),
+  phase: text("phase").notNull().default("scraping"),
+  rawCount: integer("raw_count").notNull().default(0),
+  newCount: integer("new_count").notNull().default(0),
+  relevantCount: integer("relevant_count").notNull().default(0),
+  pushedCount: integer("pushed_count").notNull().default(0),
+  currentIndexed: integer("current_indexed").notNull().default(0),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type SyncSession = typeof syncSessions.$inferSelect;
+
+export const syncStaging = pgTable("sync_staging", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  institution: text("institution").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  assetName: text("asset_name").notNull(),
+  sourceUrl: text("source_url"),
+  summary: text("summary").notNull().default(""),
+  isNew: boolean("is_new").notNull().default(false),
+  relevant: boolean("relevant"),
+  target: text("target").notNull().default("unknown"),
+  modality: text("modality").notNull().default("unknown"),
+  indication: text("indication").notNull().default("unknown"),
+  developmentStage: text("development_stage").notNull().default("unknown"),
+  status: text("status").notNull().default("staged"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type SyncStagingRow = typeof syncStaging.$inferSelect;

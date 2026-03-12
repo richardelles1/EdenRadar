@@ -1,6 +1,9 @@
 import { storage } from "../storage";
-import { runAllScrapers } from "./scrapers/index";
+import { runAllScrapers, ALL_SCRAPERS } from "./scrapers/index";
 import { enrichBatch } from "./scrapers/enrichAsset";
+import { syncStaging, type SyncStagingRow } from "@shared/schema";
+import { db } from "../db";
+import { eq, and } from "drizzle-orm";
 
 export function makeFingerprint(title: string, institution: string): string {
   return `${title.toLowerCase().trim()}|${institution.toLowerCase().trim()}`;
@@ -143,5 +146,173 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     ingestionRunning = false;
     scrapingProgress = { done: 0, total: 0, found: 0, active: [] };
     upsertProgress = { done: 0, total: 0 };
+  }
+}
+
+let syncRunning = false;
+let syncInstitution: string | null = null;
+
+export function isSyncRunning(): boolean {
+  return syncRunning;
+}
+
+export function getSyncRunningFor(): string | null {
+  return syncInstitution;
+}
+
+export function tryAcquireSyncLock(institution: string): boolean {
+  if (ingestionRunning || syncRunning) return false;
+  syncRunning = true;
+  syncInstitution = institution;
+  return true;
+}
+
+export interface SyncResult {
+  sessionId: string;
+  rawCount: number;
+  newCount: number;
+  relevantCount: number;
+}
+
+export async function runInstitutionSync(institutionName: string): Promise<SyncResult> {
+  if (ingestionRunning) throw new Error("Full ingestion is running — cannot sync");
+
+  const alreadyLocked = syncRunning && syncInstitution === institutionName;
+  if (syncRunning && !alreadyLocked) throw new Error(`Sync already running for ${syncInstitution}`);
+
+  const scraper = ALL_SCRAPERS.find((s) => s.institution === institutionName);
+  if (!scraper) throw new Error(`No scraper found for institution: ${institutionName}`);
+
+  if (!alreadyLocked) {
+    syncRunning = true;
+    syncInstitution = institutionName;
+  }
+
+  const sessionId = crypto.randomUUID();
+
+  try {
+    const currentIndexed = await storage.getInstitutionIndexedCount(institutionName);
+    const session = await storage.createSyncSession(sessionId, institutionName, currentIndexed);
+
+    console.log(`[sync] ${institutionName}: starting sync (${currentIndexed} currently indexed)...`);
+
+    const SCRAPER_TIMEOUT_MS = 5 * 60 * 1000;
+    let listings;
+    try {
+      listings = await Promise.race([
+        scraper.scrape(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("scraper timeout (5 min)")), SCRAPER_TIMEOUT_MS)
+        ),
+      ]);
+    } catch (err: any) {
+      console.error(`[sync] ${institutionName}: scrape failed — ${err?.message}`);
+      await storage.updateSyncSession(sessionId, {
+        status: "failed",
+        phase: "done",
+        completedAt: new Date(),
+      });
+      throw new Error(`Scraper failed: ${err?.message}`);
+    }
+
+    const rawCount = listings.length;
+    console.log(`[sync] ${institutionName}: scraped ${rawCount} raw listings`);
+
+    await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing" });
+
+    const existingFps = await storage.getExistingFingerprints(institutionName);
+
+    const seen = new Set<string>();
+    const stagingRows: Array<Omit<SyncStagingRow, "id" | "createdAt">> = [];
+    for (const l of listings) {
+      if (!l.title || !l.institution) continue;
+      const fp = makeFingerprint(l.title, l.institution);
+      if (seen.has(fp)) continue;
+      seen.add(fp);
+      const isNew = !existingFps.has(fp);
+      stagingRows.push({
+        sessionId,
+        institution: institutionName,
+        fingerprint: fp,
+        assetName: l.title,
+        sourceUrl: l.url || null,
+        summary: l.description || l.title,
+        isNew,
+        relevant: null,
+        target: "unknown",
+        modality: "unknown",
+        indication: "unknown",
+        developmentStage: l.stage ?? "unknown",
+        status: "staged",
+      });
+    }
+
+    await storage.insertSyncStagingBatch(stagingRows);
+
+    const newRows = stagingRows.filter((r) => r.isNew);
+    const newCount = newRows.length;
+
+    await storage.updateSyncSession(sessionId, {
+      newCount,
+      phase: "enriching",
+    });
+
+    console.log(`[sync] ${institutionName}: ${newCount} new out of ${stagingRows.length} unique — enriching new items...`);
+
+    let relevantCount = 0;
+
+    if (newCount > 0) {
+      const toEnrich = newRows.map((r, i) => ({ id: i, assetName: r.assetName }));
+      const enrichResults = await enrichBatch(toEnrich, 30);
+
+      const enrichUpdates: Array<{ fingerprint: string; data: any }> = [];
+      for (const [idx, enrichment] of enrichResults) {
+        const row = newRows[idx];
+        enrichUpdates.push({
+          fingerprint: row.fingerprint,
+          data: enrichment,
+        });
+        if (enrichment.biotechRelevant) relevantCount++;
+      }
+
+      for (const { fingerprint, data } of enrichUpdates) {
+        await db
+          .update(syncStaging)
+          .set({
+            relevant: data.biotechRelevant,
+            target: data.target,
+            modality: data.modality,
+            indication: data.indication,
+            developmentStage: data.developmentStage,
+          })
+          .where(and(
+            eq(syncStaging.sessionId, sessionId),
+            eq(syncStaging.fingerprint, fingerprint)
+          ));
+      }
+    }
+
+    await storage.updateSyncSession(sessionId, {
+      relevantCount,
+      status: "enriched",
+      phase: "done",
+      completedAt: new Date(),
+    });
+
+    console.log(`[sync] ${institutionName}: sync complete — ${rawCount} raw, ${newCount} new, ${relevantCount} relevant`);
+
+    return { sessionId, rawCount, newCount, relevantCount };
+  } catch (err: any) {
+    if (!(await storage.getSyncSession(sessionId))?.completedAt) {
+      await storage.updateSyncSession(sessionId, {
+        status: "failed",
+        phase: "done",
+        completedAt: new Date(),
+      }).catch(() => {});
+    }
+    throw err;
+  } finally {
+    syncRunning = false;
+    syncInstitution = null;
   }
 }

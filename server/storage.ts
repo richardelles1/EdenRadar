@@ -5,6 +5,8 @@ import {
   ingestionRuns, type IngestionRun, type InsertIngestionRun,
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
   scanInstitutionCounts,
+  syncSessions, type SyncSession,
+  syncStaging, type SyncStagingRow,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray } from "drizzle-orm";
@@ -44,6 +46,17 @@ export interface IStorage {
     matrix: Array<{ institution: string; counts: number[] }>;
     totalInSystem: number;
   }>;
+
+  createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
+  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt">>): Promise<SyncSession>;
+  getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
+  getLatestSyncSessions(): Promise<SyncSession[]>;
+  clearSyncStaging(institution: string): Promise<void>;
+  insertSyncStagingBatch(rows: Array<Omit<SyncStagingRow, "id" | "createdAt">>): Promise<void>;
+  getSyncStagingRows(sessionId: string): Promise<SyncStagingRow[]>;
+  updateSyncStagingStatus(sessionId: string, status: string, filterIsNew?: boolean, filterRelevant?: boolean): Promise<number>;
+  getExistingFingerprints(institution: string): Promise<Set<string>>;
+  getInstitutionIndexedCount(institution: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -324,6 +337,76 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => (b.counts[0] ?? 0) - (a.counts[0] ?? 0));
 
     return { runs, matrix, totalInSystem };
+  }
+
+  async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {
+    await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
+    const existing = await db.select().from(syncSessions).where(eq(syncSessions.institution, institution));
+    if (existing.length > 0) {
+      await db.delete(syncSessions).where(eq(syncSessions.institution, institution));
+    }
+    const [row] = await db.insert(syncSessions).values({
+      sessionId,
+      institution,
+      status: "running",
+      phase: "scraping",
+      currentIndexed,
+    }).returning();
+    return row;
+  }
+
+  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt">>): Promise<SyncSession> {
+    const [row] = await db.update(syncSessions).set(data).where(eq(syncSessions.sessionId, sessionId)).returning();
+    return row;
+  }
+
+  async getSyncSession(sessionId: string): Promise<SyncSession | undefined> {
+    const [row] = await db.select().from(syncSessions).where(eq(syncSessions.sessionId, sessionId));
+    return row;
+  }
+
+  async getLatestSyncSessions(): Promise<SyncSession[]> {
+    return db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
+  }
+
+  async clearSyncStaging(institution: string): Promise<void> {
+    await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
+  }
+
+  async insertSyncStagingBatch(rows: Array<Omit<SyncStagingRow, "id" | "createdAt">>): Promise<void> {
+    if (rows.length === 0) return;
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.insert(syncStaging).values(rows.slice(i, i + CHUNK));
+    }
+  }
+
+  async getSyncStagingRows(sessionId: string): Promise<SyncStagingRow[]> {
+    return db.select().from(syncStaging).where(eq(syncStaging.sessionId, sessionId)).orderBy(desc(syncStaging.isNew));
+  }
+
+  async updateSyncStagingStatus(sessionId: string, status: string, filterIsNew?: boolean, filterRelevant?: boolean): Promise<number> {
+    let conditions = [eq(syncStaging.sessionId, sessionId)];
+    if (filterIsNew !== undefined) conditions.push(eq(syncStaging.isNew, filterIsNew));
+    if (filterRelevant !== undefined) conditions.push(eq(syncStaging.relevant, filterRelevant));
+    const result = await db.update(syncStaging).set({ status }).where(and(...conditions)).returning({ id: syncStaging.id });
+    return result.length;
+  }
+
+  async getExistingFingerprints(institution: string): Promise<Set<string>> {
+    const rows = await db
+      .select({ fingerprint: ingestedAssets.fingerprint })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.institution, institution));
+    return new Set(rows.map(r => r.fingerprint));
+  }
+
+  async getInstitutionIndexedCount(institution: string): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.institution, institution), eq(ingestedAssets.relevant, true)));
+    return row?.count ?? 0;
   }
 }
 

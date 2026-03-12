@@ -1,10 +1,12 @@
-import { useState, useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useTheme } from "@/hooks/use-theme";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
 
 const ADMIN_KEY = "eden-admin-pw";
 
@@ -67,6 +69,17 @@ function formatDate(iso: string) {
   const d = new Date(iso);
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
     " " + d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+}
+
+function timeAgo(iso: string) {
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function DeltaCell({ current, previous }: { current: number; previous: number }) {
@@ -252,9 +265,370 @@ function ScanTracking({ pw }: { pw: string }) {
   );
 }
 
+interface SyncSessionData {
+  id: number;
+  sessionId: string;
+  institution: string;
+  status: string;
+  phase: string;
+  rawCount: number;
+  newCount: number;
+  relevantCount: number;
+  pushedCount: number;
+  currentIndexed: number;
+  createdAt: string;
+  completedAt: string | null;
+}
+
+interface SyncStatusResponse {
+  found: boolean;
+  session?: SyncSessionData;
+  newEntries?: Array<{
+    assetName: string;
+    sourceUrl: string | null;
+    target: string;
+    modality: string;
+    indication: string;
+    developmentStage: string;
+  }>;
+  syncRunning: boolean;
+  syncRunningFor: string | null;
+}
+
+function InstitutionSync({ pw }: { pw: string }) {
+  const [selectedInstitution, setSelectedInstitution] = useState("");
+  const [polling, setPolling] = useState(false);
+  const { toast } = useToast();
+
+  const { data: institutionsData } = useQuery<{ institutions: string[] }>({
+    queryKey: ["/api/scrapers/active"],
+  });
+
+  const { data: sessionsData, refetch: refetchSessions } = useQuery<{ sessions: SyncSessionData[] }>({
+    queryKey: ["/api/ingest/sync/sessions", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/ingest/sync/sessions", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load sessions");
+      return res.json();
+    },
+  });
+
+  const { data: statusData, refetch: refetchStatus } = useQuery<SyncStatusResponse>({
+    queryKey: ["/api/ingest/sync/status", selectedInstitution, pw],
+    queryFn: async () => {
+      if (!selectedInstitution) return { found: false, syncRunning: false, syncRunningFor: null };
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(selectedInstitution)}/status`, {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load sync status");
+      return res.json();
+    },
+    enabled: !!selectedInstitution,
+    refetchInterval: polling ? 2000 : false,
+  });
+
+  useEffect(() => {
+    if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
+      setPolling(false);
+    }
+  }, [statusData?.session?.status]);
+
+  const syncMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Sync failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setPolling(true);
+      toast({ title: "Sync started", description: `Syncing ${selectedInstitution}...` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const pushMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/push`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Push failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Pushed to index", description: data.message });
+      refetchStatus();
+      refetchSessions();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Push failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const institutions = institutionsData?.institutions ?? [];
+  const sessionMap = new Map<string, SyncSessionData>();
+  for (const s of sessionsData?.sessions ?? []) {
+    sessionMap.set(s.institution, s);
+  }
+
+  const session = statusData?.session;
+  const newEntries = statusData?.newEntries ?? [];
+  const isRunning = session?.status === "running";
+  const isEnriched = session?.status === "enriched";
+  const isPushed = session?.status === "pushed";
+  const isFailed = session?.status === "failed";
+  const syncIsActive = statusData?.syncRunning ?? false;
+
+  const rawCount = session?.rawCount ?? 0;
+  const currentIndexed = session?.currentIndexed ?? 0;
+  const zeroGuard = isEnriched && rawCount === 0;
+  const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
+
+  const phaseLabel = session?.phase === "scraping" ? "Scraping..."
+    : session?.phase === "comparing" ? "Comparing fingerprints..."
+    : session?.phase === "enriching" ? "Enriching with AI..."
+    : session?.phase === "done" ? "Done"
+    : "";
+
+  return (
+    <div className="space-y-6" data-testid="sync-tab">
+      <div className="flex items-center gap-4">
+        <select
+          className="flex-1 h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          value={selectedInstitution}
+          onChange={(e) => { setSelectedInstitution(e.target.value); setPolling(false); }}
+          data-testid="select-institution"
+        >
+          <option value="">Select an institution...</option>
+          {institutions.sort().map((inst) => {
+            const s = sessionMap.get(inst);
+            const suffix = s?.completedAt ? ` — last synced ${timeAgo(s.completedAt)}` : "";
+            return (
+              <option key={inst} value={inst}>
+                {inst}{suffix}
+              </option>
+            );
+          })}
+        </select>
+        <Button
+          onClick={() => syncMutation.mutate(selectedInstitution)}
+          disabled={!selectedInstitution || syncMutation.isPending || isRunning || syncIsActive}
+          data-testid="button-sync"
+        >
+          {syncMutation.isPending || isRunning ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Sync
+        </Button>
+      </div>
+
+      {selectedInstitution && session && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="sync-results">
+          <div className="px-5 py-4 border-b border-border bg-muted/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold text-foreground text-base" data-testid="sync-institution-name">{session.institution}</h3>
+                {session.completedAt && (
+                  <p className="text-xs text-muted-foreground mt-0.5" data-testid="sync-last-refreshed">
+                    Last refreshed: {formatDate(session.completedAt)}
+                  </p>
+                )}
+              </div>
+              <Badge
+                variant={isPushed ? "default" : isFailed ? "destructive" : isEnriched ? "secondary" : "outline"}
+                data-testid="sync-status-badge"
+              >
+                {session.status}
+              </Badge>
+            </div>
+          </div>
+
+          {isRunning && (
+            <div className="px-5 py-6" data-testid="sync-progress">
+              <div className="flex items-center gap-3 mb-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm font-medium text-foreground">{phaseLabel}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all duration-500 animate-pulse"
+                  style={{ width: session.phase === "scraping" ? "33%" : session.phase === "comparing" ? "50%" : session.phase === "enriching" ? "75%" : "100%" }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {rawCount > 0 ? `${rawCount} raw listings scraped` : "Fetching listings from institution..."}
+              </p>
+            </div>
+          )}
+
+          {(isEnriched || isPushed || isFailed) && (
+            <div className="px-5 py-4 space-y-4" data-testid="sync-result-details">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentIndexed}</div>
+                  <div className="text-xs text-muted-foreground">Currently Indexed</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-raw-scraped">{session.rawCount}</div>
+                  <div className="text-xs text-muted-foreground">Raw Scraped</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-new-found">{session.newCount}</div>
+                  <div className="text-xs text-muted-foreground">New (Not in Index)</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className={`text-2xl font-bold tabular-nums ${session.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`} data-testid="stat-relevant">
+                    {session.relevantCount}
+                  </div>
+                  <div className="text-xs text-muted-foreground">New + Relevant (Biotech)</div>
+                </div>
+              </div>
+
+              {zeroGuard && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
+                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Connection may be broken — 0 results returned</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper returned no results. This could indicate a broken connection, website change, or temporary outage. Push is blocked.</p>
+                  </div>
+                </div>
+              )}
+
+              {softWarning && !zeroGuard && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="sync-soft-warning">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count — the scraper may only be returning partial results.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isPushed && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="sync-pushed-success">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                      {session.pushedCount > 0 ? `${session.pushedCount} new assets pushed to index` : "No new relevant assets to push"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isFailed && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-failed">
+                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Sync failed</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper encountered an error. Check server logs for details.</p>
+                  </div>
+                </div>
+              )}
+
+              {isEnriched && session.relevantCount > 0 && !zeroGuard && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-foreground">New Relevant Entries ({newEntries.length})</h4>
+                    <Button
+                      onClick={() => pushMutation.mutate(selectedInstitution)}
+                      disabled={pushMutation.isPending || zeroGuard}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      data-testid="button-push-to-index"
+                    >
+                      {pushMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <ArrowUpCircle className="h-4 w-4 mr-2" />
+                      )}
+                      Push New Additions to Index
+                    </Button>
+                  </div>
+                  <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                        <tr className="border-b border-border">
+                          <th className="text-left py-2 px-3 font-medium text-foreground">Asset Name</th>
+                          <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
+                          <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
+                          <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
+                          <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {newEntries.map((entry, i) => (
+                          <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
+                            <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
+                              {entry.assetName}
+                            </td>
+                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
+                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
+                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
+                            <td className="py-2 px-3 text-center">
+                              {entry.sourceUrl ? (
+                                <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  <ExternalLink className="h-3.5 w-3.5 inline" />
+                                </a>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {isEnriched && session.relevantCount === 0 && session.newCount === 0 && !isFailed && (
+                <div className="text-center py-6 text-muted-foreground" data-testid="sync-no-new">
+                  <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No new entries found — index is up to date.</p>
+                </div>
+              )}
+
+              {isEnriched && session.relevantCount === 0 && session.newCount > 0 && (
+                <div className="text-center py-6 text-muted-foreground" data-testid="sync-no-relevant">
+                  <p className="text-sm">{session.newCount} new entries found, but none passed the biotech relevance filter.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!selectedInstitution && (
+        <div className="text-center py-16 text-muted-foreground" data-testid="sync-empty-state">
+          <Zap className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="text-base font-medium">Select an institution to sync</p>
+          <p className="text-sm mt-1">Test scraper connections and refresh individual sources</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
-  const [activeTab] = useState("scan-tracking");
+  const [activeTab, setActiveTab] = useState("scan-tracking");
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -299,6 +673,7 @@ export default function Admin() {
         <aside className="w-56 border-r border-border min-h-[calc(100vh-57px)] p-4 shrink-0">
           <nav className="space-y-1">
             <button
+              onClick={() => setActiveTab("scan-tracking")}
               className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "scan-tracking"
                   ? "bg-primary/10 text-primary"
@@ -309,17 +684,43 @@ export default function Admin() {
               <BarChart3 className="h-4 w-4" />
               Scan Tracking
             </button>
+            <button
+              onClick={() => setActiveTab("institution-sync")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "institution-sync"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-institution-sync"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Institution Sync
+            </button>
           </nav>
         </aside>
 
         <main className="flex-1 p-6 overflow-hidden">
-          <div className="mb-6">
-            <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scan Tracking</h2>
-            <p className="text-sm text-muted-foreground mt-1">Per-institution asset counts across scan runs</p>
-          </div>
-          <div className="border border-border rounded-xl bg-card overflow-hidden">
-            <ScanTracking pw={pw} />
-          </div>
+          {activeTab === "scan-tracking" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scan Tracking</h2>
+                <p className="text-sm text-muted-foreground mt-1">Per-institution asset counts across scan runs</p>
+              </div>
+              <div className="border border-border rounded-xl bg-card overflow-hidden">
+                <ScanTracking pw={pw} />
+              </div>
+            </>
+          )}
+
+          {activeTab === "institution-sync" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Institution Sync</h2>
+                <p className="text-sm text-muted-foreground mt-1">Test scraper connections and refresh individual institution sources</p>
+              </div>
+              <InstitutionSync pw={pw} />
+            </>
+          )}
         </main>
       </div>
     </div>

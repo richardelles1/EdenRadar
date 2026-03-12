@@ -29,13 +29,14 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
 - **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
 - **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 86 TTOs with concurrency=5, upserts to DB, diffs for new
+- **Per-institution sync**: `runInstitutionSync(institution)` — single-institution scrape → fingerprint compare → AI enrich → staging table. Two-step push: preview results then explicit "Push to Index". Zero guard blocks push if rawCount=0. Soft warning if rawCount < 50% of currentIndexed. Mutual exclusion with full ingestion.
 - **Daily cron**: `node-cron` at 8:00 AM runs ingestion automatically
 
 ### Folder Structure
 ```
 server/
   lib/
-    ingestion.ts          # runIngestionPipeline() — scrape all TTOs, upsert to DB, track new
+    ingestion.ts          # runIngestionPipeline() + runInstitutionSync() — full & per-institution sync
     scrapers/
       types.ts            # ScrapedListing, InstitutionScraper interfaces
       utils.ts            # fetchHtml (cheerio), cleanText, resolveUrl helpers

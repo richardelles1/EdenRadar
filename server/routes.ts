@@ -10,7 +10,7 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress } from "./lib/ingestion";
+import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock } from "./lib/ingestion";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 
 function friendlyOpenAIError(err: unknown): string {
@@ -504,6 +504,165 @@ export async function registerRoutes(
       res.json({ ...data, indexedCounts });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch scan matrix" });
+    }
+  });
+
+  app.get("/api/ingest/sync/sessions", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const sessions = await storage.getLatestSyncSessions();
+      res.json({ sessions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch sync sessions" });
+    }
+  });
+
+  app.get("/api/ingest/sync-global-status", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    res.json({
+      syncRunning: isSyncRunning(),
+      syncRunningFor: getSyncRunningFor(),
+      ingestionRunning: isIngestionRunning(),
+    });
+  });
+
+  app.post("/api/ingest/sync/:institution", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const institution = decodeURIComponent(req.params.institution);
+      if (isIngestionRunning()) return res.status(409).json({ error: "Full ingestion is running — cannot sync" });
+
+      const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
+      if (!scraper) return res.status(404).json({ error: `No scraper found for: ${institution}` });
+
+      if (!tryAcquireSyncLock(institution)) {
+        return res.status(409).json({ error: `Sync already running for ${getSyncRunningFor()}` });
+      }
+
+      res.json({ message: "Sync started", institution });
+
+      runInstitutionSync(institution).catch((err) => {
+        console.error(`[sync] Background sync failed for ${institution}:`, err?.message);
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Sync failed" });
+    }
+  });
+
+  app.get("/api/ingest/sync/:institution/status", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const institution = decodeURIComponent(req.params.institution);
+      const sessions = await storage.getLatestSyncSessions();
+      const session = sessions.find((s) => s.institution === institution);
+
+      if (!session) return res.json({ found: false });
+
+      const stagingRows = session.status !== "running"
+        ? await storage.getSyncStagingRows(session.sessionId)
+        : [];
+
+      const currentIndexed = await storage.getInstitutionIndexedCount(institution);
+
+      res.json({
+        found: true,
+        session: {
+          ...session,
+          currentIndexed,
+        },
+        newEntries: stagingRows
+          .filter((r) => r.isNew && r.relevant === true)
+          .map((r) => ({
+            assetName: r.assetName,
+            sourceUrl: r.sourceUrl,
+            target: r.target,
+            modality: r.modality,
+            indication: r.indication,
+            developmentStage: r.developmentStage,
+          })),
+        syncRunning: isSyncRunning(),
+        syncRunningFor: getSyncRunningFor(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch sync status" });
+    }
+  });
+
+  app.post("/api/ingest/sync/:institution/push", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const institution = decodeURIComponent(req.params.institution);
+      const sessions = await storage.getLatestSyncSessions();
+      const session = sessions.find((s) => s.institution === institution);
+
+      if (!session) return res.status(404).json({ error: "No sync session found" });
+      if (session.status === "pushed") return res.status(400).json({ error: "Already pushed" });
+      if (session.status !== "enriched") return res.status(400).json({ error: `Session not ready for push (status: ${session.status})` });
+      if (session.rawCount === 0) return res.status(400).json({ error: "Cannot push — scraper returned 0 results (connection may be broken)" });
+
+      const stagingRows = await storage.getSyncStagingRows(session.sessionId);
+      const toPush = stagingRows.filter((r) => r.isNew && r.relevant === true);
+
+      if (toPush.length === 0) {
+        await storage.updateSyncSession(session.sessionId, { pushedCount: 0, status: "pushed" });
+        return res.json({ pushed: 0, message: "No new relevant assets to push" });
+      }
+
+      const { newAssets } = await storage.bulkUpsertIngestedAssets(
+        toPush.map((r) => ({
+          fingerprint: r.fingerprint,
+          assetName: r.assetName,
+          institution: r.institution,
+          summary: r.summary,
+          sourceUrl: r.sourceUrl,
+          sourceType: "tech_transfer" as const,
+          developmentStage: r.developmentStage,
+          target: r.target,
+          modality: r.modality,
+          indication: r.indication,
+          relevant: true,
+          runId: 0,
+        }))
+      );
+
+      for (const asset of newAssets) {
+        const staged = toPush.find((r) => r.fingerprint === asset.fingerprint);
+        if (staged) {
+          await storage.updateIngestedAssetEnrichment(asset.id, {
+            target: staged.target,
+            modality: staged.modality,
+            indication: staged.indication,
+            developmentStage: staged.developmentStage,
+            biotechRelevant: true,
+          });
+        }
+      }
+
+      await storage.updateSyncStagingStatus(session.sessionId, "pushed", true, true);
+      await storage.updateSyncStagingStatus(session.sessionId, "skipped", false);
+      const skippedNonRelevant = await storage.updateSyncStagingStatus(session.sessionId, "skipped", true, false);
+
+      await storage.updateSyncSession(session.sessionId, {
+        pushedCount: newAssets.length,
+        status: "pushed",
+      });
+
+      res.json({
+        pushed: newAssets.length,
+        skipped: skippedNonRelevant,
+        message: `Pushed ${newAssets.length} new assets to index`,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Push failed" });
     }
   });
 
