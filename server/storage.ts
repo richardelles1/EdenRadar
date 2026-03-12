@@ -7,9 +7,10 @@ import {
   scanInstitutionCounts,
   syncSessions, type SyncSession,
   syncStaging, type SyncStagingRow,
+  enrichmentJobs, type EnrichmentJob,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and, inArray } from "drizzle-orm";
+import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -63,7 +64,12 @@ export interface IStorage {
     unknownCount: number;
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
-  getIncompleteAssets(): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
+  getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
+
+  createEnrichmentJob(total: number): Promise<EnrichmentJob>;
+  updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
+  getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
+  stampEnrichedAt(assetId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -449,7 +455,13 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getIncompleteAssets(): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>> {
+  async getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>> {
+    const unknownFilter = sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`;
+
+    const conditions = since
+      ? and(unknownFilter, or(isNull(ingestedAssets.enrichedAt), lt(ingestedAssets.enrichedAt, since)))
+      : unknownFilter;
+
     return db
       .select({
         id: ingestedAssets.id,
@@ -461,9 +473,25 @@ export class DatabaseStorage implements IStorage {
         developmentStage: ingestedAssets.developmentStage,
       })
       .from(ingestedAssets)
-      .where(
-        sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`
-      );
+      .where(conditions!);
+  }
+
+  async createEnrichmentJob(total: number): Promise<EnrichmentJob> {
+    const [row] = await db.insert(enrichmentJobs).values({ total, status: "running" }).returning();
+    return row;
+  }
+
+  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void> {
+    await db.update(enrichmentJobs).set(data).where(eq(enrichmentJobs.id, id));
+  }
+
+  async getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined> {
+    const [row] = await db.select().from(enrichmentJobs).where(eq(enrichmentJobs.status, "running")).orderBy(desc(enrichmentJobs.startedAt)).limit(1);
+    return row;
+  }
+
+  async stampEnrichedAt(assetId: number): Promise<void> {
+    await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
   }
 }
 

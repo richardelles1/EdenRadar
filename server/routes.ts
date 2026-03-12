@@ -676,14 +676,77 @@ export async function registerRoutes(
     }
   });
 
-  let enrichmentJobState: {
-    phase: "idle" | "mini" | "deep";
-    status: "idle" | "running" | "done" | "error";
+  let liveEnrichment: {
+    jobId: number;
     processed: number;
-    total: number;
     improved: number;
-    error?: string;
-  } = { phase: "idle", status: "idle", processed: 0, total: 0, improved: 0 };
+    total: number;
+    resumed: boolean;
+  } | null = null;
+
+  async function runEnrichmentWorker(
+    jobId: number,
+    assets: Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>,
+    startProcessed: number,
+    startImproved: number,
+    resumed: boolean,
+  ) {
+    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed };
+    const CONCURRENCY = 30;
+    const DB_SYNC_INTERVAL = 25;
+    let idx = 0;
+    let dbSyncCounter = 0;
+
+    async function worker() {
+      while (idx < assets.length) {
+        const asset = assets[idx++];
+        if (!asset) continue;
+        try {
+          const result = await reEnrichAsset(
+            asset.assetName,
+            asset.summary,
+            { target: asset.target, modality: asset.modality, indication: asset.indication, developmentStage: asset.developmentStage },
+          );
+          const improved =
+            (asset.target === "unknown" && result.target !== "unknown") ||
+            (asset.modality === "unknown" && result.modality !== "unknown") ||
+            (asset.indication === "unknown" && result.indication !== "unknown") ||
+            (asset.developmentStage === "unknown" && result.developmentStage !== "unknown");
+
+          if (improved) {
+            await storage.updateIngestedAssetEnrichment(asset.id, {
+              target: result.target,
+              modality: result.modality,
+              indication: result.indication,
+              developmentStage: result.developmentStage,
+              biotechRelevant: result.biotechRelevant,
+            });
+            liveEnrichment!.improved++;
+          }
+        } catch (e) {
+          console.error(`[enrichment] failed for asset ${asset.id}:`, e);
+        }
+        await storage.stampEnrichedAt(asset.id);
+        liveEnrichment!.processed++;
+        dbSyncCounter++;
+        if (dbSyncCounter >= DB_SYNC_INTERVAL) {
+          dbSyncCounter = 0;
+          await storage.updateEnrichmentJob(jobId, { processed: liveEnrichment!.processed, improved: liveEnrichment!.improved });
+        }
+      }
+    }
+
+    try {
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
+      await storage.updateEnrichmentJob(jobId, { status: "done", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
+      console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed`);
+    } catch (e: any) {
+      await storage.updateEnrichmentJob(jobId, { status: "error", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
+      console.error("[enrichment] Job failed:", e);
+    } finally {
+      liveEnrichment = null;
+    }
+  }
 
   app.get("/api/admin/enrichment/stats", async (req, res) => {
     try {
@@ -699,16 +762,45 @@ export async function registerRoutes(
   app.get("/api/admin/enrichment/status", async (req, res) => {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    res.json(enrichmentJobState);
+
+    if (liveEnrichment) {
+      return res.json({
+        status: "running",
+        jobId: liveEnrichment.jobId,
+        processed: liveEnrichment.processed,
+        total: liveEnrichment.total,
+        improved: liveEnrichment.improved,
+        resumed: liveEnrichment.resumed,
+      });
+    }
+
+    const lastJob = await storage.getRunningEnrichmentJob();
+    if (lastJob) {
+      return res.json({
+        status: "running",
+        jobId: lastJob.id,
+        processed: lastJob.processed,
+        total: lastJob.total,
+        improved: lastJob.improved,
+        resumed: false,
+      });
+    }
+
+    res.json({ status: "idle", processed: 0, total: 0, improved: 0, resumed: false });
   });
 
-  app.post("/api/admin/enrichment/run-mini", async (req, res) => {
+  app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      if (enrichmentJobState.status === "running") {
+      if (liveEnrichment) {
         return res.status(409).json({ error: "Enrichment job already running" });
+      }
+
+      const existingJob = await storage.getRunningEnrichmentJob();
+      if (existingJob) {
+        return res.status(409).json({ error: "Enrichment job already running (will resume on next restart)" });
       }
 
       const assets = await storage.getIncompleteAssets();
@@ -716,125 +808,32 @@ export async function registerRoutes(
         return res.json({ message: "No incomplete assets to enrich" });
       }
 
-      enrichmentJobState = { phase: "mini", status: "running", processed: 0, total: assets.length, improved: 0 };
-      res.json({ message: "Phase 1 (mini) started", total: assets.length });
+      const job = await storage.createEnrichmentJob(assets.length);
+      res.json({ message: "Enrichment started", total: assets.length, jobId: job.id });
 
-      (async () => {
-        try {
-          const CONCURRENCY = 30;
-          let idx = 0;
-          async function worker() {
-            while (idx < assets.length) {
-              const asset = assets[idx++];
-              if (!asset) continue;
-              try {
-                const result = await reEnrichAsset(
-                  asset.assetName,
-                  asset.summary,
-                  { target: asset.target, modality: asset.modality, indication: asset.indication, developmentStage: asset.developmentStage },
-                  "gpt-4o-mini"
-                );
-                const improved =
-                  (asset.target === "unknown" && result.target !== "unknown") ||
-                  (asset.modality === "unknown" && result.modality !== "unknown") ||
-                  (asset.indication === "unknown" && result.indication !== "unknown") ||
-                  (asset.developmentStage === "unknown" && result.developmentStage !== "unknown");
-
-                if (improved) {
-                  await storage.updateIngestedAssetEnrichment(asset.id, {
-                    target: result.target,
-                    modality: result.modality,
-                    indication: result.indication,
-                    developmentStage: result.developmentStage,
-                    biotechRelevant: result.biotechRelevant,
-                  });
-                  enrichmentJobState.improved++;
-                }
-              } catch (e) {
-                console.error(`[enrichment] mini failed for asset ${asset.id}:`, e);
-              }
-              enrichmentJobState.processed++;
-            }
-          }
-          await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
-          enrichmentJobState.status = "done";
-        } catch (e: any) {
-          enrichmentJobState.status = "error";
-          enrichmentJobState.error = e.message ?? "Unknown error";
-          console.error("[enrichment] Phase 1 failed:", e);
-        }
-      })();
+      runEnrichmentWorker(job.id, assets, 0, 0, false);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
     }
   });
 
-  app.post("/api/admin/enrichment/run-deep", async (req, res) => {
+  (async () => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-
-      if (enrichmentJobState.status === "running") {
-        return res.status(409).json({ error: "Enrichment job already running" });
-      }
-
-      const assets = await storage.getIncompleteAssets();
-      if (assets.length === 0) {
-        return res.json({ message: "No incomplete assets to enrich" });
-      }
-
-      enrichmentJobState = { phase: "deep", status: "running", processed: 0, total: assets.length, improved: 0 };
-      res.json({ message: "Phase 2 (deep) started", total: assets.length });
-
-      (async () => {
-        try {
-          const CONCURRENCY = 15;
-          let idx = 0;
-          async function worker() {
-            while (idx < assets.length) {
-              const asset = assets[idx++];
-              if (!asset) continue;
-              try {
-                const result = await reEnrichAsset(
-                  asset.assetName,
-                  asset.summary,
-                  { target: asset.target, modality: asset.modality, indication: asset.indication, developmentStage: asset.developmentStage },
-                  "gpt-4o"
-                );
-                const improved =
-                  (asset.target === "unknown" && result.target !== "unknown") ||
-                  (asset.modality === "unknown" && result.modality !== "unknown") ||
-                  (asset.indication === "unknown" && result.indication !== "unknown") ||
-                  (asset.developmentStage === "unknown" && result.developmentStage !== "unknown");
-
-                if (improved) {
-                  await storage.updateIngestedAssetEnrichment(asset.id, {
-                    target: result.target,
-                    modality: result.modality,
-                    indication: result.indication,
-                    developmentStage: result.developmentStage,
-                    biotechRelevant: result.biotechRelevant,
-                  });
-                  enrichmentJobState.improved++;
-                }
-              } catch (e) {
-                console.error(`[enrichment] deep failed for asset ${asset.id}:`, e);
-              }
-              enrichmentJobState.processed++;
-            }
-          }
-          await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
-          enrichmentJobState.status = "done";
-        } catch (e: any) {
-          enrichmentJobState.status = "error";
-          enrichmentJobState.error = e.message ?? "Unknown error";
-          console.error("[enrichment] Phase 2 failed:", e);
+      const staleJob = await storage.getRunningEnrichmentJob();
+      if (staleJob) {
+        const remaining = await storage.getIncompleteAssets(staleJob.startedAt);
+        if (remaining.length > 0) {
+          console.log(`[enrichment] Resuming job ${staleJob.id}: ${remaining.length} assets remaining (${staleJob.processed} already processed)`);
+          runEnrichmentWorker(staleJob.id, remaining, staleJob.processed, staleJob.improved, true);
+        } else {
+          await storage.updateEnrichmentJob(staleJob.id, { status: "done", completedAt: new Date() });
+          console.log(`[enrichment] Stale job ${staleJob.id} had no remaining work — marked done`);
         }
-      })();
-    } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
+      }
+    } catch (e) {
+      console.error("[enrichment] Failed to check for resumable jobs:", e);
     }
-  });
+  })();
 
   return httpServer;
 }

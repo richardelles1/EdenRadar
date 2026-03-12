@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, Play, DollarSign } from "lucide-react";
+import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -663,11 +663,12 @@ interface EnrichmentStats {
 }
 
 interface EnrichmentStatus {
-  phase: "idle" | "mini" | "deep";
   status: "idle" | "running" | "done" | "error";
   processed: number;
   total: number;
   improved: number;
+  resumed?: boolean;
+  jobId?: number;
   error?: string;
 }
 
@@ -702,6 +703,9 @@ function Enrichment({ pw }: { pw: string }) {
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status?.status;
+    if (status?.status === "running" && !polling) {
+      setPolling(true);
+    }
     if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
       setPolling(false);
       refetchStats();
@@ -713,9 +717,9 @@ function Enrichment({ pw }: { pw: string }) {
     }
   }, [status?.status]);
 
-  const runMini = useMutation({
+  const runEnrichment = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/run-mini", {
+      const res = await fetch("/api/admin/enrichment/run", {
         method: "POST",
         headers: { "x-admin-password": pw },
       });
@@ -728,29 +732,7 @@ function Enrichment({ pw }: { pw: string }) {
     onSuccess: () => {
       setPolling(true);
       refetchStatus();
-      toast({ title: "Phase 1 started", description: "Running GPT-4o-mini pass on incomplete assets..." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const runDeep = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/run-deep", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to start");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      setPolling(true);
-      refetchStatus();
-      toast({ title: "Phase 2 started", description: "Running GPT-4o deep pass on remaining unknowns..." });
+      toast({ title: "Enrichment started", description: "Running GPT-4o-mini pass on incomplete assets..." });
     },
     onError: (err: Error) => {
       toast({ title: "Failed to start", description: err.message, variant: "destructive" });
@@ -758,11 +740,11 @@ function Enrichment({ pw }: { pw: string }) {
   });
 
   const isRunning = status?.status === "running";
+  const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
   const totalAssets = stats?.total ?? 0;
 
-  const miniCostEstimate = unknownCount * 0.0003;
-  const deepCostEstimate = unknownCount * 0.003;
+  const costEstimate = unknownCount * 0.0003;
 
   const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
 
@@ -830,23 +812,14 @@ function Enrichment({ pw }: { pw: string }) {
             Estimated Cost
           </h3>
         </div>
-        <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="px-5 py-4">
           <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
             <div>
-              <div className="text-sm font-medium text-foreground">Phase 1 (GPT-4o-mini)</div>
+              <div className="text-sm font-medium text-foreground">GPT-4o-mini Enrichment</div>
               <div className="text-xs text-muted-foreground">{unknownCount.toLocaleString()} assets &times; ~$0.0003/asset</div>
             </div>
-            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-phase1">
-              ~${miniCostEstimate.toFixed(2)}
-            </div>
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
-            <div>
-              <div className="text-sm font-medium text-foreground">Phase 2 (GPT-4o)</div>
-              <div className="text-xs text-muted-foreground">Up to {unknownCount.toLocaleString()} assets &times; ~$0.003/asset (fewer after Phase 1)</div>
-            </div>
-            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-phase2">
-              ~${deepCostEstimate.toFixed(2)}
+            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-estimate">
+              ~${costEstimate.toFixed(2)}
             </div>
           </div>
         </div>
@@ -854,31 +827,17 @@ function Enrichment({ pw }: { pw: string }) {
 
       <div className="flex items-center gap-3">
         <Button
-          onClick={() => runMini.mutate()}
-          disabled={isRunning || unknownCount === 0 || runMini.isPending}
+          onClick={() => runEnrichment.mutate()}
+          disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
           className="flex-1"
-          data-testid="button-run-mini"
+          data-testid="button-run-enrichment"
         >
-          {isRunning && status?.phase === "mini" ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Play className="h-4 w-4 mr-2" />
-          )}
-          Run Phase 1 (Mini Pass)
-        </Button>
-        <Button
-          onClick={() => runDeep.mutate()}
-          disabled={isRunning || unknownCount === 0 || runDeep.isPending}
-          variant="secondary"
-          className="flex-1"
-          data-testid="button-run-deep"
-        >
-          {isRunning && status?.phase === "deep" ? (
+          {isRunning ? (
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          Run Phase 2 (Deep Pass)
+          Run Enrichment
         </Button>
       </div>
 
@@ -888,11 +847,11 @@ function Enrichment({ pw }: { pw: string }) {
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <span className="text-sm font-medium text-foreground">
-                {status.phase === "mini" ? "Phase 1 (GPT-4o-mini)" : "Phase 2 (GPT-4o)"} — Processing...
+                {isResumed ? "Resumed from checkpoint — " : ""}Processing...
               </span>
             </div>
             <span className="text-sm tabular-nums text-muted-foreground" data-testid="enrichment-progress-text">
-              {status.processed}/{status.total} ({progressPct}%)
+              {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
             </span>
           </div>
           <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
@@ -903,17 +862,17 @@ function Enrichment({ pw }: { pw: string }) {
             />
           </div>
           <p className="text-xs text-muted-foreground">
-            {status.improved} assets improved so far
+            {status.improved.toLocaleString()} assets improved so far
           </p>
         </div>
       )}
 
-      {status?.status === "done" && status.phase !== "idle" && (
+      {status?.status === "done" && (
         <div className="flex items-start gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="enrichment-done">
           <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              {status.phase === "mini" ? "Phase 1" : "Phase 2"} complete
+              Enrichment complete
             </p>
             <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
               {status.improved} out of {status.total} assets improved
@@ -1055,7 +1014,7 @@ export default function Admin() {
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Enrichment</h2>
-                <p className="text-sm text-muted-foreground mt-1">Two-phase AI re-enrichment for assets with unknown fields</p>
+                <p className="text-sm text-muted-foreground mt-1">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
               </div>
               <Enrichment pw={pw} />
             </>

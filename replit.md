@@ -8,7 +8,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Frontend**: React + Vite + TailwindCSS + Shadcn UI (wouter routing, TanStack Query)
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Drizzle ORM
-- **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
+- **AI**: gpt-4o-mini for bulk signal extraction & TTO enrichment; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
 - **TTO Scraping**: cheerio-based real scrapers for 138 institutions with active TechPublisher/custom/in-part/Flintbox/WordPress scrapers; 67 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
 - **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — direct API calls to `https://app.in-part.com/api/v3/public/opportunities?portalSubdomain=X&page=N&limit=24` (no Playwright needed). SSR `__NEXT_DATA__` fallback if API empty. 19+ in-part scrapers active. Records per-institution counts to `scan_institution_counts` table.
@@ -125,8 +125,9 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `search_history`: query, source, result_count, created_at
 - `saved_assets`: full asset data from saved search results
 - `ingestion_runs`: id, ran_at, total_found, new_count, status, error_message
-- `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, run_id
+- `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, enriched_at, run_id
 - `scan_institution_counts`: run_id, institution, count — per-institution scrape counts per ingestion run (populated during ingestion)
+- `enrichment_jobs`: id, model, status, total, processed, improved, started_at, completed_at — tracks enrichment job progress in DB for resumability
 
 ### Visual Theme
 - Botanical green: `--primary: 142 52% 36%` (light) / `142 65% 48%` (dark)

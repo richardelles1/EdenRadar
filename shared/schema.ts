@@ -104,6 +104,7 @@ export const ingestedAssets = pgTable("ingested_assets", {
   relevant: boolean("relevant").notNull().default(false),
   firstSeenAt: timestamp("first_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   lastSeenAt: timestamp("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  enrichedAt: timestamp("enriched_at"),
   runId: integer("run_id").notNull(),
 });
 
@@ -159,3 +160,16 @@ export const syncStaging = pgTable("sync_staging", {
 });
 
 export type SyncStagingRow = typeof syncStaging.$inferSelect;
+
+export const enrichmentJobs = pgTable("enrichment_jobs", {
+  id: serial("id").primaryKey(),
+  model: text("model").notNull().default("gpt-4o-mini"),
+  status: text("status").notNull().default("running"),
+  total: integer("total").notNull().default(0),
+  processed: integer("processed").notNull().default(0),
+  improved: integer("improved").notNull().default(0),
+  startedAt: timestamp("started_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  completedAt: timestamp("completed_at"),
+});
+
+export type EnrichmentJob = typeof enrichmentJobs.$inferSelect;

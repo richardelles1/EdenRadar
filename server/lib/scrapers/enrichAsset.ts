@@ -18,7 +18,8 @@ export interface AssetEnrichment {
 const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
 const MODALITY_VALUES = new Set([
   "small molecule", "antibody", "bispecific antibody", "car-t", "gene therapy", "gene editing",
-  "mrna therapy", "cell therapy", "peptide", "sirna", "adc", "protac", "vaccine", "nanoparticle", "unknown",
+  "mrna therapy", "cell therapy", "peptide", "sirna", "adc", "protac", "vaccine", "nanoparticle",
+  "medical device", "diagnostic", "unknown",
 ]);
 
 function sanitize(val: string, allowed: Set<string>, fallback: string): string {
@@ -36,7 +37,7 @@ export async function enrichAssetTitle(assetName: string): Promise<AssetEnrichme
         {
           role: "system",
           content: `Extract biomedical fields from a university TTO technology listing title. Reply with JSON only, no markdown.
-Fields: target (gene/protein/pathway, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown), biotechRelevant (true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application).`,
+Fields: target (gene/protein/pathway/anatomical target/biomarker, or "unknown"), modality (one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|medical device|diagnostic|unknown), indication (disease/condition, or "unknown"), developmentStage (one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown), biotechRelevant (true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application).`,
         },
         {
           role: "user",
@@ -64,7 +65,6 @@ export async function reEnrichAsset(
   assetName: string,
   summary: string,
   currentFields: { target: string; modality: string; indication: string; developmentStage: string },
-  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini"
 ): Promise<AssetEnrichment> {
   const unknownFields: string[] = [];
   if (currentFields.target === "unknown") unknownFields.push("target");
@@ -84,7 +84,7 @@ export async function reEnrichAsset(
 
   try {
     const response = await openai.chat.completions.create({
-      model,
+      model: "gpt-4o-mini",
       temperature: 0,
       max_tokens: 200,
       messages: [
@@ -95,11 +95,11 @@ export async function reEnrichAsset(
 Reply with JSON only, no markdown.
 
 Fields to determine: ${unknownFields.join(", ")}
-- target: gene/protein/pathway/mechanism, or "unknown" if truly impossible
-- modality: one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|unknown
+- target: gene/protein/pathway/mechanism/anatomical target/biomarker, or "unknown" if truly impossible
+- modality: one of: small molecule|antibody|bispecific antibody|car-t|gene therapy|gene editing|mrna therapy|cell therapy|peptide|sirna|adc|protac|vaccine|nanoparticle|medical device|diagnostic|unknown
 - indication: disease/condition, or "unknown" if truly impossible
 - developmentStage: one of: discovery|preclinical|phase 1|phase 2|phase 3|approved|unknown
-- biotechRelevant: true if applicable to pharma/biotech/medtech; false otherwise
+- biotechRelevant: true if applicable to pharma/biotech/medtech licensing — drugs, therapeutics, diagnostics, medical devices, biologics, biological research tools; false for pure software, civil/mechanical engineering, construction, agricultural equipment, optics hardware, consumer products, food science without therapeutic application
 
 Current known fields: ${JSON.stringify(Object.fromEntries(Object.entries(currentFields).filter(([, v]) => v !== "unknown")))}`,
         },
