@@ -20,47 +20,88 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
     async scrape(): Promise<ScrapedListing[]> {
       const portalUrl = `https://${subdomain}.portals.in-part.com/`;
       let browser: Browser | null = null;
+
+      // Step 1: SSR fast-path — extract page 1 + pagination metadata without launching a browser.
+      // If SSR gives us a single page of results, return immediately.
+      let ssrResults: ScrapedListing[] | null = null;
+      let expectedPages = 2; // default: assume multi-page; Playwright will determine actual count
       try {
         const res = await fetch(portalUrl, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
           signal: AbortSignal.timeout(15000),
         });
-        if (!res.ok) return [];
-        const html = await res.text();
-        const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/);
-        if (!m) return [];
-        const data = JSON.parse(m[1]);
-        const queries = data?.props?.pageProps?.dehydratedState?.queries ?? [];
-        const page = queries[0]?.state?.data?.pages?.[0];
-        if (!page?.results) return [];
-
-        const totalPages = page.pagination?.last ?? 1;
-        const totalCount = page.pagination?.count ?? page.results.length;
-
-        if (totalPages <= 1) {
-          const results: ScrapedListing[] = page.results
-            .map((r: any) => ({
-              title: r.title ?? "",
-              description: "",
-              url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
-              institution,
-            }))
-            .filter((r: ScrapedListing) => r.title.length > 0);
-          console.log(`[scraper] ${institution}: ${results.length} listings (in-part, 1 page)`);
-          return results;
+        if (res.ok) {
+          const html = await res.text();
+          const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/);
+          if (m) {
+            const data = JSON.parse(m[1]);
+            const queries = data?.props?.pageProps?.dehydratedState?.queries ?? [];
+            const page = queries[0]?.state?.data?.pages?.[0];
+            if (page?.results?.length > 0) {
+              const totalPages = page.pagination?.last ?? 1;
+              expectedPages = totalPages;
+              if (totalPages <= 1) {
+                // Single-page portal — skip browser entirely
+                const results: ScrapedListing[] = page.results
+                  .map((r: any) => ({
+                    title: r.title ?? "",
+                    description: "",
+                    url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
+                    institution,
+                  }))
+                  .filter((r: ScrapedListing) => r.title.length > 0);
+                console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR, 1 page)`);
+                return results;
+              }
+              // Stash SSR results as fallback in case Playwright fails
+              ssrResults = page.results.map((r: any) => ({
+                title: r.title ?? "",
+                description: "",
+                url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
+                institution,
+              })).filter((r: ScrapedListing) => r.title.length > 0);
+            }
+          }
         }
+      } catch {
+        // SSR probe failed — continue to Playwright
+      }
 
+      // Step 2: Playwright full-catalogue scroll.
+      // Used when: (a) SSR reports multiple pages, or (b) SSR probe failed entirely.
+      try {
         browser = await chromium.launch({ headless: true });
         const bPage = await browser.newPage();
-        await bPage.goto(portalUrl, { waitUntil: "networkidle", timeout: 45000 });
+        await bPage.goto(portalUrl, { waitUntil: "networkidle", timeout: 60000 });
 
+        // Scroll and click "load more" until stable
         let prevLinkCount = 0;
         let stableRounds = 0;
-        for (let scroll = 0; scroll < totalPages * 2 + 5; scroll++) {
-          await bPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+        const maxScrolls = Math.max(expectedPages * 3, 30);
+        for (let scroll = 0; scroll < maxScrolls; scroll++) {
+          // Scroll both window and any overflow containers (in-part uses an inner scroll div)
+          await bPage.evaluate(() => {
+            window.scrollTo(0, document.body.scrollHeight);
+            const containers = document.querySelectorAll('[class*="scroll"],[class*="list"],[class*="results"],[class*="technologies"]');
+            containers.forEach((el) => { (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight; });
+          });
+
+          // Click any "load more" / "show more" buttons
+          await bPage.evaluate(() => {
+            const btns = Array.from(document.querySelectorAll('button, a[role="button"]'));
+            for (const btn of btns) {
+              const text = (btn.textContent ?? "").toLowerCase().trim();
+              if (text.includes("load more") || text.includes("show more") || text.includes("see more")) {
+                (btn as HTMLElement).click();
+              }
+            }
+          });
+
           await bPage.waitForTimeout(2000);
-          const linkCount = await bPage.evaluate(() =>
-            document.querySelectorAll('a[href^="/"]').length
+
+          // Count listing links (in-part listings have paths like /{idHash})
+          const linkCount = await bPage.evaluate(
+            () => document.querySelectorAll('a[href^="/"]').length
           );
           if (linkCount === prevLinkCount) {
             stableRounds++;
@@ -71,17 +112,24 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
           prevLinkCount = linkCount;
         }
 
+        // Extract listings: prefer anchors inside listing-card components, fall back to all page links
         const listings = await bPage.evaluate((inst: string) => {
+          // in-part listing cards are anchors with href="/{idHash}" where idHash is a slug-style string
+          const SKIP = new Set(["", "/", "/profile", "/privacy", "/terms"]);
           const links = Array.from(document.querySelectorAll('a[href^="/"]'));
           const seen = new Set<string>();
           const results: { title: string; description: string; url: string; institution: string }[] = [];
           for (const a of links) {
             const href = a.getAttribute("href") ?? "";
-            if (href.length < 10 || href.startsWith("/_") || href === "/profile") continue;
+            // Skip navigation/UI links: must be at least 4 chars (e.g. /abc), not start with /_, not be known nav paths
+            if (href.length < 4 || href.startsWith("/_") || href.startsWith("/api") || SKIP.has(href)) continue;
+            // Skip paths with multiple segments (nav links like /about/contact)
+            if ((href.match(/\//g) ?? []).length > 2) continue;
             if (seen.has(href)) continue;
             seen.add(href);
             const title = (a.textContent ?? "").replace(/\s+/g, " ").trim();
-            const cleaned = title.replace(/^[A-Z][a-z]+ (?:University|College|Institute|School)[A-Za-z ]*/, "").trim();
+            // Strip institution name prefix that in-part prepends to titles
+            const cleaned = title.replace(/^[A-Z][a-z]+ (?:University|College|Institute|School|Université)[A-Za-z ]*/u, "").trim();
             if (!cleaned || cleaned.length < 5) continue;
             results.push({
               title: cleaned,
@@ -96,16 +144,23 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
         await browser.close();
         browser = null;
 
-        console.log(`[scraper] ${institution}: ${listings.length} listings (in-part Playwright, expected ~${totalCount})`);
-        return listings as ScrapedListing[];
-      } catch (err: any) {
-        console.warn(`[scraper] ${institution} (in-part): ${err?.message}`);
-        return [];
-      } finally {
-        if (browser) {
-          await browser.close().catch(() => {});
+        if (listings.length > 0) {
+          console.log(`[scraper] ${institution}: ${listings.length} listings (in-part Playwright)`);
+          return listings as ScrapedListing[];
         }
+      } catch (err: any) {
+        console.warn(`[scraper] ${institution} (in-part Playwright): ${err?.message}`);
+      } finally {
+        if (browser) await browser.close().catch(() => {});
       }
+
+      // Step 3: Fall back to whatever SSR gave us (page 1 only), or empty
+      if (ssrResults && ssrResults.length > 0) {
+        console.log(`[scraper] ${institution}: ${ssrResults.length} listings (in-part SSR page-1 fallback)`);
+        return ssrResults;
+      }
+      console.warn(`[scraper] ${institution} (in-part): all paths failed, returning empty`);
+      return [];
     },
   };
 }
