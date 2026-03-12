@@ -757,10 +757,12 @@ export async function registerRoutes(
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-    if (liveEnrichment) {
+    const lastJob = await storage.getLatestEnrichmentJob();
+
+    if (liveEnrichment && lastJob && liveEnrichment.jobId === lastJob.id) {
       return res.json({
         status: "running",
-        jobId: liveEnrichment.jobId,
+        jobId: lastJob.id,
         processed: liveEnrichment.processed,
         total: liveEnrichment.total,
         improved: liveEnrichment.improved,
@@ -768,7 +770,6 @@ export async function registerRoutes(
       });
     }
 
-    const lastJob = await storage.getLatestEnrichmentJob();
     if (lastJob) {
       return res.json({
         status: lastJob.status as string,

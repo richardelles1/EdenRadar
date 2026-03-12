@@ -837,7 +837,7 @@ function Enrichment({ pw }: { pw: string }) {
           ) : (
             <Sparkles className="h-4 w-4 mr-2" />
           )}
-          Run Enrichment
+          Run Enrichment (mini)
         </Button>
       </div>
 
@@ -847,7 +847,7 @@ function Enrichment({ pw }: { pw: string }) {
             <div className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin text-primary" />
               <span className="text-sm font-medium text-foreground">
-                {isResumed ? "Resumed from checkpoint — " : ""}Processing...
+                {isResumed ? "Resuming from checkpoint — " : ""}Processing...
               </span>
             </div>
             <span className="text-sm tabular-nums text-muted-foreground" data-testid="enrichment-progress-text">
