@@ -3,6 +3,7 @@ import { fetchHtml, cleanText, resolveUrl } from "./utils";
 
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
+const MAX_PAGES = 200;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,
@@ -11,10 +12,10 @@ export const stanfordScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      for (let page = 0; page <= 4; page++) {
+      for (let page = 0; page < MAX_PAGES; page++) {
         const url = page === 0 ? `${BASE}/technology` : `${BASE}/technology?page=${page}`;
-        const $ = await fetchHtml(url);
-        if (!$) continue;
+        const $ = await fetchHtml(url, 15_000);
+        if (!$) break;
 
         let pageCount = 0;
         $("a[href]").each((_, el) => {
@@ -32,6 +33,9 @@ export const stanfordScraper: InstitutionScraper = {
           });
         });
         if (pageCount === 0) break;
+        if (page % 20 === 0 && page > 0) {
+          console.log(`[scraper] ${INST}: page ${page} — ${results.length} listings so far`);
+        }
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);
