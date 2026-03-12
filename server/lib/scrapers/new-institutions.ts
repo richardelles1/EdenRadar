@@ -591,14 +591,24 @@ export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
   async scrape(): Promise<ScrapedListing[]> {
     const base = "https://www.warf.org";
+    const searchUrl = `${base}/search-results/?searchwp=&search-technology=1`;
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
     try {
-      for (let pg = 1; pg <= 30; pg++) {
-        const url = `${base}/search-results/?searchwp=&search-technology=1&paged=${pg}`;
-        const $ = await fetchHtml(url, 12000);
-        if (!$) break;
-        let found = 0;
+      const $index = await fetchHtml(searchUrl, 15000);
+      if (!$index) return [];
+      const categories: string[] = [];
+      $index("select option, input[type='checkbox'], input[type='radio']").each((_, el) => {
+        const val = $index(el).attr("value") ?? "";
+        if (val && val.length > 2 && !["1", "search", "technology"].includes(val)) {
+          categories.push(val);
+        }
+      });
+      const uniqueCats = [...new Set(categories)].slice(0, 80);
+      for (const cat of uniqueCats) {
+        const catUrl = `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}`;
+        const $ = await fetchHtml(catUrl, 12000);
+        if (!$) continue;
         $('a[href*="/technologies/summary/"]').each((_, el) => {
           const href = $(el).attr("href") ?? "";
           const title = cleanText($(el).text());
@@ -607,11 +617,9 @@ export const warfScraper: InstitutionScraper = {
           if (seen.has(fullUrl)) return;
           seen.add(fullUrl);
           results.push({ title, description: "", url: fullUrl, institution: "University of Wisconsin" });
-          found++;
         });
-        if (found === 0) break;
       }
-      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings`);
+      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings (${uniqueCats.length} categories)`);
       return results;
     } catch (err: any) {
       console.warn(`[scraper] University of Wisconsin (WARF): ${err?.message}`);
