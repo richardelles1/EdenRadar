@@ -38,7 +38,7 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
             "X-Requested-With": "XMLHttpRequest",
             "User-Agent": "Mozilla/5.0",
           },
-          signal: AbortSignal.timeout(20000),
+          signal: AbortSignal.timeout(15_000),
         });
 
         if (res.ok) {

@@ -44,7 +44,7 @@ async function fetchTitle(ncdPath: string): Promise<{ url: string; title: string
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(15_000),
     });
     if (!res.ok) return null;
     const html = await res.text();
@@ -67,7 +67,7 @@ export const ucsfScraper: InstitutionScraper = {
     try {
       const res = await fetch(LIST_URL, {
         headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(15_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let html = await res.text();
@@ -105,7 +105,7 @@ export const ucsfScraper: InstitutionScraper = {
             "Content-Type": "application/x-www-form-urlencoded",
           },
           body: body.toString(),
-          signal: AbortSignal.timeout(15000),
+          signal: AbortSignal.timeout(15_000),
         });
 
         if (!postRes.ok) {
