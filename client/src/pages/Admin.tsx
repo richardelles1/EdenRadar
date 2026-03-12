@@ -434,7 +434,7 @@ function InstitutionSync({ pw }: { pw: string }) {
             const s = sessionMap.get(inst);
             const idxCount = indexedCounts[inst] ?? 0;
             const parts: string[] = [];
-            if (idxCount > 0) parts.push(`${idxCount} indexed`);
+            parts.push(`${idxCount} indexed`);
             const refreshTs = s?.lastRefreshedAt ?? s?.completedAt;
             if (refreshTs) parts.push(`synced ${timeAgo(refreshTs)}`);
             const suffix = parts.length > 0 ? ` — ${parts.join(", ")}` : "";
@@ -564,13 +564,15 @@ function InstitutionSync({ pw }: { pw: string }) {
                 </div>
               )}
 
-              {isEnriched && session.relevantCount > 0 && !zeroGuard && (
+              {isEnriched && !zeroGuard && (
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-foreground">New Relevant Entries ({newEntries.length})</h4>
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {session.relevantCount > 0 ? `New Relevant Entries (${newEntries.length})` : "Push to Index"}
+                    </h4>
                     <Button
                       onClick={() => pushMutation.mutate(selectedInstitution)}
-                      disabled={pushMutation.isPending || zeroGuard}
+                      disabled={pushMutation.isPending || zeroGuard || session.relevantCount === 0}
                       className="bg-emerald-600 hover:bg-emerald-700 text-white"
                       data-testid="button-push-to-index"
                     >
@@ -579,47 +581,49 @@ function InstitutionSync({ pw }: { pw: string }) {
                       ) : (
                         <ArrowUpCircle className="h-4 w-4 mr-2" />
                       )}
-                      Push New Additions to Index
+                      {session.relevantCount > 0 ? "Push New Additions to Index" : "Nothing to Push"}
                     </Button>
                   </div>
-                  <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
-                    <table className="w-full text-sm">
-                      <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                        <tr className="border-b border-border">
-                          <th className="text-left py-2 px-3 font-medium text-foreground">Asset Name</th>
-                          <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
-                          <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
-                          <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
-                          <th className="text-left py-2 px-3 font-medium text-foreground">First Seen</th>
-                          <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {newEntries.map((entry, i) => (
-                          <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
-                            <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
-                              {entry.assetName}
-                            </td>
-                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
-                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
-                            <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
-                            <td className="py-2 px-3 text-muted-foreground text-xs" data-testid={`sync-entry-firstseen-${i}`}>
-                              {entry.firstSeenAt ? formatDate(entry.firstSeenAt) : "—"}
-                            </td>
-                            <td className="py-2 px-3 text-center">
-                              {entry.sourceUrl ? (
-                                <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  <ExternalLink className="h-3.5 w-3.5 inline" />
-                                </a>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
+                  {newEntries.length > 0 && (
+                    <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                          <tr className="border-b border-border">
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Asset Name</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">First Seen</th>
+                            <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        </thead>
+                        <tbody>
+                          {newEntries.map((entry, i) => (
+                            <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
+                              <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
+                                {entry.assetName}
+                              </td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
+                              <td className="py-2 px-3 text-muted-foreground text-xs" data-testid={`sync-entry-firstseen-${i}`}>
+                                {entry.firstSeenAt ? formatDate(entry.firstSeenAt) : "—"}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {entry.sourceUrl ? (
+                                  <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                    <ExternalLink className="h-3.5 w-3.5 inline" />
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                 </div>
               )}
 
