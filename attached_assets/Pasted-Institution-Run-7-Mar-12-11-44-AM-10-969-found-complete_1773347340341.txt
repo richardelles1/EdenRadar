@@ -1,0 +1,150 @@
+Institution	Δ	
+Run #7
+Mar 12 11:44 AM
+10,969 found
+completed
+Run #4
+Mar 12 07:31 AM
+11,971 found
+completed
+Run #2
+Mar 12 01:00 AM
+23,775 found
+completed
+Run #1
+Mar 11 11:52 PM
+19,493 found
+completed
+Total	-1002	10,969	11,971	23,775	19,493
+Johns Hopkins University	+2130	2,130	—	105	—
+University of Minnesota	+770	770	—	189	—
+Northwestern University	+446	757	311	—	—
+University of South Florida	+624	661	37	105	—
+Arizona State University	+573	573	—	164	—
+University of Washington	+432	435	3	—	—
+Princeton University	+337	426	89	—	—
+University of Connecticut	—	298	298	—	—
+Northeastern University	+232	294	62	—	—
+University of Utah	+206	285	79	—	—
+Rensselaer Polytechnic Institute	+231	260	29	—	—
+Washington State University	+193	234	41	—	—
+University of Delaware	—	191	191	—	—
+Virginia Tech	+155	182	27	—	—
+University of Toledo	+76	171	95	—	—
+University of Arkansas	—	165	165	—	—
+Brown University	+160	160	—	72	—
+McGill University	—	157	157	—	—
+Oregon State University	+120	154	34	—	—
+Saint Louis University	+27	127	100	—	—
+University of Alabama	+109	119	10	—	—
+University of Notre Dame	+114	114	—	—	24
+New Jersey Institute of Technology	+86	110	24	—	—
+Mississippi State University	+93	95	2	9	—
+Brandeis University	—	95	95	—	—
+Texas State University	+71	82	11	—	—
+University of Maine	+78	80	2	—	—
+University of Rochester	-29	74	103	—	—
+University of Toronto	+46	70	24	—	—
+Colorado State University	+53	68	15	—	—
+Wayne State University	+39	66	27	—	—
+University of Vermont	+35	61	26	—	—
+UT Dallas	+40	57	17	—	—
+UT Health	+22	56	34	—	—
+King's College London	+55	55	—	—	24
+Queen's University	+30	54	24	—	—
+University of British Columbia	—	53	53	—	—
+Western University	+29	53	24	—	—
+University of Alberta	+25	49	24	—	—
+University of Manitoba	+48	48	—	—	24
+University of Calgary	+48	48	—	48	—
+RWTH Aachen University	+24	48	24	—	—
+University of Liverpool	+47	47	—	—	24
+UC Davis	+25	43	18	—	—
+University of Hawaii	+17	41	24	—	—
+Monash University	+40	40	—	40	—
+Washington University in St. Louis	+40	40	—	8	—
+University of Rhode Island	—	40	40	—	—
+Georgia State University	+7	39	32	—	—
+Clemson University	+5	38	33	—	—
+Tufts University	+37	37	—	38	—
+Translational Genomics Research Institute	+4	32	28	—	—
+Griffith University	+6	30	24	—	—
+Cal Poly San Luis Obispo	+29	29	—	—	—
+Tampere University	+4	28	24	—	—
+ETH Zurich	+4	28	24	—	—
+Trinity College Dublin	+4	28	24	—	—
+Lehigh University	+17	27	10	—	—
+Aalto University	+3	27	24	—	—
+University of Helsinki	+2	26	24	—	—
+Portland State University	+24	24	—	24	—
+Stevens Institute of Technology	+16	24	8	—	—
+University of Alaska Fairbanks	+21	23	2	—	—
+University of North Dakota	—	22	22	—	—
+University of Wyoming	+18	22	4	—	—
+Rowan University	+5	22	17	—	—
+Scripps Research	+20	20	—	12	—
+SUNY Upstate Medical University	+5	20	15	—	—
+Durham University	+18	18	—	18	—
+University of South Dakota	+15	17	2	—	—
+Nottingham Trent University	—	17	17	—	—
+Ludwig Maximilian University of Munich	—	17	17	—	—
+George Mason University	+14	16	2	—	—
+University of Manchester	+15	15	—	15	—
+Simon Fraser University	+15	15	—	15	—
+Dartmouth College	—	13	13	—	—
+University of Saskatchewan	+12	12	—	3	—
+University of Victoria	+9	9	—	9	—
+Université Libre de Bruxelles	—	5	5	—	—
+National University of Singapore	+1	1	—	1	—
+University of Miami	—	1	1	—	—
+Penn State University	+1	1	—	—	—
+University of Idaho	+1	1	—	—	—
+University of Southampton	+1	1	—	—	—
+Baylor University	—	—	—	42	—
+University of Arizona	—	—	—	32	—
+Drexel University	—	—	—	22	—
+University of Pittsburgh	—	—	—	632	—
+Purdue University	—	—	—	343	—
+University of Nevada, Las Vegas	-40	—	40	85	—
+University at Buffalo	-12	—	12	6	—
+UC Berkeley	—	—	—	31	—
+University of California San Francisco	—	—	—	155	—
+Florida International University	—	—	—	160	—
+University of Illinois	—	—	—	4	—
+Rice University	—	—	—	293	—
+University of South Carolina	—	—	—	10	—
+North Dakota State University	—	—	—	1	—
+Stanford University	-9	—	9	38	—
+Montana State University	—	—	—	2	—
+SUNY System	—	—	—	55	—
+Florida State University	—	—	—	44	—
+University of Cincinnati	—	—	—	26	—
+University of Central Florida	—	—	—	120	—
+Harvard University	—	—	—	7	—
+University of Chicago	—	—	—	166	—
+Rutgers University	—	—	—	56	—
+University of Wisconsin	—	—	—	992	—
+Georgetown University	—	—	—	60	—
+Texas Tech University	—	—	—	245	—
+Boston University	—	—	—	1	—
+Yale University	—	—	—	111	—
+Stony Brook University	-50	—	50	—	—
+Indiana University	-17	—	17	—	—
+MIT	-24	—	24	—	—
+University of Pennsylvania	-35	—	35	—	—
+Iowa State University	-38	—	38	—	—
+UCLA	-680	—	680	—	—
+Auburn University	-44	—	44	—	—
+University of Southern California	-99	—	99	—	—
+University of Georgia	-193	—	193	—	—
+University of New Mexico	-674	—	674	—	—
+Columbia University	-12	—	12	—	—
+Cornell University	-441	—	441	—	—
+Icahn School of Medicine at Mount Sinai	-14	—	14	—	—
+George Washington University	-61	—	61	—	—
+CZ Biohub	-88	—	88	—	—
+Utah State University	-44	—	44	—	—
+Binghamton University	-19	—	19	—	—
+University of Oregon	-8	—	8	—	—
+Medical University of South Carolina	-34	—	34	—	—
+University of Virginia	-81	—	81	—	—
