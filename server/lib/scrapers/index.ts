@@ -121,6 +121,9 @@ import {
   monashScraper,
   nusScraper,
   // in-part Playwright scrapers (converted stubs + new)
+  portlandStateScraper,
+  notredameScraper,
+  umanitobaScraper,
   manchesterScraper,
   kclScraper,
   liverpoolScraper,
@@ -266,6 +269,9 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   monashScraper,
   nusScraper,
   // ── in-part Playwright scrapers (converted stubs + new institutions) ───
+  portlandStateScraper,
+  notredameScraper,
+  umanitobaScraper,
   manchesterScraper,
   kclScraper,
   liverpoolScraper,

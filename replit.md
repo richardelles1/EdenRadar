@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline covering 205 institutions globally (135 with active scrapers, 70 stubbed pending custom scraper development).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline covering 205 institutions globally (138 with active scrapers, 67 stubbed pending custom scraper development).
 
 ## Architecture
 
@@ -10,7 +10,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 135 institutions with active TechPublisher/custom/in-part/Flintbox/WordPress scrapers; 70 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 138 institutions with active TechPublisher/custom/in-part/Flintbox/WordPress scrapers; 67 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
 - **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — uses Playwright headless Chromium for scroll-based full-catalogue retrieval (pages 2-N via infinite scroll) with SSR fallback when only 1 page exists (extracts `__NEXT_DATA__` JSON). 19 in-part scrapers active: manchester, kcl, liverpool, durham, ethz, helsinki, aalto, tampere, lmu, rwth, tcd, ulb, toronto, western, queensu, ualberta, griffith, ntu, hawaii (plus mountsinai, indiana, nd, pdx, manitoba). Browser closes after each scrape (stateless).
 - **WordPress API factory**: `createWordPressApiScraper(baseUrl, postType, institution)` — paginates `/wp-json/wp/v2/{postType}?per_page=100&page=N`. Used by ASU/Skysong (~1,317 technologies).
 - **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
