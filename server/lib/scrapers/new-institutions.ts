@@ -48,6 +48,8 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
               const queries = nd?.props?.pageProps?.dehydratedState?.queries ?? [];
               const pg = queries[0]?.state?.data?.pages?.[0];
               if (pg?.results?.length > 0) {
+                const ssrTotal = pg.pagination?.last ?? 1;
+                const ssrCount = pg.pagination?.count ?? pg.results.length;
                 const results: ScrapedListing[] = pg.results
                   .map((r: any) => ({
                     title: (r.title ?? "").trim(),
@@ -56,7 +58,11 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
                     institution,
                   }))
                   .filter((r: ScrapedListing) => r.title.length > 0);
-                console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR fallback)`);
+                if (ssrTotal > 1) {
+                  console.warn(`[scraper] ${institution}: SSR fallback got ${results.length}/${ssrCount} listings (page 1 of ${ssrTotal} — API unavailable, SSR cannot paginate)`);
+                } else {
+                  console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR fallback)`);
+                }
                 return results;
               }
             }
