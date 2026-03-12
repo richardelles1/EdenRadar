@@ -42,6 +42,7 @@ export interface IStorage {
   getScanMatrix(limit?: number): Promise<{
     runs: Array<{ id: number; ranAt: Date; totalFound: number; newCount: number; status: string }>;
     matrix: Array<{ institution: string; counts: number[] }>;
+    totalInSystem: number;
   }>;
 }
 
@@ -261,6 +262,7 @@ export class DatabaseStorage implements IStorage {
   async getScanMatrix(limit = 10): Promise<{
     runs: Array<{ id: number; ranAt: Date; totalFound: number; newCount: number; status: string }>;
     matrix: Array<{ institution: string; counts: number[] }>;
+    totalInSystem: number;
   }> {
     const runs = await db
       .select({
@@ -275,7 +277,11 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(ingestionRuns.ranAt))
       .limit(limit);
 
-    if (runs.length === 0) return { runs: [], matrix: [] };
+    const [{ count: totalInSystem }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets);
+
+    if (runs.length === 0) return { runs: [], matrix: [], totalInSystem };
 
     const runIds = runs.map((r) => r.id);
 
@@ -317,7 +323,7 @@ export class DatabaseStorage implements IStorage {
       .filter((row) => row.counts.some((c) => c > 0))
       .sort((a, b) => (b.counts[0] ?? 0) - (a.counts[0] ?? 0));
 
-    return { runs, matrix };
+    return { runs, matrix, totalInSystem };
   }
 }
 

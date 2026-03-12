@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2 } from "lucide-react";
+import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,7 @@ interface RunMeta {
 interface ScanMatrixData {
   runs: RunMeta[];
   matrix: Array<{ institution: string; counts: number[] }>;
+  totalInSystem: number;
 }
 
 function formatDate(iso: string) {
@@ -113,10 +114,49 @@ function ScanTracking({ pw }: { pw: string }) {
     );
   }
 
-  const { runs, matrix } = data;
+  const { runs, matrix, totalInSystem } = data;
+
+  function exportCsv() {
+    const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
+    const headers = [
+      "Institution",
+      ...(runs.length >= 2 ? ["Delta"] : []),
+      ...runs.map((r) => `Run #${r.id} ${formatDate(r.ranAt)} (${r.totalFound} found, ${r.status})`),
+    ];
+    const totalRow = [
+      "Total",
+      ...(runs.length >= 2 ? [String(runs[0].totalFound - runs[1].totalFound)] : []),
+      ...runs.map((r) => String(r.totalFound)),
+    ];
+    const rows = matrix.map((row) => [
+      escape(row.institution),
+      ...(runs.length >= 2 ? [String((row.counts[0] ?? 0) - (row.counts[1] ?? 0))] : []),
+      ...row.counts.map((c) => String(c)),
+    ]);
+    const csv = [headers.join(","), totalRow.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `scan-matrix-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   return (
-    <div className="overflow-x-auto" data-testid="scan-tracking-table">
+    <div data-testid="scan-tracking-table">
+      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-2" data-testid="total-in-system">
+          <Database className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">{totalInSystem.toLocaleString()}</span>
+          <span className="text-sm text-muted-foreground">total unique TTO entries in system</span>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
+          <Download className="h-3.5 w-3.5 mr-1.5" />
+          Export CSV
+        </Button>
+      </div>
+      <div className="overflow-x-auto">
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-border">
@@ -182,6 +222,7 @@ function ScanTracking({ pw }: { pw: string }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
