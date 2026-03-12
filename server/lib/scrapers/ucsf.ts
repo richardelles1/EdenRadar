@@ -32,9 +32,11 @@ function extractViewState(html: string): Record<string, string> {
   return fields;
 }
 
+const MAX_PAGES = 30;
+
 function extractTotalPages(html: string): number {
   const m = html.match(/lblTotalPages[^>]*>(\d+)<\/span>/i);
-  return m ? parseInt(m[1], 10) : 1;
+  return m ? Math.min(parseInt(m[1], 10), MAX_PAGES) : MAX_PAGES;
 }
 
 async function fetchTitle(ncdPath: string): Promise<{ url: string; title: string } | null> {
@@ -113,10 +115,15 @@ export const ucsfScraper: InstitutionScraper = {
 
         html = await postRes.text();
         const pagePaths = extractNcdPaths(html);
+        let newCount = 0;
         for (const p of pagePaths) {
-          if (!globalSeen.has(p)) { globalSeen.add(p); allNcdPaths.push(p); }
+          if (!globalSeen.has(p)) { globalSeen.add(p); allNcdPaths.push(p); newCount++; }
         }
-        console.log(`[scraper] ${INST}: page ${page}/${totalPages} — ${pagePaths.length} NCD IDs (total: ${allNcdPaths.length})`);
+        console.log(`[scraper] ${INST}: page ${page}/${totalPages} — ${pagePaths.length} NCD IDs, ${newCount} new (total: ${allNcdPaths.length})`);
+        if (newCount === 0) {
+          console.log(`[scraper] ${INST}: no new IDs on page ${page}, stopping pagination`);
+          break;
+        }
 
         viewState = extractViewState(html);
       }
