@@ -1,18 +1,12 @@
 import * as cheerio from "cheerio";
 
 function combineSignal(timeoutMs: number, external?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = external
+    ? AbortSignal.any([timeoutSignal, external])
+    : timeoutSignal;
 
-  const onExternal = () => controller.abort();
-  external?.addEventListener("abort", onExternal, { once: true });
-
-  const cleanup = () => {
-    clearTimeout(timer);
-    external?.removeEventListener("abort", onExternal);
-  };
-
-  return { signal: controller.signal, cleanup };
+  return { signal, cleanup: () => {} };
 }
 
 export async function fetchHtml(
