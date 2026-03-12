@@ -12,6 +12,138 @@ function createStubScraper(institution: string, reason = "no public TTO listing 
   };
 }
 
+function createInPartScraper(subdomain: string, institution: string): InstitutionScraper {
+  return {
+    institution,
+    async scrape(): Promise<ScrapedListing[]> {
+      const url = `https://${subdomain}.portals.in-part.com/`;
+      try {
+        const res = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!res.ok) return [];
+        const html = await res.text();
+        const m = html.match(/__NEXT_DATA__[^>]+>([\s\S]+?)<\/script>/);
+        if (!m) return [];
+        const data = JSON.parse(m[1]);
+        const queries = data?.props?.pageProps?.dehydratedState?.queries ?? [];
+        const page = queries[0]?.state?.data?.pages?.[0];
+        if (!page?.results) return [];
+        const results: ScrapedListing[] = page.results.map((r: any) => ({
+          title: r.title ?? "",
+          description: "",
+          url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
+          institution,
+        })).filter((r: ScrapedListing) => r.title.length > 0);
+        console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR page 1 of ${page.pagination?.last ?? "?"})`);
+        return results;
+      } catch (err: any) {
+        console.warn(`[scraper] ${institution} (in-part): ${err?.message}`);
+        return [];
+      }
+    },
+  };
+}
+
+function createWordPressApiScraper(
+  baseUrl: string,
+  postType: string,
+  institution: string
+): InstitutionScraper {
+  return {
+    institution,
+    async scrape(): Promise<ScrapedListing[]> {
+      const results: ScrapedListing[] = [];
+      let page = 1;
+      while (page <= 50) {
+        try {
+          const res = await fetch(
+            `${baseUrl}/wp-json/wp/v2/${postType}?per_page=100&page=${page}`,
+            {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+              signal: AbortSignal.timeout(10000),
+            }
+          );
+          if (!res.ok) break;
+          const items: any[] = await res.json();
+          if (!Array.isArray(items) || items.length === 0) break;
+          for (const item of items) {
+            const title = (item.title?.rendered ?? "").replace(/<[^>]+>/g, "").trim();
+            if (title.length > 0) {
+              results.push({
+                title,
+                description: "",
+                url: item.link ?? `${baseUrl}/${postType}/${item.slug}/`,
+                institution,
+              });
+            }
+          }
+          if (items.length < 100) break;
+          page++;
+        } catch {
+          break;
+        }
+      }
+      console.log(`[scraper] ${institution}: ${results.length} listings (WordPress API, ${page} pages)`);
+      return results;
+    },
+  };
+}
+
+function createMontanaStateScraper(): InstitutionScraper {
+  const institution = "Montana State University";
+  return {
+    institution,
+    async scrape(): Promise<ScrapedListing[]> {
+      const indexUrl = "https://tto.montana.edu/for-industry/index.html";
+      try {
+        const res = await fetch(indexUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+          signal: AbortSignal.timeout(10000),
+        });
+        if (!res.ok) return [];
+        const html = await res.text();
+        const linkRe = /href="(\/links\/techops\/[^"]+\.html)"/g;
+        const hrefs: string[] = [];
+        let m: RegExpExecArray | null;
+        while ((m = linkRe.exec(html)) !== null) {
+          if (!hrefs.includes(m[1])) hrefs.push(m[1]);
+        }
+        const results: ScrapedListing[] = [];
+        for (const href of hrefs) {
+          try {
+            const pageRes = await fetch(`https://tto.montana.edu${href}`, {
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+              signal: AbortSignal.timeout(8000),
+            });
+            if (!pageRes.ok) continue;
+            const pageHtml = await pageRes.text();
+            const titleMatch = pageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i) ??
+              pageHtml.match(/<title>([^<]+)<\/title>/i);
+            const title = titleMatch ? titleMatch[1].replace(/\s*[-|].*$/, "").trim() : "";
+            if (title.length > 5) {
+              results.push({
+                title,
+                description: "",
+                url: `https://tto.montana.edu${href}`,
+                institution,
+              });
+            }
+          } catch {
+            continue;
+          }
+        }
+        console.log(`[scraper] ${institution}: ${results.length} listings (${hrefs.length} pages found)`);
+        return results;
+      } catch (err: any) {
+        console.warn(`[scraper] ${institution}: ${err?.message}`);
+        return [];
+      }
+    },
+  };
+}
+
 // ── Verified working TechPublisher scrapers ──────────────────────────────
 export const princetonScraper = createTechPublisherScraper(
   "puotl",
@@ -374,7 +506,7 @@ export const baylorScraper = createFlintboxScraper(
 );
 export const portlandStateScraper = createStubScraper("Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
-export const montanaStateScraper = createStubScraper("Montana State University");
+export const montanaStateScraper = createMontanaStateScraper();
 export const unmScraper = createFlintboxScraper(
   { slug: "unm", orgId: 83, accessKey: "d806a16b-e229-4077-81f8-1704ae7099be" },
   "University of New Mexico"
@@ -389,8 +521,8 @@ export const usuScraper = createFlintboxScraper(
 export const byuScraper = createStubScraper("Brigham Young University");
 export const uaaScraper = createStubScraper("University of Alaska Anchorage");
 export const undScraper = createStubScraper("University of North Dakota");
-export const ndsuScraper = createStubScraper("North Dakota State University");
-export const indianaScraper = createStubScraper("Indiana University");
+export const ndsuScraper = createTechPublisherScraper("ndsurf", "North Dakota State University", { maxPg: 30 });
+export const indianaScraper = createInPartScraper("iu", "Indiana University");
 export const notredameScraper = createStubScraper("University of Notre Dame");
 export const warfScraper = createStubScraper("University of Wisconsin");
 export const auburnScraper = createFlintboxScraper(
@@ -431,9 +563,9 @@ export const uriScraper = createFlintboxScraper(
   { slug: "uri", orgId: 39, accessKey: "4cfe8cae-7fe8-4d31-a38e-9628d93f4ac0" },
   "University of Rhode Island"
 );
-export const mountsinaiScraper = createStubScraper("Icahn School of Medicine at Mount Sinai");
+export const mountsinaiScraper = createInPartScraper("mountsinai", "Icahn School of Medicine at Mount Sinai");
 export const caltechScraper = createStubScraper("California Institute of Technology");
-export const asuScraper = createStubScraper("Arizona State University");
+export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
 
 // ── International: UK ────────────────────────────────────────────────────
 export const oxfordScraper = createStubScraper("University of Oxford");

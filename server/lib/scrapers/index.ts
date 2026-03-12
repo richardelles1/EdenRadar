@@ -92,6 +92,12 @@ import {
   usaskScraper,
   // FSU custom scraper
   fsuScraper,
+  // New scrapers – ASU, NDSU, Montana State, Mount Sinai, Indiana
+  asuScraper,
+  ndsuScraper,
+  montanaStateScraper,
+  mountsinaiScraper,
+  indianaScraper,
   // Flintbox – verified working
   ucfScraper,
   fiuScraper,
@@ -211,6 +217,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   leedsScraper,
   southamptonScraper,
   usaskScraper,
+  // ── New scrapers (ASU, NDSU, Montana State, Mount Sinai, Indiana) ────────
+  asuScraper,
+  ndsuScraper,
+  montanaStateScraper,
+  mountsinaiScraper,
+  indianaScraper,
   // ── Flintbox (verified working orgIds) ───────────────────────────────────
   ucfScraper,
   fiuScraper,

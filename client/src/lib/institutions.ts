@@ -113,7 +113,7 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "portlandstate", name: "Portland State University", city: "Portland, OR", ttoName: "PSU Innovation & Commercialization", website: "https://www.pdx.edu/research/innovation-commercialization", specialties: ["Biosensors", "Drug Delivery", "Biomaterials"] , noPublicPortal: true },
   // Mountain West
   { slug: "umontana", name: "University of Montana", city: "Missoula, MT", ttoName: "UM Office of Technology Transfer", website: "https://www.umt.edu/research/technology-transfer", specialties: ["Drug Discovery", "Infectious Disease", "Agricultural Biotech"] , noPublicPortal: true },
-  { slug: "montanastate", name: "Montana State University", city: "Bozeman, MT", ttoName: "MSU Technology Transfer", website: "https://www.montana.edu/research/techtransfer", specialties: ["Drug Delivery", "Biosensors", "Agricultural Biotech"] , noPublicPortal: true },
+  { slug: "montanastate", name: "Montana State University", city: "Bozeman, MT", ttoName: "MSU Technology Transfer", website: "https://www.montana.edu/research/techtransfer", specialties: ["Drug Delivery", "Biosensors", "Agricultural Biotech"] },
   { slug: "unm", name: "University of New Mexico", city: "Albuquerque, NM", ttoName: "UNM Rainforest Innovations", website: "https://rainforestinnovations.com", specialties: ["Drug Discovery", "Oncology", "Biosensors"]  },
   { slug: "nmsu", name: "New Mexico State University", city: "Las Cruces, NM", ttoName: "NMSU Arrowhead Center", website: "https://arrowheadcenter.nmsu.edu", specialties: ["Agricultural Biotech", "Drug Discovery", "Biosensors"] , noPublicPortal: true },
   { slug: "unr", name: "University of Nevada, Reno", city: "Reno, NV", ttoName: "UNR Office of Technology Transfer", website: "https://www.unr.edu/research/technology-transfer", specialties: ["Drug Discovery", "Neuroscience", "Biosensors"] , noPublicPortal: true },
@@ -124,9 +124,9 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "uaa", name: "University of Alaska Anchorage", city: "Anchorage, AK", ttoName: "UAA Innovation Office", website: "https://www.uaa.alaska.edu/research", specialties: ["Diagnostics", "Biosensors", "Environmental Health"] , noPublicPortal: true },
   // Midwest
   { slug: "und", name: "University of North Dakota", city: "Grand Forks, ND", ttoName: "UND Innovation Office", website: "https://und.edu/research/innovation", specialties: ["Drug Discovery", "Diagnostics", "Rare Disease"] , noPublicPortal: true },
-  { slug: "ndsu", name: "North Dakota State University", city: "Fargo, ND", ttoName: "NDSU Technology Transfer", website: "https://www.ndsu.edu/research/techtransfer", specialties: ["Agricultural Biotech", "Drug Delivery", "Biomaterials"] , noPublicPortal: true },
+  { slug: "ndsu", name: "North Dakota State University", city: "Fargo, ND", ttoName: "NDSU Technology Transfer", website: "https://www.ndsu.edu/research/techtransfer", specialties: ["Agricultural Biotech", "Drug Delivery", "Biomaterials"] },
   { slug: "sdstate", name: "South Dakota State University", city: "Brookings, SD", ttoName: "SDSU Innovation Office", website: "https://www.sdstate.edu/research/innovation", specialties: ["Agricultural Biotech", "Drug Delivery", "Diagnostics"] },
-  { slug: "indiana", name: "Indiana University", city: "Bloomington, IN", ttoName: "IU Innovation & Commercialization Office", website: "https://innovation.iu.edu", specialties: ["Drug Discovery", "Oncology", "Neuroscience"] , noPublicPortal: true },
+  { slug: "indiana", name: "Indiana University", city: "Bloomington, IN", ttoName: "IU Innovation & Commercialization Office", website: "https://innovation.iu.edu", specialties: ["Drug Discovery", "Oncology", "Neuroscience"] },
   { slug: "notredame", name: "University of Notre Dame", city: "Notre Dame, IN", ttoName: "Notre Dame IDEA Center", website: "https://ideacenter.nd.edu", specialties: ["Drug Delivery", "Oncology", "Rare Disease"] , noPublicPortal: true },
   { slug: "warf", name: "University of Wisconsin", city: "Madison, WI", ttoName: "Wisconsin Alumni Research Foundation", website: "https://www.warf.org", specialties: ["Drug Discovery", "Gene Therapy", "Oncology"] , noPublicPortal: true },
   // Southeast
@@ -146,10 +146,10 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "brandeis", name: "Brandeis University", city: "Waltham, MA", ttoName: "Brandeis Office of Technology Licensing", website: "https://www.brandeis.edu/research/innovation", specialties: ["Drug Discovery", "Neuroscience", "Structural Biology"]  },
   { slug: "unh", name: "University of New Hampshire", city: "Durham, NH", ttoName: "UNH Innovation Office", website: "https://www.unh.edu/research/innovation", specialties: ["Drug Discovery", "Agricultural Biotech", "Biomaterials"] , noPublicPortal: true },
   { slug: "uri", name: "University of Rhode Island", city: "Kingston, RI", ttoName: "URI Innovation Office", website: "https://web.uri.edu/research/commercialization", specialties: ["Drug Delivery", "Oncology", "Natural Products"]  },
-  { slug: "mountsinai", name: "Icahn School of Medicine at Mount Sinai", city: "New York, NY", ttoName: "Mount Sinai Technology Transfer", website: "https://icahn.mssm.edu/research/technology-transfer", specialties: ["Oncology", "Neuroscience", "Gene Therapy"] , noPublicPortal: true },
+  { slug: "mountsinai", name: "Icahn School of Medicine at Mount Sinai", city: "New York, NY", ttoName: "Mount Sinai Technology Transfer", website: "https://icahn.mssm.edu/research/technology-transfer", specialties: ["Oncology", "Neuroscience", "Gene Therapy"] },
   // Other US
   { slug: "caltech", name: "California Institute of Technology", city: "Pasadena, CA", ttoName: "Caltech Office of Technology Transfer", website: "https://techtransfer.caltech.edu", specialties: ["Drug Delivery", "Bioelectronics", "Gene Editing"] , noPublicPortal: true },
-  { slug: "asu", name: "Arizona State University", city: "Tempe, AZ", ttoName: "ASU Skysong Innovations", website: "https://skysonginnovations.com", specialties: ["Drug Discovery", "Diagnostics", "Biomaterials"] , noPublicPortal: true },
+  { slug: "asu", name: "Arizona State University", city: "Tempe, AZ", ttoName: "ASU Skysong Innovations", website: "https://skysonginnovations.com", specialties: ["Drug Discovery", "Diagnostics", "Biomaterials"] },
   { slug: "uillinois", name: "University of Illinois", city: "Urbana-Champaign, IL", ttoName: "UI Office of Technology Management", website: "https://otm.illinois.edu", specialties: ["Drug Delivery", "Bioelectronics", "Genomics"] },
 
   // ── Europe ────────────────────────────────────────────────────────────────

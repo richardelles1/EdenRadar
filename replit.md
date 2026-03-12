@@ -1,6 +1,6 @@
 # EdenRadar v2
 
-AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline covering 195 institutions globally (88 with active scrapers, remainder stubbed pending custom scraper development).
+AI-powered biotech asset matchmaking platform for internal use. Ingests signals from multiple sources, normalizes them through a scoring pipeline, and generates buyer-facing intelligence outputs (ranked results, dossiers, match reports). Includes a real TTO ingestion pipeline covering 195 institutions globally (116 with active scrapers, remainder stubbed pending custom scraper development).
 
 ## Architecture
 
@@ -10,7 +10,9 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
 - **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
-- **TTO Scraping**: cheerio-based real scrapers for 88 institutions with active TechPublisher/custom scrapers; 107 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
+- **TTO Scraping**: cheerio-based real scrapers for 116 institutions with active TechPublisher/custom/in-part/WordPress scrapers; 79 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
+- **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — fetches portal homepage, extracts `__NEXT_DATA__` JSON for SSR page 1 (24 results per institution). Used by Mount Sinai (`mountsinai`) and Indiana (`iu`). Full pagination blocked by private GraphQL API.
+- **WordPress API factory**: `createWordPressApiScraper(baseUrl, postType, institution)` — paginates `/wp-json/wp/v2/{postType}?per_page=100&page=N`. Used by ASU/Skysong (~1,317 technologies).
 - **TechPublisher v3**: Sitemap-based category discovery (sitemap.xml → all category URLs → fetch per category page); individual page fetching for uncovered tech URLs from sitemap; achieves ~99% coverage (72/73 for Lehigh vs. 10 previously). Falls back to RSS when no sitemap.
 - **Flintbox scraper factory**: `server/lib/scrapers/flintbox.ts` — uses confirmed working API: `GET /api/v1/technologies?organizationId={id}&organizationAccessKey={key}&per_page=500` with `X-Requested-With: XMLHttpRequest` header; response is JSON:API format (`data[].attributes.name`); Georgetown returns 111, Cornell returns 1,114 assets
 - **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
