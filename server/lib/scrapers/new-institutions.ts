@@ -636,6 +636,9 @@ export const undScraper: InstitutionScraper = {
 export const ndsuScraper = createTechPublisherScraper("ndsurf", "North Dakota State University", { maxPg: 30 });
 export const indianaScraper = createInPartScraper("iu", "Indiana University");
 export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
+// WARF HTML crawl: /wp-json/warf/v1/technologies returns 404 — no REST API exists.
+// This approach scrapes category options from /commercialize/technologies/ then
+// concurrently fetches search results per-category. Verified: 1,525 listings (140 categories).
 export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
   async scrape(): Promise<ScrapedListing[]> {
@@ -703,6 +706,7 @@ export const templeScraper = createStubScraper("Temple University");
 export const drexelScraper = createTechPublisherScraper("drexelotc", "Drexel University", { maxPg: 50 });
 export const bucknellScraper = createStubScraper("Bucknell University");
 export const sunyalbanyScraper = createStubScraper("SUNY Albany");
+// UConn Flintbox API still works (verified: 298 items). Intentionally kept.
 export const uconnScraper = createFlintboxScraper(
   { slug: "uconn", orgId: 106, accessKey: "c9a1cb21-6c5e-437c-9662-9492efa1205a" },
   "University of Connecticut"
