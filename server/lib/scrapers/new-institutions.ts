@@ -76,6 +76,12 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
         const bPage = await browser.newPage();
         await bPage.goto(portalUrl, { waitUntil: "networkidle", timeout: 60000 });
 
+        // Wait for the results container before scrolling so we don't extract a blank page
+        await bPage.waitForSelector(
+          'a[href^="/"], [class*="card"], [class*="result"], [class*="listing"], [class*="technolog"]',
+          { timeout: 15000 }
+        ).catch(() => { /* portal may render differently — proceed anyway */ });
+
         // Scroll and click "load more" until stable
         let prevLinkCount = 0;
         let stableRounds = 0;
@@ -147,7 +153,11 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
       try {
         const abort = AbortSignal.timeout(90_000);
         const abortPromise = new Promise<never>((_, reject) =>
-          abort.addEventListener("abort", () => reject(new Error("in-part Playwright timeout (90s)")))
+          abort.addEventListener("abort", () => {
+            // Close the browser so runPlaywright() is unblocked and exits quickly
+            if (browser) browser.close().catch(() => {});
+            reject(new Error("in-part Playwright timeout (90s)"));
+          })
         );
         const listings = await Promise.race([runPlaywright(), abortPromise]);
         if (listings.length > 0) {
