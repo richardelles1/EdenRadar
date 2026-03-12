@@ -621,7 +621,7 @@ export async function registerRoutes(
       const toPush = stagingRows.filter((r) => r.isNew && r.relevant === true);
 
       if (toPush.length === 0) {
-        await storage.updateSyncSession(session.sessionId, { pushedCount: 0, status: "pushed" });
+        await storage.updateSyncSession(session.sessionId, { pushedCount: 0, status: "pushed", lastRefreshedAt: new Date() });
         return res.json({ pushed: 0, message: "No new relevant assets to push" });
       }
 
@@ -662,6 +662,7 @@ export async function registerRoutes(
       await storage.updateSyncSession(session.sessionId, {
         pushedCount: newAssets.length,
         status: "pushed",
+        lastRefreshedAt: new Date(),
       });
 
       res.json({

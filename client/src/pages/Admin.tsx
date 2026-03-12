@@ -278,6 +278,7 @@ interface SyncSessionData {
   currentIndexed: number;
   createdAt: string;
   completedAt: string | null;
+  lastRefreshedAt: string | null;
 }
 
 interface SyncStatusResponse {
@@ -434,7 +435,8 @@ function InstitutionSync({ pw }: { pw: string }) {
             const idxCount = indexedCounts[inst] ?? 0;
             const parts: string[] = [];
             if (idxCount > 0) parts.push(`${idxCount} indexed`);
-            if (s?.completedAt) parts.push(`synced ${timeAgo(s.completedAt)}`);
+            const refreshTs = s?.lastRefreshedAt ?? s?.completedAt;
+            if (refreshTs) parts.push(`synced ${timeAgo(refreshTs)}`);
             const suffix = parts.length > 0 ? ` — ${parts.join(", ")}` : "";
             return (
               <option key={inst} value={inst}>
@@ -463,9 +465,9 @@ function InstitutionSync({ pw }: { pw: string }) {
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="font-semibold text-foreground text-base" data-testid="sync-institution-name">{session.institution}</h3>
-                {session.completedAt && (
+                {(session.lastRefreshedAt || session.completedAt) && (
                   <p className="text-xs text-muted-foreground mt-0.5" data-testid="sync-last-refreshed">
-                    Last refreshed: {formatDate(session.completedAt)}
+                    Last refreshed: {formatDate(session.lastRefreshedAt ?? session.completedAt!)}
                   </p>
                 )}
               </div>
