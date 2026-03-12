@@ -82,6 +82,8 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
     },
   });
 
+  const syncIsRunning = (statusData as any)?.syncRunning ?? false;
+  const syncRunningFor = (statusData as any)?.syncRunningFor ?? null;
   const isRunning = statusData?.status === "running" || scanMutation.isPending;
   const enrichingCount = statusData?.enrichingCount ?? 0;
   const scrapingProgress = statusData?.scrapingProgress ?? { done: 0, total: 0, found: 0 };
@@ -111,11 +113,12 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
           size="sm"
           className="h-7 text-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={handleScan}
-          disabled={isRunning}
+          disabled={isRunning || syncIsRunning}
           data-testid="button-run-scan"
+          title={syncIsRunning ? `Sync running for ${syncRunningFor} — wait for it to complete` : undefined}
         >
           {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-          Run Full Scan
+          {syncIsRunning ? "Sync Active" : "Run Full Scan"}
         </Button>
       </div>
     );
@@ -184,11 +187,12 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
           variant="outline"
           className="h-7 text-xs shrink-0 border-destructive/30 text-destructive hover:bg-destructive/5"
           onClick={handleScan}
-          disabled={isRunning}
+          disabled={isRunning || syncIsRunning}
           data-testid="button-retry-scan"
+          title={syncIsRunning ? `Sync running for ${syncRunningFor}` : undefined}
         >
           <RefreshCw className="w-3 h-3 mr-1.5" />
-          Retry
+          {syncIsRunning ? "Sync Active" : "Retry"}
         </Button>
       </div>
     );
@@ -230,11 +234,12 @@ function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
         variant="outline"
         className="h-7 text-xs shrink-0 border-primary/30 text-primary hover:bg-primary/5"
         onClick={handleScan}
-        disabled={isRunning}
+        disabled={isRunning || syncIsRunning}
         data-testid="button-refresh-scan"
+        title={syncIsRunning ? `Sync running for ${syncRunningFor}` : undefined}
       >
         <RefreshCw className="w-3 h-3 mr-1.5" />
-        Refresh
+        {syncIsRunning ? "Sync Active" : "Refresh"}
       </Button>
     </div>
   );

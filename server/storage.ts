@@ -48,7 +48,7 @@ export interface IStorage {
   }>;
 
   createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
-  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt">>): Promise<SyncSession>;
+  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
   getLatestSyncSessions(): Promise<SyncSession[]>;
   clearSyncStaging(institution: string): Promise<void>;
@@ -355,7 +355,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt">>): Promise<SyncSession> {
+  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt">>): Promise<SyncSession> {
     const [row] = await db.update(syncSessions).set(data).where(eq(syncSessions.sessionId, sessionId)).returning();
     return row;
   }

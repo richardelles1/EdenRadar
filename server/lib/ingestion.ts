@@ -303,11 +303,13 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       }
     }
 
+    const now = new Date();
     await storage.updateSyncSession(sessionId, {
       relevantCount,
       status: "enriched",
       phase: "done",
-      completedAt: new Date(),
+      completedAt: now,
+      lastRefreshedAt: now,
     });
 
     console.log(`[sync] ${institutionName}: sync complete — ${rawCount} raw, ${newCount} new, ${relevantCount} relevant`);

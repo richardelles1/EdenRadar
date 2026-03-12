@@ -260,6 +260,8 @@ export async function registerRoutes(
         enrichingCount: getEnrichingCount(),
         scrapingProgress: getScrapingProgress(),
         upsertProgress: getUpsertProgress(),
+        syncRunning: isSyncRunning(),
+        syncRunningFor: getSyncRunningFor(),
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch status" });

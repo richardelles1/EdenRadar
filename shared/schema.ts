@@ -135,6 +135,7 @@ export const syncSessions = pgTable("sync_sessions", {
   currentIndexed: integer("current_indexed").notNull().default(0),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
+  lastRefreshedAt: timestamp("last_refreshed_at"),
 });
 
 export type SyncSession = typeof syncSessions.$inferSelect;
