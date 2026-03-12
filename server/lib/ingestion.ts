@@ -42,6 +42,11 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     const lastRun = await storage.getLastIngestionRun();
     return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
   }
+  if (syncRunning) {
+    console.log(`[ingestion] Institution sync running for ${syncInstitution}, skipping full ingestion.`);
+    const lastRun = await storage.getLastIngestionRun();
+    return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
+  }
 
   ingestionRunning = true;
   scrapingProgress = { done: 0, total: 0, found: 0, active: [] };

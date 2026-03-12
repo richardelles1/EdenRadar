@@ -238,6 +238,9 @@ export async function registerRoutes(
       const lastRun = await storage.getLastIngestionRun();
       return res.json({ message: "Ingestion already in progress", status: "running", runId: lastRun?.id });
     }
+    if (isSyncRunning()) {
+      return res.status(409).json({ error: `Institution sync is running for ${getSyncRunningFor()} — cannot start full ingestion` });
+    }
     res.json({ message: "Ingestion started" });
     runIngestionPipeline().catch((err) => {
       console.error("[ingestion] Background run failed:", err);
