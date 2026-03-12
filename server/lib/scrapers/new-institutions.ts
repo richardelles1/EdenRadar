@@ -69,7 +69,9 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
 
       // Step 2: Playwright full-catalogue scroll.
       // Used when: (a) SSR reports multiple pages, or (b) SSR probe failed entirely.
-      try {
+      // Wrapped with Promise.race + AbortSignal.timeout to honour a 90s hard budget
+      // (consistent with the AbortSignal.timeout pattern used for fetch() above).
+      const runPlaywright = async (): Promise<ScrapedListing[]> => {
         browser = await chromium.launch({ headless: true });
         const bPage = await browser.newPage();
         await bPage.goto(portalUrl, { waitUntil: "networkidle", timeout: 60000 });
@@ -86,7 +88,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
             containers.forEach((el) => { (el as HTMLElement).scrollTop = (el as HTMLElement).scrollHeight; });
           });
 
-          // Click any "load more" / "show more" buttons
+          // Click any "load more" / "show more" / "see more" buttons before waiting
           await bPage.evaluate(() => {
             const btns = Array.from(document.querySelectorAll('button, a[role="button"]'));
             for (const btn of btns) {
@@ -99,7 +101,6 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
 
           await bPage.waitForTimeout(2000);
 
-          // Count listing links (in-part listings have paths like /{idHash})
           const linkCount = await bPage.evaluate(
             () => document.querySelectorAll('a[href^="/"]').length
           );
@@ -112,23 +113,20 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
           prevLinkCount = linkCount;
         }
 
-        // Extract listings: prefer anchors inside listing-card components, fall back to all page links
+        // Extract listing anchors: in-part technology hrefs are /{idHash} (1-segment paths)
         const listings = await bPage.evaluate((inst: string) => {
-          // in-part listing cards are anchors with href="/{idHash}" where idHash is a slug-style string
           const SKIP = new Set(["", "/", "/profile", "/privacy", "/terms"]);
           const links = Array.from(document.querySelectorAll('a[href^="/"]'));
           const seen = new Set<string>();
           const results: { title: string; description: string; url: string; institution: string }[] = [];
           for (const a of links) {
             const href = a.getAttribute("href") ?? "";
-            // Skip navigation/UI links: must be at least 4 chars (e.g. /abc), not start with /_, not be known nav paths
+            // Keep only single-segment paths (/someHash); drop nav/api/meta links
             if (href.length < 4 || href.startsWith("/_") || href.startsWith("/api") || SKIP.has(href)) continue;
-            // Skip paths with multiple segments (nav links like /about/contact)
             if ((href.match(/\//g) ?? []).length > 2) continue;
             if (seen.has(href)) continue;
             seen.add(href);
             const title = (a.textContent ?? "").replace(/\s+/g, " ").trim();
-            // Strip institution name prefix that in-part prepends to titles
             const cleaned = title.replace(/^[A-Z][a-z]+ (?:University|College|Institute|School|Université)[A-Za-z ]*/u, "").trim();
             if (!cleaned || cleaned.length < 5) continue;
             results.push({
@@ -143,10 +141,18 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
 
         await browser.close();
         browser = null;
+        return listings as ScrapedListing[];
+      };
 
+      try {
+        const abort = AbortSignal.timeout(90_000);
+        const abortPromise = new Promise<never>((_, reject) =>
+          abort.addEventListener("abort", () => reject(new Error("in-part Playwright timeout (90s)")))
+        );
+        const listings = await Promise.race([runPlaywright(), abortPromise]);
         if (listings.length > 0) {
           console.log(`[scraper] ${institution}: ${listings.length} listings (in-part Playwright)`);
-          return listings as ScrapedListing[];
+          return listings;
         }
       } catch (err: any) {
         console.warn(`[scraper] ${institution} (in-part Playwright): ${err?.message}`);
