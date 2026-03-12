@@ -1,0 +1,134 @@
+Institution,Delta,Run #7 Mar 12 11:44 AM (10969 found, completed),Run #4 Mar 12 07:31 AM (11971 found, completed),Run #2 Mar 12 01:00 AM (23775 found, completed),Run #1 Mar 11 11:52 PM (19493 found, completed)
+Total,-1002,10969,11971,23775,19493
+"Johns Hopkins University",2130,2130,0,105,0
+"University of Minnesota",770,770,0,189,0
+"Northwestern University",446,757,311,0,0
+"University of South Florida",624,661,37,105,0
+"Arizona State University",573,573,0,164,0
+"University of Washington",432,435,3,0,0
+"Princeton University",337,426,89,0,0
+"University of Connecticut",0,298,298,0,0
+"Northeastern University",232,294,62,0,0
+"University of Utah",206,285,79,0,0
+"Rensselaer Polytechnic Institute",231,260,29,0,0
+"Washington State University",193,234,41,0,0
+"University of Delaware",0,191,191,0,0
+"Virginia Tech",155,182,27,0,0
+"University of Toledo",76,171,95,0,0
+"University of Arkansas",0,165,165,0,0
+"Brown University",160,160,0,72,0
+"McGill University",0,157,157,0,0
+"Oregon State University",120,154,34,0,0
+"Saint Louis University",27,127,100,0,0
+"University of Alabama",109,119,10,0,0
+"University of Notre Dame",114,114,0,0,24
+"New Jersey Institute of Technology",86,110,24,0,0
+"Mississippi State University",93,95,2,9,0
+"Brandeis University",0,95,95,0,0
+"Texas State University",71,82,11,0,0
+"University of Maine",78,80,2,0,0
+"University of Rochester",-29,74,103,0,0
+"University of Toronto",46,70,24,0,0
+"Colorado State University",53,68,15,0,0
+"Wayne State University",39,66,27,0,0
+"University of Vermont",35,61,26,0,0
+"UT Dallas",40,57,17,0,0
+"UT Health",22,56,34,0,0
+"King's College London",55,55,0,0,24
+"Queen's University",30,54,24,0,0
+"University of British Columbia",0,53,53,0,0
+"Western University",29,53,24,0,0
+"University of Alberta",25,49,24,0,0
+"University of Manitoba",48,48,0,0,24
+"University of Calgary",48,48,0,48,0
+"RWTH Aachen University",24,48,24,0,0
+"University of Liverpool",47,47,0,0,24
+"UC Davis",25,43,18,0,0
+"University of Hawaii",17,41,24,0,0
+"Monash University",40,40,0,40,0
+"Washington University in St. Louis",40,40,0,8,0
+"University of Rhode Island",0,40,40,0,0
+"Georgia State University",7,39,32,0,0
+"Clemson University",5,38,33,0,0
+"Tufts University",37,37,0,38,0
+"Translational Genomics Research Institute",4,32,28,0,0
+"Griffith University",6,30,24,0,0
+"Cal Poly San Luis Obispo",29,29,0,0,0
+"Tampere University",4,28,24,0,0
+"ETH Zurich",4,28,24,0,0
+"Trinity College Dublin",4,28,24,0,0
+"Lehigh University",17,27,10,0,0
+"Aalto University",3,27,24,0,0
+"University of Helsinki",2,26,24,0,0
+"Portland State University",24,24,0,24,0
+"Stevens Institute of Technology",16,24,8,0,0
+"University of Alaska Fairbanks",21,23,2,0,0
+"University of North Dakota",0,22,22,0,0
+"University of Wyoming",18,22,4,0,0
+"Rowan University",5,22,17,0,0
+"Scripps Research",20,20,0,12,0
+"SUNY Upstate Medical University",5,20,15,0,0
+"Durham University",18,18,0,18,0
+"University of South Dakota",15,17,2,0,0
+"Nottingham Trent University",0,17,17,0,0
+"Ludwig Maximilian University of Munich",0,17,17,0,0
+"George Mason University",14,16,2,0,0
+"University of Manchester",15,15,0,15,0
+"Simon Fraser University",15,15,0,15,0
+"Dartmouth College",0,13,13,0,0
+"University of Saskatchewan",12,12,0,3,0
+"University of Victoria",9,9,0,9,0
+"Université Libre de Bruxelles",0,5,5,0,0
+"National University of Singapore",1,1,0,1,0
+"University of Miami",0,1,1,0,0
+"Penn State University",1,1,0,0,0
+"University of Idaho",1,1,0,0,0
+"University of Southampton",1,1,0,0,0
+"Baylor University",0,0,0,42,0
+"University of Arizona",0,0,0,32,0
+"Drexel University",0,0,0,22,0
+"University of Pittsburgh",0,0,0,632,0
+"Purdue University",0,0,0,343,0
+"University of Nevada, Las Vegas",-40,0,40,85,0
+"University at Buffalo",-12,0,12,6,0
+"UC Berkeley",0,0,0,31,0
+"University of California San Francisco",0,0,0,155,0
+"Florida International University",0,0,0,160,0
+"University of Illinois",0,0,0,4,0
+"Rice University",0,0,0,293,0
+"University of South Carolina",0,0,0,10,0
+"North Dakota State University",0,0,0,1,0
+"Stanford University",-9,0,9,38,0
+"Montana State University",0,0,0,2,0
+"SUNY System",0,0,0,55,0
+"Florida State University",0,0,0,44,0
+"University of Cincinnati",0,0,0,26,0
+"University of Central Florida",0,0,0,120,0
+"Harvard University",0,0,0,7,0
+"University of Chicago",0,0,0,166,0
+"Rutgers University",0,0,0,56,0
+"University of Wisconsin",0,0,0,992,0
+"Georgetown University",0,0,0,60,0
+"Texas Tech University",0,0,0,245,0
+"Boston University",0,0,0,1,0
+"Yale University",0,0,0,111,0
+"Stony Brook University",-50,0,50,0,0
+"Indiana University",-17,0,17,0,0
+"MIT",-24,0,24,0,0
+"University of Pennsylvania",-35,0,35,0,0
+"Iowa State University",-38,0,38,0,0
+"UCLA",-680,0,680,0,0
+"Auburn University",-44,0,44,0,0
+"University of Southern California",-99,0,99,0,0
+"University of Georgia",-193,0,193,0,0
+"University of New Mexico",-674,0,674,0,0
+"Columbia University",-12,0,12,0,0
+"Cornell University",-441,0,441,0,0
+"Icahn School of Medicine at Mount Sinai",-14,0,14,0,0
+"George Washington University",-61,0,61,0,0
+"CZ Biohub",-88,0,88,0,0
+"Utah State University",-44,0,44,0,0
+"Binghamton University",-19,0,19,0,0
+"University of Oregon",-8,0,8,0,0
+"Medical University of South Carolina",-34,0,34,0,0
+"University of Virginia",-81,0,81,0,0
