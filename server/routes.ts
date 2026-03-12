@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -544,9 +545,10 @@ export async function registerRoutes(
         return res.status(409).json({ error: `Sync already running for ${getSyncRunningFor()}` });
       }
 
-      res.json({ message: "Sync started", institution });
+      const sessionId = crypto.randomUUID();
+      res.json({ message: "Sync started", institution, sessionId });
 
-      runInstitutionSync(institution).catch((err) => {
+      runInstitutionSync(institution, sessionId).catch((err) => {
         console.error(`[sync] Background sync failed for ${institution}:`, err?.message);
       });
     } catch (err: any) {
@@ -586,6 +588,7 @@ export async function registerRoutes(
             modality: r.modality,
             indication: r.indication,
             developmentStage: r.developmentStage,
+            firstSeenAt: r.createdAt,
           })),
         syncRunning: isSyncRunning(),
         syncRunningFor: getSyncRunningFor(),

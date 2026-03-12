@@ -174,7 +174,7 @@ export interface SyncResult {
   relevantCount: number;
 }
 
-export async function runInstitutionSync(institutionName: string): Promise<SyncResult> {
+export async function runInstitutionSync(institutionName: string, providedSessionId?: string): Promise<SyncResult> {
   if (ingestionRunning) throw new Error("Full ingestion is running — cannot sync");
 
   const alreadyLocked = syncRunning && syncInstitution === institutionName;
@@ -188,7 +188,7 @@ export async function runInstitutionSync(institutionName: string): Promise<SyncR
     syncInstitution = institutionName;
   }
 
-  const sessionId = crypto.randomUUID();
+  const sessionId = providedSessionId ?? crypto.randomUUID();
 
   try {
     const currentIndexed = await storage.getInstitutionIndexedCount(institutionName);
@@ -243,7 +243,7 @@ export async function runInstitutionSync(institutionName: string): Promise<SyncR
         modality: "unknown",
         indication: "unknown",
         developmentStage: l.stage ?? "unknown",
-        status: "staged",
+        status: "scraped",
       });
     }
 
@@ -265,25 +265,31 @@ export async function runInstitutionSync(institutionName: string): Promise<SyncR
       const toEnrich = newRows.map((r, i) => ({ id: i, assetName: r.assetName }));
       const enrichResults = await enrichBatch(toEnrich, 30);
 
-      const enrichUpdates: Array<{ fingerprint: string; data: any }> = [];
+      const enrichUpdates: Array<{ fingerprint: string; enrichment: { biotechRelevant: boolean; target: string; modality: string; indication: string; developmentStage: string } }> = [];
       for (const [idx, enrichment] of enrichResults) {
         const row = newRows[idx];
         enrichUpdates.push({
           fingerprint: row.fingerprint,
-          data: enrichment,
+          enrichment: {
+            biotechRelevant: enrichment.biotechRelevant ?? false,
+            target: enrichment.target ?? "unknown",
+            modality: enrichment.modality ?? "unknown",
+            indication: enrichment.indication ?? "unknown",
+            developmentStage: enrichment.developmentStage ?? "unknown",
+          },
         });
         if (enrichment.biotechRelevant) relevantCount++;
       }
 
-      for (const { fingerprint, data } of enrichUpdates) {
+      for (const { fingerprint, enrichment: e } of enrichUpdates) {
         await db
           .update(syncStaging)
           .set({
-            relevant: data.biotechRelevant,
-            target: data.target,
-            modality: data.modality,
-            indication: data.indication,
-            developmentStage: data.developmentStage,
+            relevant: e.biotechRelevant,
+            target: e.target,
+            modality: e.modality,
+            indication: e.indication,
+            developmentStage: e.developmentStage,
           })
           .where(and(
             eq(syncStaging.sessionId, sessionId),

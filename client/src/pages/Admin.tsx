@@ -290,6 +290,7 @@ interface SyncStatusResponse {
     modality: string;
     indication: string;
     developmentStage: string;
+    firstSeenAt: string;
   }>;
   syncRunning: boolean;
   syncRunningFor: string | null;
@@ -303,6 +304,20 @@ function InstitutionSync({ pw }: { pw: string }) {
   const { data: institutionsData } = useQuery<{ institutions: string[] }>({
     queryKey: ["/api/scrapers/active"],
   });
+
+  const { data: indexedCountsData } = useQuery<{ indexedCounts: Record<string, number> }>({
+    queryKey: ["/api/admin/scan-matrix-counts", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/scan-matrix", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) return { indexedCounts: {} };
+      const data = await res.json();
+      return { indexedCounts: data.indexedCounts ?? {} };
+    },
+  });
+
+  const indexedCounts = indexedCountsData?.indexedCounts ?? {};
 
   const { data: sessionsData, refetch: refetchSessions } = useQuery<{ sessions: SyncSessionData[] }>({
     queryKey: ["/api/ingest/sync/sessions", pw],
@@ -416,7 +431,11 @@ function InstitutionSync({ pw }: { pw: string }) {
           <option value="">Select an institution...</option>
           {institutions.sort().map((inst) => {
             const s = sessionMap.get(inst);
-            const suffix = s?.completedAt ? ` — last synced ${timeAgo(s.completedAt)}` : "";
+            const idxCount = indexedCounts[inst] ?? 0;
+            const parts: string[] = [];
+            if (idxCount > 0) parts.push(`${idxCount} indexed`);
+            if (s?.completedAt) parts.push(`synced ${timeAgo(s.completedAt)}`);
+            const suffix = parts.length > 0 ? ` — ${parts.join(", ")}` : "";
             return (
               <option key={inst} value={inst}>
                 {inst}{suffix}
@@ -569,6 +588,7 @@ function InstitutionSync({ pw }: { pw: string }) {
                           <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
                           <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
                           <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
+                          <th className="text-left py-2 px-3 font-medium text-foreground">First Seen</th>
                           <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
                         </tr>
                       </thead>
@@ -581,6 +601,9 @@ function InstitutionSync({ pw }: { pw: string }) {
                             <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
                             <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
                             <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
+                            <td className="py-2 px-3 text-muted-foreground text-xs" data-testid={`sync-entry-firstseen-${i}`}>
+                              {entry.firstSeenAt ? formatDate(entry.firstSeenAt) : "—"}
+                            </td>
                             <td className="py-2 px-3 text-center">
                               {entry.sourceUrl ? (
                                 <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">

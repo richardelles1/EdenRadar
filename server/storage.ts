@@ -33,7 +33,7 @@ export interface IStorage {
   bulkUpsertIngestedAssets(
     listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
     onProgress?: (done: number, total: number) => void
-  ): Promise<{ newAssets: Array<{ id: number; assetName: string }>; totalProcessed: number }>;
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }>;
   updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
@@ -143,7 +143,7 @@ export class DatabaseStorage implements IStorage {
   async bulkUpsertIngestedAssets(
     listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
     onProgress?: (done: number, total: number) => void
-  ): Promise<{ newAssets: Array<{ id: number; assetName: string }>; totalProcessed: number }> {
+  ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }> {
     const CHUNK = 800;
     const total = listings.length;
     const allFingerprints = listings.map((l) => l.fingerprint);
@@ -163,14 +163,14 @@ export class DatabaseStorage implements IStorage {
     const existingListings = listings.filter((l) => existingSet.has(l.fingerprint));
 
     // 2. Bulk INSERT new listings (chunked)
-    const newAssets: Array<{ id: number; assetName: string }> = [];
+    const newAssets: Array<{ id: number; assetName: string; fingerprint: string }> = [];
     for (let i = 0; i < newListings.length; i += CHUNK) {
       const chunk = newListings.slice(i, i + CHUNK);
       const inserted = await db
         .insert(ingestedAssets)
         .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
-        .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName });
-      for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName });
+        .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName, fingerprint: ingestedAssets.fingerprint });
+      for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName, fingerprint: row.fingerprint });
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
     }
 

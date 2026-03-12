@@ -153,7 +153,7 @@ export const syncStaging = pgTable("sync_staging", {
   modality: text("modality").notNull().default("unknown"),
   indication: text("indication").notNull().default("unknown"),
   developmentStage: text("development_stage").notNull().default("unknown"),
-  status: text("status").notNull().default("staged"),
+  status: text("status").notNull().default("scraped"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
