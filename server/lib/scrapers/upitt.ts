@@ -1,5 +1,4 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchJson } from "./utils";
 
 const INST = "University of Pittsburgh";
 const JSON_URL = "https://inventions.pitt.edu/technologies/index.json";
@@ -15,9 +14,20 @@ export const upittScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
     try {
-      const data = await fetchJson<PittTech[]>(JSON_URL);
-      if (!data || !Array.isArray(data)) {
-        console.log(`[scraper] ${INST}: 0 listings (no data)`);
+      const res = await fetch(JSON_URL, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)",
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) {
+        console.error(`[scraper] ${INST}: HTTP ${res.status}`);
+        return [];
+      }
+      const data: PittTech[] = await res.json();
+      if (!Array.isArray(data)) {
+        console.log(`[scraper] ${INST}: 0 listings (response is not an array)`);
         return [];
       }
 

@@ -19,7 +19,7 @@ interface PurdueResponse {
 async function fetchPage(page: number): Promise<PurdueResponse> {
   const params = new URLSearchParams({
     page: String(page),
-    itemsPerPage: "20",
+    itemsPerPage: "100",
     orderBy: "0",
   });
   params.append("columns[]", "name");
@@ -31,7 +31,7 @@ async function fetchPage(page: number): Promise<PurdueResponse> {
       Accept: "application/json",
       Referer: "https://licensing.prf.org/products",
     },
-    signal: AbortSignal.timeout(15_000),
+    signal: AbortSignal.timeout(20_000),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json() as Promise<PurdueResponse>;

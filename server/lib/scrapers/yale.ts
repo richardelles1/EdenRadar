@@ -81,13 +81,13 @@ async function runWithConcurrency<T>(
 ): Promise<T[]> {
   const results: T[] = [];
   let index = 0;
-  async function worker() {
+  const worker = async () => {
     while (index < tasks.length) {
       const i = index++;
       results[i] = await tasks[i]();
     }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
   return results;
 }
 

@@ -256,7 +256,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   undScraper,
   sfuScraper,
   warfScraper,
-  // ── Flintbox (verified working orgIds) ───────────────────────────────────
+  // ── Flintbox / in-part / stubs (migrated from deprecated Flintbox API) ──
   ucfScraper,
   fiuScraper,
   riceScraper,

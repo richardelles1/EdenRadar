@@ -2,82 +2,119 @@ import * as cheerio from "cheerio";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 const INST = "UC Berkeley";
-const BASE_URL = "https://techtransfer.universityofcalifornia.edu";
-const SITEMAP_URL = `${BASE_URL}/sitemap.xml`;
+const BASE = "https://techtransfer.universityofcalifornia.edu";
+const LIST_URL = `${BASE}/Default?RunSearch=true&campus=B`;
+const UA = "Mozilla/5.0 (compatible; EdenRadar/2.0)";
+const NEXT_TARGET = "ctl00$ContentPlaceHolder1$ucNCDList$ucPagination$nextPage";
+const MAX_PAGES = 30;
 
-async function runWithConcurrency<T>(
-  tasks: (() => Promise<T>)[],
-  concurrency: number
-): Promise<T[]> {
-  const results: T[] = [];
-  let index = 0;
-  async function worker() {
-    while (index < tasks.length) {
-      const i = index++;
-      results[i] = await tasks[i]();
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, worker));
+function extractListings(html: string, institution: string): ScrapedListing[] {
+  const $ = cheerio.load(html);
+  const results: ScrapedListing[] = [];
+  $('a.tech-link[href*="NCD/"]').each((_, el) => {
+    const href = $(el).attr("href") ?? "";
+    const title = $(el).text().trim();
+    if (!title || title.length < 5) return;
+    const url = href.startsWith("http") ? href : `${BASE}${href}`;
+    results.push({ title, description: "", url, institution });
+  });
   return results;
 }
 
-async function fetchTitle(ncdPath: string): Promise<{ url: string; title: string } | null> {
-  const url = `${BASE_URL}/${ncdPath}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const title = $("h1.tech-heading-main").first().text().trim()
-      || $("h1").first().text().trim()
-      || $("title").text().replace(/\s*-\s*Available technology.*$/i, "").trim();
-    if (!title) return null;
-    return { url, title };
-  } catch {
-    return null;
+function extractViewState(html: string): Record<string, string> {
+  const fields: Record<string, string> = {};
+  for (const name of ["__VIEWSTATE", "__VIEWSTATEGENERATOR", "__EVENTVALIDATION"]) {
+    const re = new RegExp(`id="${name}"[^>]*value="([^"]*)"`);
+    const m = html.match(re);
+    if (m) fields[name] = m[1];
   }
+  return fields;
+}
+
+function extractTotalPages(html: string): number {
+  const m = html.match(/lblTotalPages[^>]*>(\d+)<\/span>/i);
+  return m ? Math.min(parseInt(m[1], 10), MAX_PAGES) : 1;
 }
 
 export const ucBerkeleyScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: fetching NCD technology pages from sitemap...`);
+    console.log(`[scraper] ${INST}: fetching campus-filtered listing pages...`);
     try {
-      const res = await fetch(SITEMAP_URL, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-        signal: AbortSignal.timeout(15_000),
+      const res = await fetch(LIST_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(20_000),
       });
-      if (!res.ok) throw new Error(`sitemap HTTP ${res.status}`);
-      const xml = await res.text();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let html = await res.text();
 
-      const ncdPaths: string[] = [];
-      const re = /NCD\/(\d+)\.html/g;
-      let m: RegExpExecArray | null;
       const seen = new Set<string>();
-      while ((m = re.exec(xml)) !== null) {
-        const path = `NCD/${m[1]}.html`;
-        if (!seen.has(path)) {
-          seen.add(path);
-          ncdPaths.push(path);
+      const allResults: ScrapedListing[] = [];
+
+      const addResults = (listings: ScrapedListing[]) => {
+        for (const l of listings) {
+          if (!seen.has(l.url)) {
+            seen.add(l.url);
+            allResults.push(l);
+          }
         }
       }
 
-      console.log(`[scraper] ${INST}: found ${ncdPaths.length} NCD tech IDs in sitemap`);
+      addResults(extractListings(html, INST));
+      const totalPages = extractTotalPages(html);
+      console.log(`[scraper] ${INST}: page 1/${totalPages} — ${allResults.length} listings`);
 
-      const tasks = ncdPaths.map((path) => () => fetchTitle(path));
-      const results = await runWithConcurrency(tasks, 4);
+      let viewState = extractViewState(html);
 
-      const listings: ScrapedListing[] = results
-        .filter((r): r is { url: string; title: string } => r !== null)
-        .map(({ url, title }) => ({ title, description: "", url, institution: INST }));
+      for (let page = 2; page <= totalPages; page++) {
+        if (!viewState.__VIEWSTATE) {
+          console.warn(`[scraper] ${INST}: missing __VIEWSTATE at page ${page}, stopping`);
+          break;
+        }
 
-      console.log(`[scraper] ${INST}: scraped ${listings.length} listings`);
-      return listings;
+        const body = new URLSearchParams();
+        body.set("__EVENTTARGET", NEXT_TARGET);
+        body.set("__EVENTARGUMENT", "");
+        if (viewState.__VIEWSTATE) body.set("__VIEWSTATE", viewState.__VIEWSTATE);
+        if (viewState.__VIEWSTATEGENERATOR) body.set("__VIEWSTATEGENERATOR", viewState.__VIEWSTATEGENERATOR);
+        if (viewState.__EVENTVALIDATION) body.set("__EVENTVALIDATION", viewState.__EVENTVALIDATION);
+
+        try {
+          const postRes = await fetch(LIST_URL, {
+            method: "POST",
+            headers: {
+              "User-Agent": UA,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+            signal: AbortSignal.timeout(20_000),
+          });
+
+          if (!postRes.ok) {
+            console.warn(`[scraper] ${INST}: page ${page} POST returned ${postRes.status}, stopping`);
+            break;
+          }
+
+          html = await postRes.text();
+          const before = allResults.length;
+          addResults(extractListings(html, INST));
+          const newCount = allResults.length - before;
+          if (newCount === 0) {
+            console.log(`[scraper] ${INST}: no new listings on page ${page}, stopping`);
+            break;
+          }
+
+          viewState = extractViewState(html);
+        } catch (err: any) {
+          console.warn(`[scraper] ${INST}: page ${page} error: ${err?.message}, stopping`);
+          break;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${allResults.length} listings across ${totalPages} pages`);
+      return allResults;
     } catch (err: any) {
-      console.error(`[scraper] ${INST}: error — ${err.message}`);
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
   },

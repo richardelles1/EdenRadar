@@ -6,20 +6,19 @@ const BASE = "https://techtransfer.universityofcalifornia.edu";
 const LIST_URL = `${BASE}/Default?RunSearch=true&campus=SF`;
 const UA = "Mozilla/5.0 (compatible; EdenRadar/2.0)";
 const NEXT_TARGET = "ctl00$ContentPlaceHolder1$ucNCDList$ucPagination$nextPage";
+const MAX_PAGES = 30;
 
-function extractNcdPaths(html: string): string[] {
-  const paths: string[] = [];
-  const seen = new Set<string>();
-  const re = /NCD\/(\d+)\.html/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(html)) !== null) {
-    const path = `NCD/${m[1]}.html`;
-    if (!seen.has(path)) {
-      seen.add(path);
-      paths.push(path);
-    }
-  }
-  return paths;
+function extractListings(html: string, institution: string): ScrapedListing[] {
+  const $ = cheerio.load(html);
+  const results: ScrapedListing[] = [];
+  $('a.tech-link[href*="NCD/"]').each((_, el) => {
+    const href = $(el).attr("href") ?? "";
+    const title = $(el).text().trim();
+    if (!title || title.length < 5) return;
+    const url = href.startsWith("http") ? href : `${BASE}${href}`;
+    results.push({ title, description: "", url, institution });
+  });
+  return results;
 }
 
 function extractViewState(html: string): Record<string, string> {
@@ -32,56 +31,38 @@ function extractViewState(html: string): Record<string, string> {
   return fields;
 }
 
-const MAX_PAGES = 30;
-
 function extractTotalPages(html: string): number {
   const m = html.match(/lblTotalPages[^>]*>(\d+)<\/span>/i);
-  return m ? Math.min(parseInt(m[1], 10), MAX_PAGES) : MAX_PAGES;
-}
-
-async function fetchTitle(ncdPath: string): Promise<{ url: string; title: string } | null> {
-  const url = `${BASE}/${ncdPath}`;
-  try {
-    const res = await fetch(url, {
-      headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const $ = cheerio.load(html);
-    const title =
-      $("h1.tech-heading-main").first().text().trim() ||
-      $("h1").first().text().trim() ||
-      $("title").text().replace(/\s*-\s*Available technology.*$/i, "").trim();
-    if (!title) return null;
-    return { url, title };
-  } catch {
-    return null;
-  }
+  return m ? Math.min(parseInt(m[1], 10), MAX_PAGES) : 1;
 }
 
 export const ucsfScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: fetching NCD technology list (all pages)...`);
+    console.log(`[scraper] ${INST}: fetching campus-filtered listing pages...`);
     try {
       const res = await fetch(LIST_URL, {
         headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(15_000),
+        signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       let html = await res.text();
 
-      const allNcdPaths: string[] = [];
-      const globalSeen = new Set<string>();
+      const seen = new Set<string>();
+      const allResults: ScrapedListing[] = [];
 
-      const page1Paths = extractNcdPaths(html);
-      for (const p of page1Paths) {
-        if (!globalSeen.has(p)) { globalSeen.add(p); allNcdPaths.push(p); }
+      const addResults = (listings: ScrapedListing[]) => {
+        for (const l of listings) {
+          if (!seen.has(l.url)) {
+            seen.add(l.url);
+            allResults.push(l);
+          }
+        }
       }
 
+      addResults(extractListings(html, INST));
       const totalPages = extractTotalPages(html);
-      console.log(`[scraper] ${INST}: page 1/${totalPages} — ${page1Paths.length} NCD IDs`);
+      console.log(`[scraper] ${INST}: page 1/${totalPages} — ${allResults.length} listings`);
 
       let viewState = extractViewState(html);
 
@@ -98,50 +79,40 @@ export const ucsfScraper: InstitutionScraper = {
         if (viewState.__VIEWSTATEGENERATOR) body.set("__VIEWSTATEGENERATOR", viewState.__VIEWSTATEGENERATOR);
         if (viewState.__EVENTVALIDATION) body.set("__EVENTVALIDATION", viewState.__EVENTVALIDATION);
 
-        const postRes = await fetch(LIST_URL, {
-          method: "POST",
-          headers: {
-            "User-Agent": UA,
-            "Content-Type": "application/x-www-form-urlencoded",
-          },
-          body: body.toString(),
-          signal: AbortSignal.timeout(15_000),
-        });
+        try {
+          const postRes = await fetch(LIST_URL, {
+            method: "POST",
+            headers: {
+              "User-Agent": UA,
+              "Content-Type": "application/x-www-form-urlencoded",
+            },
+            body: body.toString(),
+            signal: AbortSignal.timeout(20_000),
+          });
 
-        if (!postRes.ok) {
-          console.warn(`[scraper] ${INST}: page ${page} POST returned ${postRes.status}, stopping`);
+          if (!postRes.ok) {
+            console.warn(`[scraper] ${INST}: page ${page} POST returned ${postRes.status}, stopping`);
+            break;
+          }
+
+          html = await postRes.text();
+          const before = allResults.length;
+          addResults(extractListings(html, INST));
+          const newCount = allResults.length - before;
+          if (newCount === 0) {
+            console.log(`[scraper] ${INST}: no new listings on page ${page}, stopping`);
+            break;
+          }
+
+          viewState = extractViewState(html);
+        } catch (err: any) {
+          console.warn(`[scraper] ${INST}: page ${page} error: ${err?.message}, stopping`);
           break;
-        }
-
-        html = await postRes.text();
-        const pagePaths = extractNcdPaths(html);
-        let newCount = 0;
-        for (const p of pagePaths) {
-          if (!globalSeen.has(p)) { globalSeen.add(p); allNcdPaths.push(p); newCount++; }
-        }
-        console.log(`[scraper] ${INST}: page ${page}/${totalPages} — ${pagePaths.length} NCD IDs, ${newCount} new (total: ${allNcdPaths.length})`);
-        if (newCount === 0) {
-          console.log(`[scraper] ${INST}: no new IDs on page ${page}, stopping pagination`);
-          break;
-        }
-
-        viewState = extractViewState(html);
-      }
-
-      console.log(`[scraper] ${INST}: collected ${allNcdPaths.length} NCD IDs across ${totalPages} pages, fetching titles...`);
-
-      const results: ScrapedListing[] = [];
-      const BATCH = 10;
-      for (let i = 0; i < allNcdPaths.length; i += BATCH) {
-        const batch = allNcdPaths.slice(i, i + BATCH);
-        const fetched = await Promise.all(batch.map(fetchTitle));
-        for (const r of fetched) {
-          if (r) results.push({ title: r.title, description: "", url: r.url, institution: INST });
         }
       }
 
-      console.log(`[scraper] ${INST}: scraped ${results.length} listings`);
-      return results;
+      console.log(`[scraper] ${INST}: ${allResults.length} listings across ${totalPages} pages`);
+      return allResults;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
