@@ -80,7 +80,7 @@ export const dataSources: Record<SourceKey, DataSource> = {
   techtransfer: {
     id: "techtransfer",
     label: "Tech Transfer",
-    description: "University technology licensing offices (28 institutions, ~224 listings)",
+    description: "University technology licensing offices (138 institutions — DB-backed, updated nightly)",
     search: searchTechTransfer,
   },
   nih_reporter: {

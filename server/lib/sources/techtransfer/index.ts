@@ -1,3 +1,6 @@
+import { and, eq, or, ilike, desc, sql } from "drizzle-orm";
+import { db } from "../../../db";
+import { ingestedAssets } from "@shared/schema";
 import type { RawSignal } from "../../types";
 import { getStanfordListings } from "./stanford";
 import { getMitListings } from "./mit";
@@ -70,13 +73,70 @@ function matchesQuery(signal: RawSignal, query: string): boolean {
   return terms.some((t) => haystack.includes(t));
 }
 
-export async function searchTechTransfer(query: string, maxResults = 10): Promise<RawSignal[]> {
-  const allListings = adapters.flatMap((a) => a.getListings());
-  const matched = allListings.filter((s) => matchesQuery(s, query));
+function toSignal(asset: typeof ingestedAssets.$inferSelect): RawSignal {
+  return {
+    id: String(asset.id),
+    source_type: "tech_transfer" as const,
+    title: asset.assetName,
+    text: asset.summary,
+    authors_or_owner: asset.institution,
+    institution_or_sponsor: asset.institution,
+    date: asset.lastSeenAt.toISOString().slice(0, 10),
+    stage_hint: asset.developmentStage,
+    url: asset.sourceUrl ?? "",
+    metadata: {
+      target: asset.target,
+      modality: asset.modality,
+      indication: asset.indication,
+    },
+  };
+}
 
-  if (matched.length === 0) {
-    return allListings.slice(0, Math.min(5, maxResults));
+export async function searchTechTransfer(query: string, maxResults = 50): Promise<RawSignal[]> {
+  // Primary path: query the ingested_assets DB table (populated by the nightly cron).
+  // Only fall back to static adapters when the DB table has zero tech_transfer rows.
+  try {
+    const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+
+    // Check total tech_transfer row count first — determines fallback eligibility
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.sourceType, "tech_transfer"));
+    const dbHasData = Number(count) > 0;
+
+    if (dbHasData) {
+      let rows;
+      if (terms.length > 0) {
+        const conditions = terms.flatMap((t) => [
+          ilike(ingestedAssets.assetName, `%${t}%`),
+          ilike(ingestedAssets.summary, `%${t}%`),
+        ]);
+        rows = await db
+          .select()
+          .from(ingestedAssets)
+          .where(and(eq(ingestedAssets.sourceType, "tech_transfer"), or(...conditions)))
+          .orderBy(desc(ingestedAssets.lastSeenAt))
+          .limit(maxResults);
+      } else {
+        rows = await db
+          .select()
+          .from(ingestedAssets)
+          .where(eq(ingestedAssets.sourceType, "tech_transfer"))
+          .orderBy(desc(ingestedAssets.lastSeenAt))
+          .limit(maxResults);
+      }
+      // When DB has data, always return DB rows (empty array if no keyword match)
+      return rows.map(toSignal);
+    }
+  } catch (err: any) {
+    console.warn("[techtransfer] DB search failed, using static fallback:", err?.message);
   }
 
-  return matched.slice(0, maxResults);
+  // Fallback: static adapters (used only when ingested_assets has no tech_transfer rows yet)
+  const allListings = adapters.flatMap((a) => a.getListings());
+  const terms = query.toLowerCase().split(/\s+/).filter((t) => t.length > 2);
+  if (terms.length === 0) return allListings.slice(0, maxResults);
+  const matched = allListings.filter((s) => matchesQuery(s, query));
+  return matched.length > 0 ? matched.slice(0, maxResults) : allListings.slice(0, Math.min(5, maxResults));
 }
