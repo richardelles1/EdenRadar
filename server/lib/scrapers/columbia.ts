@@ -30,6 +30,7 @@ async function fetchPage(category: string, page: number): Promise<string[]> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+      signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) return [];
     const html = await res.text();

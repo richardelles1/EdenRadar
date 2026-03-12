@@ -271,10 +271,21 @@ export async function runAllScrapers(
   let listingsFound = 0;
   const activeInstitutions = new Set<string>();
 
+  const SCRAPER_TIMEOUT_MS = 5 * 60 * 1000;
+
   const tasks = ALL_SCRAPERS.map((scraper) => async () => {
     activeInstitutions.add(scraper.institution);
     try {
-      return await scraper.scrape();
+      const result = await Promise.race([
+        scraper.scrape(),
+        new Promise<ScrapedListing[]>((_, reject) =>
+          setTimeout(() => reject(new Error(`scraper timeout`)), SCRAPER_TIMEOUT_MS)
+        ),
+      ]);
+      return result;
+    } catch (err: any) {
+      console.warn(`[scrapers] ${scraper.institution} failed: ${err?.message}`);
+      return [] as ScrapedListing[];
     } finally {
       activeInstitutions.delete(scraper.institution);
     }
