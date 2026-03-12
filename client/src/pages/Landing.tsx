@@ -154,7 +154,7 @@ const FEATURES = [
     icon: Database,
     title: "Multi-Source Intelligence",
     description:
-      "Ingests PubMed, ClinicalTrials.gov, bioRxiv, medRxiv, patents, NIH Reporter, OpenAlex, and 124 tech transfer offices.",
+      "Ingests PubMed, ClinicalTrials.gov, bioRxiv, medRxiv, patents, NIH Reporter, OpenAlex, and 135 tech transfer offices.",
   },
   {
     icon: Download,
@@ -274,7 +274,7 @@ export default function Landing() {
                   {[
                     { value: "10M+", label: "Papers indexed" },
                     { value: "8", label: "Data sources" },
-                    { value: "124", label: "TTOs covered" },
+                    { value: "135", label: "TTOs covered" },
                   ].map((stat) => (
                     <div key={stat.label} className="text-center sm:text-left">
                       <div

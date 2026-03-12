@@ -120,6 +120,26 @@ import {
   uvicScraper,
   monashScraper,
   nusScraper,
+  // in-part Playwright scrapers (converted stubs + new)
+  manchesterScraper,
+  kclScraper,
+  liverpoolScraper,
+  durhamInPartScraper,
+  ethzurichScraper,
+  helsinkiScraper,
+  aaltoScraper,
+  tampereScraper,
+  lmuScraper,
+  rwthScraper,
+  tcdScraper,
+  ulbScraper,
+  utorontoScraper,
+  westernScraper,
+  queensuScraper,
+  ualbertaScraper,
+  griffithScraper,
+  ntuScraper,
+  uhawScraper,
 } from "./new-institutions";
 
 export { ScrapedListing, InstitutionScraper };
@@ -245,6 +265,26 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   uvicScraper,
   monashScraper,
   nusScraper,
+  // ── in-part Playwright scrapers (converted stubs + new institutions) ───
+  manchesterScraper,
+  kclScraper,
+  liverpoolScraper,
+  durhamInPartScraper,
+  ethzurichScraper,
+  helsinkiScraper,
+  aaltoScraper,
+  tampereScraper,
+  lmuScraper,
+  rwthScraper,
+  tcdScraper,
+  ulbScraper,
+  utorontoScraper,
+  westernScraper,
+  queensuScraper,
+  ualbertaScraper,
+  griffithScraper,
+  ntuScraper,
+  uhawScraper,
 ];
 
 async function runWithConcurrency<T>(

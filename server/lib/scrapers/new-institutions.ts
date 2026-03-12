@@ -1,3 +1,4 @@
+import { chromium, type Browser } from "playwright";
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { fetchHtml, cleanText } from "./utils";
@@ -17,31 +18,93 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
   return {
     institution,
     async scrape(): Promise<ScrapedListing[]> {
-      const url = `https://${subdomain}.portals.in-part.com/`;
+      const portalUrl = `https://${subdomain}.portals.in-part.com/`;
+      let browser: Browser | null = null;
       try {
-        const res = await fetch(url, {
+        const res = await fetch(portalUrl, {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
           signal: AbortSignal.timeout(15000),
         });
         if (!res.ok) return [];
         const html = await res.text();
-        const m = html.match(/__NEXT_DATA__[^>]+>([\s\S]+?)<\/script>/);
+        const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]+?)<\/script>/);
         if (!m) return [];
         const data = JSON.parse(m[1]);
         const queries = data?.props?.pageProps?.dehydratedState?.queries ?? [];
         const page = queries[0]?.state?.data?.pages?.[0];
         if (!page?.results) return [];
-        const results: ScrapedListing[] = page.results.map((r: any) => ({
-          title: r.title ?? "",
-          description: "",
-          url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
-          institution,
-        })).filter((r: ScrapedListing) => r.title.length > 0);
-        console.log(`[scraper] ${institution}: ${results.length} listings (in-part SSR page 1 of ${page.pagination?.last ?? "?"})`);
-        return results;
+
+        const totalPages = page.pagination?.last ?? 1;
+        const totalCount = page.pagination?.count ?? page.results.length;
+
+        if (totalPages <= 1) {
+          const results: ScrapedListing[] = page.results
+            .map((r: any) => ({
+              title: r.title ?? "",
+              description: "",
+              url: `https://${subdomain}.portals.in-part.com/${r.idHash}`,
+              institution,
+            }))
+            .filter((r: ScrapedListing) => r.title.length > 0);
+          console.log(`[scraper] ${institution}: ${results.length} listings (in-part, 1 page)`);
+          return results;
+        }
+
+        browser = await chromium.launch({ headless: true });
+        const bPage = await browser.newPage();
+        await bPage.goto(portalUrl, { waitUntil: "networkidle", timeout: 45000 });
+
+        let prevLinkCount = 0;
+        let stableRounds = 0;
+        for (let scroll = 0; scroll < totalPages * 2 + 5; scroll++) {
+          await bPage.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await bPage.waitForTimeout(2000);
+          const linkCount = await bPage.evaluate(() =>
+            document.querySelectorAll('a[href^="/"]').length
+          );
+          if (linkCount === prevLinkCount) {
+            stableRounds++;
+            if (stableRounds >= 2) break;
+          } else {
+            stableRounds = 0;
+          }
+          prevLinkCount = linkCount;
+        }
+
+        const listings = await bPage.evaluate((inst: string) => {
+          const links = Array.from(document.querySelectorAll('a[href^="/"]'));
+          const seen = new Set<string>();
+          const results: { title: string; description: string; url: string; institution: string }[] = [];
+          for (const a of links) {
+            const href = a.getAttribute("href") ?? "";
+            if (href.length < 10 || href.startsWith("/_") || href === "/profile") continue;
+            if (seen.has(href)) continue;
+            seen.add(href);
+            const title = (a.textContent ?? "").replace(/\s+/g, " ").trim();
+            const cleaned = title.replace(/^[A-Z][a-z]+ (?:University|College|Institute|School)[A-Za-z ]*/, "").trim();
+            if (!cleaned || cleaned.length < 5) continue;
+            results.push({
+              title: cleaned,
+              description: "",
+              url: `https://${location.hostname}${href}`,
+              institution: inst,
+            });
+          }
+          return results;
+        }, institution);
+
+        await browser.close();
+        browser = null;
+
+        console.log(`[scraper] ${institution}: ${listings.length} listings (in-part Playwright, expected ~${totalCount})`);
+        return listings as ScrapedListing[];
       } catch (err: any) {
         console.warn(`[scraper] ${institution} (in-part): ${err?.message}`);
         return [];
+      } finally {
+        if (browser) {
+          await browser.close().catch(() => {});
+        }
       }
     },
   };
@@ -678,7 +741,7 @@ export const asuScraper = createWordPressApiScraper("https://skysonginnovations.
 export const oxfordScraper = createStubScraper("University of Oxford");
 export const imperialScraper = createStubScraper("Imperial College London");
 export const uclScraper = createStubScraper("University College London");
-export const manchesterScraper = createStubScraper("University of Manchester");
+export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
 export const edinburghScraper = createStubScraper("University of Edinburgh");
 export const bristolScraper = createStubScraper("University of Bristol");
 export const glasgowScraper = createStubScraper("University of Glasgow");
@@ -686,10 +749,12 @@ export const birminghamScraper = createStubScraper("University of Birmingham");
 export const nottinghamScraper = createStubScraper("University of Nottingham");
 export const sheffieldScraper = createStubScraper("University of Sheffield");
 export const warwickScraper = createStubScraper("University of Warwick");
-export const kclScraper = createStubScraper("King's College London");
+export const kclScraper = createInPartScraper("kcl", "King's College London");
+export const liverpoolScraper = createInPartScraper("liverpool", "University of Liverpool");
+export const durhamInPartScraper = createInPartScraper("durham", "Durham University");
 
 // ── International: Switzerland ───────────────────────────────────────────
-export const ethzurichScraper = createStubScraper("ETH Zurich");
+export const ethzurichScraper = createInPartScraper("ethz", "ETH Zurich");
 export const epflScraper = createStubScraper("EPFL");
 export const ubaselScraper = createStubScraper("University of Basel");
 export const ulausanneScraper = createStubScraper("University of Lausanne");
@@ -715,13 +780,14 @@ export const dtuScraper = createStubScraper("Technical University of Denmark");
 export const lundScraper = createStubScraper("Lund University");
 export const chalmersScraper = createStubScraper("Chalmers University of Technology");
 export const gothenburgScraper = createStubScraper("University of Gothenburg");
-export const helsinkiScraper = createStubScraper("University of Helsinki");
-export const aaltoScraper = createStubScraper("Aalto University");
+export const helsinkiScraper = createInPartScraper("helsinki", "University of Helsinki");
+export const aaltoScraper = createInPartScraper("aalto", "Aalto University");
+export const tampereScraper = createInPartScraper("tampere", "Tampere University");
 
 // ── International: Germany ───────────────────────────────────────────────
 export const tumScraper = createStubScraper("Technical University of Munich");
-export const lmuScraper = createStubScraper("Ludwig Maximilian University of Munich");
-export const rwthScraper = createStubScraper("RWTH Aachen University");
+export const lmuScraper = createInPartScraper("lmu", "Ludwig Maximilian University of Munich");
+export const rwthScraper = createInPartScraper("rwth", "RWTH Aachen University");
 export const ufreiburgScraper = createStubScraper("University of Freiburg");
 export const ubonnScraper = createStubScraper("University of Bonn");
 export const ucologneScraper = createStubScraper("University of Cologne");
@@ -732,8 +798,15 @@ export const heidelbergScraper = createStubScraper("University of Heidelberg");
 export const weizmannScraper = createStubScraper("Weizmann Institute of Science");
 export const technionScraper = createStubScraper("Technion – Israel Institute of Technology");
 
+// ── International: Ireland ───────────────────────────────────────────────
+export const tcdScraper = createInPartScraper("tcd", "Trinity College Dublin");
+export const ulbScraper = createInPartScraper("ulb", "Université Libre de Bruxelles");
+
 // ── International: Canada ────────────────────────────────────────────────
-export const utorontoScraper = createStubScraper("University of Toronto");
+export const utorontoScraper = createInPartScraper("toronto", "University of Toronto");
+export const westernScraper = createInPartScraper("western", "Western University");
+export const queensuScraper = createInPartScraper("queensu", "Queen's University");
+export const ualbertaScraper = createInPartScraper("ualberta", "University of Alberta");
 export const mcgillScraper = createFlintboxScraper(
   { slug: "mcgill", orgId: 37, accessKey: "b2e0b0b3-23e5-4738-bbc8-846269cddced" },
   "McGill University"
@@ -805,3 +878,8 @@ export const nusScraper = createFlintboxScraper(
 );
 export const hkustScraper = createStubScraper("Hong Kong University of Science and Technology");
 export const hkuScraper = createStubScraper("University of Hong Kong");
+export const griffithScraper = createInPartScraper("griffith", "Griffith University");
+export const ntuScraper = createInPartScraper("ntu", "Nottingham Trent University");
+
+// ── Additional US (in-part) ─────────────────────────────────────────────
+export const uhawScraper = createInPartScraper("hawaii", "University of Hawaii");
