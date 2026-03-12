@@ -106,10 +106,17 @@ function ScanTracking({ pw }: { pw: string }) {
 
   if (data.runs.length === 0) {
     return (
-      <div className="text-center py-20 text-muted-foreground" data-testid="scan-empty">
-        <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-40" />
-        <p className="text-lg font-medium">No completed scan runs yet</p>
-        <p className="text-sm mt-2">Run the ingestion pipeline to see scan data here.</p>
+      <div data-testid="scan-empty">
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-border" data-testid="total-in-system">
+          <Database className="h-4 w-4 text-primary" />
+          <span className="text-sm font-semibold text-foreground">{data.totalInSystem.toLocaleString()}</span>
+          <span className="text-sm text-muted-foreground">total unique TTO entries in system</span>
+        </div>
+        <div className="text-center py-20 text-muted-foreground">
+          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-40" />
+          <p className="text-lg font-medium">No completed scan runs yet</p>
+          <p className="text-sm mt-2">Run the ingestion pipeline to see scan data here.</p>
+        </div>
       </div>
     );
   }
