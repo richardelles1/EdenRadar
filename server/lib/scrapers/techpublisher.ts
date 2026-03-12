@@ -161,7 +161,9 @@ export function createTechPublisherScraper(
       });
       sitemapCatUrls.forEach((u) => homePageCats.add(u));
 
-      const allCatUrls = [...homePageCats];
+      const allCatUrls = opts.maxCats != null
+        ? [...homePageCats].slice(0, opts.maxCats)
+        : [...homePageCats];
       await runConcurrent(allCatUrls, async (catUrl) => {
         const $c = await fetchHtml(catUrl, FETCH_TIMEOUT_MS, signal);
         if ($c) harvestLinks($c, techSelector, seenUrls, seenTitles, results);
@@ -198,6 +200,10 @@ export function createTechPublisherScraper(
     institution,
     async scrape(): Promise<ScrapedListing[]> {
       const controller = new AbortController();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (opts.institutionTimeoutMs) {
+        timer = setTimeout(() => controller.abort(), opts.institutionTimeoutMs);
+      }
       try {
         return await scrapeInner(controller.signal);
       } catch (err: any) {
@@ -205,6 +211,8 @@ export function createTechPublisherScraper(
           console.error(`[scraper] ${institution} failed: ${err?.message}`);
         }
         return [];
+      } finally {
+        if (timer) clearTimeout(timer);
       }
     },
   };

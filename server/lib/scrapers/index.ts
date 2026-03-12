@@ -336,13 +336,22 @@ export async function runAllScrapers(
 ): Promise<ScrapedListing[]> {
   console.log(`[scrapers] Starting scrape for ${ALL_SCRAPERS.length} institutions...`);
 
+  const totalCount = ALL_SCRAPERS.length;
   let listingsFound = 0;
+  let doneCount = 0;
   const activeInstitutions = new Set<string>();
+
+  const emitProgress = () => {
+    onProgress?.(doneCount, totalCount, listingsFound, [...activeInstitutions]);
+  };
+
+  emitProgress();
 
   const SCRAPER_TIMEOUT_MS = 5 * 60 * 1000;
 
   const tasks = ALL_SCRAPERS.map((scraper) => async () => {
     activeInstitutions.add(scraper.institution);
+    emitProgress();
     try {
       const result = await Promise.race([
         scraper.scrape(),
@@ -360,8 +369,9 @@ export async function runAllScrapers(
   });
 
   const results = await runWithConcurrency(tasks, 5, (_taskIndex, result, done, total) => {
+    doneCount = done;
     listingsFound += (result as ScrapedListing[]).length;
-    onProgress?.(done, total, listingsFound, [...activeInstitutions]);
+    emitProgress();
   });
 
   const allListings = results.flat();
