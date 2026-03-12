@@ -229,5 +229,5 @@ export const INSTITUTIONS: Institution[] = [
 ];
 
 export const BLOCKED_SLUGS = new Set([
-  "ucsf", "duke", "mayo", "ucolorado", "columbia",
+  "mayo",
 ]);

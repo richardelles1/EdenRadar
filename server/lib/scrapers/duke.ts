@@ -19,6 +19,7 @@ export const dukeScraper: InstitutionScraper = {
     try {
       const res = await fetch(SITEMAP, {
         headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15000),
       });
       if (!res.ok) throw new Error(`sitemap HTTP ${res.status}`);
       const xml = await res.text();
