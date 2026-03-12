@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap } from "lucide-react";
+import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, Play, DollarSign } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -656,6 +656,293 @@ function InstitutionSync({ pw }: { pw: string }) {
   );
 }
 
+interface EnrichmentStats {
+  total: number;
+  unknownCount: number;
+  byField: { target: number; modality: number; indication: number; developmentStage: number };
+}
+
+interface EnrichmentStatus {
+  phase: "idle" | "mini" | "deep";
+  status: "idle" | "running" | "done" | "error";
+  processed: number;
+  total: number;
+  improved: number;
+  error?: string;
+}
+
+function Enrichment({ pw }: { pw: string }) {
+  const [polling, setPolling] = useState(false);
+  const { toast } = useToast();
+
+  const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
+    queryKey: ["/api/admin/enrichment/stats", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/stats", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load enrichment stats");
+      return res.json();
+    },
+  });
+
+  const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
+    queryKey: ["/api/admin/enrichment/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/status", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load enrichment status");
+      return res.json();
+    },
+    refetchInterval: polling ? 1500 : false,
+  });
+
+  const prevStatusRef = useRef<string | undefined>();
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    prevStatusRef.current = status?.status;
+    if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
+      setPolling(false);
+      refetchStats();
+      if (status.status === "done") {
+        toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed` });
+      } else {
+        toast({ title: "Enrichment failed", description: status.error ?? "Unknown error", variant: "destructive" });
+      }
+    }
+  }, [status?.status]);
+
+  const runMini = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/run-mini", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to start");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setPolling(true);
+      refetchStatus();
+      toast({ title: "Phase 1 started", description: "Running GPT-4o-mini pass on incomplete assets..." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const runDeep = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/run-deep", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to start");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      setPolling(true);
+      refetchStatus();
+      toast({ title: "Phase 2 started", description: "Running GPT-4o deep pass on remaining unknowns..." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const isRunning = status?.status === "running";
+  const unknownCount = stats?.unknownCount ?? 0;
+  const totalAssets = stats?.total ?? 0;
+
+  const miniCostEstimate = unknownCount * 0.0003;
+  const deepCostEstimate = unknownCount * 0.003;
+
+  const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+
+  if (statsLoading) {
+    return (
+      <div className="flex items-center justify-center py-20" data-testid="enrichment-loading">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="enrichment-tab">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-1">Total Assets</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-1">With Unknown Fields</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground mt-1">Fully Enriched</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
+            {totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%
+          </div>
+          <div className="text-xs text-muted-foreground mt-1">Completion Rate</div>
+        </div>
+      </div>
+
+      {stats && unknownCount > 0 && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border bg-muted/20">
+            <h3 className="text-sm font-semibold text-foreground">Per-Field Breakdown</h3>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border">
+            <div className="bg-card p-3 text-center">
+              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-target">{stats.byField.target.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Target</div>
+            </div>
+            <div className="bg-card p-3 text-center">
+              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-modality">{stats.byField.modality.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Modality</div>
+            </div>
+            <div className="bg-card p-3 text-center">
+              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-indication">{stats.byField.indication.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Indication</div>
+            </div>
+            <div className="bg-card p-3 text-center">
+              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-stage">{stats.byField.developmentStage.toLocaleString()}</div>
+              <div className="text-xs text-muted-foreground">Dev Stage</div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
+        <div className="px-5 py-3 border-b border-border bg-muted/20">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <DollarSign className="h-4 w-4" />
+            Estimated Cost
+          </h3>
+        </div>
+        <div className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+            <div>
+              <div className="text-sm font-medium text-foreground">Phase 1 (GPT-4o-mini)</div>
+              <div className="text-xs text-muted-foreground">{unknownCount.toLocaleString()} assets &times; ~$0.0003/asset</div>
+            </div>
+            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-phase1">
+              ~${miniCostEstimate.toFixed(2)}
+            </div>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+            <div>
+              <div className="text-sm font-medium text-foreground">Phase 2 (GPT-4o)</div>
+              <div className="text-xs text-muted-foreground">Up to {unknownCount.toLocaleString()} assets &times; ~$0.003/asset (fewer after Phase 1)</div>
+            </div>
+            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-phase2">
+              ~${deepCostEstimate.toFixed(2)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Button
+          onClick={() => runMini.mutate()}
+          disabled={isRunning || unknownCount === 0 || runMini.isPending}
+          className="flex-1"
+          data-testid="button-run-mini"
+        >
+          {isRunning && status?.phase === "mini" ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Play className="h-4 w-4 mr-2" />
+          )}
+          Run Phase 1 (Mini Pass)
+        </Button>
+        <Button
+          onClick={() => runDeep.mutate()}
+          disabled={isRunning || unknownCount === 0 || runDeep.isPending}
+          variant="secondary"
+          className="flex-1"
+          data-testid="button-run-deep"
+        >
+          {isRunning && status?.phase === "deep" ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
+          Run Phase 2 (Deep Pass)
+        </Button>
+      </div>
+
+      {isRunning && status && (
+        <div className="border border-border rounded-xl bg-card p-5 space-y-3" data-testid="enrichment-progress">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-primary" />
+              <span className="text-sm font-medium text-foreground">
+                {status.phase === "mini" ? "Phase 1 (GPT-4o-mini)" : "Phase 2 (GPT-4o)"} — Processing...
+              </span>
+            </div>
+            <span className="text-sm tabular-nums text-muted-foreground" data-testid="enrichment-progress-text">
+              {status.processed}/{status.total} ({progressPct}%)
+            </span>
+          </div>
+          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+            <div
+              className="bg-primary h-2.5 rounded-full transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+              data-testid="enrichment-progress-bar"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {status.improved} assets improved so far
+          </p>
+        </div>
+      )}
+
+      {status?.status === "done" && status.phase !== "idle" && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="enrichment-done">
+          <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              {status.phase === "mini" ? "Phase 1" : "Phase 2"} complete
+            </p>
+            <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
+              {status.improved} out of {status.total} assets improved
+            </p>
+          </div>
+        </div>
+      )}
+
+      {status?.status === "error" && (
+        <div className="flex items-start gap-3 p-4 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
+          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-red-700 dark:text-red-400">Enrichment failed</p>
+            <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "Unknown error"}</p>
+          </div>
+        </div>
+      )}
+
+      {unknownCount === 0 && totalAssets > 0 && (
+        <div className="text-center py-10 text-muted-foreground" data-testid="enrichment-all-complete">
+          <CheckCircle2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
+          <p className="text-base font-medium">All assets fully enriched</p>
+          <p className="text-sm mt-1">No unknown fields remaining in the database.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("scan-tracking");
@@ -726,6 +1013,18 @@ export default function Admin() {
               <RefreshCw className="h-4 w-4" />
               Institution Sync
             </button>
+            <button
+              onClick={() => setActiveTab("enrichment")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "enrichment"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-enrichment"
+            >
+              <Sparkles className="h-4 w-4" />
+              Enrichment
+            </button>
           </nav>
         </aside>
 
@@ -749,6 +1048,16 @@ export default function Admin() {
                 <p className="text-sm text-muted-foreground mt-1">Test scraper connections and refresh individual institution sources</p>
               </div>
               <InstitutionSync pw={pw} />
+            </>
+          )}
+
+          {activeTab === "enrichment" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Enrichment</h2>
+                <p className="text-sm text-muted-foreground mt-1">Two-phase AI re-enrichment for assets with unknown fields</p>
+              </div>
+              <Enrichment pw={pw} />
             </>
           )}
         </main>

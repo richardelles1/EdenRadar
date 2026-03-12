@@ -57,6 +57,13 @@ export interface IStorage {
   updateSyncStagingStatus(sessionId: string, status: string, filterIsNew?: boolean, filterRelevant?: boolean): Promise<number>;
   getExistingFingerprints(institution: string): Promise<Set<string>>;
   getInstitutionIndexedCount(institution: string): Promise<number>;
+
+  getEnrichmentStats(): Promise<{
+    total: number;
+    unknownCount: number;
+    byField: { target: number; modality: number; indication: number; developmentStage: number };
+  }>;
+  getIncompleteAssets(): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -407,6 +414,56 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .where(and(eq(ingestedAssets.institution, institution), eq(ingestedAssets.relevant, true)));
     return row?.count ?? 0;
+  }
+
+  async getEnrichmentStats(): Promise<{
+    total: number;
+    unknownCount: number;
+    byField: { target: number; modality: number; indication: number; developmentStage: number };
+  }> {
+    const [totalRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets);
+    const total = totalRow?.count ?? 0;
+
+    const [unknownRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(
+        sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`
+      );
+    const unknownCount = unknownRow?.count ?? 0;
+
+    const [targetRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.target, "unknown"));
+    const [modalityRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.modality, "unknown"));
+    const [indicationRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.indication, "unknown"));
+    const [stageRow] = await db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.developmentStage, "unknown"));
+
+    return {
+      total,
+      unknownCount,
+      byField: {
+        target: targetRow?.count ?? 0,
+        modality: modalityRow?.count ?? 0,
+        indication: indicationRow?.count ?? 0,
+        developmentStage: stageRow?.count ?? 0,
+      },
+    };
+  }
+
+  async getIncompleteAssets(): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>> {
+    return db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        summary: ingestedAssets.summary,
+        target: ingestedAssets.target,
+        modality: ingestedAssets.modality,
+        indication: ingestedAssets.indication,
+        developmentStage: ingestedAssets.developmentStage,
+      })
+      .from(ingestedAssets)
+      .where(
+        sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`
+      );
   }
 }
 
