@@ -819,7 +819,7 @@ export const ethzurichScraper = createInPartScraper("ethz", "ETH Zurich");
 export const epflScraper = createStubScraper("EPFL");
 export const ubaselScraper = createStubScraper("University of Basel");
 export const ulausanneScraper = createStubScraper("University of Lausanne");
-export const ugenevaScaper = createStubScraper("University of Geneva");
+export const ugenevaScraper = createStubScraper("University of Geneva");
 export const uzurichScraper = createStubScraper("University of Zurich");
 
 // ── International: Benelux ───────────────────────────────────────────────
@@ -831,7 +831,7 @@ export const vuamsterdamScraper = createStubScraper("Vrije Universiteit Amsterda
 export const leidenScraper = createStubScraper("Leiden University");
 
 // ── International: Nordic ────────────────────────────────────────────────
-export const karolinskaScaper = createStubScraper("Karolinska Institutet");
+export const karolinskaScraper = createStubScraper("Karolinska Institutet");
 export const inven2Scraper = createStubScraper("University of Oslo");
 export const visScraper = createStubScraper("University of Bergen");
 export const ntnuScraper = createStubScraper("NTNU");
