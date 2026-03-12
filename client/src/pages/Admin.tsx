@@ -132,9 +132,14 @@ function ScanTracking({ pw }: { pw: string }) {
               <th key={run.id} className="text-center py-2 px-3 font-normal min-w-[90px]">
                 <div className="text-xs font-semibold text-foreground">Run #{run.id}</div>
                 <div className="text-xs text-muted-foreground">{formatDate(run.ranAt)}</div>
-                <Badge variant={i === 0 ? "default" : "secondary"} className="mt-1 text-[10px] px-1.5 py-0">
-                  {run.totalFound.toLocaleString()} found
-                </Badge>
+                <div className="flex items-center justify-center gap-1 mt-1">
+                  <Badge variant={i === 0 ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
+                    {run.totalFound.toLocaleString()} found
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize" data-testid={`status-run-${run.id}`}>
+                    {run.status}
+                  </Badge>
+                </div>
               </th>
             ))}
           </tr>
@@ -145,14 +150,14 @@ function ScanTracking({ pw }: { pw: string }) {
             {runs.length >= 2 && (
               <td className="text-center py-2 px-3 font-semibold">
                 <DeltaCell
-                  current={matrix.reduce((s, r) => s + (r.counts[0] ?? 0), 0)}
-                  previous={matrix.reduce((s, r) => s + (r.counts[1] ?? 0), 0)}
+                  current={runs[0].totalFound}
+                  previous={runs[1].totalFound}
                 />
               </td>
             )}
-            {runs.map((_, i) => (
+            {runs.map((run, i) => (
               <td key={i} className="text-center py-2 px-3 font-semibold text-foreground">
-                {matrix.reduce((s, r) => s + (r.counts[i] ?? 0), 0).toLocaleString()}
+                {run.totalFound.toLocaleString()}
               </td>
             ))}
           </tr>
