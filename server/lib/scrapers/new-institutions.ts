@@ -1,5 +1,6 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
+import { fetchHtml, cleanText } from "./utils";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
@@ -494,7 +495,32 @@ export const riceScraper = createFlintboxScraper(
   { slug: "rice", orgId: 71, accessKey: "71da9d2e-1e3f-4137-81b1-54405988d820" },
   "Rice University"
 );
-export const uhoustonScraper = createStubScraper("University of Houston");
+export const uhoustonScraper: InstitutionScraper = {
+  institution: "University of Houston",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.uh.edu/uh-energy-innovation/uh-innovation/technologies/";
+    try {
+      const $ = await fetchHtml(url, 15000);
+      if (!$) return [];
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      $('a[href*="catalog/technologies.php?id="]').each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const title = cleanText($(el).text());
+        if (!title || title.length < 5) return;
+        const fullUrl = href.startsWith("http") ? href : `https://www.uh.edu${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        results.push({ title, description: "", url: fullUrl, institution: "University of Houston" });
+      });
+      console.log(`[scraper] University of Houston: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] University of Houston: ${err?.message}`);
+      return [];
+    }
+  },
+};
 export const texasTechScraper = createFlintboxScraper(
   { slug: "ttu", orgId: 23, accessKey: "391d483e-dc4f-4be7-913d-1a63f683a47b" },
   "Texas Tech University"
@@ -504,7 +530,7 @@ export const baylorScraper = createFlintboxScraper(
   { slug: "baylor", orgId: 201, accessKey: "613499ba-c868-4819-9b2d-d7744d83bebc" },
   "Baylor University"
 );
-export const portlandStateScraper = createStubScraper("Portland State University");
+export const portlandStateScraper = createInPartScraper("pdx", "Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createMontanaStateScraper();
 export const unmScraper = createFlintboxScraper(
@@ -513,18 +539,86 @@ export const unmScraper = createFlintboxScraper(
 );
 export const nmsuScraper = createStubScraper("New Mexico State University");
 export const unrScraper = createStubScraper("University of Nevada, Reno");
-export const unlvScraper = createStubScraper("University of Nevada, Las Vegas");
+export const unlvScraper = createTechPublisherScraper("unlvecondev", "University of Nevada, Las Vegas");
 export const usuScraper = createFlintboxScraper(
   { slug: "usu", orgId: 198, accessKey: "6af4c512-15e2-4213-bb3f-3b7e904a0e43" },
   "Utah State University"
 );
 export const byuScraper = createStubScraper("Brigham Young University");
 export const uaaScraper = createStubScraper("University of Alaska Anchorage");
-export const undScraper = createStubScraper("University of North Dakota");
+export const undScraper: InstitutionScraper = {
+  institution: "University of North Dakota",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://und.edu/research/corporate-engagement-commercialization/available-technologies.html";
+    try {
+      const $ = await fetchHtml(url, 15000);
+      if (!$) return [];
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      $('a[href*="_files/docs/available-technologies/"]').each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const title = cleanText($(el).text());
+        if (!title || title.length < 5) return;
+        const fullUrl = href.startsWith("http") ? href : `https://und.edu${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        results.push({ title, description: "", url: fullUrl, institution: "University of North Dakota" });
+      });
+      if (results.length === 0) {
+        $("a[href$='.pdf']").each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          if (!href.includes("available-technolog")) return;
+          const title = cleanText($(el).text());
+          if (!title || title.length < 5) return;
+          const fullUrl = href.startsWith("http") ? href : `https://und.edu${href}`;
+          if (seen.has(fullUrl)) return;
+          seen.add(fullUrl);
+          results.push({ title, description: "", url: fullUrl, institution: "University of North Dakota" });
+        });
+      }
+      console.log(`[scraper] University of North Dakota: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] University of North Dakota: ${err?.message}`);
+      return [];
+    }
+  },
+};
 export const ndsuScraper = createTechPublisherScraper("ndsurf", "North Dakota State University", { maxPg: 30 });
 export const indianaScraper = createInPartScraper("iu", "Indiana University");
-export const notredameScraper = createStubScraper("University of Notre Dame");
-export const warfScraper = createStubScraper("University of Wisconsin");
+export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
+export const warfScraper: InstitutionScraper = {
+  institution: "University of Wisconsin",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.warf.org";
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    try {
+      for (let pg = 1; pg <= 30; pg++) {
+        const url = `${base}/search-results/?searchwp=&search-technology=1&paged=${pg}`;
+        const $ = await fetchHtml(url, 12000);
+        if (!$) break;
+        let found = 0;
+        $('a[href*="/technologies/summary/"]').each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const title = cleanText($(el).text());
+          if (!title || title.length < 5) return;
+          const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+          if (seen.has(fullUrl)) return;
+          seen.add(fullUrl);
+          results.push({ title, description: "", url: fullUrl, institution: "University of Wisconsin" });
+          found++;
+        });
+        if (found === 0) break;
+      }
+      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] University of Wisconsin (WARF): ${err?.message}`);
+      return results;
+    }
+  },
+};
 export const auburnScraper = createFlintboxScraper(
   { slug: "auburn", orgId: 30, accessKey: "7ff46c23-25a2-4e76-9c2a-34f7c5819ab4" },
   "Auburn University"
@@ -639,12 +733,50 @@ export const ucalgaryScraper = createFlintboxScraper(
   { slug: "calgary", orgId: 202, accessKey: "9939c8eb-7d70-4432-9a85-a7627b836328" },
   "University of Calgary"
 );
-export const umanitobaScraper = createStubScraper("University of Manitoba");
+export const umanitobaScraper = createInPartScraper("manitoba", "University of Manitoba");
 export const uvicScraper = createFlintboxScraper(
   { slug: "uvic", orgId: 95, accessKey: "7b328428-6bc4-45ad-b80c-9f0531797e59" },
   "University of Victoria"
 );
-export const sfuScraper = createStubScraper("Simon Fraser University");
+export const sfuScraper: InstitutionScraper = {
+  institution: "Simon Fraser University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.sfu.ca/technology-licensing/industry/our-technologies.html";
+    try {
+      const $ = await fetchHtml(url, 15000);
+      if (!$) return [];
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      $("a[href$='.pdf']").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href.includes("technology-licensing")) return;
+        const title = cleanText($(el).text());
+        if (!title || title.length < 5) return;
+        const fullUrl = href.startsWith("http") ? href : `https://www.sfu.ca${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        results.push({ title, description: "", url: fullUrl, institution: "Simon Fraser University" });
+      });
+      if (results.length === 0) {
+        $('a[href*="/technology-licensing/"]').each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          if (href === url || href.includes("industry") || href.includes("contact")) return;
+          const title = cleanText($(el).text());
+          if (!title || title.length < 5) return;
+          const fullUrl = href.startsWith("http") ? href : `https://www.sfu.ca${href}`;
+          if (seen.has(fullUrl)) return;
+          seen.add(fullUrl);
+          results.push({ title, description: "", url: fullUrl, institution: "Simon Fraser University" });
+        });
+      }
+      console.log(`[scraper] Simon Fraser University: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] Simon Fraser University: ${err?.message}`);
+      return [];
+    }
+  },
+};
 
 // ── International: Asia-Pacific ──────────────────────────────────────────
 export const umelbourneScraper = createStubScraper("University of Melbourne");
