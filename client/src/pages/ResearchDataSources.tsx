@@ -148,6 +148,8 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
 
 const ALL_SOURCE_KEYS = SOURCE_GROUPS.flatMap((g) => g.keys.map((k) => k.key));
 
+const DEFAULT_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "arxiv", "clinicaltrials", "patents"];
+
 const SOURCE_LABELS: Record<string, string> = {};
 SOURCE_GROUPS.forEach((g) => g.keys.forEach((k) => { SOURCE_LABELS[k.key] = k.label; }));
 
@@ -203,7 +205,7 @@ export default function ResearchDataSources() {
   const initialQuery = searchParams.get("q") ?? "";
   const initialSources = searchParams.get("sources")
     ? searchParams.get("sources")!.split(",").filter((s) => ALL_SOURCE_KEYS.includes(s))
-    : ALL_SOURCE_KEYS;
+    : DEFAULT_SOURCE_KEYS;
   const initialPage = parseInt(searchParams.get("page") ?? "1") || 1;
   const [query, setQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
@@ -218,13 +220,18 @@ export default function ResearchDataSources() {
     return f;
   });
   const [page, setPage] = useState(initialPage);
-  const [showFilters, setShowFilters] = useState(true);
+  const [showFilters, setShowFilters] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 768 : true
+  );
 
   useEffect(() => {
     const params = new URLSearchParams();
     if (activeQuery) params.set("q", activeQuery);
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-    if (selectedSources.length < ALL_SOURCE_KEYS.length) {
+    const isDefault =
+      selectedSources.length === DEFAULT_SOURCE_KEYS.length &&
+      DEFAULT_SOURCE_KEYS.every((k) => selectedSources.includes(k));
+    if (!isDefault) {
       params.set("sources", selectedSources.join(","));
     }
     if (page > 1) params.set("page", String(page));
@@ -241,7 +248,7 @@ export default function ResearchDataSources() {
         body: JSON.stringify({
           query: activeQuery,
           sources: selectedSources,
-          maxPerSource: 12,
+          maxPerSource: 5,
           ...filters,
         }),
       }).then((r) => r.json()),
@@ -312,7 +319,7 @@ export default function ResearchDataSources() {
   }
 
   function resetSources() {
-    setSelectedSources(ALL_SOURCE_KEYS);
+    setSelectedSources(DEFAULT_SOURCE_KEYS);
     setPage(1);
   }
 
@@ -326,7 +333,12 @@ export default function ResearchDataSources() {
   return (
     <div className="flex h-screen overflow-hidden">
       {showFilters && (
-        <aside className="w-[280px] shrink-0 border-r border-border bg-background overflow-y-auto p-4 space-y-4">
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-40 md:hidden"
+            onClick={() => setShowFilters(false)}
+          />
+        <aside className="fixed inset-y-0 left-0 z-50 md:relative md:inset-auto md:z-auto w-[280px] shrink-0 border-r border-border bg-background overflow-y-auto p-4 space-y-4 shadow-xl md:shadow-none">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">Filters</h2>
             <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => setShowFilters(false)} data-testid="button-close-filters">
@@ -365,7 +377,7 @@ export default function ResearchDataSources() {
             </div>
           </div>
 
-          <Accordion type="multiple" defaultValue={["field", "sourceType"]} className="space-y-0">
+          <Accordion type="multiple" defaultValue={[]} className="space-y-0">
             <FilterSection
               id="field"
               title="Field"
@@ -403,6 +415,7 @@ export default function ResearchDataSources() {
             />
           </Accordion>
         </aside>
+        </>
       )}
 
       <div ref={resultsRef} className="flex-1 overflow-y-auto p-6 space-y-5">

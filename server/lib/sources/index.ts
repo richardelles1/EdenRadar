@@ -243,17 +243,30 @@ export function getSource(key: string): DataSource {
   return dataSources.pubmed;
 }
 
+const SOURCE_TIMEOUT_MS = 7000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`Source "${label}" timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+}
+
 export async function collectAllSignals(
   query: string,
   sourceKeys: SourceKey[],
-  maxPerSource = 12
+  maxPerSource = 5
 ): Promise<RawSignal[]> {
   const selectedSources = sourceKeys
     .filter((k) => k in dataSources)
     .map((k) => dataSources[k]);
 
   const results = await Promise.allSettled(
-    selectedSources.map((s) => s.search(query, maxPerSource))
+    selectedSources.map((s) =>
+      withTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
+    )
   );
 
   const signals: RawSignal[] = [];
@@ -261,7 +274,12 @@ export async function collectAllSignals(
     if (r.status === "fulfilled") {
       signals.push(...r.value);
     } else {
-      console.error(`Source ${selectedSources[i].id} failed:`, r.reason);
+      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+      if (msg.includes("timed out")) {
+        console.warn(`[search] ${msg}`);
+      } else {
+        console.error(`[search] Source ${selectedSources[i].id} failed:`, r.reason);
+      }
     }
   });
 

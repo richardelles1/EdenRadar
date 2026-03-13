@@ -152,7 +152,7 @@ const buyerProfileSchema = z.object({
 const searchBodySchema = z.object({
   query: z.string().min(1).max(500),
   sources: z.array(z.string()).default(ALL_SOURCES),
-  maxPerSource: z.number().int().min(1).max(20).default(12),
+  maxPerSource: z.number().int().min(1).max(20).default(5),
   buyerProfile: buyerProfileSchema,
   field: z.enum([
     "oncology", "immunology", "neurology", "cardiology", "rare_diseases",
@@ -171,7 +171,7 @@ const searchBodySchema = z.object({
 const reportBodySchema = z.object({
   query: z.string().min(1).max(500),
   sources: z.array(z.string()).default(ALL_SOURCES),
-  maxPerSource: z.number().int().min(1).max(15).default(8),
+  maxPerSource: z.number().int().min(1).max(15).default(5),
   buyerProfile: buyerProfileSchema,
 });
 
