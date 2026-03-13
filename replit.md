@@ -18,10 +18,27 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
 - **Georgia Tech added**: New institution entry (gatech.flintbox.com, org 186) with dedicated Flintbox scraper
 
-### Portal Gate
-- `localStorage.getItem('eden-portal')` = "true" to be inside the app
+### Portal Gates
+**Industry Portal** (original):
+- `localStorage.getItem('eden-portal')` = "true" to be inside
 - `DashboardLayout` redirects to `/` if flag missing
-- Set by "Enter Portal" on Landing page; cleared by "Exit Portal" in Sidebar
+- Entry: "For Industry" CTA on Landing page; exit: "Exit Portal" in Sidebar
+- Routes: /scout, /assets, /reports, /alerts, /institutions, /sources
+
+**Researcher Portal** (new — Task #21):
+- `localStorage.getItem('eden-research-portal')` = "true" to be inside
+- `ResearchLayout` redirects to `/` if flag missing
+- Researcher identity: `localStorage.getItem('eden-researcher-id')` = UUID (auto-generated)
+- Researcher profile: `localStorage.getItem('eden-researcher-profile')` = JSON
+- Entry: "For Researchers" CTA on Landing page; exit: "Exit Portal" in ResearchSidebar
+- Routes: /research, /research/create-discovery, /research/my-discoveries, /research/data-sources, /research/profile
+- Industry Bridge: Published discovery cards appear in GET /api/discoveries (public endpoint) — surfaced in industry Scout with "Lab Published" amber badge (AssetCard.tsx checks source_types includes "researcher")
+
+### Discovery Cards (Ecosystem Bridge)
+- Researchers create Discovery Cards via `POST /api/research/discoveries`
+- Publishing via `PATCH /api/research/discoveries/:id/publish` makes card visible industry-side
+- All published cards in `GET /api/discoveries` (no auth needed)
+- In industry Scout search results, cards with `source_types` including "researcher" get amber "Lab Published · Researcher Discovery" banner
 
 ### Key Design Decisions
 - **Unified `RawSignal` type**: All 8 data sources convert their output to `RawSignal[]`

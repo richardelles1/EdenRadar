@@ -15,7 +15,13 @@ import Institutions from "@/pages/Institutions";
 import InstitutionDetail from "@/pages/InstitutionDetail";
 import Sources from "@/pages/Sources";
 import Admin from "@/pages/Admin";
+import ResearchDashboard from "@/pages/ResearchDashboard";
+import CreateDiscovery from "@/pages/CreateDiscovery";
+import MyDiscoveries from "@/pages/MyDiscoveries";
+import ResearchProfile from "@/pages/ResearchProfile";
+import ResearchDataSources from "@/pages/ResearchDataSources";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
+import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { useEffect } from "react";
 
 function ThemeInit() {
@@ -89,6 +95,32 @@ function Router() {
       </Route>
 
       <Route path="/admin" component={Admin} />
+
+      <Route path="/research">
+        <ResearchLayout>
+          <ResearchDashboard />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/create-discovery">
+        <ResearchLayout>
+          <CreateDiscovery />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/my-discoveries">
+        <ResearchLayout>
+          <MyDiscoveries />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/profile">
+        <ResearchLayout>
+          <ResearchProfile />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/data-sources">
+        <ResearchLayout>
+          <ResearchDataSources />
+        </ResearchLayout>
+      </Route>
 
       <Route component={NotFound} />
     </Switch>

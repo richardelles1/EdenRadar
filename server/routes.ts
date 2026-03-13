@@ -2,6 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema } from "@shared/schema";
 import { dataSources, collectAllSignals, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -840,6 +841,109 @@ export async function registerRoutes(
       console.error("[enrichment] Failed to check for resumable jobs:", e);
     }
   })();
+
+  // ── Researcher portal routes ──────────────────────────────────────────────
+
+  // Public: published discovery cards (used by industry Scout)
+  app.get("/api/discoveries", async (_req, res) => {
+    try {
+      const cards = await storage.getPublishedDiscoveryCards();
+      res.json({ cards });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Research projects (scoped to researcher_id header)
+  app.get("/api/research/projects", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    try {
+      const projects = await storage.getResearchProjects(researcherId);
+      res.json({ projects });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/research/projects", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const parsed = insertResearchProjectSchema.safeParse({ ...req.body, researcherId });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const project = await storage.createResearchProject(parsed.data);
+      res.json({ project });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/research/projects/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      await storage.deleteResearchProject(id, researcherId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Discovery cards
+  app.get("/api/research/discoveries", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    try {
+      const cards = await storage.getDiscoveryCards(researcherId);
+      res.json({ cards });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/research/discoveries", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const parsed = insertDiscoveryCardSchema.safeParse({ ...req.body, researcherId, published: false });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const card = await storage.createDiscoveryCard(parsed.data);
+      res.json({ card });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/research/discoveries/:id/publish", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      const card = await storage.publishDiscoveryCard(id, researcherId);
+      if (!card) return res.status(404).json({ error: "Card not found" });
+      res.json({ card });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/research/discoveries/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      const card = await storage.updateDiscoveryCard(id, researcherId, req.body);
+      if (!card) return res.status(404).json({ error: "Card not found" });
+      res.json({ card });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   return httpServer;
 }

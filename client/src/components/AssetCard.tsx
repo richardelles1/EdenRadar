@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import {
   Bookmark, BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
   FlaskConical, FileText, Building2, Key, ArrowRight, CalendarDays,
+  Microscope,
 } from "lucide-react";
 import { ScoreBadge } from "./ScoreBadge";
 import { SourceBadge } from "./SourceBadge";
@@ -74,16 +75,36 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     setLocation(`/asset/${asset.id}`);
   };
 
+  const isResearcherPublished = asset.source_types?.includes("researcher");
+
   return (
     <Card
-      className="group border border-card-border bg-card hover:border-primary/40 transition-all duration-300 flex flex-col overflow-hidden"
+      className={`group border bg-card transition-all duration-300 flex flex-col overflow-hidden ${
+        isResearcherPublished
+          ? "border-amber-500/40 hover:border-amber-500/60 ring-1 ring-amber-500/10"
+          : "border-card-border hover:border-primary/40"
+      }`}
       data-testid={`asset-card-${asset.id}`}
     >
+      {isResearcherPublished && (
+        <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20">
+          <Microscope className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 tracking-wide uppercase">
+            Lab Published · Researcher Discovery
+          </span>
+        </div>
+      )}
       <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className="shrink-0 w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center">
-              <FlaskConical className="w-4 h-4 text-primary" />
+            <div className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
+              isResearcherPublished ? "bg-amber-500/10" : "bg-primary/10"
+            }`}>
+              {isResearcherPublished ? (
+                <Microscope className="w-4 h-4 text-amber-500" />
+              ) : (
+                <FlaskConical className="w-4 h-4 text-primary" />
+              )}
             </div>
             <h3 className="font-semibold text-foreground text-sm leading-tight truncate" data-testid={`text-asset-name-${asset.id}`}>
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}

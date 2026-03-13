@@ -8,6 +8,8 @@ import {
   syncSessions, type SyncSession,
   syncStaging, type SyncStagingRow,
   enrichmentJobs, type EnrichmentJob,
+  researchProjects, type ResearchProject, type InsertResearchProject,
+  discoveryCards, type DiscoveryCard, type InsertDiscoveryCard,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
@@ -71,6 +73,17 @@ export interface IStorage {
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   stampEnrichedAt(assetId: number): Promise<void>;
+
+  getResearchProjects(researcherId: string): Promise<ResearchProject[]>;
+  createResearchProject(data: InsertResearchProject): Promise<ResearchProject>;
+  updateResearchProject(id: number, researcherId: string, data: Partial<InsertResearchProject>): Promise<ResearchProject | undefined>;
+  deleteResearchProject(id: number, researcherId: string): Promise<void>;
+
+  getDiscoveryCards(researcherId: string): Promise<DiscoveryCard[]>;
+  getPublishedDiscoveryCards(): Promise<DiscoveryCard[]>;
+  createDiscoveryCard(data: InsertDiscoveryCard): Promise<DiscoveryCard>;
+  publishDiscoveryCard(id: number, researcherId: string): Promise<DiscoveryCard | undefined>;
+  updateDiscoveryCard(id: number, researcherId: string, data: Partial<InsertDiscoveryCard>): Promise<DiscoveryCard | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -498,6 +511,56 @@ export class DatabaseStorage implements IStorage {
 
   async stampEnrichedAt(assetId: number): Promise<void> {
     await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
+  }
+
+  async getResearchProjects(researcherId: string): Promise<ResearchProject[]> {
+    return db.select().from(researchProjects).where(eq(researchProjects.researcherId, researcherId)).orderBy(desc(researchProjects.lastEditedAt));
+  }
+
+  async createResearchProject(data: InsertResearchProject): Promise<ResearchProject> {
+    const [row] = await db.insert(researchProjects).values(data).returning();
+    return row;
+  }
+
+  async updateResearchProject(id: number, researcherId: string, data: Partial<InsertResearchProject>): Promise<ResearchProject | undefined> {
+    const [row] = await db.update(researchProjects)
+      .set({ ...data, lastEditedAt: new Date() })
+      .where(and(eq(researchProjects.id, id), eq(researchProjects.researcherId, researcherId)))
+      .returning();
+    return row;
+  }
+
+  async deleteResearchProject(id: number, researcherId: string): Promise<void> {
+    await db.delete(researchProjects).where(and(eq(researchProjects.id, id), eq(researchProjects.researcherId, researcherId)));
+  }
+
+  async getDiscoveryCards(researcherId: string): Promise<DiscoveryCard[]> {
+    return db.select().from(discoveryCards).where(eq(discoveryCards.researcherId, researcherId)).orderBy(desc(discoveryCards.createdAt));
+  }
+
+  async getPublishedDiscoveryCards(): Promise<DiscoveryCard[]> {
+    return db.select().from(discoveryCards).where(eq(discoveryCards.published, true)).orderBy(desc(discoveryCards.createdAt));
+  }
+
+  async createDiscoveryCard(data: InsertDiscoveryCard): Promise<DiscoveryCard> {
+    const [row] = await db.insert(discoveryCards).values(data).returning();
+    return row;
+  }
+
+  async publishDiscoveryCard(id: number, researcherId: string): Promise<DiscoveryCard | undefined> {
+    const [row] = await db.update(discoveryCards)
+      .set({ published: true })
+      .where(and(eq(discoveryCards.id, id), eq(discoveryCards.researcherId, researcherId)))
+      .returning();
+    return row;
+  }
+
+  async updateDiscoveryCard(id: number, researcherId: string, data: Partial<InsertDiscoveryCard>): Promise<DiscoveryCard | undefined> {
+    const [row] = await db.update(discoveryCards)
+      .set(data)
+      .where(and(eq(discoveryCards.id, id), eq(discoveryCards.researcherId, researcherId)))
+      .returning();
+    return row;
   }
 }
 

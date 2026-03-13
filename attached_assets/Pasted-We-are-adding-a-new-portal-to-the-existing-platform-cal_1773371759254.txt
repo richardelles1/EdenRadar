@@ -1,0 +1,172 @@
+We are adding a new portal to the existing platform called Eden Radar.
+
+Do NOT modify the existing Industry portal.
+
+Currently the landing page has a button labeled:
+
+Enter Portal
+
+Change this to two buttons:
+
+For Industry
+For Researchers
+
+The Industry button should route to the existing industry portal exactly as it does now.
+
+We are only building the Researcher side of the platform.
+
+--------------------------------------------------
+
+Researcher Portal Concept
+
+The researcher portal allows academic researchers to publish "Discovery Cards" describing emerging technologies or discoveries that may be commercially valuable.
+
+The purpose of the portal is to allow researchers to surface promising discoveries to industry users.
+
+Think of it like a digital academic demo day.
+
+Researchers create cards describing their technology and industry users can later browse them.
+
+This is NOT a literature search engine.
+
+It is a discovery showcase platform.
+
+--------------------------------------------------
+
+Routes to build
+
+/research
+Researcher dashboard
+
+/research/create-discovery
+Page where researchers create a new discovery card
+
+/research/my-discoveries
+Page showing all cards the researcher has created
+
+/research/profile
+Researcher profile page
+
+--------------------------------------------------
+
+Discovery Card Data Model
+
+Each discovery card should include:
+
+title
+summary
+research_area
+technology_type
+institution
+lab
+development_stage
+ip_status
+seeking
+contact_email
+publication_link (optional)
+patent_link (optional)
+created_at
+
+Example:
+
+Title: AI Model for ICU Nurse Staffing Optimization
+Institution: University of Michigan
+Technology Type: Healthcare AI
+Development Stage: Prototype
+IP Status: Provisional patent filed
+Seeking: Licensing partner
+
+--------------------------------------------------
+
+Database Tables (Supabase)
+
+researchers
+research_profiles
+discovery_cards
+
+--------------------------------------------------
+
+UI Components
+
+DiscoveryCard
+Card displaying technology summary
+
+DiscoveryForm
+Form used to create a discovery card
+
+ResearchSidebar
+Navigation sidebar
+
+ResearchDashboard
+Main researcher dashboard layout
+
+--------------------------------------------------
+
+Research Dashboard Layout
+
+Header:
+Logo
+Search bar
+Profile icon
+
+Left Sidebar:
+Dashboard
+Create Discovery
+My Discoveries
+Profile
+
+Main Area:
+
+Top section:
+Welcome message
+Button: "Create Discovery"
+
+Middle section:
+List of discovery cards created by the user
+
+--------------------------------------------------
+
+Discovery Creation Page
+
+Create a clean form where researchers fill out:
+
+Title
+Summary
+Research Area
+Technology Type
+Institution
+Lab
+Development Stage
+IP Status
+Seeking
+Contact Email
+Publication Link (optional)
+Patent Link (optional)
+
+Submit should store the card in the discovery_cards table.
+
+--------------------------------------------------
+
+Design Requirements
+
+Use modern UI styling:
+
+Next.js
+React
+TypeScript
+Tailwind CSS
+Supabase authentication and database
+
+The UI should be clean and minimal.
+
+--------------------------------------------------
+
+Important
+
+The Researcher portal should feel simple and fast.
+
+Researchers should be able to publish a discovery in under 3 minutes.
+
+Do not build research paper search or literature databases.
+
+Focus entirely on discovery cards.

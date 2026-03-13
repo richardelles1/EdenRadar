@@ -173,3 +173,47 @@ export const enrichmentJobs = pgTable("enrichment_jobs", {
 });
 
 export type EnrichmentJob = typeof enrichmentJobs.$inferSelect;
+
+export const researchProjects = pgTable("research_projects", {
+  id: serial("id").primaryKey(),
+  researcherId: text("researcher_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  researchArea: text("research_area"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastEditedAt: timestamp("last_edited_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({
+  id: true,
+  createdAt: true,
+  lastEditedAt: true,
+});
+export type InsertResearchProject = z.infer<typeof insertResearchProjectSchema>;
+export type ResearchProject = typeof researchProjects.$inferSelect;
+
+export const discoveryCards = pgTable("discovery_cards", {
+  id: serial("id").primaryKey(),
+  researcherId: text("researcher_id").notNull(),
+  title: text("title").notNull(),
+  summary: text("summary").notNull(),
+  researchArea: text("research_area").notNull(),
+  technologyType: text("technology_type").notNull(),
+  institution: text("institution").notNull(),
+  lab: text("lab"),
+  developmentStage: text("development_stage").notNull(),
+  ipStatus: text("ip_status").notNull(),
+  seeking: text("seeking").notNull(),
+  contactEmail: text("contact_email").notNull(),
+  publicationLink: text("publication_link"),
+  patentLink: text("patent_link"),
+  published: boolean("published").default(false).notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertDiscoveryCardSchema = createInsertSchema(discoveryCards).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertDiscoveryCard = z.infer<typeof insertDiscoveryCardSchema>;
+export type DiscoveryCard = typeof discoveryCards.$inferSelect;

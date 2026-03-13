@@ -3,7 +3,8 @@ export type SourceType =
   | "preprint"
   | "clinical_trial"
   | "patent"
-  | "tech_transfer";
+  | "tech_transfer"
+  | "researcher";
 
 export interface RawSignal {
   id: string;
