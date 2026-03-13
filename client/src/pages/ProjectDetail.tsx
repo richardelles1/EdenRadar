@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, Save, Loader2, Trash2, Plus, X, ChevronDown, ChevronUp,
-  FlaskConical, ExternalLink, ArrowRight,
+  FlaskConical, ExternalLink, ArrowRight, Download,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,7 @@ import {
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject } from "@shared/schema";
+import { ResearchBriefPDF } from "@/components/ResearchBriefPDF";
 
 type Paper = { paper_title: string; authors: string; journal: string; year: string; paper_link: string; notes: string };
 type Dataset = { dataset_name: string; dataset_source: string; dataset_link: string; notes: string };
@@ -83,6 +84,7 @@ export default function ProjectDetail() {
   const [local, setLocal] = useState<ResearchProject | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [pdfGenerating, setPdfGenerating] = useState(false);
   const [activeSection, setActiveSection] = useState("overview");
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const navRef = useRef<HTMLDivElement>(null);
@@ -154,6 +156,28 @@ export default function ProjectDetail() {
     navigate("/research/projects");
   }
 
+  async function exportBrief() {
+    if (!local) return;
+    setPdfGenerating(true);
+    try {
+      const { pdf } = await import("@react-pdf/renderer");
+      const blob = await pdf(<ResearchBriefPDF project={local} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${local.title.replace(/[^a-z0-9]/gi, "-").toLowerCase()}-research-brief.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Research brief downloaded" });
+    } catch {
+      toast({ title: "PDF export failed", variant: "destructive" });
+    } finally {
+      setPdfGenerating(false);
+    }
+  }
+
   function pushToDiscovery() {
     if (!local) return;
     const prefill = {
@@ -210,12 +234,23 @@ export default function ProjectDetail() {
         <Button
           variant="outline"
           size="sm"
+          className="gap-1.5 text-xs shrink-0"
+          onClick={exportBrief}
+          disabled={pdfGenerating}
+          data-testid="button-export-brief"
+        >
+          {pdfGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+          <span className="hidden sm:inline">Export Brief</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
           className="gap-1.5 text-xs shrink-0 border-violet-500/40 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
           onClick={pushToDiscovery}
           data-testid="button-push-discovery"
         >
           <FlaskConical className="w-3.5 h-3.5" />
-          Push to Discovery
+          <span className="hidden sm:inline">Push to Discovery</span>
         </Button>
         <Button
           variant="ghost"
