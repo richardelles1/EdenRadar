@@ -3,7 +3,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema } from "@shared/schema";
-import { dataSources, collectAllSignals, type SourceKey } from "./lib/sources/index";
+import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
 import { scoreAssets } from "./lib/pipeline/scoreAssets";
@@ -106,12 +106,7 @@ function friendlyOpenAIError(err: unknown): string {
   return "Search failed. Please try again.";
 }
 
-const ALL_SOURCES: SourceKey[] = [
-  "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
-  "nih_reporter", "openalex", "lab_discoveries",
-  "semantic_scholar", "arxiv", "nsf_awards", "eu_cordis", "lens",
-  "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb",
-];
+const ALL_SOURCES = ALL_SOURCE_KEYS;
 
 const buyerProfileSchema = z.object({
   therapeutic_areas: z.array(z.string()).default([]),
@@ -130,10 +125,17 @@ const searchBodySchema = z.object({
   sources: z.array(z.string()).default(ALL_SOURCES),
   maxPerSource: z.number().int().min(1).max(20).default(12),
   buyerProfile: buyerProfileSchema,
-  field: z.string().optional(),
+  field: z.enum([
+    "oncology", "immunology", "neurology", "cardiology", "rare_diseases",
+    "infectious_disease", "metabolic", "ophthalmology", "dermatology",
+    "respiratory", "gastroenterology", "hematology", "musculoskeletal", "psychiatry",
+  ]).optional(),
   sourceType: z.enum(["publication", "preprint", "grant", "clinical_trial", "dataset", "patent", "conference_abstract"]).optional(),
   dateRange: z.enum(["30d", "6m", "1y", "5y"]).optional(),
-  technologyType: z.string().optional(),
+  technologyType: z.enum([
+    "small_molecule", "biologic", "gene_therapy", "cell_therapy",
+    "antibody", "vaccine", "diagnostic", "medical_device",
+  ]).optional(),
   trialPhase: z.enum(["preclinical", "phase_1", "phase_2", "phase_3", "phase_4"]).optional(),
 });
 

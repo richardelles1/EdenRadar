@@ -47,6 +47,13 @@ export type SourceKey =
   | "geo"
   | "pdb";
 
+export const ALL_SOURCE_KEYS: SourceKey[] = [
+  "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
+  "nih_reporter", "openalex", "lab_discoveries",
+  "semantic_scholar", "arxiv", "nsf_awards", "eu_cordis", "lens",
+  "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb",
+];
+
 export interface DataSource {
   id: SourceKey;
   label: string;
