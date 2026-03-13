@@ -23,10 +23,8 @@ function parseGrantDate(raw: string | null | undefined): string {
     const d = new Date(Number(year), Number(month) - 1, Number(day));
     if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   }
-  try {
-    const d = new Date(raw);
-    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  } catch {}
+  const d = new Date(raw);
+  if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   return raw;
 }
 
