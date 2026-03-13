@@ -20,6 +20,7 @@ import CreateDiscovery from "@/pages/CreateDiscovery";
 import MyDiscoveries from "@/pages/MyDiscoveries";
 import ResearchProfile from "@/pages/ResearchProfile";
 import ResearchDataSources from "@/pages/ResearchDataSources";
+import ResearchLibrary from "@/pages/ResearchLibrary";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { AuthProvider } from "@/hooks/use-auth";
@@ -123,6 +124,11 @@ function Router() {
       <Route path="/research/data-sources">
         <ResearchLayout>
           <ResearchDataSources />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/library">
+        <ResearchLayout>
+          <ResearchLibrary />
         </ResearchLayout>
       </Route>
 

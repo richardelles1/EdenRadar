@@ -19,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useResearcherId, useResearcherHeaders, getResearcherProfile } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
-import type { ResearchProject } from "@shared/schema";
+import type { ResearchProject, SavedReference } from "@shared/schema";
 
 type ProjectsResponse = { projects: ResearchProject[] };
 type SearchResult = {
@@ -254,30 +254,13 @@ export default function ResearchDashboard() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {projects.map((p) => (
-              <div
+              <ProjectCard
                 key={p.id}
-                className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors flex flex-col gap-2"
-                data-testid={`project-card-${p.id}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-foreground leading-snug">{p.title}</h3>
-                  <button
-                    onClick={() => deleteProject.mutate(p.id)}
-                    className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
-                    data-testid={`button-delete-project-${p.id}`}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-                {p.researchArea && (
-                  <Badge variant="secondary" className="text-[11px] w-fit bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
-                    {p.researchArea}
-                  </Badge>
-                )}
-                <p className="text-[11px] text-muted-foreground">
-                  Last edited {formatDate(p.lastEditedAt)}
-                </p>
-              </div>
+                project={p}
+                onDelete={() => deleteProject.mutate(p.id)}
+                researcherHeaders={researcherHeaders}
+                researcherId={researcherId}
+              />
             ))}
           </div>
         )}
@@ -319,6 +302,76 @@ export default function ResearchDashboard() {
           </Button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function ProjectCard({
+  project,
+  onDelete,
+  researcherHeaders,
+  researcherId,
+}: {
+  project: ResearchProject;
+  onDelete: () => void;
+  researcherHeaders: Record<string, string>;
+  researcherId: string;
+}) {
+  const { data: refsData } = useQuery<{ references: SavedReference[] }>({
+    queryKey: ["/api/research/references", researcherId, project.id],
+    queryFn: () =>
+      fetch(`/api/research/references?projectId=${project.id}`, { headers: researcherHeaders }).then((r) => r.json()),
+    enabled: !!researcherId,
+  });
+
+  const refs = refsData?.references ?? [];
+
+  return (
+    <div
+      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors flex flex-col gap-2"
+      data-testid={`project-card-${project.id}`}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold text-foreground leading-snug">{project.title}</h3>
+        <button
+          onClick={onDelete}
+          className="text-muted-foreground hover:text-red-500 transition-colors shrink-0"
+          data-testid={`button-delete-project-${project.id}`}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      {project.researchArea && (
+        <Badge variant="secondary" className="text-[11px] w-fit bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
+          {project.researchArea}
+        </Badge>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        Last edited {formatDate(project.lastEditedAt)}
+      </p>
+      {refs.length > 0 && (
+        <div className="mt-1 pt-2 border-t border-border space-y-1" data-testid={`project-refs-${project.id}`}>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
+            Reference Literature ({refs.length})
+          </p>
+          {refs.slice(0, 3).map((ref) => (
+            <a
+              key={ref.id}
+              href={ref.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 text-[11px] text-foreground hover:text-violet-500 transition-colors line-clamp-1"
+              data-testid={`project-ref-link-${ref.id}`}
+            >
+              <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground" />
+              <span className="truncate">{ref.title}</span>
+            </a>
+          ))}
+          {refs.length > 3 && (
+            <p className="text-[10px] text-muted-foreground">+{refs.length - 3} more</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

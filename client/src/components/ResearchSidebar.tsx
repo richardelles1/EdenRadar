@@ -5,6 +5,7 @@ import {
   PlusCircle,
   BookOpen,
   Database,
+  Library,
   User,
   Moon,
   Sun,
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { href: "/research/create-discovery", label: "Create Discovery", icon: PlusCircle },
   { href: "/research/my-discoveries", label: "My Discoveries", icon: BookOpen },
   { href: "/research/data-sources", label: "Data Sources", icon: Database },
+  { href: "/research/library", label: "Library", icon: Library },
   { href: "/research/profile", label: "Profile", icon: User },
 ];
 
