@@ -6,6 +6,17 @@ import { searchPatents } from "./patents";
 import { searchTechTransfer } from "./techtransfer/index";
 import { searchNihReporter } from "./nih_reporter";
 import { searchOpenAlex } from "./openalex";
+import { searchSemanticScholar } from "./semantic_scholar";
+import { searchArxiv } from "./arxiv";
+import { searchNsfAwards } from "./nsf_awards";
+import { searchEuCordis } from "./eu_cordis";
+import { searchLens } from "./lens";
+import { searchEuropePmc } from "./europepmc";
+import { searchZenodo } from "./zenodo";
+import { searchEuClinicalTrials } from "./eu_clinicaltrials";
+import { searchIsrctn } from "./isrctn";
+import { searchGeo } from "./geo";
+import { searchPdb } from "./pdb";
 import type { RawSignal } from "../types";
 import { db } from "../../db";
 import { discoveryCards } from "@shared/schema";
@@ -23,7 +34,18 @@ export type SourceKey =
   | "techtransfer"
   | "nih_reporter"
   | "openalex"
-  | "lab_discoveries";
+  | "lab_discoveries"
+  | "semantic_scholar"
+  | "arxiv"
+  | "nsf_awards"
+  | "eu_cordis"
+  | "lens"
+  | "europepmc"
+  | "zenodo"
+  | "eu_clinicaltrials"
+  | "isrctn"
+  | "geo"
+  | "pdb";
 
 export interface DataSource {
   id: SourceKey;
@@ -140,6 +162,72 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "Lab Discoveries",
     description: "Admin-curated researcher Discovery Cards — direct submissions from academic labs seeking licensing partners",
     search: searchLabDiscoveries,
+  },
+  semantic_scholar: {
+    id: "semantic_scholar",
+    label: "Semantic Scholar",
+    description: "200M+ papers — AI-powered scholarly search with rich metadata",
+    search: searchSemanticScholar,
+  },
+  arxiv: {
+    id: "arxiv",
+    label: "arXiv",
+    description: "Preprints in physics, math, CS, and quantitative biology",
+    search: searchArxiv,
+  },
+  nsf_awards: {
+    id: "nsf_awards",
+    label: "NSF Awards",
+    description: "US National Science Foundation funded research grants",
+    search: searchNsfAwards,
+  },
+  eu_cordis: {
+    id: "eu_cordis",
+    label: "EU CORDIS",
+    description: "European research funding — Horizon Europe and FP projects",
+    search: searchEuCordis,
+  },
+  lens: {
+    id: "lens",
+    label: "Lens.org",
+    description: "Global patent search covering USPTO, EPO, and WIPO (requires LENS_API_KEY)",
+    search: searchLens,
+  },
+  europepmc: {
+    id: "europepmc",
+    label: "Europe PMC",
+    description: "Life sciences literature — 40M+ articles, preprints, patents, and clinical guidelines",
+    search: searchEuropePmc,
+  },
+  zenodo: {
+    id: "zenodo",
+    label: "Zenodo",
+    description: "Open research datasets, software, and preprints from CERN",
+    search: searchZenodo,
+  },
+  eu_clinicaltrials: {
+    id: "eu_clinicaltrials",
+    label: "EU Clinical Trials",
+    description: "European Clinical Trials Information System (CTIS)",
+    search: searchEuClinicalTrials,
+  },
+  isrctn: {
+    id: "isrctn",
+    label: "ISRCTN",
+    description: "UK/international clinical trials registry",
+    search: searchIsrctn,
+  },
+  geo: {
+    id: "geo",
+    label: "GEO",
+    description: "Gene Expression Omnibus — genomics datasets from NCBI",
+    search: searchGeo,
+  },
+  pdb: {
+    id: "pdb",
+    label: "PDB",
+    description: "Protein Data Bank — 3D structures of proteins and nucleic acids",
+    search: searchPdb,
   },
 };
 

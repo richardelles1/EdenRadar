@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema } from "@shared/schema";
 import { dataSources, collectAllSignals, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -16,6 +16,65 @@ import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapin
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
+import type { RawSignal } from "./lib/types";
+
+const SOURCE_TYPE_MAP: Record<string, string[]> = {
+  publication: ["paper"],
+  preprint: ["preprint"],
+  grant: ["grant"],
+  clinical_trial: ["clinical_trial"],
+  dataset: ["dataset"],
+  patent: ["patent"],
+  conference_abstract: ["paper"],
+};
+
+const PHASE_MAP: Record<string, string[]> = {
+  preclinical: ["preclinical", "discovery"],
+  phase_1: ["phase 1"],
+  phase_2: ["phase 2"],
+  phase_3: ["phase 3"],
+  phase_4: ["phase 4", "approved"],
+};
+
+function applySignalFilters(
+  signals: RawSignal[],
+  filters: { sourceType?: string; dateRange?: string; trialPhase?: string }
+): RawSignal[] {
+  let filtered = signals;
+
+  if (filters.sourceType) {
+    const allowed = SOURCE_TYPE_MAP[filters.sourceType] ?? [filters.sourceType];
+    filtered = filtered.filter((s) => allowed.includes(s.source_type));
+  }
+
+  if (filters.dateRange) {
+    const now = new Date();
+    let cutoff: Date;
+    switch (filters.dateRange) {
+      case "30d": cutoff = new Date(now.getTime() - 30 * 86400000); break;
+      case "6m": cutoff = new Date(now.getFullYear(), now.getMonth() - 6, now.getDate()); break;
+      case "1y": cutoff = new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()); break;
+      case "5y": cutoff = new Date(now.getFullYear() - 5, now.getMonth(), now.getDate()); break;
+      default: cutoff = new Date(0);
+    }
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
+    filtered = filtered.filter((s) => {
+      if (!s.date) return true;
+      return s.date >= cutoffStr;
+    });
+  }
+
+  if (filters.trialPhase) {
+    const allowed = PHASE_MAP[filters.trialPhase] ?? [filters.trialPhase];
+    filtered = filtered.filter((s) => {
+      if (s.source_type !== "clinical_trial") return true;
+      const hint = s.stage_hint.toLowerCase();
+      return allowed.some((p) => hint.includes(p));
+    });
+  }
+
+  return filtered;
+}
 
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
@@ -31,7 +90,12 @@ function friendlyOpenAIError(err: unknown): string {
   return "Search failed. Please try again.";
 }
 
-const ALL_SOURCES: SourceKey[] = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer"];
+const ALL_SOURCES: SourceKey[] = [
+  "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
+  "nih_reporter", "openalex", "lab_discoveries",
+  "semantic_scholar", "arxiv", "nsf_awards", "eu_cordis", "lens",
+  "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb",
+];
 
 const buyerProfileSchema = z.object({
   therapeutic_areas: z.array(z.string()).default([]),
@@ -50,6 +114,11 @@ const searchBodySchema = z.object({
   sources: z.array(z.string()).default(ALL_SOURCES),
   maxPerSource: z.number().int().min(1).max(20).default(12),
   buyerProfile: buyerProfileSchema,
+  field: z.string().optional(),
+  sourceType: z.enum(["publication", "preprint", "grant", "clinical_trial", "dataset", "patent", "conference_abstract"]).optional(),
+  dateRange: z.enum(["30d", "6m", "1y", "5y"]).optional(),
+  technologyType: z.string().optional(),
+  trialPhase: z.enum(["preclinical", "phase_1", "phase_2", "phase_3", "phase_4"]).optional(),
 });
 
 const reportBodySchema = z.object({
@@ -105,11 +174,15 @@ export async function registerRoutes(
 
   app.post("/api/search", async (req, res) => {
     try {
-      const { query, sources, maxPerSource, buyerProfile } = searchBodySchema.parse(req.body);
+      const { query, sources, maxPerSource, buyerProfile, field, sourceType, dateRange, technologyType, trialPhase } = searchBodySchema.parse(req.body);
       const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
       const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
 
-      const signals = await collectAllSignals(query, effectiveSources, maxPerSource);
+      const enrichedQuery = [query, field, technologyType].filter(Boolean).join(" ");
+
+      let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
+
+      signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase });
 
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
@@ -974,6 +1047,45 @@ export async function registerRoutes(
       const card = await storage.updateDiscoveryCard(id, researcherId, req.body);
       if (!card) return res.status(404).json({ error: "Card not found" });
       res.json({ card });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Saved references
+  app.get("/api/research/references", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const projectId = req.query.projectId ? parseInt(req.query.projectId as string) : undefined;
+    try {
+      const refs = await storage.getSavedReferences(researcherId, projectId);
+      res.json({ references: refs });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/research/references", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const parsed = insertSavedReferenceSchema.safeParse({ ...req.body, userId: researcherId });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      const ref = await storage.createSavedReference(parsed.data);
+      res.json({ reference: ref });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/research/references/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      await storage.deleteSavedReference(id, researcherId);
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

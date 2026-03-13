@@ -219,3 +219,23 @@ export const insertDiscoveryCardSchema = createInsertSchema(discoveryCards).omit
 });
 export type InsertDiscoveryCard = z.infer<typeof insertDiscoveryCardSchema>;
 export type DiscoveryCard = typeof discoveryCards.$inferSelect;
+
+export const savedReferences = pgTable("saved_references", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  projectId: integer("project_id"),
+  title: text("title").notNull(),
+  url: text("url").notNull(),
+  sourceType: text("source_type").notNull().default("paper"),
+  date: text("date").notNull().default(""),
+  institution: text("institution").notNull().default(""),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSavedReferenceSchema = createInsertSchema(savedReferences).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSavedReference = z.infer<typeof insertSavedReferenceSchema>;
+export type SavedReference = typeof savedReferences.$inferSelect;

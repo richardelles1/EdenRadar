@@ -17,7 +17,7 @@ function toRawSignal(project: any): RawSignal {
 
   return {
     id: `nih-${nctId || Math.random()}`,
-    source_type: "paper",
+    source_type: "grant",
     title: project.project_title ?? "Untitled NIH Project",
     text: abstractText,
     authors_or_owner: piNames.join(", "),

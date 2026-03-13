@@ -10,6 +10,7 @@ import {
   enrichmentJobs, type EnrichmentJob,
   researchProjects, type ResearchProject, type InsertResearchProject,
   discoveryCards, type DiscoveryCard, type InsertDiscoveryCard,
+  savedReferences, type SavedReference, type InsertSavedReference,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
@@ -87,6 +88,10 @@ export interface IStorage {
   publishDiscoveryCard(id: number, researcherId: string): Promise<DiscoveryCard | undefined>;
   updateDiscoveryCard(id: number, researcherId: string, data: Partial<InsertDiscoveryCard>): Promise<DiscoveryCard | undefined>;
   updateDiscoveryCardAdmin(id: number, data: { adminStatus: string; adminNote?: string }): Promise<DiscoveryCard | undefined>;
+
+  getSavedReferences(userId: string, projectId?: number): Promise<SavedReference[]>;
+  createSavedReference(data: InsertSavedReference): Promise<SavedReference>;
+  deleteSavedReference(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -584,6 +589,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(discoveryCards.id, id))
       .returning();
     return row;
+  }
+
+  async getSavedReferences(userId: string, projectId?: number): Promise<SavedReference[]> {
+    const conditions = [eq(savedReferences.userId, userId)];
+    if (projectId !== undefined) {
+      conditions.push(eq(savedReferences.projectId, projectId));
+    }
+    return db.select().from(savedReferences).where(and(...conditions)).orderBy(desc(savedReferences.createdAt));
+  }
+
+  async createSavedReference(data: InsertSavedReference): Promise<SavedReference> {
+    const [row] = await db.insert(savedReferences).values(data).returning();
+    return row;
+  }
+
+  async deleteSavedReference(id: number, userId: string): Promise<void> {
+    await db.delete(savedReferences).where(and(eq(savedReferences.id, id), eq(savedReferences.userId, userId)));
   }
 }
 
