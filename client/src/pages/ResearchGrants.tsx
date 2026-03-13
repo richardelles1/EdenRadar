@@ -82,7 +82,12 @@ function MultiSelectFilter({
     if (selected.includes(option)) {
       onChange(selected.filter((s) => s !== option));
     } else {
-      onChange([...selected, option]);
+      const next = [...selected, option];
+      if (next.length === options.length) {
+        onChange([]);
+      } else {
+        onChange(next);
+      }
     }
   }
 
@@ -537,9 +542,7 @@ export default function ResearchGrants() {
 
   function handleTabChange(t: "find" | "my") {
     setTab(t);
-    if (t === "my") {
-      clearSearch();
-    }
+    clearSearch();
   }
 
   function handleAddGrant() {
