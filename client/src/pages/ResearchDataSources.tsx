@@ -300,14 +300,17 @@ export default function ResearchDataSources() {
     setSelectedSources((prev) =>
       prev.includes(key) ? prev.filter((s) => s !== key) : [...prev, key]
     );
+    setPage(1);
   }
 
   function selectAllSources() {
     setSelectedSources(ALL_SOURCE_KEYS);
+    setPage(1);
   }
 
   function resetSources() {
-    setSelectedSources([]);
+    setSelectedSources(ALL_SOURCE_KEYS);
+    setPage(1);
   }
 
   function changePage(p: number) {

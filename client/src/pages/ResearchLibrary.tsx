@@ -113,7 +113,7 @@ export default function ResearchLibrary() {
           {groupKeys.map((key) => {
             const refs = grouped[key];
             const isUnsorted = key === "unsorted";
-            const groupTitle = isUnsorted ? "Unsorted Bookmarks" : projectMap[Number(key)] ?? `Project #${key}`;
+            const groupTitle = isUnsorted ? "Unsaved bookmarks" : projectMap[Number(key)] ?? `Project #${key}`;
 
             return (
               <section key={key} data-testid={`library-group-${key}`}>
