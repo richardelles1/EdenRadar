@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, type InsertResearchProject } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject } from "@shared/schema";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -1259,6 +1259,61 @@ export async function registerRoutes(
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     try {
       await storage.deleteSavedReference(id, researcherId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Saved grants
+  app.get("/api/research/grants", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    try {
+      const grants = await storage.getSavedGrants(researcherId);
+      res.json({ grants });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/research/grants", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const parsed = insertSavedGrantSchema.safeParse({ ...req.body, userId: researcherId });
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    try {
+      if (parsed.data.projectId) {
+        const project = await storage.getResearchProject(parsed.data.projectId, researcherId);
+        if (!project) return res.status(403).json({ error: "Project not found or not owned by you" });
+      }
+      const grant = await storage.createSavedGrant(parsed.data);
+      res.json({ grant });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/research/grants/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      const grant = await storage.updateSavedGrant(id, researcherId, req.body);
+      res.json({ grant });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/research/grants/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      await storage.deleteSavedGrant(id, researcherId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

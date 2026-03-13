@@ -18,6 +18,7 @@ import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject } from "@shared/schema";
 import { ResearchBriefPDF } from "@/components/ResearchBriefPDF";
+import { computeReadinessScore } from "@/lib/readiness";
 
 type Paper = { paper_title: string; authors: string; journal: string; year: string; paper_link: string; notes: string };
 type Dataset = { dataset_name: string; dataset_source: string; dataset_link: string; notes: string };
@@ -231,6 +232,17 @@ export default function ProjectDetail() {
           {local.researchDomain && <p className="text-xs text-muted-foreground">{local.researchDomain}</p>}
         </div>
         <Badge className={`text-xs shrink-0 ${getStatusColor(local.status)}`}>{local.status.replace("_"," ")}</Badge>
+        {(() => {
+          const r = computeReadinessScore(local);
+          return (
+            <span
+              className={`text-xs font-semibold shrink-0 hidden sm:inline ${r.textColor}`}
+              data-testid="text-readiness-score"
+            >
+              {r.score}/100
+            </span>
+          );
+        })()}
         <Button
           variant="outline"
           size="sm"

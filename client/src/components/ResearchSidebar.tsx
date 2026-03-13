@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Microscope,
+  BadgeDollarSign,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/research/projects", label: "My Projects", icon: FolderOpen },
   { href: "/research/alerts", label: "My Alerts", icon: Bell },
+  { href: "/research/grants", label: "My Grants", icon: BadgeDollarSign },
   { href: "/research/my-discoveries", label: "My Discoveries", icon: BookOpen },
   { href: "/research/data-sources", label: "Data Sources", icon: Database },
   { href: "/research/library", label: "Library", icon: Library },

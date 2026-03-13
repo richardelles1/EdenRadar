@@ -29,6 +29,7 @@ import {
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject, SavedReference } from "@shared/schema";
+import { computeReadinessScore } from "@/lib/readiness";
 
 type ProjectsResponse = { projects: ResearchProject[] };
 
@@ -299,6 +300,7 @@ export function ProjectCard({
 
   const refs = refsData?.references ?? [];
   const statusConf = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.planning;
+  const readiness = computeReadinessScore(project);
 
   return (
     <div
@@ -330,6 +332,22 @@ export function ProjectCard({
       </div>
       {project.hypothesis && !compact && (
         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{project.hypothesis}</p>
+      )}
+      {!compact && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-wide">Readiness</span>
+            <span className={`text-[11px] font-semibold ${readiness.textColor}`} data-testid={`readiness-score-${project.id}`}>
+              {readiness.score}/100
+            </span>
+          </div>
+          <div className="h-1 rounded-full bg-muted overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${readiness.barColor}`}
+              style={{ width: `${readiness.score}%` }}
+            />
+          </div>
+        </div>
       )}
       <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-auto">
         <span className="flex items-center gap-1">

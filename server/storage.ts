@@ -11,6 +11,7 @@ import {
   researchProjects, type ResearchProject, type InsertResearchProject,
   discoveryCards, type DiscoveryCard, type InsertDiscoveryCard,
   savedReferences, type SavedReference, type InsertSavedReference,
+  savedGrants, type SavedGrant, type InsertSavedGrant,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
@@ -93,6 +94,11 @@ export interface IStorage {
   getSavedReferences(userId: string, projectId?: number): Promise<SavedReference[]>;
   createSavedReference(data: InsertSavedReference): Promise<SavedReference>;
   deleteSavedReference(id: number, userId: string): Promise<void>;
+
+  getSavedGrants(userId: string): Promise<SavedGrant[]>;
+  createSavedGrant(data: InsertSavedGrant): Promise<SavedGrant>;
+  updateSavedGrant(id: number, userId: string, data: Partial<InsertSavedGrant>): Promise<SavedGrant>;
+  deleteSavedGrant(id: number, userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -613,6 +619,24 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavedReference(id: number, userId: string): Promise<void> {
     await db.delete(savedReferences).where(and(eq(savedReferences.id, id), eq(savedReferences.userId, userId)));
+  }
+
+  async getSavedGrants(userId: string): Promise<SavedGrant[]> {
+    return db.select().from(savedGrants).where(eq(savedGrants.userId, userId)).orderBy(desc(savedGrants.createdAt));
+  }
+
+  async createSavedGrant(data: InsertSavedGrant): Promise<SavedGrant> {
+    const [row] = await db.insert(savedGrants).values(data).returning();
+    return row;
+  }
+
+  async updateSavedGrant(id: number, userId: string, data: Partial<InsertSavedGrant>): Promise<SavedGrant> {
+    const [row] = await db.update(savedGrants).set(data).where(and(eq(savedGrants.id, id), eq(savedGrants.userId, userId))).returning();
+    return row;
+  }
+
+  async deleteSavedGrant(id: number, userId: string): Promise<void> {
+    await db.delete(savedGrants).where(and(eq(savedGrants.id, id), eq(savedGrants.userId, userId)));
   }
 }
 

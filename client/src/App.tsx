@@ -23,6 +23,7 @@ import ResearchDataSources from "@/pages/ResearchDataSources";
 import ResearchLibrary from "@/pages/ResearchLibrary";
 import ResearchProjects from "@/pages/ResearchProjects";
 import ResearchAlerts from "@/pages/ResearchAlerts";
+import ResearchGrants from "@/pages/ResearchGrants";
 import ProjectDetail from "@/pages/ProjectDetail";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
@@ -147,6 +148,11 @@ function Router() {
       <Route path="/research/alerts">
         <ResearchLayout>
           <ResearchAlerts />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/grants">
+        <ResearchLayout>
+          <ResearchGrants />
         </ResearchLayout>
       </Route>
 

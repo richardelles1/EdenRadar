@@ -1,0 +1,311 @@
+You’re already very close to the right shape of product, and your instinct about Ovid Synthesis is exactly right. Ovid didn’t win because it had the most features — it won because it turned research into a structured workflow and made the output credible.
+
+So the real question is not “what features are missing?” but:
+
+What makes researchers trust and rely on the platform?
+
+From the way you described the system, you already have:
+	•	structured project template
+	•	collapsible sections
+	•	literature attachments
+	•	research brief output
+	•	multi-source library
+	•	discovery cards → industry
+	•	collaboration (in progress)
+
+That’s already a strong core.
+
+To become best-in-class, the additions should do one of four things:
+	1.	increase trust
+	2.	reduce thinking friction
+	3.	generate credible outputs
+	4.	create network effects
+
+Below are the additions that move the needle most.
+
+⸻
+
+1. Evidence Grading (Huge Trust Feature)
+
+Systematic research tools always include evidence grading.
+
+Every attached paper could get a quick rating.
+
+Example fields:
+
+Evidence strength
+Study type
+Sample size
+Replication status
+
+Dropdown example:
+
+Meta-analysis
+Randomized clinical trial
+Cohort study
+Preclinical study
+Computational study
+
+Then a confidence rating:
+
+High confidence
+Moderate
+Low
+
+Why this matters:
+
+Researchers instantly understand the quality of the literature base.
+
+This is one of the quiet things Ovid does very well.
+
+⸻
+
+2. Contradiction Detection
+
+Elite research tools show conflicting findings.
+
+When multiple papers are attached:
+
+Add a small section:
+
+Conflicting Evidence
+
+Researchers summarize:
+
+Paper A shows positive correlation
+Paper B shows no effect
+Paper C shows inverse relationship
+
+This is extremely valuable for systematic thinking.
+
+⸻
+
+3. Structured Research Timeline
+
+Projects benefit from a simple timeline.
+
+Concept
+Literature review
+Experimental design
+Pilot data
+Validation
+Publication
+Commercialization
+
+Researchers can update progress.
+
+Industry can later see where the discovery sits.
+
+⸻
+
+4. Research Map / Concept Graph
+
+A visual element can be extremely powerful.
+
+Imagine a small graph showing:
+
+Project
+│
+├── Papers
+├── Patents
+├── Grants
+├── Datasets
+└── Collaborators
+
+It becomes a knowledge map for the project.
+
+This doesn’t need to be fancy.
+
+Even a simple relationship graph is powerful.
+
+⸻
+
+5. Exportable Research Briefs
+
+Your brief generation idea is excellent.
+
+Add export formats:
+
+PDF
+Grant brief
+Industry brief
+Lab meeting summary
+
+Each output adjusts tone slightly.
+
+Example:
+
+Scientific summary
+Commercialization summary
+Executive summary
+
+This makes the platform useful beyond the portal itself.
+
+⸻
+
+6. Research Signal Alerts
+
+You already have alerts, but you can make them smarter.
+
+Example:
+
+New paper related to this project
+New grant in your research area
+New patent filed
+New clinical trial
+
+This keeps projects alive over time.
+
+⸻
+
+7. Discovery Readiness Score
+
+This will be extremely valuable later.
+
+Automatically estimate:
+
+Discovery Readiness Score
+
+Based on:
+
+literature strength
+grant funding
+patent status
+experimental stage
+
+Example output:
+
+Readiness Score: 72/100
+
+Industry users love this.
+
+⸻
+
+8. Project Templates
+
+Instead of one template, allow:
+
+Experimental study
+Clinical research
+Computational research
+Review study
+Commercialization concept
+
+This slightly changes the fields.
+
+It reduces friction.
+
+⸻
+
+9. Lab / Team Mode
+
+If you eventually allow labs to join:
+
+Lab workspace
+Shared projects
+Shared discovery pipeline
+
+This is how the tool spreads across universities.
+
+⸻
+
+10. Research Provenance Log
+
+This is subtle but powerful.
+
+Track:
+
+who added paper
+who edited hypothesis
+who updated method
+
+Researchers appreciate transparent history.
+
+⸻
+
+The One Feature That Could Make Your Platform Unique
+
+Your industry bridge is the differentiator.
+
+You should lean into it.
+
+Add a section inside each project:
+
+Industry Relevance
+
+Fields like:
+
+market applications
+competitive technologies
+commercial timeline
+
+This is what transforms:
+
+research → opportunity
+
+No academic tool really does this well.
+
+⸻
+
+What You Should NOT Do
+
+Avoid turning the platform into:
+
+another literature search engine
+
+You already solved that by aggregating sources.
+
+The product should focus on:
+
+structured research thinking
++
+discovery creation
++
+commercialization pipeline
+
+
+⸻
+
+The Real Competitive Advantage
+
+Your system now looks like:
+
+Research workspace
+      ↓
+Structured project
+      ↓
+Research brief
+      ↓
+Discovery card
+      ↓
+Industry exposure
+
+That pipeline does not exist in most academic tools.
+
+⸻
+
+My Honest Advice
+
+If I had to prioritize the three additions that would make this elite:
+	1.	Evidence grading for literature
+	2.	Exportable research briefs
+	3.	Discovery readiness score
+
+Those dramatically increase credibility and usefulness.
+
+⸻
+
+One final thought, because this is important.
+
+The biggest mistake research platforms make is adding too many features.
+
+Ovid succeeded because it kept the workflow simple:
+
+question
+evidence
+analysis
+output
+
+Your platform already follows that structure.
+
+That’s why you’re feeling the product come together.
