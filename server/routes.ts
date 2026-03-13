@@ -1102,7 +1102,11 @@ export async function registerRoutes(
   app.get("/api/research/references", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
-    const projectId = req.query.projectId ? parseInt(req.query.projectId as string) : undefined;
+    let projectId: number | undefined;
+    if (req.query.projectId) {
+      projectId = parseInt(req.query.projectId as string);
+      if (isNaN(projectId)) return res.status(400).json({ error: "Invalid projectId" });
+    }
     try {
       const refs = await storage.getSavedReferences(researcherId, projectId);
       res.json({ references: refs });
@@ -1117,6 +1121,10 @@ export async function registerRoutes(
     const parsed = insertSavedReferenceSchema.safeParse({ ...req.body, userId: researcherId });
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
+      if (parsed.data.projectId) {
+        const project = await storage.getResearchProject(parsed.data.projectId, researcherId);
+        if (!project) return res.status(403).json({ error: "Project not found or not owned by you" });
+      }
       const ref = await storage.createSavedReference(parsed.data);
       res.json({ reference: ref });
     } catch (err: any) {

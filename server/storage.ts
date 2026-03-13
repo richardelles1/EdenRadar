@@ -75,6 +75,7 @@ export interface IStorage {
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   stampEnrichedAt(assetId: number): Promise<void>;
 
+  getResearchProject(id: number, researcherId: string): Promise<ResearchProject | undefined>;
   getResearchProjects(researcherId: string): Promise<ResearchProject[]>;
   createResearchProject(data: InsertResearchProject): Promise<ResearchProject>;
   updateResearchProject(id: number, researcherId: string, data: Partial<InsertResearchProject>): Promise<ResearchProject | undefined>;
@@ -519,6 +520,12 @@ export class DatabaseStorage implements IStorage {
 
   async stampEnrichedAt(assetId: number): Promise<void> {
     await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
+  }
+
+  async getResearchProject(id: number, researcherId: string): Promise<ResearchProject | undefined> {
+    const [row] = await db.select().from(researchProjects)
+      .where(and(eq(researchProjects.id, id), eq(researchProjects.researcherId, researcherId)));
+    return row;
   }
 
   async getResearchProjects(researcherId: string): Promise<ResearchProject[]> {
