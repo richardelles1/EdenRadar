@@ -1,0 +1,55 @@
+I really like the filter function. However, the search results are quite limited—could we add more research platforms, including the ones listed below?
+
+
+General Academic Search Engines
+
+PubMed – Biomedical and life sciences literature
+Scopus – Large abstract and citation database (subscription)
+Web of Science – Multidisciplinary research platform (subscription)
+BASE – Bielefeld Academic Search Engine (free)
+CORE – Aggregator of open access research papers
+Semantic Scholar – AI-powered research tool
+Microsoft Academic – (Discontinued but archived data available)
+ScienceDirect – Elsevier's platform for peer-reviewed literature
+Subject-Specific Databases
+
+JSTOR – Arts, humanities, and social sciences
+IEEE Xplore – Engineering, computer science, electronics
+PubMed Central – Free archive of biomedical literature
+PsycINFO – Psychology and behavioral sciences
+ERIC – Education research
+arXiv.org – Physics, mathematics, computer science (preprints)
+SSRN – Social sciences and humanities (preprints)
+RePEc – Economics research
+ChemSpider – Chemistry
+AGRICOLA – Agriculture and related sciences
+Open Access Repositories
+
+DOAJ – Directory of Open Access Journals
+OpenAIRE – Open access research publications
+Zenodo – Multidisciplinary research outputs
+HAL – French open archive
+Europe PMC – Life sciences literature
+Institutional & National Libraries
+
+WorldCat – Search library catalogs worldwide
+British Library – Main catalogue
+Library of Congress – US library catalog
+ETH E-Collection – ETH Zurich's open access platform
+Preprint Servers
+
+medRxiv – Health sciences
+bioRxiv – Biology
+ChemRxiv – Chemistry
+SocArXiv – Social sciences
+PsyArXiv – Psychology
+EarthArXiv – Earth sciences
+engrXiv – Engineering
+ 
+
+ 
+
+When I searched for articles on leadership, I received about 10 results—only 2 were actually relevant to leadership, while the other 8 were unrelated. Is there a way to improve the accuracy of search results?
+ 
+
+Once the initial process is complete, we could consider adding some visual interest for users—perhaps a fun animation or graphic to engage them while the system scans documents
