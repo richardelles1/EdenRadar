@@ -269,6 +269,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ingest/history", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const runs = await storage.getIngestionRunHistory(5);
+      res.json(runs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/ingest/delta", async (_req, res) => {
     try {
       const lastRun = await storage.getLastIngestionRun();

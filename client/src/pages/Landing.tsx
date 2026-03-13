@@ -2,9 +2,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import {
-  ArrowRight,
   FlaskConical,
-  Layers,
   Download,
   Zap,
   Database,
@@ -251,22 +249,6 @@ export default function Landing() {
                       Enter Portal
                     </Button>
                     <p className="text-[11px] text-muted-foreground text-center">Scout · Reports · Saved Assets · Alerts</p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="gap-2 text-base h-12 px-7 border-border"
-                      onClick={() => {
-                        localStorage.setItem("eden-portal", "true");
-                        window.location.href = "/scout";
-                      }}
-                      data-testid="button-cta-launch"
-                    >
-                      Launch Scout
-                      <ArrowRight className="w-4 h-4" />
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground text-center">Jump straight to asset discovery</p>
                   </div>
                 </div>
 

@@ -12,12 +12,10 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe, RefreshCw, CheckCircle2, AlertCircle, XCircle, Building2 } from "lucide-react";
-import { Progress } from "@/components/ui/progress";
+import { FileBarChart2, Loader2, Globe } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { IngestionRun } from "@shared/schema";
 import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
@@ -38,212 +36,6 @@ type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
 
-type ScrapingProgress = { done: number; total: number; found: number; active?: string[] };
-type IngestStatus = IngestionRun & { status: string } | { status: "never_run"; totalFound: 0; newCount: 0; ranAt: null };
-
-function formatRelativeTime(dt: Date | string | null): string {
-  if (!dt) return "unknown";
-  const d = new Date(dt);
-  const now = Date.now();
-  const diff = now - d.getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return "just now";
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function ScanStatusBar({ onRefresh }: { onRefresh: () => void }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-
-  const { data: statusData } = useQuery<IngestStatus & { enrichingCount?: number; scrapingProgress?: ScrapingProgress; upsertProgress?: { done: number; total: number } }>({
-    queryKey: ["/api/ingest/status"],
-    refetchInterval: (query) => {
-      const data = query.state.data as (IngestStatus & { enrichingCount?: number }) | undefined;
-      if (data?.status === "running") return 3000;
-      if ((data?.enrichingCount ?? 0) > 0) return 5000;
-      return 30000;
-    },
-    staleTime: 0,
-  });
-
-  const scanMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ingest/run", {});
-      return res.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/ingest/status"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Scan failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const syncIsRunning = (statusData as any)?.syncRunning ?? false;
-  const syncRunningFor = (statusData as any)?.syncRunningFor ?? null;
-  const isRunning = statusData?.status === "running" || scanMutation.isPending;
-  const enrichingCount = statusData?.enrichingCount ?? 0;
-  const scrapingProgress = statusData?.scrapingProgress ?? { done: 0, total: 0, found: 0 };
-  const upsertProgress = statusData?.upsertProgress ?? { done: 0, total: 0 };
-  const isSaving = scrapingProgress.total > 0 && scrapingProgress.done >= scrapingProgress.total && upsertProgress.total > 0;
-  const progressPct = scrapingProgress.total > 0
-    ? Math.round((scrapingProgress.done / scrapingProgress.total) * 100)
-    : 0;
-  const savePct = upsertProgress.total > 0
-    ? Math.round((upsertProgress.done / upsertProgress.total) * 100)
-    : 0;
-
-  const handleScan = () => {
-    scanMutation.mutate();
-    onRefresh();
-  };
-
-  if (!statusData || statusData.status === "never_run") {
-    return (
-      <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-amber-500/20 bg-amber-500/5" data-testid="scan-status-bar">
-        <div className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
-          <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-          <span className="font-medium">Sources not yet indexed</span>
-          <span className="hidden sm:inline text-muted-foreground">— run a full scan to pull real listings from all {INSTITUTIONS.length} TTOs</span>
-        </div>
-        <Button
-          size="sm"
-          className="h-7 text-xs shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-          onClick={handleScan}
-          disabled={isRunning || syncIsRunning}
-          data-testid="button-run-scan"
-          title={syncIsRunning ? `Sync running for ${syncRunningFor} — wait for it to complete` : undefined}
-        >
-          {isRunning ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
-          {syncIsRunning ? "Sync Active" : "Run Full Scan"}
-        </Button>
-      </div>
-    );
-  }
-
-  if (isRunning) {
-    const hasProgress = scrapingProgress.total > 0;
-    const activeInstitutions = scrapingProgress.active ?? [];
-    return (
-      <div className="max-w-3xl mx-auto px-3.5 py-2.5 rounded-lg border border-primary/20 bg-primary/5 space-y-1.5" data-testid="scan-status-bar">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
-            <span className="text-xs text-primary font-medium">
-              {isSaving ? "Saving to database…" : "Scanning TTO sources…"}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {isSaving ? (
-              <span data-testid="progress-saving">
-                {upsertProgress.done.toLocaleString()} / {upsertProgress.total.toLocaleString()} listings saved
-              </span>
-            ) : hasProgress ? (
-              <>
-                <Building2 className="w-3 h-3" />
-                <span data-testid="progress-institutions">
-                  {scrapingProgress.done.toLocaleString()} / {scrapingProgress.total.toLocaleString()} institutions
-                </span>
-                <span className="text-muted-foreground/40">·</span>
-                <span data-testid="progress-listings">
-                  {scrapingProgress.found.toLocaleString()} listings found
-                </span>
-              </>
-            ) : (
-              <span>Starting up…</span>
-            )}
-          </div>
-        </div>
-        <Progress
-          value={isSaving ? savePct : progressPct}
-          className="h-1.5 bg-primary/10"
-          data-testid="progress-bar"
-        />
-        {!isSaving && activeInstitutions.length > 0 && (
-          <p className="text-[10px] text-muted-foreground/70 truncate" data-testid="progress-active-institutions">
-            <span className="font-medium text-muted-foreground">Now:</span>{" "}
-            {activeInstitutions.join(" · ")}
-          </p>
-        )}
-      </div>
-    );
-  }
-
-  if (statusData.status === "failed") {
-    return (
-      <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-destructive/20 bg-destructive/5" data-testid="scan-status-bar">
-        <div className="flex items-center gap-2 text-xs text-destructive">
-          <XCircle className="w-3.5 h-3.5 shrink-0" />
-          <span className="font-medium">Last scan failed</span>
-          {statusData.errorMessage && (
-            <span className="hidden sm:inline text-muted-foreground">— {statusData.errorMessage}</span>
-          )}
-        </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="h-7 text-xs shrink-0 border-destructive/30 text-destructive hover:bg-destructive/5"
-          onClick={handleScan}
-          disabled={isRunning || syncIsRunning}
-          data-testid="button-retry-scan"
-          title={syncIsRunning ? `Sync running for ${syncRunningFor}` : undefined}
-        >
-          <RefreshCw className="w-3 h-3 mr-1.5" />
-          {syncIsRunning ? "Sync Active" : "Retry"}
-        </Button>
-      </div>
-    );
-  }
-
-  const updatedCount = (statusData.totalFound ?? 0) - (statusData.newCount ?? 0);
-
-  return (
-    <div className="max-w-3xl mx-auto flex items-center justify-between gap-3 px-3.5 py-2 rounded-lg border border-primary/15 bg-primary/5" data-testid="scan-status-bar">
-      <div className="flex items-center gap-2 text-xs">
-        <CheckCircle2 className="w-3.5 h-3.5 text-primary shrink-0" />
-        <span className="text-muted-foreground">
-          Last scan: <span className="text-foreground font-medium">{formatRelativeTime(statusData.ranAt)}</span>
-        </span>
-        <span className="text-muted-foreground/50">·</span>
-        <span className="text-muted-foreground">
-          <span className="text-foreground font-medium">{statusData.totalFound}</span> assets indexed
-        </span>
-        {statusData.newCount > 0 ? (
-          <>
-            <span className="text-muted-foreground/50">·</span>
-            <span className="text-primary font-medium">+{statusData.newCount} new</span>
-          </>
-        ) : updatedCount > 0 ? (
-          <>
-            <span className="text-muted-foreground/50">·</span>
-            <span className="text-muted-foreground">{updatedCount} refreshed</span>
-          </>
-        ) : null}
-        {enrichingCount > 0 && (
-          <span className="flex items-center gap-1 ml-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-[10px] font-medium">
-            <Loader2 className="w-2.5 h-2.5 animate-spin" />
-            Enriching {enrichingCount.toLocaleString()} assets…
-          </span>
-        )}
-      </div>
-      <Button
-        size="sm"
-        variant="outline"
-        className="h-7 text-xs shrink-0 border-primary/30 text-primary hover:bg-primary/5"
-        onClick={handleScan}
-        disabled={isRunning || syncIsRunning}
-        data-testid="button-refresh-scan"
-        title={syncIsRunning ? `Sync running for ${syncRunningFor}` : undefined}
-      >
-        <RefreshCw className="w-3 h-3 mr-1.5" />
-        {syncIsRunning ? "Sync Active" : "Refresh"}
-      </Button>
-    </div>
-  );
-}
 
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
@@ -339,7 +131,6 @@ export default function Scout() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
-  const [scanTick, setScanTick] = useState(0);
 
   function ssGet<T>(key: string, fallback: T): T {
     try {
@@ -620,8 +411,6 @@ export default function Scout() {
                 </span>
               </Button>
             </div>
-
-            <ScanStatusBar onRefresh={() => setScanTick((t) => t + 1)} />
 
             <div className="max-w-3xl mx-auto flex items-center justify-end">
               <TooltipProvider>
