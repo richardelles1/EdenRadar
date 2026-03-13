@@ -271,9 +271,17 @@ function SketchPad() {
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     isDrawing.current = true;
-    lastPos.current = getPos(e);
+    const pos = getPos(e);
+    lastPos.current = pos;
     canvasRef.current?.setPointerCapture(e.pointerId);
-  }, [getPos]);
+    const ctx = canvasRef.current?.getContext("2d");
+    if (ctx) {
+      ctx.fillStyle = strokeColor;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, strokeSize / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }, [getPos, strokeColor, strokeSize]);
 
   const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!isDrawing.current || !lastPos.current) return;
