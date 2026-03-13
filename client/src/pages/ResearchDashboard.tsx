@@ -28,7 +28,7 @@ type SearchResult = {
   url: string;
   date: string;
   institution_or_sponsor: string;
-  metadata?: { award_range?: string; [key: string]: unknown };
+  metadata?: { opp_status?: string; opp_num?: string; [key: string]: unknown };
 };
 type SearchResponse = { assets: { signals: SearchResult[] }[] };
 type DiscoveryCard = { id: number; title: string; summary: string; published: boolean; adminStatus: string; researchArea: string; createdAt: string };
@@ -308,9 +308,9 @@ export default function ResearchDashboard() {
                   Deadline: {spotlightGrant.date}
                 </span>
               )}
-              {spotlightGrant.metadata?.award_range && (
-                <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                  {spotlightGrant.metadata.award_range}
+              {spotlightGrant.metadata?.opp_num && (
+                <span className="text-muted-foreground">
+                  {spotlightGrant.metadata.opp_num}
                 </span>
               )}
             </div>

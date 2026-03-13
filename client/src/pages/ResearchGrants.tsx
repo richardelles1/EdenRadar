@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useMemo } from "react";
 import {
   BadgeDollarSign, Search, Bookmark, BookmarkCheck, Plus, Trash2,
-  ExternalLink, Calendar, Building2, DollarSign, Loader2, X,
+  ExternalLink, Calendar, Building2, DollarSign, Loader2, X, ChevronDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,30 +18,26 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedGrant, ResearchProject } from "@shared/schema";
 
 const GRANT_SOURCES = ["grants_gov"];
 
-const RESEARCH_FIELDS = [
+const RESEARCH_AREAS = [
   "Biotech", "Drug Discovery", "Genomics", "Immunology", "Oncology",
   "AI in Healthcare", "Medical Devices", "Diagnostics", "Digital Health", "Public Health",
 ];
 
-const CAREER_STAGES = [
-  "Graduate Student", "Postdoctoral Researcher", "Early Career Investigator",
-  "Principal Investigator", "Institutional / Consortium",
-];
+const OPP_STATUSES = ["Posted", "Forecasted"];
 
-const AMOUNT_RANGES = [
-  { label: "Any amount", value: "all" },
-  { label: "< $50K", value: "<$50K" },
-  { label: "$50K – $100K", value: "$50K-$100K" },
-  { label: "$100K – $500K", value: "$100K-$500K" },
-  { label: "$500K – $1M", value: "$500K-$1M" },
-  { label: "$1M – $5M", value: "$1M-$5M" },
-  { label: "$5M+", value: "$5M+" },
+const DEADLINE_OPTIONS = [
+  { label: "Any deadline", value: "any" },
+  { label: "≤ 30 days", value: "30" },
+  { label: "≤ 60 days", value: "60" },
+  { label: "≤ 90 days", value: "90" },
+  { label: "≤ 180 days", value: "180" },
 ];
 
 const STATUS_CONFIG = {
@@ -59,16 +55,95 @@ type SignalResult = {
   institution_or_sponsor: string;
   source_key?: string;
   metadata?: {
-    award_range?: string;
-    award_ceiling?: number;
-    award_floor?: number;
+    opp_status?: string;
     opp_num?: string;
     open_date?: string;
     close_date?: string;
-    category?: string;
+    doc_type?: string;
+    cfda?: string[];
     [key: string]: unknown;
   };
 };
+
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onChange,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const allSelected = selected.length === 0;
+
+  function toggle(option: string) {
+    if (selected.includes(option)) {
+      onChange(selected.filter((s) => s !== option));
+    } else {
+      onChange([...selected, option]);
+    }
+  }
+
+  function selectAll() {
+    onChange([]);
+  }
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className="flex items-center gap-1.5 h-7 px-2.5 text-xs rounded-md border border-border bg-background hover:bg-accent/60 transition-colors text-muted-foreground hover:text-foreground"
+          data-testid={`filter-${label.toLowerCase().replace(/\s+/g, "-")}`}
+        >
+          {label}
+          {selected.length > 0 && (
+            <span className="bg-violet-500/20 text-violet-600 dark:text-violet-400 text-[10px] font-semibold px-1.5 py-0.5 rounded-full leading-none">
+              {selected.length}
+            </span>
+          )}
+          <ChevronDown className="w-3 h-3 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-48 p-2" align="start">
+        <label
+          className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent/60 cursor-pointer text-xs font-medium text-foreground"
+          data-testid={`filter-${label.toLowerCase().replace(/\s+/g, "-")}-all`}
+        >
+          <Checkbox
+            checked={allSelected}
+            onCheckedChange={selectAll}
+          />
+          All
+        </label>
+        <div className="h-px bg-border my-1" />
+        <div className="max-h-48 overflow-y-auto space-y-0.5">
+          {options.map((option) => (
+            <label
+              key={option}
+              className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-accent/60 cursor-pointer text-xs text-foreground"
+              data-testid={`filter-option-${option.toLowerCase().replace(/\s+/g, "-")}`}
+            >
+              <Checkbox
+                checked={selected.includes(option)}
+                onCheckedChange={() => toggle(option)}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function daysUntil(dateStr: string): number {
+  const target = new Date(dateStr + "T00:00:00Z");
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.ceil((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
 
 function GrantResultCard({
   signal,
@@ -98,6 +173,8 @@ function GrantResultCard({
     setProjectId(undefined);
   }
 
+  const oppStatus = signal.metadata?.opp_status;
+
   return (
     <div
       className="bg-card border border-border rounded-lg p-4 flex flex-col gap-2 hover:border-violet-500/30 transition-colors"
@@ -105,8 +182,23 @@ function GrantResultCard({
     >
       <div className="flex items-start gap-3">
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">{signal.title}</p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+          <div className="flex items-center gap-2 mb-1">
+            <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">{signal.title}</p>
+            {oppStatus && (
+              <Badge
+                variant="secondary"
+                className={`text-[10px] shrink-0 ${
+                  oppStatus === "posted"
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                }`}
+                data-testid={`grant-status-badge-${signal.id}`}
+              >
+                {oppStatus === "posted" ? "Posted" : "Forecasted"}
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
             {signal.institution_or_sponsor && (
               <span className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Building2 className="w-3 h-3" />
@@ -119,10 +211,9 @@ function GrantResultCard({
                 Deadline: {signal.date}
               </span>
             )}
-            {signal.metadata?.award_range && (
-              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
-                <DollarSign className="w-3 h-3" />
-                {signal.metadata.award_range}
+            {signal.metadata?.opp_num && (
+              <span className="text-xs text-muted-foreground">
+                {signal.metadata.opp_num}
               </span>
             )}
           </div>
@@ -152,7 +243,7 @@ function GrantResultCard({
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-72 p-3" align="end">
-              <p className="text-xs font-semibold text-foreground mb-2">Save to My Grants</p>
+              <p className="text-xs font-semibold text-foreground mb-2">Save Grant</p>
               <div className="space-y-2">
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Link to project (optional)</p>
@@ -189,7 +280,7 @@ function GrantResultCard({
           </Popover>
         </div>
       </div>
-      {signal.text && (
+      {signal.text && signal.text !== signal.title && (
         <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">{signal.text}</p>
       )}
     </div>
@@ -303,9 +394,9 @@ export default function ResearchGrants() {
   const [tab, setTab] = useState<"find" | "my">("find");
   const [query, setQuery] = useState("");
   const [activeQuery, setActiveQuery] = useState("");
-  const [fieldFilter, setFieldFilter] = useState("");
-  const [careerFilter, setCareerFilter] = useState("");
-  const [amountFilter, setAmountFilter] = useState("");
+  const [areaFilters, setAreaFilters] = useState<string[]>([]);
+  const [statusFilters, setStatusFilters] = useState<string[]>([]);
+  const [deadlineFilter, setDeadlineFilter] = useState("any");
   const [addOpen, setAddOpen] = useState(false);
 
   const [addTitle, setAddTitle] = useState("");
@@ -340,9 +431,9 @@ export default function ResearchGrants() {
   const savedUrls = useMemo(() => new Set(savedGrants.map((g) => g.url).filter(Boolean)), [savedGrants]);
 
   const builtQuery = useMemo(() => {
-    const parts = [activeQuery, fieldFilter, careerFilter, amountFilter].filter(Boolean);
+    const parts = [activeQuery, ...areaFilters].filter(Boolean);
     return parts.join(" ").trim();
-  }, [activeQuery, fieldFilter, careerFilter, amountFilter]);
+  }, [activeQuery, areaFilters]);
 
   const { data: searchData, isFetching: searching } = useQuery<{ assets: { signals: SignalResult[] }[] }>({
     queryKey: ["/api/search/grants", builtQuery],
@@ -350,14 +441,38 @@ export default function ResearchGrants() {
       const r = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: builtQuery, sources: GRANT_SOURCES, maxPerSource: 15 }),
+        body: JSON.stringify({ query: builtQuery, sources: GRANT_SOURCES, maxPerSource: 25 }),
       });
       if (!r.ok) throw new Error("Search failed");
       return r.json();
     },
     enabled: !!builtQuery,
   });
-  const results = useMemo(() => searchData?.assets?.flatMap((a) => a.signals ?? []) ?? [], [searchData]);
+
+  const rawResults = useMemo(() => searchData?.assets?.flatMap((a) => a.signals ?? []) ?? [], [searchData]);
+
+  const results = useMemo(() => {
+    let filtered = rawResults;
+
+    if (statusFilters.length > 0) {
+      const lowerSet = new Set(statusFilters.map((s) => s.toLowerCase()));
+      filtered = filtered.filter((s) => {
+        const status = (s.metadata?.opp_status ?? "").toLowerCase();
+        return lowerSet.has(status);
+      });
+    }
+
+    if (deadlineFilter !== "any") {
+      const maxDays = parseInt(deadlineFilter);
+      filtered = filtered.filter((s) => {
+        if (!s.date) return false;
+        const days = daysUntil(s.date);
+        return days >= 0 && days <= maxDays;
+      });
+    }
+
+    return filtered;
+  }, [rawResults, statusFilters, deadlineFilter]);
 
   type SaveGrantPayload = { title: string; url?: string; agencyName?: string; notes?: string; projectId?: number; deadline?: string; amount?: string; status?: string };
 
@@ -412,8 +527,19 @@ export default function ResearchGrants() {
     if (query.trim()) setActiveQuery(query.trim());
   }
 
-  function clearFilter(setter: (v: string) => void) {
-    setter("");
+  function clearSearch() {
+    setQuery("");
+    setActiveQuery("");
+    setAreaFilters([]);
+    setStatusFilters([]);
+    setDeadlineFilter("any");
+  }
+
+  function handleTabChange(t: "find" | "my") {
+    setTab(t);
+    if (t === "my") {
+      clearSearch();
+    }
   }
 
   function handleAddGrant() {
@@ -432,11 +558,22 @@ export default function ResearchGrants() {
     setAddStatus("not_started"); setAddProjectId(undefined);
   }
 
-  const activeFilters = [
-    fieldFilter && { label: fieldFilter, clear: () => clearFilter(setFieldFilter) },
-    careerFilter && { label: careerFilter, clear: () => clearFilter(setCareerFilter) },
-    amountFilter && { label: amountFilter, clear: () => clearFilter(setAmountFilter) },
-  ].filter(Boolean) as { label: string; clear: () => void }[];
+  const hasActiveFilters = areaFilters.length > 0 || statusFilters.length > 0 || deadlineFilter !== "any";
+  const hasAnythingActive = !!activeQuery || hasActiveFilters;
+
+  const activeFilterChips: { label: string; clear: () => void }[] = [
+    ...areaFilters.map((f) => ({
+      label: f,
+      clear: () => setAreaFilters((prev) => prev.filter((x) => x !== f)),
+    })),
+    ...statusFilters.map((f) => ({
+      label: f,
+      clear: () => setStatusFilters((prev) => prev.filter((x) => x !== f)),
+    })),
+    ...(deadlineFilter !== "any"
+      ? [{ label: `≤ ${deadlineFilter} days`, clear: () => setDeadlineFilter("any") }]
+      : []),
+  ];
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -444,7 +581,7 @@ export default function ResearchGrants() {
         <div className="flex items-center gap-2.5">
           <BadgeDollarSign className="w-5 h-5 text-violet-500" />
           <div>
-            <h1 className="text-lg font-bold text-foreground">Grants</h1>
+            <h1 className="text-lg font-bold text-foreground" data-testid="text-grants-title">Grants</h1>
             <p className="text-xs text-muted-foreground">Discover and track research funding opportunities</p>
           </div>
         </div>
@@ -452,7 +589,7 @@ export default function ResearchGrants() {
           {([["find", "Find Grants"], ["my", "Saved Grants"]] as const).map(([t, label]) => (
             <button
               key={t}
-              onClick={() => setTab(t)}
+              onClick={() => handleTabChange(t)}
               className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${
                 tab === t
                   ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
@@ -489,47 +626,65 @@ export default function ResearchGrants() {
               <Button onClick={handleSearch} disabled={!query.trim()} className="shrink-0" data-testid="grants-search-btn">
                 {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : "Search"}
               </Button>
+              {hasAnythingActive && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 w-9 h-9 text-muted-foreground hover:text-foreground"
+                  onClick={clearSearch}
+                  data-testid="grants-clear-btn"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Select value={fieldFilter} onValueChange={setFieldFilter}>
-                <SelectTrigger className="h-7 text-xs w-40" data-testid="grants-filter-field">
-                  <SelectValue placeholder="Research field" />
+            <div className="flex flex-wrap items-center gap-2">
+              <MultiSelectFilter
+                label="Research Area"
+                options={RESEARCH_AREAS}
+                selected={areaFilters}
+                onChange={setAreaFilters}
+              />
+              <MultiSelectFilter
+                label="Status"
+                options={OPP_STATUSES}
+                selected={statusFilters}
+                onChange={setStatusFilters}
+              />
+              <Select value={deadlineFilter} onValueChange={setDeadlineFilter}>
+                <SelectTrigger className="h-7 text-xs w-36" data-testid="filter-deadline">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {RESEARCH_FIELDS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={careerFilter} onValueChange={setCareerFilter}>
-                <SelectTrigger className="h-7 text-xs w-44" data-testid="grants-filter-career">
-                  <SelectValue placeholder="Career stage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CAREER_STAGES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={amountFilter || "all"} onValueChange={(v) => setAmountFilter(v === "all" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs w-40" data-testid="grants-filter-amount">
-                  <SelectValue placeholder="Funding amount" />
-                </SelectTrigger>
-                <SelectContent>
-                  {AMOUNT_RANGES.map((a) => <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>)}
+                  {DEADLINE_OPTIONS.map((d) => (
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
-            {activeFilters.length > 0 && (
+            {activeFilterChips.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {activeFilters.map((f) => (
+                {activeFilterChips.map((chip) => (
                   <button
-                    key={f.label}
-                    onClick={f.clear}
+                    key={chip.label}
+                    onClick={chip.clear}
                     className="flex items-center gap-1 text-xs bg-violet-500/10 text-violet-600 dark:text-violet-400 px-2 py-1 rounded-full border border-violet-500/20 hover:bg-violet-500/20 transition-colors"
+                    data-testid={`filter-chip-${chip.label.toLowerCase().replace(/\s+/g, "-")}`}
                   >
-                    {f.label}
+                    {chip.label}
                     <X className="w-3 h-3" />
                   </button>
                 ))}
+                <button
+                  onClick={() => { setAreaFilters([]); setStatusFilters([]); setDeadlineFilter("any"); }}
+                  className="text-xs text-muted-foreground hover:text-foreground px-2 py-1 transition-colors"
+                  data-testid="filter-clear-all"
+                >
+                  Clear all
+                </button>
               </div>
             )}
 
@@ -563,14 +718,23 @@ export default function ResearchGrants() {
 
             {builtQuery && !searching && results.length === 0 && (
               <div className="text-center py-12 text-muted-foreground">
-                <p className="text-sm">No grants found for "{builtQuery}"</p>
-                <p className="text-xs mt-1">Try a broader keyword or different filters</p>
+                <p className="text-sm">No grants found{rawResults.length > 0 ? " matching your filters" : ` for "${builtQuery}"`}</p>
+                <p className="text-xs mt-1">
+                  {rawResults.length > 0
+                    ? `${rawResults.length} result${rawResults.length !== 1 ? "s" : ""} hidden by filters — try adjusting them`
+                    : "Try a broader keyword or different filters"}
+                </p>
               </div>
             )}
 
             {results.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs text-muted-foreground">{results.length} opportunities found</p>
+                <p className="text-xs text-muted-foreground">
+                  {results.length} opportunit{results.length === 1 ? "y" : "ies"} found
+                  {rawResults.length > results.length && (
+                    <span className="ml-1">({rawResults.length - results.length} filtered out)</span>
+                  )}
+                </p>
                 {results.map((signal) => (
                   <GrantResultCard
                     key={signal.id}

@@ -3,63 +3,54 @@ import type { RawSignal } from "../types";
 const GRANTS_GOV_API = "https://apply07.grants.gov/grantsws/rest/opportunities/search/";
 
 interface GrantsGovOpportunity {
-  id: number;
-  oppNum: string;
-  oppTitle: string;
-  agencyName: string;
+  id: string;
+  number: string;
+  title: string;
+  agency: string;
+  agencyCode: string;
   openDate: string;
   closeDate: string;
-  awardCeiling: number;
-  awardFloor: number;
-  synopsis: string;
+  oppStatus: string;
   docType: string;
-  categoryOfFundingActivity: string;
+  cfdaList?: string[];
 }
 
-function formatDate(raw: string | null | undefined): string {
+function parseGrantDate(raw: string | null | undefined): string {
   if (!raw) return "";
+  const parts = raw.split("/");
+  if (parts.length === 3) {
+    const [month, day, year] = parts;
+    const d = new Date(Number(year), Number(month) - 1, Number(day));
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
   try {
     const d = new Date(raw);
-    if (isNaN(d.getTime())) return raw;
-    return d.toISOString().slice(0, 10);
-  } catch {
-    return raw;
-  }
-}
-
-function formatCurrency(amount: number | null | undefined): string {
-  if (!amount || amount <= 0) return "";
-  if (amount >= 1_000_000) return `$${(amount / 1_000_000).toFixed(1)}M`;
-  if (amount >= 1_000) return `$${(amount / 1_000).toFixed(0)}K`;
-  return `$${amount.toLocaleString()}`;
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  } catch {}
+  return raw;
 }
 
 function toRawSignal(opp: GrantsGovOpportunity): RawSignal {
-  const closeDate = formatDate(opp.closeDate);
-  const openDate = formatDate(opp.openDate);
-  const ceiling = formatCurrency(opp.awardCeiling);
-  const floor = formatCurrency(opp.awardFloor);
-  const awardRange = ceiling && floor ? `${floor} – ${ceiling}` : ceiling || floor || "";
+  const closeDate = parseGrantDate(opp.closeDate);
+  const openDate = parseGrantDate(opp.openDate);
 
   return {
     id: `grants-gov-${opp.id}`,
     source_type: "grant",
-    title: opp.oppTitle || "Untitled Opportunity",
-    text: opp.synopsis || opp.oppTitle || "",
+    title: opp.title || "Untitled Opportunity",
+    text: opp.title || "",
     authors_or_owner: "",
-    institution_or_sponsor: opp.agencyName || "",
+    institution_or_sponsor: opp.agency || "",
     date: closeDate || openDate,
     stage_hint: "open_funding",
     url: `https://www.grants.gov/search-results-detail/${opp.id}`,
     metadata: {
-      opp_num: opp.oppNum,
+      opp_num: opp.number,
       open_date: openDate,
       close_date: closeDate,
-      award_ceiling: opp.awardCeiling,
-      award_floor: opp.awardFloor,
-      award_range: awardRange,
-      category: opp.categoryOfFundingActivity,
+      opp_status: opp.oppStatus,
       doc_type: opp.docType,
+      cfda: opp.cfdaList,
       source_label: "Grants.gov",
     },
   };
@@ -84,7 +75,7 @@ export async function searchGrantsGov(query: string, maxResults = 12): Promise<R
     if (!res.ok) throw new Error(`Grants.gov API error: ${res.status}`);
     const data = await res.json();
     const opps: GrantsGovOpportunity[] = data?.oppHits ?? [];
-    return opps.filter((o) => o.oppTitle).map(toRawSignal);
+    return opps.filter((o) => o.title).map(toRawSignal);
   } catch (err) {
     console.error("Grants.gov search error:", err);
     return [];
