@@ -238,8 +238,10 @@ function CollectorHealth({ pw }: { pw: string }) {
                   <span className="tabular-nums">{run.totalFound.toLocaleString()} found</span>
                   {run.status === "completed" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
                 </div>
-                {run.relevantNewCount > 0 && (
-                  <div className="text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">+{run.relevantNewCount} new</div>
+                {run.status === "completed" && (
+                  <div className={`font-medium mt-0.5 ${run.relevantNewCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
+                    {run.relevantNewCount > 0 ? `+${run.relevantNewCount} new` : "0 new"}
+                  </div>
                 )}
               </div>
             ))}
