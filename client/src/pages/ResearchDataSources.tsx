@@ -273,7 +273,12 @@ export default function ResearchDataSources() {
 
   const totalResults = allSignals.length;
   const totalPages = Math.max(1, Math.ceil(totalResults / PAGE_SIZE));
-  const pagedSignals = allSignals.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const clampedPage = Math.min(page, totalPages);
+  const pagedSignals = allSignals.slice((clampedPage - 1) * PAGE_SIZE, clampedPage * PAGE_SIZE);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
 
   function handleSearch() {
     if (query.trim()) {
@@ -498,15 +503,15 @@ export default function ResearchDataSources() {
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground font-medium" data-testid="result-count">
                 {totalResults} result{totalResults !== 1 ? "s" : ""} for "{activeQuery}"
-                {totalPages > 1 && ` — Page ${page} of ${totalPages}`}
+                {totalPages > 1 && ` — Page ${clampedPage} of ${totalPages}`}
               </p>
             </div>
 
             {pagedSignals.map((signal, i) => (
               <SignalCard
-                key={signal.id ?? `${page}-${i}`}
+                key={signal.id ?? `${clampedPage}-${i}`}
                 signal={signal}
-                index={(page - 1) * PAGE_SIZE + i}
+                index={(clampedPage - 1) * PAGE_SIZE + i}
                 isSaved={savedUrls.has(signal.url)}
                 projects={projectsData?.projects ?? []}
                 researcherHeaders={researcherHeaders}
@@ -522,8 +527,8 @@ export default function ResearchDataSources() {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={page <= 1}
-                  onClick={() => changePage(page - 1)}
+                  disabled={clampedPage <= 1}
+                  onClick={() => changePage(clampedPage - 1)}
                   data-testid="button-prev-page"
                 >
                   <ChevronLeft className="w-4 h-4" />
@@ -534,17 +539,17 @@ export default function ResearchDataSources() {
                     let p: number;
                     if (totalPages <= 7) {
                       p = i + 1;
-                    } else if (page <= 4) {
+                    } else if (clampedPage <= 4) {
                       p = i + 1;
-                    } else if (page >= totalPages - 3) {
+                    } else if (clampedPage >= totalPages - 3) {
                       p = totalPages - 6 + i;
                     } else {
-                      p = page - 3 + i;
+                      p = clampedPage - 3 + i;
                     }
                     return (
                       <Button
                         key={p}
-                        variant={p === page ? "default" : "outline"}
+                        variant={p === clampedPage ? "default" : "outline"}
                         size="sm"
                         className="w-8 h-8 p-0"
                         onClick={() => changePage(p)}
@@ -558,8 +563,8 @@ export default function ResearchDataSources() {
                 <Button
                   variant="outline"
                   size="sm"
-                  disabled={page >= totalPages}
-                  onClick={() => changePage(page + 1)}
+                  disabled={clampedPage >= totalPages}
+                  onClick={() => changePage(clampedPage + 1)}
                   data-testid="button-next-page"
                 >
                   Next
