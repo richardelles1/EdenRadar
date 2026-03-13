@@ -446,7 +446,7 @@ export default function ResearchGrants() {
       const r = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: builtQuery, sources: GRANT_SOURCES, maxPerSource: 25 }),
+        body: JSON.stringify({ query: builtQuery, sources: GRANT_SOURCES, maxPerSource: 20 }),
       });
       if (!r.ok) throw new Error("Search failed");
       return r.json();
