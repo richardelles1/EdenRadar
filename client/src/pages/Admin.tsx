@@ -52,20 +52,6 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
   );
 }
 
-interface RunMeta {
-  id: number;
-  ranAt: string;
-  totalFound: number;
-  newCount: number;
-  status: string;
-}
-
-interface ScanMatrixData {
-  runs: RunMeta[];
-  matrix: Array<{ institution: string; counts: number[] }>;
-  totalInSystem: number;
-  indexedCounts: Record<string, number>;
-}
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -84,21 +70,64 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-function DeltaCell({ current, previous }: { current: number; previous: number }) {
-  const diff = current - previous;
-  if (diff === 0) return <span className="text-muted-foreground" data-testid="delta-unchanged">&mdash;</span>;
-  if (diff > 0) return <span className="text-emerald-600 dark:text-emerald-400 font-medium" data-testid="delta-increase">+{diff}</span>;
-  return <span className="text-red-500 dark:text-red-400 font-medium" data-testid="delta-decrease">{diff}</span>;
+interface CollectorHealthData {
+  rows: Array<{
+    institution: string;
+    indexed: number;
+    lastSeenAt: string | null;
+    lastRunCount: number;
+    prevRunCount: number;
+    health: "ok" | "degraded" | "failing";
+  }>;
+  totalIndexed: number;
+  totalInstitutions: number;
+  issueCount: number;
+  lastScanAt: string | null;
+  runs: Array<{
+    id: number;
+    ranAt: string;
+    totalFound: number;
+    newCount: number;
+    relevantNewCount: number;
+    status: string;
+  }>;
 }
 
-function ScanTracking({ pw }: { pw: string }) {
-  const { data, isLoading, error } = useQuery<ScanMatrixData>({
-    queryKey: ["/api/admin/scan-matrix", pw],
+function HealthDot({ health }: { health: "ok" | "degraded" | "failing" }) {
+  if (health === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid="health-ok" />;
+  if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
+  return <XCircle className="h-4 w-4 text-red-500" data-testid="health-failing" />;
+}
+
+function HealthLabel({ health }: { health: "ok" | "degraded" | "failing" }) {
+  if (health === "ok") return <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Working</span>;
+  if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
+  return <span className="text-red-500 dark:text-red-400 text-xs font-medium">Failing</span>;
+}
+
+function relativeTime(iso: string | null): string {
+  if (!iso) return "Never";
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function CollectorHealth({ pw }: { pw: string }) {
+  const [issuesOnly, setIssuesOnly] = useState(false);
+
+  const { data, isLoading, error } = useQuery<CollectorHealthData>({
+    queryKey: ["/api/admin/collector-health", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/scan-matrix", {
+      const res = await fetch("/api/admin/collector-health", {
         headers: { "x-admin-password": pw },
       });
-      if (!res.ok) throw new Error("Failed to load scan data");
+      if (!res.ok) throw new Error("Failed to load collector health");
       return res.json();
     },
     refetchInterval: 30_000,
@@ -106,7 +135,7 @@ function ScanTracking({ pw }: { pw: string }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-20" data-testid="scan-loading">
+      <div className="flex items-center justify-center py-20" data-testid="health-loading">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -114,154 +143,146 @@ function ScanTracking({ pw }: { pw: string }) {
 
   if (error || !data) {
     return (
-      <div className="text-center py-20 text-muted-foreground" data-testid="scan-error">
-        Failed to load scan data. Check backend connection.
+      <div className="text-center py-20 text-muted-foreground" data-testid="health-error">
+        Failed to load collector health data.
       </div>
     );
   }
 
-  if (data.runs.length === 0) {
-    return (
-      <div data-testid="scan-empty">
-        <div className="flex items-center gap-2 px-4 py-3 border-b border-border" data-testid="total-in-system">
-          <Database className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">{data.totalInSystem.toLocaleString()}</span>
-          <span className="text-sm text-muted-foreground">total unique TTO entries in system</span>
-        </div>
-        <div className="text-center py-20 text-muted-foreground">
-          <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-40" />
-          <p className="text-lg font-medium">No completed scan runs yet</p>
-          <p className="text-sm mt-2">Run the ingestion pipeline to see scan data here.</p>
-        </div>
-      </div>
-    );
-  }
+  const sortedRows = [...data.rows].sort((a, b) => {
+    const healthOrder = { failing: 0, degraded: 1, ok: 2 };
+    const hDiff = healthOrder[a.health] - healthOrder[b.health];
+    if (hDiff !== 0) return hDiff;
+    return b.indexed - a.indexed;
+  });
 
-  const { runs, matrix, totalInSystem, indexedCounts } = data;
-  const totalIndexed = Object.values(indexedCounts).reduce((s, c) => s + c, 0);
+  const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok") : sortedRows;
+
+  const latestRun = data.runs[0];
+  const netNew = latestRun?.relevantNewCount ?? latestRun?.newCount ?? 0;
 
   function exportCsv() {
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const headers = [
-      "Institution",
-      "Indexed",
-      ...(runs.length >= 2 ? ["Delta"] : []),
-      ...runs.map((r) => `Run #${r.id} ${formatDate(r.ranAt)} (${r.totalFound} found, ${r.status})`),
-    ];
-    const totalRow = [
-      "Total",
-      String(totalIndexed),
-      ...(runs.length >= 2 ? [String(runs[0].totalFound - runs[1].totalFound)] : []),
-      ...runs.map((r) => String(r.totalFound)),
-    ];
-    const rows = matrix.map((row) => [
+    const headers = ["Institution", "Indexed", "Health", "Last Seen", "Last Scan Found"];
+    const rows = sortedRows.map((row) => [
       escape(row.institution),
-      String(indexedCounts[row.institution] ?? 0),
-      ...(runs.length >= 2 ? [String((row.counts[0] ?? 0) - (row.counts[1] ?? 0))] : []),
-      ...row.counts.map((c) => String(c)),
+      String(row.indexed),
+      row.health,
+      row.lastSeenAt ? new Date(row.lastSeenAt).toISOString().slice(0, 10) : "never",
+      String(row.lastRunCount),
     ]);
-    const csv = [headers.join(","), totalRow.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `scan-matrix-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `collector-health-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   return (
-    <div data-testid="scan-tracking-table">
+    <div data-testid="collector-health">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
+        <div className="text-center">
+          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-indexed">{data.totalIndexed.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">Total Indexed</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-institutions">{data.totalInstitutions}</div>
+          <div className="text-xs text-muted-foreground">Institutions</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-net-new">{netNew}</div>
+          <div className="text-xs text-muted-foreground">Net New (Last Run)</div>
+        </div>
+        <div className="text-center">
+          <div className={`text-2xl font-bold tabular-nums ${data.issueCount > 0 ? "text-amber-500" : "text-emerald-500"}`} data-testid="stat-issues">{data.issueCount}</div>
+          <div className="text-xs text-muted-foreground">Need Attention</div>
+        </div>
+      </div>
+
+      {data.runs.length > 0 && (
+        <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="run-timeline">
+          <div className="text-xs font-semibold text-muted-foreground mb-2">Recent Runs</div>
+          <div className="flex gap-2 overflow-x-auto">
+            {data.runs.map((run) => (
+              <div key={run.id} className={`shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[120px] ${run.status === "completed" ? "border-border bg-card" : "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950"}`} data-testid={`timeline-run-${run.id}`}>
+                <div className="font-medium text-foreground">Run #{run.id}</div>
+                <div className="text-muted-foreground">{formatDate(run.ranAt)}</div>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <span className="tabular-nums">{run.totalFound.toLocaleString()} found</span>
+                  {run.status === "completed" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
+                </div>
+                {run.relevantNewCount > 0 && (
+                  <div className="text-emerald-600 dark:text-emerald-400 font-medium mt-0.5">+{run.relevantNewCount} new</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-2" data-testid="total-in-system">
-          <Database className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold text-foreground">{totalInSystem.toLocaleString()}</span>
-          <span className="text-sm text-muted-foreground">total unique TTO entries in system</span>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-muted-foreground">
+            {data.lastScanAt ? `Last scan: ${relativeTime(data.lastScanAt)}` : "No scans yet"}
+          </span>
+          {data.issueCount > 0 && (
+            <Button
+              variant={issuesOnly ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs"
+              onClick={() => setIssuesOnly((v) => !v)}
+              data-testid="button-issues-filter"
+            >
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              {issuesOnly ? "Show All" : `${data.issueCount} Issues`}
+            </Button>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export CSV
         </Button>
       </div>
-      <div className="flex items-center gap-4 px-4 py-2 border-b border-border bg-muted/20 text-xs text-muted-foreground" data-testid="scan-legend">
-        <span><strong>Raw (Scraped)</strong> = total listings found by scraper before AI filter</span>
-        <span><strong>Indexed</strong> = currently stored in database after AI filter</span>
-      </div>
+
       <div className="overflow-x-auto">
-      <table className="w-full text-sm border-collapse">
-        <thead>
-          <tr className="border-b border-border">
-            <th className="text-left py-3 px-4 font-semibold text-foreground sticky left-0 bg-card z-10 min-w-[200px]">
-              Institution
-            </th>
-            <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Currently stored in database after AI filter" data-testid="header-indexed">
-              Indexed
-            </th>
-            {runs.length >= 2 && (
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">
-                &Delta;
-              </th>
-            )}
-            {runs.map((run, i) => (
-              <th key={run.id} className="text-center py-2 px-3 font-normal min-w-[90px]">
-                <div className="text-xs font-semibold text-foreground">Run #{run.id}</div>
-                <div className="text-xs text-muted-foreground">{formatDate(run.ranAt)}</div>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  <Badge variant={i === 0 ? "default" : "secondary"} className="text-[10px] px-1.5 py-0">
-                    {run.totalFound.toLocaleString()} found
-                  </Badge>
-                  <Badge variant="outline" className="text-[10px] px-1.5 py-0 capitalize" data-testid={`status-run-${run.id}`}>
-                    {run.status}
-                  </Badge>
-                </div>
-              </th>
-            ))}
-          </tr>
-          <tr className="border-b-2 border-border bg-muted/30">
-            <td className="py-2 px-4 font-semibold text-foreground sticky left-0 bg-muted/30 z-10">
-              Total
-            </td>
-            <td className="text-center py-2 px-3 font-semibold text-foreground" data-testid="total-indexed">
-              {totalIndexed.toLocaleString()}
-            </td>
-            {runs.length >= 2 && (
-              <td className="text-center py-2 px-3 font-semibold">
-                <DeltaCell
-                  current={runs[0].totalFound}
-                  previous={runs[1].totalFound}
-                />
-              </td>
-            )}
-            {runs.map((run, i) => (
-              <td key={i} className="text-center py-2 px-3 font-semibold text-foreground">
-                {run.totalFound.toLocaleString()}
-              </td>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {matrix.map((row) => (
-            <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`scan-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-              <td className="py-2 px-4 font-medium text-foreground sticky left-0 bg-card z-10 truncate max-w-[250px]" title={row.institution}>
-                {row.institution}
-              </td>
-              <td className={`text-center py-2 px-3 tabular-nums ${(indexedCounts[row.institution] ?? 0) === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`} data-testid={`indexed-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                {(indexedCounts[row.institution] ?? 0) > 0 ? (indexedCounts[row.institution]).toLocaleString() : "\u2014"}
-              </td>
-              {runs.length >= 2 && (
-                <td className="text-center py-2 px-3">
-                  <DeltaCell current={row.counts[0] ?? 0} previous={row.counts[1] ?? 0} />
-                </td>
-              )}
-              {row.counts.map((count, i) => (
-                <td key={i} className={`text-center py-2 px-3 tabular-nums ${count === 0 ? "text-muted-foreground/40" : "text-foreground"}`}>
-                  {count > 0 ? count.toLocaleString() : "\u2014"}
-                </td>
-              ))}
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-border">
+              <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[100px]">Collector Health</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="Relevant assets in database">DB Indexed</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="When any asset was last seen by a scraper">Last Seen</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[100px]" title="Assets found in the most recent scan run">Last Scan Found</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {displayRows.map((row) => (
+              <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                  {row.institution}
+                </td>
+                <td className="text-center py-2 px-3">
+                  <div className="flex items-center justify-center gap-1.5">
+                    <HealthDot health={row.health} />
+                    <HealthLabel health={row.health} />
+                  </div>
+                </td>
+                <td className={`text-center py-2 px-3 tabular-nums ${row.indexed === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
+                  {row.indexed > 0 ? row.indexed.toLocaleString() : "\u2014"}
+                </td>
+                <td className={`text-center py-2 px-3 text-xs ${!row.lastSeenAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                  {relativeTime(row.lastSeenAt)}
+                </td>
+                <td className={`text-center py-2 px-3 tabular-nums ${row.lastRunCount === 0 ? "text-muted-foreground/40" : "text-foreground"}`}>
+                  {row.lastRunCount > 0 ? row.lastRunCount.toLocaleString() : "\u2014"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -1461,8 +1482,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               }`}
               data-testid="nav-scan-tracking"
             >
-              <BarChart3 className="h-4 w-4" />
-              Scan Tracking
+              <Activity className="h-4 w-4" />
+              Collector Health
             </button>
             <button
               onClick={() => setActiveTab("institution-sync")}
@@ -1524,11 +1545,11 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
           {activeTab === "scan-tracking" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scan Tracking</h2>
-                <p className="text-sm text-muted-foreground mt-1">Per-institution asset counts across scan runs</p>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Collector Health</h2>
+                <p className="text-sm text-muted-foreground mt-1">Per-institution collector status, indexed assets, and scan history</p>
               </div>
               <div className="border border-border rounded-xl bg-card overflow-hidden">
-                <ScanTracking pw={pw} />
+                <CollectorHealth pw={pw} />
               </div>
             </>
           )}

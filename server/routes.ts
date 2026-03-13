@@ -647,6 +647,78 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/collector-health", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const allInstitutionNames = ALL_SCRAPERS.map((s) => s.institution);
+
+      const [healthData, runHistory] = await Promise.all([
+        storage.getCollectorHealthData(),
+        storage.getIngestionRunHistory(6),
+      ]);
+
+      const { institutions: instRows, lastTwoRunCounts, lastTwoRuns } = healthData;
+      const latestRun = runHistory[0];
+      const latestRunFailed = latestRun && latestRun.status !== "completed";
+
+      const instMap = new Map(instRows.map((r) => [r.institution, r]));
+
+      const lastRunId = lastTwoRuns[0]?.id ?? -1;
+      const prevRunId = lastTwoRuns[1]?.id ?? -1;
+      const scanMap: Record<string, { last: number; prev: number }> = {};
+      for (const sc of lastTwoRunCounts) {
+        if (!scanMap[sc.institution]) scanMap[sc.institution] = { last: 0, prev: 0 };
+        if (sc.runId === lastRunId) scanMap[sc.institution].last = sc.count;
+        if (sc.runId === prevRunId) scanMap[sc.institution].prev = sc.count;
+      }
+
+      const rows = allInstitutionNames.map((name) => {
+        const dbRow = instMap.get(name);
+        const indexed = dbRow?.indexed ?? 0;
+        const lastSeenAt = dbRow?.lastSeenAt ?? null;
+        const sc = scanMap[name] ?? { last: 0, prev: 0 };
+
+        let health: "ok" | "degraded" | "failing";
+        if (lastTwoRuns.length === 0) {
+          health = "failing";
+        } else if (latestRunFailed) {
+          health = "degraded";
+        } else if (sc.last > 0) {
+          health = "ok";
+        } else if (sc.prev > 0) {
+          health = "degraded";
+        } else {
+          health = "failing";
+        }
+
+        return { institution: name, indexed, lastSeenAt, lastRunCount: sc.last, prevRunCount: sc.prev, health };
+      });
+
+      const totalIndexed = rows.reduce((s, r) => s + r.indexed, 0);
+      const issueCount = rows.filter((r) => r.health !== "ok").length;
+
+      res.json({
+        rows,
+        totalIndexed,
+        totalInstitutions: allInstitutionNames.length,
+        issueCount,
+        lastScanAt: latestRun?.ranAt ?? null,
+        runs: runHistory.map((r) => ({
+          id: r.id,
+          ranAt: r.ranAt,
+          totalFound: r.totalFound,
+          newCount: r.newCount,
+          relevantNewCount: r.relevantNewCount ?? 0,
+          status: r.status,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch collector health" });
+    }
+  });
+
   app.get("/api/ingest/sync/sessions", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

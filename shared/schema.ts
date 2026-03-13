@@ -78,6 +78,7 @@ export const ingestionRuns = pgTable("ingestion_runs", {
   ranAt: timestamp("ran_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   totalFound: integer("total_found").notNull().default(0),
   newCount: integer("new_count").notNull().default(0),
+  relevantNewCount: integer("relevant_new_count").notNull().default(0),
   status: text("status").notNull().default("running"),
   errorMessage: text("error_message"),
 });

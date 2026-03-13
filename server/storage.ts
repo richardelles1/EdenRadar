@@ -52,6 +52,12 @@ export interface IStorage {
     totalInSystem: number;
   }>;
 
+  getCollectorHealthData(): Promise<{
+    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null }>;
+    lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
+    lastTwoRuns: Array<{ id: number; ranAt: Date }>;
+  }>;
+
   createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
   updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
@@ -379,6 +385,42 @@ export class DatabaseStorage implements IStorage {
       .sort((a, b) => (b.counts[0] ?? 0) - (a.counts[0] ?? 0));
 
     return { runs, matrix, totalInSystem };
+  }
+
+  async getCollectorHealthData(): Promise<{
+    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null }>;
+    lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
+    lastTwoRuns: Array<{ id: number; ranAt: Date }>;
+  }> {
+    const instRows = await db
+      .select({
+        institution: ingestedAssets.institution,
+        indexed: sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true)::int`,
+        lastSeenAt: sql<Date>`max(${ingestedAssets.lastSeenAt})`,
+      })
+      .from(ingestedAssets)
+      .groupBy(ingestedAssets.institution);
+
+    const runs = await db
+      .select({ id: ingestionRuns.id, ranAt: ingestionRuns.ranAt })
+      .from(ingestionRuns)
+      .where(eq(ingestionRuns.status, "completed"))
+      .orderBy(desc(ingestionRuns.ranAt))
+      .limit(2);
+
+    let scanCounts: Array<{ runId: number; institution: string; count: number }> = [];
+    if (runs.length > 0) {
+      scanCounts = await db
+        .select({
+          runId: scanInstitutionCounts.runId,
+          institution: scanInstitutionCounts.institution,
+          count: scanInstitutionCounts.count,
+        })
+        .from(scanInstitutionCounts)
+        .where(inArray(scanInstitutionCounts.runId, runs.map((r) => r.id)));
+    }
+
+    return { institutions: instRows, lastTwoRunCounts: scanCounts, lastTwoRuns: runs };
   }
 
   async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {

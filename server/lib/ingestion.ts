@@ -109,7 +109,6 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     upsertProgress = { done: 0, total: 0 };
     ingestionRunning = false;
 
-    // Enrich in background — non-blocking, counter decrements per-asset in real time
     if (newAssets.length > 0) {
       enrichingCount = newAssets.length;
       console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (concurrency: 50)...`);
@@ -130,9 +129,14 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
           console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
         }
         enrichingCount = Math.max(0, enrichingCount - 1);
-      }).then(() => {
+      }).then(async () => {
         enrichingCount = 0;
         console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant, ${removedCount} removed`);
+        try {
+          await storage.updateIngestionRun(run.id, { relevantNewCount: enrichedCount });
+        } catch (err: any) {
+          console.error(`[ingestion] Failed to update relevantNewCount: ${err?.message}`);
+        }
       }).catch((err: any) => {
         enrichingCount = 0;
         console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
