@@ -1,0 +1,335 @@
+SECTION 1 — PROJECT OVERVIEW
+
+Fields:
+
+project_title (text)
+research_domain (dropdown)
+project_summary (large text)
+keywords (tag input)
+
+research_domain options:
+
+Biotech
+Drug Discovery
+Genomics
+Diagnostics
+Medical Devices
+AI in Healthcare
+Digital Health
+Healthcare Systems
+Other
+
+--------------------------------------------------
+
+SECTION 2 — RESEARCH QUESTION
+
+Fields:
+
+primary_research_question (text)
+hypothesis (text)
+scientific_rationale (large text)
+
+--------------------------------------------------
+
+SECTION 3 — LITERATURE CONTEXT
+
+Fields:
+
+key_papers (repeatable entry list)
+
+Each paper entry includes:
+
+paper_title
+authors
+journal
+year
+paper_link
+notes
+
+Additional fields:
+
+conflicting_evidence (large text)
+literature_gap (large text)
+
+--------------------------------------------------
+
+SECTION 4 — METHODS / APPROACH
+
+Fields:
+
+research_methodology (dropdown)
+
+Options:
+
+Experimental
+Computational
+Clinical
+Observational
+Mixed Methods
+
+experimental_design (large text)
+
+key_technologies (tag input)
+
+datasets_used (repeatable list)
+
+Each dataset entry includes:
+
+dataset_name
+dataset_source
+dataset_link
+notes
+
+--------------------------------------------------
+
+SECTION 5 — DATA & EVIDENCE
+
+Fields:
+
+preliminary_data (large text)
+
+supporting_evidence_links (repeatable list)
+
+confidence_level (dropdown)
+
+Options:
+
+Conceptual
+Early data
+Validated in lab
+Preclinical evidence
+Clinical evidence
+
+--------------------------------------------------
+
+SECTION 6 — COMMERCIALIZATION SIGNALS
+
+Fields:
+
+potential_applications (large text)
+
+industry_relevance (dropdown)
+
+Options:
+
+Pharma
+Biotech
+Medical Devices
+Digital Health
+Healthcare Systems
+
+patent_status (dropdown)
+
+Options:
+
+None
+Patent in preparation
+Patent filed
+Patent granted
+
+startup_potential (dropdown)
+
+Options:
+
+Low
+Moderate
+High
+
+--------------------------------------------------
+
+SECTION 7 — COLLABORATION
+
+Fields:
+
+project_contributors (repeatable list)
+
+Each contributor entry includes:
+
+name
+institution
+role
+email
+
+open_for_collaboration (boolean toggle)
+
+collaboration_type (multi-select)
+
+Options:
+
+Academic collaboration
+Industry partnership
+Clinical research partner
+Startup founder
+Investor
+
+--------------------------------------------------
+
+SECTION 8 — FUNDING
+
+Fields:
+
+funding_status (dropdown)
+
+Options:
+
+Not funded
+Grant submitted
+Grant funded
+Industry funded
+
+funding_sources (repeatable list)
+
+Examples:
+
+NIH
+NSF
+EU
+Private Foundation
+Corporate
+
+estimated_budget (numeric)
+
+--------------------------------------------------
+
+SECTION 9 — RISK ASSESSMENT
+
+Fields:
+
+technical_risk (dropdown)
+
+Options:
+
+Low
+Moderate
+High
+
+regulatory_risk (dropdown)
+
+Options:
+
+Low
+Moderate
+High
+
+key_scientific_unknowns (large text)
+
+--------------------------------------------------
+
+SECTION 10 — NEXT MILESTONES
+
+Fields:
+
+next_experiments (repeatable checklist)
+
+expected_timeline (dropdown)
+
+Options:
+
+3 months
+6 months
+12 months
+24 months
+
+success_criteria (large text)
+
+--------------------------------------------------
+
+SECTION 11 — DISCOVERY CARD PREPARATION
+
+Fields:
+
+discovery_title (text)
+discovery_summary (large text)
+
+technology_type (dropdown)
+
+Options:
+
+Small molecule
+Biologic
+Gene therapy
+Cell therapy
+Diagnostic
+Medical device
+AI/software
+Platform technology
+
+development_stage (dropdown)
+
+Options:
+
+Basic research
+Translational
+Preclinical
+Clinical
+
+seeking (multi-select)
+
+Options:
+
+Licensing partner
+Industry collaboration
+Startup founder
+Investment
+
+publish_to_industry (boolean toggle)
+
+--------------------------------------------------
+
+DATABASE STRUCTURE
+
+Create Supabase table:
+
+research_projects
+
+Columns:
+
+project_id (uuid primary key)
+user_id
+project_title
+research_domain
+project_summary
+keywords (json)
+primary_research_question
+hypothesis
+scientific_rationale
+key_papers (json)
+conflicting_evidence
+literature_gap
+research_methodology
+experimental_design
+key_technologies (json)
+datasets_used (json)
+preliminary_data
+supporting_evidence_links (json)
+confidence_level
+potential_applications
+industry_relevance
+patent_status
+startup_potential
+project_contributors (json)
+open_for_collaboration
+collaboration_type (json)
+funding_status
+funding_sources (json)
+estimated_budget
+technical_risk
+regulatory_risk
+key_scientific_unknowns
+next_experiments (json)
+expected_timeline
+success_criteria
+discovery_title
+discovery_summary
+technology_type
+development_stage
+seeking (json)
+publish_to_industry
+created_at
+updated_at
+
+--------------------------------------------------
+
+USER EXPERIENCE REQUIREMENTS
+
+The form should be sectioned with collapsible panels.

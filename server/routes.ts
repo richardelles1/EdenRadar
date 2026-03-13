@@ -1072,19 +1072,76 @@ export async function registerRoutes(
         (val) => val === undefined || val === null || !isNaN(Date.parse(val)),
         { message: "Invalid date format" }
       ),
+      researchDomain: z.string().nullable().optional(),
+      keywords: z.array(z.string()).nullable().optional(),
+      primaryResearchQuestion: z.string().nullable().optional(),
+      scientificRationale: z.string().nullable().optional(),
+      keyPapers: z.array(z.object({
+        paper_title: z.string(), authors: z.string(), journal: z.string(),
+        year: z.string(), paper_link: z.string(), notes: z.string(),
+      })).nullable().optional(),
+      conflictingEvidence: z.string().nullable().optional(),
+      literatureGap: z.string().nullable().optional(),
+      experimentalDesign: z.string().nullable().optional(),
+      keyTechnologies: z.array(z.string()).nullable().optional(),
+      datasetsUsed: z.array(z.object({
+        dataset_name: z.string(), dataset_source: z.string(),
+        dataset_link: z.string(), notes: z.string(),
+      })).nullable().optional(),
+      preliminaryData: z.string().nullable().optional(),
+      supportingEvidenceLinks: z.array(z.object({ url: z.string(), label: z.string() })).nullable().optional(),
+      confidenceLevel: z.string().nullable().optional(),
+      potentialApplications: z.string().nullable().optional(),
+      industryRelevance: z.string().nullable().optional(),
+      patentStatus: z.string().nullable().optional(),
+      startupPotential: z.string().nullable().optional(),
+      projectContributors: z.array(z.object({
+        name: z.string(), institution: z.string(), role: z.string(), email: z.string(),
+      })).nullable().optional(),
+      openForCollaboration: z.boolean().nullable().optional(),
+      collaborationType: z.array(z.string()).nullable().optional(),
+      fundingStatus: z.string().nullable().optional(),
+      fundingSources: z.array(z.string()).nullable().optional(),
+      estimatedBudget: z.number().int().nullable().optional(),
+      technicalRisk: z.string().nullable().optional(),
+      regulatoryRisk: z.string().nullable().optional(),
+      keyScientificUnknowns: z.string().nullable().optional(),
+      nextExperiments: z.array(z.object({ label: z.string(), done: z.boolean() })).nullable().optional(),
+      expectedTimeline: z.string().nullable().optional(),
+      successCriteria: z.string().nullable().optional(),
+      discoveryTitle: z.string().nullable().optional(),
+      discoverySummary: z.string().nullable().optional(),
+      technologyType: z.string().nullable().optional(),
+      developmentStage: z.string().nullable().optional(),
+      projectSeeking: z.array(z.string()).nullable().optional(),
+      publishToIndustry: z.boolean().nullable().optional(),
     });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     const validated = parsed.data;
     const updates: Partial<InsertResearchProject> = {};
-    if (validated.title !== undefined) updates.title = validated.title;
-    if (validated.description !== undefined) updates.description = validated.description;
-    if (validated.researchArea !== undefined) updates.researchArea = validated.researchArea;
-    if (validated.hypothesis !== undefined) updates.hypothesis = validated.hypothesis;
-    if (validated.status !== undefined) updates.status = validated.status;
-    if (validated.objectives !== undefined) updates.objectives = validated.objectives;
-    if (validated.methodology !== undefined) updates.methodology = validated.methodology;
-    if (validated.targetCompletion !== undefined) updates.targetCompletion = validated.targetCompletion;
+    const textFields = [
+      "title","description","researchArea","hypothesis","status","objectives","methodology",
+      "targetCompletion","researchDomain","primaryResearchQuestion","scientificRationale",
+      "conflictingEvidence","literatureGap","experimentalDesign","preliminaryData",
+      "confidenceLevel","potentialApplications","industryRelevance","patentStatus",
+      "startupPotential","fundingStatus","technicalRisk","regulatoryRisk",
+      "keyScientificUnknowns","expectedTimeline","successCriteria","discoveryTitle",
+      "discoverySummary","technologyType","developmentStage",
+    ] as const;
+    for (const f of textFields) {
+      if (validated[f] !== undefined) (updates as any)[f] = validated[f];
+    }
+    const jsonFields = [
+      "keywords","keyPapers","keyTechnologies","datasetsUsed","supportingEvidenceLinks",
+      "projectContributors","collaborationType","fundingSources","nextExperiments","projectSeeking",
+    ] as const;
+    for (const f of jsonFields) {
+      if (validated[f] !== undefined) (updates as any)[f] = validated[f];
+    }
+    if (validated.openForCollaboration !== undefined) updates.openForCollaboration = validated.openForCollaboration;
+    if (validated.publishToIndustry !== undefined) updates.publishToIndustry = validated.publishToIndustry;
+    if (validated.estimatedBudget !== undefined) updates.estimatedBudget = validated.estimatedBudget;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
     try {
       const project = await storage.updateResearchProject(id, researcherId, updates);

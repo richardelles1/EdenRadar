@@ -61,21 +61,29 @@ export default function CreateDiscovery() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  const storedPrefill = (() => {
+    try {
+      const raw = sessionStorage.getItem("eden-discovery-prefill");
+      if (raw) { sessionStorage.removeItem("eden-discovery-prefill"); return JSON.parse(raw); }
+    } catch {}
+    return {};
+  })();
+
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      title: "",
-      summary: "",
-      researchArea: "",
-      technologyType: "",
-      institution: "",
-      lab: "",
-      developmentStage: "",
-      ipStatus: "",
-      seeking: "",
-      contactEmail: "",
-      publicationLink: "",
-      patentLink: "",
+      title: storedPrefill.title ?? "",
+      summary: storedPrefill.summary ?? "",
+      researchArea: storedPrefill.researchArea ?? "",
+      technologyType: storedPrefill.technologyType ?? "",
+      institution: storedPrefill.institution ?? "",
+      lab: storedPrefill.lab ?? "",
+      developmentStage: storedPrefill.developmentStage ?? "",
+      ipStatus: storedPrefill.ipStatus ?? "",
+      seeking: storedPrefill.seeking ?? "",
+      contactEmail: storedPrefill.contactEmail ?? "",
+      publicationLink: storedPrefill.publicationLink ?? "",
+      patentLink: storedPrefill.patentLink ?? "",
     },
   });
 

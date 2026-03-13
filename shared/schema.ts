@@ -187,6 +187,52 @@ export const researchProjects = pgTable("research_projects", {
   targetCompletion: date("target_completion"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   lastEditedAt: timestamp("last_edited_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  // §1 Overview
+  researchDomain: text("research_domain"),
+  keywords: jsonb("keywords").$type<string[]>(),
+  // §2 Research Question
+  primaryResearchQuestion: text("primary_research_question"),
+  scientificRationale: text("scientific_rationale"),
+  // §3 Literature Context
+  keyPapers: jsonb("key_papers").$type<Array<{ paper_title: string; authors: string; journal: string; year: string; paper_link: string; notes: string }>>(),
+  conflictingEvidence: text("conflicting_evidence"),
+  literatureGap: text("literature_gap"),
+  // §4 Methods
+  experimentalDesign: text("experimental_design"),
+  keyTechnologies: jsonb("key_technologies").$type<string[]>(),
+  datasetsUsed: jsonb("datasets_used").$type<Array<{ dataset_name: string; dataset_source: string; dataset_link: string; notes: string }>>(),
+  // §5 Data & Evidence
+  preliminaryData: text("preliminary_data"),
+  supportingEvidenceLinks: jsonb("supporting_evidence_links").$type<Array<{ url: string; label: string }>>(),
+  confidenceLevel: text("confidence_level"),
+  // §6 Commercialization
+  potentialApplications: text("potential_applications"),
+  industryRelevance: text("industry_relevance"),
+  patentStatus: text("patent_status"),
+  startupPotential: text("startup_potential"),
+  // §7 Collaboration
+  projectContributors: jsonb("project_contributors").$type<Array<{ name: string; institution: string; role: string; email: string }>>(),
+  openForCollaboration: boolean("open_for_collaboration"),
+  collaborationType: jsonb("collaboration_type").$type<string[]>(),
+  // §8 Funding
+  fundingStatus: text("funding_status"),
+  fundingSources: jsonb("funding_sources").$type<string[]>(),
+  estimatedBudget: integer("estimated_budget"),
+  // §9 Risk
+  technicalRisk: text("technical_risk"),
+  regulatoryRisk: text("regulatory_risk"),
+  keyScientificUnknowns: text("key_scientific_unknowns"),
+  // §10 Milestones
+  nextExperiments: jsonb("next_experiments").$type<Array<{ label: string; done: boolean }>>(),
+  expectedTimeline: text("expected_timeline"),
+  successCriteria: text("success_criteria"),
+  // §11 Discovery Card Prep
+  discoveryTitle: text("discovery_title"),
+  discoverySummary: text("discovery_summary"),
+  technologyType: text("technology_type"),
+  developmentStage: text("development_stage"),
+  projectSeeking: jsonb("project_seeking").$type<string[]>(),
+  publishToIndustry: boolean("publish_to_industry"),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({
