@@ -660,8 +660,6 @@ export async function registerRoutes(
       ]);
 
       const { institutions: instRows, lastTwoRunCounts, lastTwoRuns } = healthData;
-      const latestRun = runHistory[0];
-      const latestRunFailed = latestRun && latestRun.status !== "completed";
 
       const instMap = new Map(instRows.map((r) => [r.institution, r]));
 
@@ -678,13 +676,12 @@ export async function registerRoutes(
         const dbRow = instMap.get(name);
         const indexed = dbRow?.indexed ?? 0;
         const lastSeenAt = dbRow?.lastSeenAt ?? null;
+        const netNew = dbRow?.netNew ?? 0;
         const sc = scanMap[name] ?? { last: 0, prev: 0 };
 
         let health: "ok" | "degraded" | "failing";
         if (lastTwoRuns.length === 0) {
           health = "failing";
-        } else if (latestRunFailed) {
-          health = "degraded";
         } else if (sc.last > 0) {
           health = "ok";
         } else if (sc.prev > 0) {
@@ -693,18 +690,21 @@ export async function registerRoutes(
           health = "failing";
         }
 
-        return { institution: name, indexed, lastSeenAt, lastRunCount: sc.last, prevRunCount: sc.prev, health };
+        return { institution: name, indexed, lastSeenAt, netNew, lastRunCount: sc.last, prevRunCount: sc.prev, health };
       });
 
       const totalIndexed = rows.reduce((s, r) => s + r.indexed, 0);
+      const totalNetNew = rows.reduce((s, r) => s + r.netNew, 0);
       const issueCount = rows.filter((r) => r.health !== "ok").length;
+      const lastScanAt = runHistory[0]?.ranAt ?? null;
 
       res.json({
         rows,
         totalIndexed,
         totalInstitutions: allInstitutionNames.length,
+        totalNetNew,
         issueCount,
-        lastScanAt: latestRun?.ranAt ?? null,
+        lastScanAt,
         runs: runHistory.map((r) => ({
           id: r.id,
           ranAt: r.ranAt,

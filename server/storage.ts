@@ -53,7 +53,7 @@ export interface IStorage {
   }>;
 
   getCollectorHealthData(): Promise<{
-    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null }>;
+    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null; netNew: number }>;
     lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
     lastTwoRuns: Array<{ id: number; ranAt: Date }>;
   }>;
@@ -388,25 +388,30 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCollectorHealthData(): Promise<{
-    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null }>;
+    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null; netNew: number }>;
     lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
     lastTwoRuns: Array<{ id: number; ranAt: Date }>;
   }> {
-    const instRows = await db
-      .select({
-        institution: ingestedAssets.institution,
-        indexed: sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true)::int`,
-        lastSeenAt: sql<Date>`max(${ingestedAssets.lastSeenAt})`,
-      })
-      .from(ingestedAssets)
-      .groupBy(ingestedAssets.institution);
-
     const runs = await db
       .select({ id: ingestionRuns.id, ranAt: ingestionRuns.ranAt })
       .from(ingestionRuns)
       .where(eq(ingestionRuns.status, "completed"))
       .orderBy(desc(ingestionRuns.ranAt))
       .limit(2);
+
+    const lastCompletedRunAt = runs[0]?.ranAt ?? null;
+
+    const instRows = await db
+      .select({
+        institution: ingestedAssets.institution,
+        indexed: sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true)::int`,
+        lastSeenAt: sql<Date>`max(${ingestedAssets.lastSeenAt})`,
+        netNew: lastCompletedRunAt
+          ? sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true and ${ingestedAssets.firstSeenAt} >= ${lastCompletedRunAt})::int`
+          : sql<number>`0`,
+      })
+      .from(ingestedAssets)
+      .groupBy(ingestedAssets.institution);
 
     let scanCounts: Array<{ runId: number; institution: string; count: number }> = [];
     if (runs.length > 0) {

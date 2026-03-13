@@ -75,12 +75,14 @@ interface CollectorHealthData {
     institution: string;
     indexed: number;
     lastSeenAt: string | null;
+    netNew: number;
     lastRunCount: number;
     prevRunCount: number;
     health: "ok" | "degraded" | "failing";
   }>;
   totalIndexed: number;
   totalInstitutions: number;
+  totalNetNew: number;
   issueCount: number;
   lastScanAt: string | null;
   runs: Array<{
@@ -120,6 +122,7 @@ function relativeTime(iso: string | null): string {
 
 function CollectorHealth({ pw }: { pw: string }) {
   const [issuesOnly, setIssuesOnly] = useState(false);
+  const { toast } = useToast();
 
   const { data, isLoading, error } = useQuery<CollectorHealthData>({
     queryKey: ["/api/admin/collector-health", pw],
@@ -131,6 +134,26 @@ function CollectorHealth({ pw }: { pw: string }) {
       return res.json();
     },
     refetchInterval: 30_000,
+  });
+
+  const syncMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Sync failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_d, institution) => {
+      toast({ title: "Sync started", description: `Syncing ${institution}...` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
   });
 
   if (isLoading) {
@@ -158,20 +181,17 @@ function CollectorHealth({ pw }: { pw: string }) {
 
   const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok") : sortedRows;
 
-  const latestRun = data.runs[0];
-  const netNew = latestRun?.relevantNewCount ?? latestRun?.newCount ?? 0;
-
   function exportCsv() {
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const headers = ["Institution", "Indexed", "Health", "Last Seen", "Last Scan Found"];
-    const rows = sortedRows.map((row) => [
+    const headers = ["Institution", "Indexed", "Health", "Last Seen", "Net New"];
+    const csvRows = sortedRows.map((row) => [
       escape(row.institution),
       String(row.indexed),
       row.health,
       row.lastSeenAt ? new Date(row.lastSeenAt).toISOString().slice(0, 10) : "never",
-      String(row.lastRunCount),
+      String(row.netNew),
     ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
+    const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -183,7 +203,7 @@ function CollectorHealth({ pw }: { pw: string }) {
 
   return (
     <div data-testid="collector-health">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
         <div className="text-center">
           <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-indexed">{data.totalIndexed.toLocaleString()}</div>
           <div className="text-xs text-muted-foreground">Total Indexed</div>
@@ -193,12 +213,16 @@ function CollectorHealth({ pw }: { pw: string }) {
           <div className="text-xs text-muted-foreground">Institutions</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-net-new">{netNew}</div>
+          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-net-new">{data.totalNetNew}</div>
           <div className="text-xs text-muted-foreground">Net New (Last Run)</div>
         </div>
         <div className="text-center">
           <div className={`text-2xl font-bold tabular-nums ${data.issueCount > 0 ? "text-amber-500" : "text-emerald-500"}`} data-testid="stat-issues">{data.issueCount}</div>
           <div className="text-xs text-muted-foreground">Need Attention</div>
+        </div>
+        <div className="text-center">
+          <div className="text-sm font-medium text-foreground" data-testid="stat-last-scan">{data.lastScanAt ? formatDate(data.lastScanAt) : "Never"}</div>
+          <div className="text-xs text-muted-foreground">Last Scan</div>
         </div>
       </div>
 
@@ -225,9 +249,6 @@ function CollectorHealth({ pw }: { pw: string }) {
 
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3">
-          <span className="text-sm text-muted-foreground">
-            {data.lastScanAt ? `Last scan: ${relativeTime(data.lastScanAt)}` : "No scans yet"}
-          </span>
           {data.issueCount > 0 && (
             <Button
               variant={issuesOnly ? "default" : "outline"}
@@ -255,7 +276,8 @@ function CollectorHealth({ pw }: { pw: string }) {
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[100px]">Collector Health</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="Relevant assets in database">DB Indexed</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="When any asset was last seen by a scraper">Last Seen</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[100px]" title="Assets found in the most recent scan run">Last Scan Found</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="New relevant assets from last scan run">Net New</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
             </tr>
           </thead>
           <tbody>
@@ -276,8 +298,21 @@ function CollectorHealth({ pw }: { pw: string }) {
                 <td className={`text-center py-2 px-3 text-xs ${!row.lastSeenAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                   {relativeTime(row.lastSeenAt)}
                 </td>
-                <td className={`text-center py-2 px-3 tabular-nums ${row.lastRunCount === 0 ? "text-muted-foreground/40" : "text-foreground"}`}>
-                  {row.lastRunCount > 0 ? row.lastRunCount.toLocaleString() : "\u2014"}
+                <td className={`text-center py-2 px-3 tabular-nums ${row.netNew === 0 ? "text-muted-foreground/40" : "text-emerald-600 dark:text-emerald-400 font-medium"}`}>
+                  {row.netNew > 0 ? `+${row.netNew}` : "\u2014"}
+                </td>
+                <td className="text-center py-2 px-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0"
+                    onClick={() => syncMutation.mutate(row.institution)}
+                    disabled={syncMutation.isPending}
+                    title={`Sync ${row.institution}`}
+                    data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                  </Button>
                 </td>
               </tr>
             ))}
