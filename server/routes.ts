@@ -28,6 +28,34 @@ const SOURCE_TYPE_MAP: Record<string, string[]> = {
   conference_abstract: ["paper"],
 };
 
+const FIELD_SYNONYMS: Record<string, string[]> = {
+  oncology: ["oncology", "cancer", "tumor", "tumour", "carcinoma", "neoplasm", "malignant"],
+  immunology: ["immunology", "immune", "autoimmune", "immunotherapy", "antibody"],
+  neurology: ["neurology", "neurological", "brain", "neural", "neurodegenerative", "alzheimer", "parkinson", "cns"],
+  cardiology: ["cardiology", "cardiovascular", "cardiac", "heart", "vascular", "atherosclerosis"],
+  rare_diseases: ["rare disease", "orphan", "rare disorder", "ultra-rare"],
+  infectious_disease: ["infectious disease", "infection", "pathogen", "antimicrobial", "antiviral", "antibiotic"],
+  metabolic: ["metabolic", "metabolism", "diabetes", "obesity", "lipid", "cholesterol"],
+  ophthalmology: ["ophthalmology", "ophthalmic", "retinal", "ocular", "eye disease", "macular"],
+  dermatology: ["dermatology", "skin", "dermal", "psoriasis", "eczema", "cutaneous"],
+  respiratory: ["respiratory", "pulmonary", "lung", "asthma", "copd", "airway"],
+  gastroenterology: ["gastroenterology", "gastrointestinal", "gi tract", "liver", "hepatic", "crohn"],
+  hematology: ["hematology", "haematology", "blood", "leukemia", "lymphoma", "anemia"],
+  musculoskeletal: ["musculoskeletal", "bone", "joint", "arthritis", "osteoporosis", "orthopedic"],
+  psychiatry: ["psychiatry", "psychiatric", "mental health", "depression", "anxiety", "schizophrenia"],
+};
+
+const TECH_SYNONYMS: Record<string, string[]> = {
+  small_molecule: ["small molecule", "compound", "inhibitor", "oral drug", "chemical entity"],
+  biologic: ["biologic", "biological", "biosimilar", "protein therapeutic", "recombinant"],
+  gene_therapy: ["gene therapy", "gene editing", "crispr", "aav", "viral vector", "genetic"],
+  cell_therapy: ["cell therapy", "car-t", "stem cell", "cellular therapy", "adoptive cell"],
+  antibody: ["antibody", "monoclonal", "mab", "bispecific", "nanobody", "immunoglobulin"],
+  vaccine: ["vaccine", "vaccination", "immunization", "mrna vaccine", "adjuvant"],
+  diagnostic: ["diagnostic", "biomarker", "assay", "companion diagnostic", "imaging"],
+  medical_device: ["medical device", "implant", "surgical", "wearable", "device"],
+};
+
 const PHASE_MAP: Record<string, string[]> = {
   preclinical: ["preclinical", "discovery"],
   phase_1: ["phase 1"],
@@ -43,18 +71,18 @@ function applySignalFilters(
   let filtered = signals;
 
   if (filters.field) {
-    const fieldLower = filters.field.toLowerCase();
+    const terms = FIELD_SYNONYMS[filters.field] ?? [filters.field.replace(/_/g, " ")];
     filtered = filtered.filter((s) => {
       const haystack = `${s.title} ${s.text}`.toLowerCase();
-      return haystack.includes(fieldLower);
+      return terms.some((t) => haystack.includes(t));
     });
   }
 
   if (filters.technologyType) {
-    const techLower = filters.technologyType.toLowerCase();
+    const terms = TECH_SYNONYMS[filters.technologyType] ?? [filters.technologyType.replace(/_/g, " ")];
     filtered = filtered.filter((s) => {
       const haystack = `${s.title} ${s.text}`.toLowerCase();
-      return haystack.includes(techLower);
+      return terms.some((t) => haystack.includes(t));
     });
   }
 
