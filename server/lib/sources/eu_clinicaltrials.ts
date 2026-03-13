@@ -1,49 +1,41 @@
 import type { RawSignal } from "../types";
 
-const BASE = "https://euclinicaltrials.eu/ctis-public/search";
+const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
 export async function searchEuClinicalTrials(query: string, maxResults = 12): Promise<RawSignal[]> {
   try {
-    const body = {
-      searchCriteria: {
-        containAll: query,
-        containAny: "",
-        containNot: "",
-      },
-      pagination: {
-        page: 1,
-        size: maxResults,
-      },
-      sort: { property: "decisionDate", direction: "DESC" },
-    };
-
-    const res = await fetch(BASE, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15000),
+    const params = new URLSearchParams({
+      query: `${query} (SRC:CTX OR SRC:CBA)`,
+      format: "json",
+      pageSize: String(maxResults),
+      resultType: "core",
     });
 
-    if (!res.ok) throw new Error(`EU Clinical Trials API error: ${res.status}`);
-    const data = await res.json();
-    const results: any[] = data?.data ?? [];
+    const res = await fetch(`${BASE}?${params}`, {
+      signal: AbortSignal.timeout(15000),
+      headers: { Accept: "application/json" },
+    });
 
-    return results.filter((r) => r.ctTitle || r.ctNumber).map((r): RawSignal => {
-      const ctNumber = r.ctNumber ?? "";
+    if (!res.ok) throw new Error(`EU Clinical Trials via Europe PMC error: ${res.status}`);
+    const data = await res.json();
+    const results: any[] = data?.resultList?.result ?? [];
+
+    return results.filter((r) => r.title).map((r): RawSignal => {
+      const pmcid = r.pmcid ?? r.id ?? "";
+      const doi = r.doi ?? "";
       return {
-        id: `euct-${ctNumber || Math.random()}`,
+        id: `euct-${pmcid || doi || Math.random()}`,
         source_type: "clinical_trial",
-        title: r.ctTitle ?? `EU Trial ${ctNumber}`,
-        text: r.ctTitle ?? "",
-        authors_or_owner: r.sponsorName ?? "",
-        institution_or_sponsor: r.sponsorName ?? "",
-        date: r.decisionDate ?? r.startDateEU ?? "",
-        stage_hint: mapEuPhase(r.trialPhase),
-        url: ctNumber ? `https://euclinicaltrials.eu/ctis-public/view/${ctNumber}` : "https://euclinicaltrials.eu",
+        title: r.title,
+        text: r.abstractText ?? r.title ?? "",
+        authors_or_owner: (r.authorString ?? "").slice(0, 200),
+        institution_or_sponsor: r.affiliation ?? "",
+        date: r.firstPublicationDate ?? r.dateOfCreation ?? "",
+        stage_hint: extractPhaseFromText(r.title + " " + (r.abstractText ?? "")),
+        url: doi ? `https://doi.org/${doi}` : pmcid ? `https://europepmc.org/article/${r.source}/${pmcid}` : "https://euclinicaltrials.eu",
         metadata: {
-          ct_number: ctNumber,
-          status: r.ctStatus ?? "",
-          phase: r.trialPhase ?? "",
+          doi,
+          pmcid,
           source_label: "EU Clinical Trials",
         },
       };
@@ -54,12 +46,12 @@ export async function searchEuClinicalTrials(query: string, maxResults = 12): Pr
   }
 }
 
-function mapEuPhase(phase: string | undefined): string {
-  if (!phase) return "unknown";
-  const p = phase.toLowerCase();
-  if (p.includes("i") && !p.includes("ii")) return "phase 1";
-  if (p.includes("ii") && !p.includes("iii")) return "phase 2";
-  if (p.includes("iii")) return "phase 3";
-  if (p.includes("iv")) return "approved";
-  return "preclinical";
+function extractPhaseFromText(text: string): string {
+  const t = text.toLowerCase();
+  if (/phase\s*(iv|4)/i.test(t)) return "approved";
+  if (/phase\s*(iii|3)/i.test(t)) return "phase 3";
+  if (/phase\s*(ii|2)/i.test(t)) return "phase 2";
+  if (/phase\s*(i|1)/i.test(t)) return "phase 1";
+  if (/preclinical|pre-clinical/i.test(t)) return "preclinical";
+  return "unknown";
 }

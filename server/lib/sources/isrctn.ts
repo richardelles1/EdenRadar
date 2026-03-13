@@ -1,13 +1,14 @@
 import type { RawSignal } from "../types";
 
-const BASE = "https://www.isrctn.com/api/query/format/json";
+const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
 export async function searchIsrctn(query: string, maxResults = 12): Promise<RawSignal[]> {
   try {
     const params = new URLSearchParams({
-      q: query,
-      page: "1",
+      query: `${query} ISRCTN`,
+      format: "json",
       pageSize: String(maxResults),
+      resultType: "core",
     });
 
     const res = await fetch(`${BASE}?${params}`, {
@@ -15,26 +16,29 @@ export async function searchIsrctn(query: string, maxResults = 12): Promise<RawS
       headers: { Accept: "application/json" },
     });
 
-    if (!res.ok) throw new Error(`ISRCTN API error: ${res.status}`);
+    if (!res.ok) throw new Error(`ISRCTN via Europe PMC error: ${res.status}`);
     const data = await res.json();
-    const items: any[] = data?.items ?? data?.results ?? [];
+    const results: any[] = data?.resultList?.result ?? [];
 
-    return items.filter((item) => item.title || item.isrctn).map((item): RawSignal => {
-      const isrctnId = item.isrctn ?? item.doi ?? "";
+    return results.filter((r) => r.title).map((r): RawSignal => {
+      const id = r.id ?? r.pmcid ?? "";
+      const doi = r.doi ?? "";
+      const isrctnMatch = (r.title + " " + (r.abstractText ?? "")).match(/ISRCTN\d+/);
+      const isrctnId = isrctnMatch ? isrctnMatch[0] : "";
+
       return {
-        id: `isrctn-${isrctnId || Math.random()}`,
+        id: `isrctn-${isrctnId || id || Math.random()}`,
         source_type: "clinical_trial",
-        title: item.title ?? `ISRCTN ${isrctnId}`,
-        text: item.plainEnglishSummary ?? item.scientificTitle ?? "",
-        authors_or_owner: item.contacts?.[0]?.name ?? "",
-        institution_or_sponsor: item.sponsor?.organisation ?? item.sponsor ?? "",
-        date: item.lastEdited ?? item.dateAssigned ?? "",
-        stage_hint: mapIsrctnPhase(item.phase),
-        url: isrctnId ? `https://www.isrctn.com/${isrctnId}` : "https://www.isrctn.com",
+        title: r.title,
+        text: r.abstractText ?? r.title ?? "",
+        authors_or_owner: (r.authorString ?? "").slice(0, 200),
+        institution_or_sponsor: r.affiliation ?? "",
+        date: r.firstPublicationDate ?? r.dateOfCreation ?? "",
+        stage_hint: extractPhaseFromText(r.title + " " + (r.abstractText ?? "")),
+        url: isrctnId ? `https://www.isrctn.com/${isrctnId}` : doi ? `https://doi.org/${doi}` : "https://www.isrctn.com",
         metadata: {
           isrctn_id: isrctnId,
-          status: item.recruitmentStatus ?? item.overallTrialStatus ?? "",
-          phase: item.phase ?? "",
+          doi,
           source_label: "ISRCTN",
         },
       };
@@ -45,12 +49,12 @@ export async function searchIsrctn(query: string, maxResults = 12): Promise<RawS
   }
 }
 
-function mapIsrctnPhase(phase: string | undefined): string {
-  if (!phase) return "unknown";
-  const p = phase.toLowerCase();
-  if (p.includes("1") || p.includes("i") && !p.includes("ii")) return "phase 1";
-  if (p.includes("2") || p.includes("ii") && !p.includes("iii")) return "phase 2";
-  if (p.includes("3") || p.includes("iii")) return "phase 3";
-  if (p.includes("4") || p.includes("iv")) return "approved";
-  return "preclinical";
+function extractPhaseFromText(text: string): string {
+  const t = text.toLowerCase();
+  if (/phase\s*(iv|4)/i.test(t)) return "approved";
+  if (/phase\s*(iii|3)/i.test(t)) return "phase 3";
+  if (/phase\s*(ii|2)/i.test(t)) return "phase 2";
+  if (/phase\s*(i|1)/i.test(t)) return "phase 1";
+  if (/preclinical|pre-clinical/i.test(t)) return "preclinical";
+  return "unknown";
 }
