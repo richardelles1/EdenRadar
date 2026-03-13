@@ -9,7 +9,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Backend**: Express.js + TypeScript
 - **Database**: PostgreSQL via Drizzle ORM
 - **AI**: gpt-4o-mini for bulk signal extraction & TTO enrichment; gpt-4o for report/dossier narrative generation (uses `OPENAI_API_KEY`)
-- **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex
+- **Data Sources**: PubMed, bioRxiv, medRxiv, ClinicalTrials.gov, USPTO Patents, University Tech Transfer, NIH Reporter, OpenAlex, Semantic Scholar, arXiv, NSF Awards, EU CORDIS, Lens.org, Europe PMC, Zenodo, EU Clinical Trials, ISRCTN, GEO, PDB, Grants.gov, BASE, CORE, IEEE Xplore, ERIC, ChemRxiv, SocArXiv, PsyArXiv, EarthArXiv, engrXiv, DOAJ, OpenAIRE, HAL (32 total)
 - **TTO Scraping**: cheerio-based real scrapers for 138 institutions with active TechPublisher/custom/in-part/Flintbox/WordPress scrapers; 67 additional institutions stubbed (no public TTO listing portal or non-TechPublisher sites needing custom scrapers); daily cron at 8AM; manual Refresh button
 - **in-part.com factory**: `createInPartScraper(subdomain, institution)` in new-institutions.ts — direct API calls to `https://app.in-part.com/api/v3/public/opportunities?portalSubdomain=X&page=N&limit=24` (no Playwright needed). SSR `__NEXT_DATA__` fallback if API empty. 19+ in-part scrapers active. Records per-institution counts to `scan_institution_counts` table.
 - **WordPress API factory**: `createWordPressApiScraper(baseUrl, postType, institution)` — paginates `/wp-json/wp/v2/{postType}?per_page=100&page=N`. Used by ASU/Skysong (~1,317 technologies).
@@ -105,8 +105,9 @@ server/
       cwru.ts             # CWRU TTO scraper
       ucolorado.ts        # CU Innovations scraper
     sources/
-      index.ts            # collectAllSignals() fan-out + DataSource registry
+      index.ts            # collectAllSignals() fan-out + DataSource registry (32 sources)
       pubmed.ts, biorxiv.ts, medrxiv.ts, clinicaltrials.ts, patents.ts, techtransfer/
+      base_search.ts, core.ts, ieee.ts, eric.ts, osf_preprints.ts, doaj.ts, openaire.ts, hal.ts
     pipeline/
       normalizeSignals.ts, clusterAssets.ts, scoreAssets.ts, generateReport.ts, generateDossier.ts
   routes.ts               # All API routes

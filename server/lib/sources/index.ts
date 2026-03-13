@@ -18,6 +18,14 @@ import { searchEuClinicalTrials } from "./eu_clinicaltrials";
 import { searchIsrctn } from "./isrctn";
 import { searchGeo } from "./geo";
 import { searchPdb } from "./pdb";
+import { searchBase } from "./base_search";
+import { searchCore } from "./core";
+import { searchIeee } from "./ieee";
+import { searchEric } from "./eric";
+import { createOsfSearchFn } from "./osf_preprints";
+import { searchDoaj } from "./doaj";
+import { searchOpenaire } from "./openaire";
+import { searchHal } from "./hal";
 import type { RawSignal } from "../types";
 import { db } from "../../db";
 import { discoveryCards } from "@shared/schema";
@@ -47,13 +55,28 @@ export type SourceKey =
   | "isrctn"
   | "geo"
   | "pdb"
-  | "grants_gov";
+  | "grants_gov"
+  | "base"
+  | "core"
+  | "ieee"
+  | "eric"
+  | "chemrxiv"
+  | "socarxiv"
+  | "psyarxiv"
+  | "eartharxiv"
+  | "engrxiv"
+  | "doaj"
+  | "openaire"
+  | "hal";
 
 export const ALL_SOURCE_KEYS: SourceKey[] = [
   "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
   "nih_reporter", "openalex", "lab_discoveries",
   "semantic_scholar", "arxiv", "nsf_awards", "eu_cordis", "lens",
   "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb", "grants_gov",
+  "base", "core", "ieee", "eric",
+  "chemrxiv", "socarxiv", "psyarxiv", "eartharxiv", "engrxiv",
+  "doaj", "openaire", "hal",
 ];
 
 export interface DataSource {
@@ -243,6 +266,78 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "Grants.gov",
     description: "Federal funding opportunities — open and forecasted grants from US agencies",
     search: searchGrantsGov,
+  },
+  base: {
+    id: "base",
+    label: "BASE",
+    description: "Bielefeld Academic Search Engine — 300M+ documents from 10,000+ content providers",
+    search: searchBase,
+  },
+  core: {
+    id: "core",
+    label: "CORE",
+    description: "Aggregator of 300M+ open access research papers worldwide",
+    search: searchCore,
+  },
+  ieee: {
+    id: "ieee",
+    label: "IEEE Xplore",
+    description: "Engineering, computer science, and electronics research (requires IEEE_API_KEY)",
+    search: searchIeee,
+  },
+  eric: {
+    id: "eric",
+    label: "ERIC",
+    description: "Education research from the US Department of Education",
+    search: searchEric,
+  },
+  chemrxiv: {
+    id: "chemrxiv",
+    label: "ChemRxiv",
+    description: "Chemistry preprints via OSF",
+    search: createOsfSearchFn("chemrxiv"),
+  },
+  socarxiv: {
+    id: "socarxiv",
+    label: "SocArXiv",
+    description: "Social sciences preprints via OSF",
+    search: createOsfSearchFn("socarxiv"),
+  },
+  psyarxiv: {
+    id: "psyarxiv",
+    label: "PsyArXiv",
+    description: "Psychology preprints via OSF",
+    search: createOsfSearchFn("psyarxiv"),
+  },
+  eartharxiv: {
+    id: "eartharxiv",
+    label: "EarthArXiv",
+    description: "Earth sciences preprints via OSF",
+    search: createOsfSearchFn("eartharxiv"),
+  },
+  engrxiv: {
+    id: "engrxiv",
+    label: "engrXiv",
+    description: "Engineering preprints via OSF",
+    search: createOsfSearchFn("engrxiv"),
+  },
+  doaj: {
+    id: "doaj",
+    label: "DOAJ",
+    description: "Directory of Open Access Journals — quality-controlled OA journals",
+    search: searchDoaj,
+  },
+  openaire: {
+    id: "openaire",
+    label: "OpenAIRE",
+    description: "Open access research publications from European repositories",
+    search: searchOpenaire,
+  },
+  hal: {
+    id: "hal",
+    label: "HAL",
+    description: "French national open archive — multidisciplinary research",
+    search: searchHal,
   },
 };
 

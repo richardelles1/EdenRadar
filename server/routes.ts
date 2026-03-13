@@ -122,6 +122,40 @@ function applySignalFilters(
   return filtered;
 }
 
+const STOP_WORDS = new Set([
+  "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+  "of", "with", "by", "from", "is", "it", "as", "be", "was", "are",
+  "were", "been", "being", "have", "has", "had", "do", "does", "did",
+  "will", "would", "shall", "should", "may", "might", "can", "could",
+  "not", "no", "this", "that", "these", "those", "its", "my", "your",
+  "his", "her", "our", "their", "what", "which", "who", "whom",
+  "how", "when", "where", "why", "all", "each", "every", "both",
+  "few", "more", "most", "other", "some", "such", "than", "too",
+  "very", "just", "about", "above", "after", "again", "between",
+  "into", "through", "during", "before", "below", "up", "down",
+  "out", "off", "over", "under", "further", "then", "once",
+  "any", "only", "own", "same", "so", "if", "also", "new", "using",
+  "use", "used", "based", "study", "research", "results", "analysis",
+  "data", "method", "methods", "effect", "effects", "model",
+]);
+
+function applyRelevanceFilter(signals: RawSignal[], query: string): RawSignal[] {
+  if (signals.length <= 5) return signals;
+
+  const queryTokens = query
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length >= 3 && !STOP_WORDS.has(w));
+
+  if (queryTokens.length === 0) return signals;
+
+  return signals.filter((s) => {
+    const haystack = `${s.title} ${s.text}`.toLowerCase();
+    return queryTokens.some((token) => haystack.includes(token));
+  });
+}
+
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
     const msg = err instanceof Error ? err.message : String(err);
@@ -231,6 +265,7 @@ export async function registerRoutes(
       let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
 
       signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
+      signals = applyRelevanceFilter(signals, query);
 
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
@@ -264,7 +299,8 @@ export async function registerRoutes(
       const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
       const profile = buyerProfile ?? DEFAULT_BUYER_PROFILE;
 
-      const signals = await collectAllSignals(query, effectiveSources, maxPerSource);
+      let signals = await collectAllSignals(query, effectiveSources, maxPerSource);
+      signals = applyRelevanceFilter(signals, query);
       if (signals.length === 0) {
         return res.json({
           title: `HelixRadar Report: ${query}`,

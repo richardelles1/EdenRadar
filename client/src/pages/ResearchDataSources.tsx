@@ -101,6 +101,10 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
       { key: "openalex", label: "OpenAlex" },
       { key: "semantic_scholar", label: "Semantic Scholar" },
       { key: "europepmc", label: "Europe PMC" },
+      { key: "base", label: "BASE" },
+      { key: "core", label: "CORE" },
+      { key: "ieee", label: "IEEE Xplore" },
+      { key: "eric", label: "ERIC" },
     ],
   },
   {
@@ -109,6 +113,11 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
       { key: "biorxiv", label: "bioRxiv" },
       { key: "medrxiv", label: "medRxiv" },
       { key: "arxiv", label: "arXiv" },
+      { key: "chemrxiv", label: "ChemRxiv" },
+      { key: "socarxiv", label: "SocArXiv" },
+      { key: "psyarxiv", label: "PsyArXiv" },
+      { key: "eartharxiv", label: "EarthArXiv" },
+      { key: "engrxiv", label: "engrXiv" },
     ],
   },
   {
@@ -117,6 +126,7 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
       { key: "nih_reporter", label: "NIH Reporter" },
       { key: "nsf_awards", label: "NSF Awards" },
       { key: "eu_cordis", label: "EU CORDIS" },
+      { key: "grants_gov", label: "Grants.gov" },
     ],
   },
   {
@@ -133,6 +143,14 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
       { key: "patents", label: "USPTO Patents" },
       { key: "techtransfer", label: "Tech Transfer" },
       { key: "lens", label: "Lens.org" },
+    ],
+  },
+  {
+    label: "Open Access",
+    keys: [
+      { key: "doaj", label: "DOAJ" },
+      { key: "openaire", label: "OpenAIRE" },
+      { key: "hal", label: "HAL" },
     ],
   },
   {
@@ -495,14 +513,77 @@ export default function ResearchDataSources() {
         )}
 
         {isLoading && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Microscope className="w-4 h-4 animate-pulse text-violet-500" />
-              <span>Scanning {selectedSources.length} data sources...</span>
+          <div className="space-y-5" data-testid="search-scanning">
+            <div className="rounded-xl border bg-card p-5 space-y-4">
+              <div className="flex items-center gap-2.5">
+                <div className="relative w-5 h-5">
+                  <Microscope className="w-5 h-5 text-violet-500" />
+                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-violet-500 rounded-full animate-ping" />
+                </div>
+                <span className="text-sm font-medium">
+                  Scanning {selectedSources.length} data source{selectedSources.length !== 1 ? "s" : ""}...
+                </span>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                {selectedSources.map((key, i) => (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors"
+                    style={{
+                      animation: `source-pulse 2s ease-in-out ${i * 0.15}s infinite`,
+                    }}
+                  >
+                    <span
+                      className="w-1.5 h-1.5 rounded-full bg-violet-500"
+                      style={{
+                        animation: `source-dot 2s ease-in-out ${i * 0.15}s infinite`,
+                      }}
+                    />
+                    {SOURCE_LABELS[key] ?? key}
+                  </span>
+                ))}
+              </div>
+
+              <div className="h-1 rounded-full bg-muted overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-violet-500"
+                  style={{
+                    animation: "scan-bar 2s ease-in-out infinite",
+                    width: "40%",
+                  }}
+                />
+              </div>
             </div>
+
             <div className="space-y-3">
-              {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-24 rounded-lg" />)}
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="rounded-lg border bg-card/50 p-4 space-y-2" style={{ animation: `skeleton-fade 1.5s ease-in-out ${i * 0.2}s infinite` }}>
+                  <Skeleton className="h-4 w-3/4 rounded" />
+                  <Skeleton className="h-3 w-full rounded" />
+                  <Skeleton className="h-3 w-2/3 rounded" />
+                </div>
+              ))}
             </div>
+
+            <style>{`
+              @keyframes source-pulse {
+                0%, 100% { background-color: transparent; color: hsl(var(--muted-foreground)); }
+                50% { background-color: hsl(263 70% 50% / 0.1); color: hsl(263 70% 50%); border-color: hsl(263 70% 50% / 0.3); }
+              }
+              @keyframes source-dot {
+                0%, 100% { opacity: 0.3; transform: scale(1); }
+                50% { opacity: 1; transform: scale(1.4); }
+              }
+              @keyframes scan-bar {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(350%); }
+              }
+              @keyframes skeleton-fade {
+                0%, 100% { opacity: 0.5; }
+                50% { opacity: 1; }
+              }
+            `}</style>
           </div>
         )}
 
