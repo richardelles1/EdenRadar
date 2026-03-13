@@ -17,6 +17,8 @@ export function ResearchLayout({ children }: ResearchLayoutProps) {
       navigate("/login", { replace: true });
     } else if (role === "industry") {
       navigate("/scout", { replace: true });
+    } else if (role && role !== "researcher") {
+      navigate("/login", { replace: true });
     }
   }, [session, role, loading, navigate]);
 
