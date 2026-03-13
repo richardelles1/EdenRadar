@@ -21,7 +21,6 @@ import {
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedGrant, ResearchProject } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
 
 const GRANT_SOURCES = ["nih_reporter", "nsf_awards", "eu_cordis"];
 
@@ -345,8 +344,15 @@ export default function ResearchGrants() {
   const results = useMemo(() => searchData?.assets?.flatMap((a) => a.signals ?? []) ?? [], [searchData]);
 
   const saveGrant = useMutation({
-    mutationFn: (data: Partial<SavedGrant>) =>
-      apiRequest("POST", "/api/research/grants", { ...data, userId: researcherId }),
+    mutationFn: async (data: Partial<SavedGrant>) => {
+      const r = await fetch("/api/research/grants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...researcherHeaders },
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("Failed to save grant");
+      return r.json();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/grants"] });
       toast({ title: "Grant saved" });
@@ -355,14 +361,28 @@ export default function ResearchGrants() {
   });
 
   const updateGrant = useMutation({
-    mutationFn: ({ id, ...data }: { id: number } & Partial<SavedGrant>) =>
-      apiRequest("PATCH", `/api/research/grants/${id}`, data),
+    mutationFn: async ({ id, ...data }: { id: number } & Partial<SavedGrant>) => {
+      const r = await fetch(`/api/research/grants/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...researcherHeaders },
+        body: JSON.stringify(data),
+      });
+      if (!r.ok) throw new Error("Failed to update grant");
+      return r.json();
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/research/grants"] }),
     onError: () => toast({ title: "Failed to update", variant: "destructive" }),
   });
 
   const deleteGrant = useMutation({
-    mutationFn: (id: number) => apiRequest("DELETE", `/api/research/grants/${id}`),
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/research/grants/${id}`, {
+        method: "DELETE",
+        headers: researcherHeaders,
+      });
+      if (!r.ok) throw new Error("Failed to delete grant");
+      return r.json();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/grants"] });
       toast({ title: "Grant removed" });
