@@ -85,8 +85,8 @@ export default function ProjectDetail() {
     return (
       <div className="p-6 max-w-3xl mx-auto text-center">
         <p className="text-muted-foreground">Project not found.</p>
-        <Button variant="ghost" className="mt-4 gap-2" onClick={() => navigate("/research")} data-testid="button-back-dashboard">
-          <ArrowLeft className="w-4 h-4" /> Back to Dashboard
+        <Button variant="ghost" className="mt-4 gap-2" onClick={() => navigate("/research/projects")} data-testid="button-back-projects">
+          <ArrowLeft className="w-4 h-4" /> Back to My Projects
         </Button>
       </div>
     );
@@ -95,7 +95,7 @@ export default function ProjectDetail() {
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate("/research")} data-testid="button-back-dashboard">
+        <Button variant="ghost" size="icon" className="shrink-0" onClick={() => navigate("/research/projects")} data-testid="button-back-projects">
           <ArrowLeft className="w-4 h-4" />
         </Button>
         <h1 className="text-xl font-bold text-foreground truncate" data-testid="text-project-title">{project.title}</h1>

@@ -21,6 +21,8 @@ import MyDiscoveries from "@/pages/MyDiscoveries";
 import ResearchProfile from "@/pages/ResearchProfile";
 import ResearchDataSources from "@/pages/ResearchDataSources";
 import ResearchLibrary from "@/pages/ResearchLibrary";
+import ResearchProjects from "@/pages/ResearchProjects";
+import ResearchAlerts from "@/pages/ResearchAlerts";
 import ProjectDetail from "@/pages/ProjectDetail";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
@@ -135,6 +137,16 @@ function Router() {
       <Route path="/research/projects/:id">
         <ResearchLayout>
           <ProjectDetail />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/projects">
+        <ResearchLayout>
+          <ResearchProjects />
+        </ResearchLayout>
+      </Route>
+      <Route path="/research/alerts">
+        <ResearchLayout>
+          <ResearchAlerts />
         </ResearchLayout>
       </Route>
 
