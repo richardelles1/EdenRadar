@@ -91,6 +91,7 @@ const TRIAL_PHASE_OPTIONS = [
   { value: "phase_2", label: "Phase 2" },
   { value: "phase_3", label: "Phase 3" },
   { value: "phase_4", label: "Phase 4" },
+  { value: "approved", label: "Approved / Post-Market" },
 ];
 
 const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[] = [
@@ -202,9 +203,13 @@ export default function ResearchDataSources() {
 
   const searchParams = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
   const initialQuery = searchParams.get("q") ?? "";
+  const initialSources = searchParams.get("sources")
+    ? searchParams.get("sources")!.split(",").filter((s) => ALL_SOURCE_KEYS.includes(s))
+    : ALL_SOURCE_KEYS;
+  const initialPage = parseInt(searchParams.get("page") ?? "1") || 1;
   const [query, setQuery] = useState(initialQuery);
   const [activeQuery, setActiveQuery] = useState(initialQuery);
-  const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SOURCE_KEYS);
+  const [selectedSources, setSelectedSources] = useState<string[]>(initialSources);
   const [filters, setFilters] = useState<Filters>(() => {
     const f: Filters = {};
     if (searchParams.get("field")) f.field = searchParams.get("field")!;
@@ -214,17 +219,20 @@ export default function ResearchDataSources() {
     if (searchParams.get("trialPhase")) f.trialPhase = searchParams.get("trialPhase")!;
     return f;
   });
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialPage);
   const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => {
-    if (!activeQuery) return;
     const params = new URLSearchParams();
-    params.set("q", activeQuery);
+    if (activeQuery) params.set("q", activeQuery);
     Object.entries(filters).forEach(([k, v]) => { if (v) params.set(k, v); });
-    const url = `/research/data-sources?${params.toString()}`;
+    if (selectedSources.length < ALL_SOURCE_KEYS.length) {
+      params.set("sources", selectedSources.join(","));
+    }
+    if (page > 1) params.set("page", String(page));
+    const url = `/research/data-sources${params.toString() ? "?" + params.toString() : ""}`;
     window.history.replaceState(null, "", url);
-  }, [activeQuery, filters]);
+  }, [activeQuery, filters, selectedSources, page]);
 
   const { data, isLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", activeQuery, selectedSources, filters],

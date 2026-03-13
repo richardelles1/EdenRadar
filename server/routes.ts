@@ -61,7 +61,8 @@ const PHASE_MAP: Record<string, string[]> = {
   phase_1: ["phase 1"],
   phase_2: ["phase 2"],
   phase_3: ["phase 3"],
-  phase_4: ["phase 4", "approved"],
+  phase_4: ["phase 4"],
+  approved: ["approved", "phase 4 approved", "post-market"],
 };
 
 function applySignalFilters(
@@ -164,7 +165,7 @@ const searchBodySchema = z.object({
     "small_molecule", "biologic", "gene_therapy", "cell_therapy",
     "antibody", "vaccine", "diagnostic", "medical_device",
   ]).optional(),
-  trialPhase: z.enum(["preclinical", "phase_1", "phase_2", "phase_3", "phase_4"]).optional(),
+  trialPhase: z.enum(["preclinical", "phase_1", "phase_2", "phase_3", "phase_4", "approved"]).optional(),
 });
 
 const reportBodySchema = z.object({
