@@ -233,7 +233,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     const rawCount = listings.length;
     console.log(`[sync] ${institutionName}: scraped ${rawCount} raw listings`);
 
-    await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing" });
+    await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing", lastRefreshedAt: new Date() });
 
     const existingFps = await storage.getExistingFingerprints(institutionName);
 
@@ -270,6 +270,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     await storage.updateSyncSession(sessionId, {
       newCount,
       phase: "enriching",
+      lastRefreshedAt: new Date(),
     });
 
     console.log(`[sync] ${institutionName}: ${newCount} new out of ${stagingRows.length} unique — enriching new items...`);

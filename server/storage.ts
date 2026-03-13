@@ -406,10 +406,23 @@ export class DatabaseStorage implements IStorage {
 
   async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {
     await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
-    const existing = await db.select().from(syncSessions).where(eq(syncSessions.institution, institution));
-    if (existing.length > 0) {
-      await db.delete(syncSessions).where(eq(syncSessions.institution, institution));
+
+    const existing = await db
+      .select({ id: syncSessions.id })
+      .from(syncSessions)
+      .where(eq(syncSessions.institution, institution))
+      .orderBy(desc(syncSessions.createdAt));
+
+    if (existing.length >= 10) {
+      const keepIds = existing.slice(0, 9).map((r) => r.id);
+      await db.delete(syncSessions).where(
+        and(
+          eq(syncSessions.institution, institution),
+          sql`${syncSessions.id} NOT IN (${sql.join(keepIds.map(id => sql`${id}`), sql`, `)})`
+        )
+      );
     }
+
     const [row] = await db.insert(syncSessions).values({
       sessionId,
       institution,

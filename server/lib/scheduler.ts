@@ -10,6 +10,8 @@ export interface SchedulerStatus {
   failedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
+  cycleCount: number;
+  priorityQueue: string[];
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -20,6 +22,8 @@ let failedThisCycle = 0;
 let cycleStartedAt: Date | null = null;
 let lastActivityAt: Date | null = null;
 let schedulerTimer: ReturnType<typeof setTimeout> | null = null;
+let cycleCount = 0;
+let priorityQueue: string[] = [];
 
 const DELAY_BETWEEN_SYNCS_MS = 5_000;
 
@@ -38,6 +42,8 @@ export function getSchedulerStatus(): SchedulerStatus {
     failedThisCycle,
     cycleStartedAt: cycleStartedAt?.toISOString() ?? null,
     lastActivityAt: lastActivityAt?.toISOString() ?? null,
+    cycleCount,
+    priorityQueue: [...priorityQueue],
   };
 }
 
@@ -50,13 +56,16 @@ export function startScheduler(): { ok: boolean; message: string } {
   }
 
   schedulerState = "running";
-  if (!cycleStartedAt || queueIndex >= getInstitutionQueue().length) {
+  if (schedulerState === "running" && cycleStartedAt && queueIndex < getInstitutionQueue().length) {
+    console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
+  } else {
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
     cycleStartedAt = new Date();
+    cycleCount++;
+    console.log(`[scheduler] Started cycle #${cycleCount} — ${getInstitutionQueue().length} institutions`);
   }
-  console.log(`[scheduler] Started — resuming at position ${queueIndex}/${getInstitutionQueue().length}`);
   scheduleNext();
   return { ok: true, message: "Scheduler started" };
 }
@@ -74,20 +83,47 @@ export function pauseScheduler(): { ok: boolean; message: string } {
   return { ok: true, message: "Scheduler paused" };
 }
 
+export function bumpToFront(institution: string): { ok: boolean; message: string } {
+  const queue = getInstitutionQueue();
+  if (!queue.includes(institution)) {
+    return { ok: false, message: `Institution "${institution}" not found in scraper list` };
+  }
+  if (!priorityQueue.includes(institution)) {
+    priorityQueue.push(institution);
+  }
+  return { ok: true, message: `${institution} added to priority queue` };
+}
+
 function scheduleNext(): void {
   if (schedulerState !== "running") return;
-
-  const queue = getInstitutionQueue();
-  if (queueIndex >= queue.length) {
-    console.log(`[scheduler] Cycle complete — ${completedThisCycle} succeeded, ${failedThisCycle} failed`);
-    schedulerState = "idle";
-    currentInstitution = null;
-    return;
-  }
 
   if (isSyncRunning() || isIngestionRunning()) {
     schedulerTimer = setTimeout(() => scheduleNext(), 10_000);
     return;
+  }
+
+  if (priorityQueue.length > 0) {
+    const institution = priorityQueue.shift()!;
+    currentInstitution = institution;
+    console.log(`[scheduler] Priority sync: ${institution}`);
+    runOne(institution).finally(() => {
+      currentInstitution = null;
+      lastActivityAt = new Date();
+      if (schedulerState === "running") {
+        schedulerTimer = setTimeout(() => scheduleNext(), DELAY_BETWEEN_SYNCS_MS);
+      }
+    });
+    return;
+  }
+
+  const queue = getInstitutionQueue();
+  if (queueIndex >= queue.length) {
+    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} succeeded, ${failedThisCycle} failed. Starting next cycle...`);
+    queueIndex = 0;
+    completedThisCycle = 0;
+    failedThisCycle = 0;
+    cycleStartedAt = new Date();
+    cycleCount++;
   }
 
   const institution = queue[queueIndex];

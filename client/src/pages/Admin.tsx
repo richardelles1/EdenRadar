@@ -84,6 +84,7 @@ interface CollectorHealthRow {
   relevantCount: number;
   phase: string | null;
   sessionId: string | null;
+  consecutiveFailures: number;
   health: HealthStatus;
 }
 
@@ -96,6 +97,8 @@ interface SchedulerStatus {
   failedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
+  cycleCount: number;
+  priorityQueue: string[];
 }
 
 interface CollectorHealthData {
@@ -202,6 +205,27 @@ function CollectorHealth({ pw }: { pw: string }) {
     },
   });
 
+  const bumpMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch("/api/ingest/scheduler/bump", {
+        method: "POST",
+        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        body: JSON.stringify({ institution }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || "Bump failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_d, institution) => {
+      toast({ title: "Priority queued", description: `${institution} will sync next` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Bump failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20" data-testid="health-loading">
@@ -289,6 +313,7 @@ function CollectorHealth({ pw }: { pw: string }) {
               </span>
               <span className="text-muted-foreground">
                 {sched.queuePosition}/{sched.queueTotal} institutions
+                {sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}
               </span>
               {sched.currentInstitution && (
                 <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
@@ -344,10 +369,15 @@ function CollectorHealth({ pw }: { pw: string }) {
           <tbody>
             {displayRows.map((row) => (
               <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.lastSyncError ? `${row.institution} — Error: ${row.lastSyncError}` : row.institution}>
                   <div className="flex items-center gap-1.5">
                     <span className="truncate">{row.institution}</span>
-                    {row.lastSyncError && row.health === "failing" && (
+                    {row.consecutiveFailures >= 3 && (
+                      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                        {row.consecutiveFailures}x failed
+                      </Badge>
+                    )}
+                    {row.lastSyncError && (row.health === "failing" || row.health === "degraded") && (
                       <span className="shrink-0" title={row.lastSyncError}>
                         <AlertCircle className="h-3 w-3 text-red-400" />
                       </span>
@@ -374,34 +404,51 @@ function CollectorHealth({ pw }: { pw: string }) {
                   )}
                 </td>
                 <td className="text-center py-2 px-3">
-                  {row.health === "stale" ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
-                      onClick={() => cancelMutation.mutate(row.institution)}
-                      disabled={cancelMutation.isPending}
-                      title={`Cancel stale session for ${row.institution}`}
-                      data-testid={`button-cancel-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                    >
-                      <XCircle className="h-3.5 w-3.5 mr-1" />
-                      Cancel
-                    </Button>
-                  ) : row.health === "syncing" ? (
-                    <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin mx-auto" />
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={() => syncMutation.mutate(row.institution)}
-                      disabled={syncMutation.isPending}
-                      title={`Sync ${row.institution}`}
-                      data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                    >
-                      <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                    </Button>
-                  )}
+                  <div className="flex items-center justify-center gap-1">
+                    {row.health === "stale" ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
+                        onClick={() => cancelMutation.mutate(row.institution)}
+                        disabled={cancelMutation.isPending}
+                        title={`Cancel stale session for ${row.institution}`}
+                        data-testid={`button-cancel-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                      >
+                        <XCircle className="h-3.5 w-3.5 mr-1" />
+                        Cancel
+                      </Button>
+                    ) : row.health === "syncing" ? (
+                      <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          onClick={() => syncMutation.mutate(row.institution)}
+                          disabled={syncMutation.isPending}
+                          title={`Sync ${row.institution}`}
+                          data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                        >
+                          <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                        </Button>
+                        {sched.state === "running" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600"
+                            onClick={() => bumpMutation.mutate(row.institution)}
+                            disabled={bumpMutation.isPending}
+                            title={`Bump ${row.institution} to front of scheduler queue`}
+                            data-testid={`button-bump-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                          >
+                            <ArrowUpCircle className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1255,7 +1302,7 @@ function DataRefresh({ pw }: { pw: string }) {
                 )}
               </div>
               <div className="flex items-center gap-3">
-                <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done</span>
+                <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
                 <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
                 {sched.failedThisCycle > 0 && (
                   <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
@@ -1271,6 +1318,7 @@ function DataRefresh({ pw }: { pw: string }) {
               <p className="text-[11px] text-muted-foreground/70">
                 Cycle started {relativeTime(sched.cycleStartedAt)}
                 {sched.lastActivityAt && <> · last activity {relativeTime(sched.lastActivityAt)}</>}
+                {sched.priorityQueue.length > 0 && <> · {sched.priorityQueue.length} priority queued</>}
               </p>
             )}
           </div>

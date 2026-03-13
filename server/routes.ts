@@ -13,7 +13,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
@@ -659,11 +659,12 @@ export async function registerRoutes(
       const { institutions: instRows, syncSessions: sessions } = healthData;
 
       const instMap = new Map(instRows.map((r) => [r.institution, r]));
-      const sessionMap = new Map<string, typeof sessions[0]>();
+      const sessionsByInstitution = new Map<string, typeof sessions>();
       for (const s of sessions) {
-        if (!sessionMap.has(s.institution)) {
-          sessionMap.set(s.institution, s);
+        if (!sessionsByInstitution.has(s.institution)) {
+          sessionsByInstitution.set(s.institution, []);
         }
+        sessionsByInstitution.get(s.institution)!.push(s);
       }
 
       const STALE_THRESHOLD_MS = 10 * 60 * 1000;
@@ -673,7 +674,17 @@ export async function registerRoutes(
         const dbRow = instMap.get(name);
         const totalInDb = dbRow?.totalInDb ?? 0;
         const biotechRelevant = dbRow?.biotechRelevant ?? 0;
-        const session = sessionMap.get(name);
+        const instSessions = sessionsByInstitution.get(name) ?? [];
+        const session = instSessions[0] ?? null;
+
+        let consecutiveFailures = 0;
+        for (const s of instSessions) {
+          if (s.status === "failed") {
+            consecutiveFailures++;
+          } else {
+            break;
+          }
+        }
 
         let health: "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
         if (!session) {
@@ -683,7 +694,7 @@ export async function registerRoutes(
           const elapsed = now - new Date(heartbeat).getTime();
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "failed") {
-          health = "failing";
+          health = consecutiveFailures >= 3 ? "failing" : "degraded";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           health = "ok";
         } else {
@@ -702,6 +713,7 @@ export async function registerRoutes(
           relevantCount: session?.relevantCount ?? 0,
           phase: session?.phase ?? null,
           sessionId: session?.sessionId ?? null,
+          consecutiveFailures,
           health,
         };
       });
@@ -766,6 +778,15 @@ export async function registerRoutes(
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const result = pauseScheduler();
+    res.json(result);
+  });
+
+  app.post("/api/ingest/scheduler/bump", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { institution } = req.body ?? {};
+    if (!institution) return res.status(400).json({ error: "institution is required" });
+    const result = bumpToFront(institution);
     res.json(result);
   });
 
