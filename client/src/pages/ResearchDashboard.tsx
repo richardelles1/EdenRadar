@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useResearcherId, getResearcherHeaders, getResearcherProfile } from "@/hooks/use-researcher";
+import { useResearcherId, useResearcherHeaders, getResearcherProfile } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject } from "@shared/schema";
 
@@ -38,6 +38,7 @@ function formatDate(d: string | Date) {
 
 export default function ResearchDashboard() {
   const researcherId = useResearcherId();
+  const researcherHeaders = useResearcherHeaders();
   const profile = getResearcherProfile();
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -51,7 +52,7 @@ export default function ResearchDashboard() {
   const { data: projectsData, isLoading: projectsLoading } = useQuery<ProjectsResponse>({
     queryKey: ["/api/research/projects", researcherId],
     queryFn: () =>
-      fetch("/api/research/projects", { headers: getResearcherHeaders() }).then((r) => r.json()),
+      fetch("/api/research/projects", { headers: researcherHeaders }).then((r) => r.json()),
   });
 
   const { data: alertData, isLoading: alertLoading } = useQuery<SearchResponse>({
@@ -66,14 +67,14 @@ export default function ResearchDashboard() {
   const { data: discoveryData } = useQuery<{ cards: Array<{ id: number; published: boolean }> }>({
     queryKey: ["/api/research/discoveries", researcherId],
     queryFn: () =>
-      fetch("/api/research/discoveries", { headers: getResearcherHeaders() }).then((r) => r.json()),
+      fetch("/api/research/discoveries", { headers: researcherHeaders }).then((r) => r.json()),
   });
 
   const createProject = useMutation({
     mutationFn: () =>
       fetch("/api/research/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...getResearcherHeaders() },
+        headers: { "Content-Type": "application/json", ...researcherHeaders },
         body: JSON.stringify({ title: newProjectTitle, researchArea: newProjectArea, researcherId }),
       }).then((r) => r.json()),
     onSuccess: () => {
@@ -89,7 +90,7 @@ export default function ResearchDashboard() {
     mutationFn: (id: number) =>
       fetch(`/api/research/projects/${id}`, {
         method: "DELETE",
-        headers: getResearcherHeaders(),
+        headers: researcherHeaders,
       }).then((r) => r.json()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/projects", researcherId] });

@@ -14,7 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useResearcherId, getResearcherHeaders } from "@/hooks/use-researcher";
+import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { DiscoveryCard } from "@shared/schema";
 
@@ -30,6 +30,7 @@ function formatDate(d: string | Date) {
 
 export default function MyDiscoveries() {
   const researcherId = useResearcherId();
+  const researcherHeaders = useResearcherHeaders();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -37,14 +38,14 @@ export default function MyDiscoveries() {
   const { data, isLoading } = useQuery<DiscoveriesResponse>({
     queryKey: ["/api/research/discoveries", researcherId],
     queryFn: () =>
-      fetch("/api/research/discoveries", { headers: getResearcherHeaders() }).then((r) => r.json()),
+      fetch("/api/research/discoveries", { headers: researcherHeaders }).then((r) => r.json()),
   });
 
   const publish = useMutation({
     mutationFn: (id: number) =>
       fetch(`/api/research/discoveries/${id}/publish`, {
         method: "PATCH",
-        headers: getResearcherHeaders(),
+        headers: researcherHeaders,
       }).then((r) => r.json()),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/discoveries", researcherId] });

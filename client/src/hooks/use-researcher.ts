@@ -1,29 +1,19 @@
 import { useAuth } from "@/hooks/use-auth";
 
-function getSupabaseUserId(): string {
-  const keys = Object.keys(localStorage);
-  const sbKey = keys.find((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
-  if (!sbKey) return "";
-  try {
-    const parsed = JSON.parse(localStorage.getItem(sbKey) || "");
-    return parsed?.user?.id ?? "";
-  } catch {
-    return "";
-  }
-}
-
 export function useResearcherId(): string {
   const { user } = useAuth();
   return user?.id ?? "";
 }
 
-export function getResearcherHeaders(): HeadersInit {
-  return { "x-researcher-id": getSupabaseUserId() };
-}
-
-export function useResearcherHeaders(): HeadersInit {
-  const { user } = useAuth();
-  return { "x-researcher-id": user?.id ?? "" };
+export function useResearcherHeaders(): Record<string, string> {
+  const { user, session } = useAuth();
+  const headers: Record<string, string> = {
+    "x-researcher-id": user?.id ?? "",
+  };
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  return headers;
 }
 
 export function getResearcherProfile() {

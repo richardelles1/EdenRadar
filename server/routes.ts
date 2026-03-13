@@ -15,6 +15,7 @@ import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock } from "./lib/ingestion";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
+import { verifyResearcherAuth } from "./lib/supabaseAuth";
 
 function friendlyOpenAIError(err: unknown): string {
   if (isFatalOpenAIError(err)) {
@@ -885,7 +886,9 @@ export async function registerRoutes(
     }
   });
 
-  // Research projects (scoped to researcher_id header)
+  // Research projects (scoped to authenticated researcher)
+  app.use("/api/research", verifyResearcherAuth);
+
   app.get("/api/research/projects", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });

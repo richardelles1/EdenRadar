@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FlaskConical, Send } from "lucide-react";
-import { useResearcherId, getResearcherHeaders } from "@/hooks/use-researcher";
+import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { DiscoveryCard } from "@shared/schema";
 
@@ -57,6 +57,7 @@ const SEEKING_OPTIONS = [
 
 export default function CreateDiscovery() {
   const researcherId = useResearcherId();
+  const researcherHeaders = useResearcherHeaders();
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -92,14 +93,14 @@ export default function CreateDiscovery() {
       };
       const createRes = await fetch("/api/research/discoveries", {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...getResearcherHeaders() },
+        headers: { "Content-Type": "application/json", ...researcherHeaders },
         body: JSON.stringify(body),
       });
       const { card } = await createRes.json() as { card: DiscoveryCard };
       if (publish) {
         await fetch(`/api/research/discoveries/${card.id}/publish`, {
           method: "PATCH",
-          headers: getResearcherHeaders(),
+          headers: researcherHeaders,
         });
         toast({
           title: "Published to EdenRadar Industry!",

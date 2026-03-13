@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import { Sprout, Loader2 } from "lucide-react";
 
 export default function Login() {
@@ -41,7 +42,7 @@ export default function Login() {
         setLoading(false);
         return;
       }
-      const { data } = await (await import("@/lib/supabase")).supabase.auth.getUser();
+      const { data } = await supabase.auth.getUser();
       const r = data.user?.user_metadata?.role;
       if (r === "industry" || r === "researcher") redirectByRole(r);
       else { setError("Account has no role assigned"); setLoading(false); }
