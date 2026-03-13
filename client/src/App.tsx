@@ -22,6 +22,9 @@ import ResearchProfile from "@/pages/ResearchProfile";
 import ResearchDataSources from "@/pages/ResearchDataSources";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
+import { AuthProvider } from "@/hooks/use-auth";
+import { SiteGate } from "@/components/SiteGate";
+import Login from "@/pages/Login";
 import { useEffect } from "react";
 
 function ThemeInit() {
@@ -40,6 +43,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Landing} />
+      <Route path="/login" component={Login} />
 
       <Route path="/discover">
         <Redirect to="/scout" />
@@ -131,9 +135,13 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ThemeInit />
-        <Toaster />
-        <Router />
+        <AuthProvider>
+          <ThemeInit />
+          <Toaster />
+          <SiteGate>
+            <Router />
+          </SiteGate>
+        </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>
   );

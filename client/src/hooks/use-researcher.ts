@@ -1,20 +1,29 @@
-import { useMemo } from "react";
+import { useAuth } from "@/hooks/use-auth";
 
-function getOrCreateResearcherId(): string {
-  let id = localStorage.getItem("eden-researcher-id");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("eden-researcher-id", id);
+function getSupabaseUserId(): string {
+  const keys = Object.keys(localStorage);
+  const sbKey = keys.find((k) => k.startsWith("sb-") && k.endsWith("-auth-token"));
+  if (!sbKey) return "";
+  try {
+    const parsed = JSON.parse(localStorage.getItem(sbKey) || "");
+    return parsed?.user?.id ?? "";
+  } catch {
+    return "";
   }
-  return id;
 }
 
 export function useResearcherId(): string {
-  return useMemo(() => getOrCreateResearcherId(), []);
+  const { user } = useAuth();
+  return user?.id ?? "";
 }
 
 export function getResearcherHeaders(): HeadersInit {
-  return { "x-researcher-id": getOrCreateResearcherId() };
+  return { "x-researcher-id": getSupabaseUserId() };
+}
+
+export function useResearcherHeaders(): HeadersInit {
+  const { user } = useAuth();
+  return { "x-researcher-id": user?.id ?? "" };
 }
 
 export function getResearcherProfile() {

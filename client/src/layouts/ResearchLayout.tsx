@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { ResearchSidebar } from "@/components/ResearchSidebar";
+import { useAuth } from "@/hooks/use-auth";
 
 type ResearchLayoutProps = {
   children: React.ReactNode;
@@ -8,13 +9,18 @@ type ResearchLayoutProps = {
 
 export function ResearchLayout({ children }: ResearchLayoutProps) {
   const [, navigate] = useLocation();
+  const { session, role, loading } = useAuth();
 
   useEffect(() => {
-    const entered = localStorage.getItem("eden-research-portal");
-    if (!entered) {
-      navigate("/");
+    if (loading) return;
+    if (!session) {
+      navigate("/login", { replace: true });
+    } else if (role === "industry") {
+      navigate("/scout", { replace: true });
     }
-  }, [navigate]);
+  }, [session, role, loading, navigate]);
+
+  if (loading || !session || role !== "researcher") return null;
 
   return (
     <div className="flex min-h-screen bg-background">

@@ -18,21 +18,34 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **UMich unblocked**: Removed from BLOCKED_SLUGS; now uses Flintbox scraper (umich.flintbox.com, org 12)
 - **Georgia Tech added**: New institution entry (gatech.flintbox.com, org 186) with dedicated Flintbox scraper
 
-### Portal Gates
-**Industry Portal** (original):
-- `localStorage.getItem('eden-portal')` = "true" to be inside
-- `DashboardLayout` redirects to `/` if flag missing
-- Entry: "For Industry" CTA on Landing page; exit: "Exit Portal" in Sidebar
+### Authentication (Task #25 — Supabase Auth)
+**Site Gate**: Password "quality" unlocks the site (localStorage `eden-access`). Full-screen prompt before landing page.
+
+**Supabase Auth**: Email/password auth via `@supabase/supabase-js`. User role stored in `user_metadata.role` ("industry" | "researcher").
+- Supabase project: `tqaitpaajbogrcoyzsgx`
+- Frontend client: `client/src/lib/supabase.ts`
+- Auth context: `client/src/hooks/use-auth.tsx` — `AuthProvider` wraps entire app, `useAuth()` hook
+- Env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
+
+**Test Accounts**:
+- `industry@test.com` / `Quality2025!` → role: industry
+- `research@test.com` / `Quality2025!` → role: researcher
+
+**Industry Portal**:
+- `DashboardLayout` checks Supabase session + role='industry'; redirects to /login if unauthenticated, to /research if wrong role
 - Routes: /scout, /assets, /reports, /alerts, /institutions, /sources
 
-**Researcher Portal** (new — Task #21):
-- `localStorage.getItem('eden-research-portal')` = "true" to be inside
-- `ResearchLayout` redirects to `/` if flag missing
-- Researcher identity: `localStorage.getItem('eden-researcher-id')` = UUID (auto-generated)
-- Researcher profile: `localStorage.getItem('eden-researcher-profile')` = JSON
-- Entry: "For Researchers" CTA on Landing page; exit: "Exit Portal" in ResearchSidebar
+**Researcher Portal**:
+- `ResearchLayout` checks Supabase session + role='researcher'; redirects to /login if unauthenticated, to /scout if wrong role
+- Researcher identity: Supabase `user.id` (UUID) — passed as `x-researcher-id` header
+- Researcher profile: still localStorage `eden-researcher-profile` = JSON
 - Routes: /research, /research/create-discovery, /research/my-discoveries, /research/data-sources, /research/profile
-- Industry Bridge: Published discovery cards appear in GET /api/discoveries (public endpoint) — surfaced in industry Scout with "Lab Published" amber badge (AssetCard.tsx checks source_types includes "researcher")
+- Industry Bridge: Published discovery cards appear in GET /api/discoveries (public endpoint) — surfaced in industry Scout with "Lab Published" amber badge
+
+**Login Page** (`/login`): Sign In / Sign Up tabs; sign-up includes role selector (Industry / Researcher).
+**Landing Page** (`/`): Single "Log In" CTA; auto-redirects to portal if already authenticated.
+**Sign Out**: Both sidebars have "Sign Out" button → clears Supabase session → redirects to /login.
+**Admin**: unchanged — still uses `eden-admin-pw` localStorage gate (password: "eden").
 
 ### Discovery Cards (Ecosystem Bridge)
 - Researchers create Discovery Cards via `POST /api/research/discoveries`
@@ -153,5 +166,8 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
+- `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)
 - `OPENAI_API_KEY`: OpenAI API key (Replit secret)
 - `SESSION_SECRET`: Session encryption secret
+- `VITE_SUPABASE_URL`: Supabase project URL (frontend)
+- `VITE_SUPABASE_ANON_KEY`: Supabase anon/public API key (frontend)

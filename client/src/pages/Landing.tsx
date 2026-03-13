@@ -1,6 +1,8 @@
+import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
+import { useAuth } from "@/hooks/use-auth";
 import {
   FlaskConical,
   Download,
@@ -9,7 +11,6 @@ import {
   BrainCircuit,
   ChevronRight,
   LogIn,
-  Microscope,
 } from "lucide-react";
 
 function EdenSVG() {
@@ -185,15 +186,19 @@ const STEPS = [
 
 export default function Landing() {
   const [, navigate] = useLocation();
+  const { session, role, loading } = useAuth();
 
-  function handleEnterPortal() {
-    localStorage.setItem("eden-portal", "true");
-    navigate("/scout");
-  }
+  useEffect(() => {
+    if (!loading && session && role) {
+      const dest = role === "industry" ? "/scout" : "/research";
+      navigate(dest, { replace: true });
+    }
+  }, [loading, session, role, navigate]);
 
-  function handleEnterResearch() {
-    localStorage.setItem("eden-research-portal", "true");
-    navigate("/research");
+  if (!loading && session && role) return null;
+
+  function handleLogin() {
+    navigate("/login");
   }
 
   return (
@@ -244,31 +249,15 @@ export default function Landing() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row gap-3">
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      size="lg"
-                      className="gap-2 text-base font-semibold h-12 px-7"
-                      onClick={handleEnterPortal}
-                      data-testid="button-cta-enter-portal"
-                    >
-                      <LogIn className="w-4 h-4" />
-                      For Industry
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground text-center">Scout · Reports · Assets · Alerts</p>
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <Button
-                      size="lg"
-                      variant="outline"
-                      className="gap-2 text-base font-semibold h-12 px-7 border-violet-500/50 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:border-violet-500"
-                      onClick={handleEnterResearch}
-                      data-testid="button-cta-enter-research"
-                    >
-                      <Microscope className="w-4 h-4" />
-                      For Researchers
-                    </Button>
-                    <p className="text-[11px] text-muted-foreground text-center">Literature · Projects · Discoveries</p>
-                  </div>
+                  <Button
+                    size="lg"
+                    className="gap-2 text-base font-semibold h-12 px-7"
+                    onClick={handleLogin}
+                    data-testid="button-cta-login"
+                  >
+                    <LogIn className="w-4 h-4" />
+                    Log In
+                  </Button>
                 </div>
 
                 <div className="flex items-center gap-6 pt-2">
@@ -368,27 +357,15 @@ export default function Landing() {
                 Start discovering drug assets from thousands of research papers — structured,
                 filtered, and ready to export.
               </p>
-              <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                <Button
-                  size="lg"
-                  className="gap-2 font-semibold h-12 px-8"
-                  onClick={handleEnterPortal}
-                  data-testid="button-footer-cta-industry"
-                >
-                  <LogIn className="w-4 h-4" />
-                  For Industry
-                </Button>
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="gap-2 font-semibold h-12 px-8 border-violet-500/50 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 hover:border-violet-500"
-                  onClick={handleEnterResearch}
-                  data-testid="button-footer-cta-research"
-                >
-                  <Microscope className="w-4 h-4" />
-                  For Researchers
-                </Button>
-              </div>
+              <Button
+                size="lg"
+                className="gap-2 font-semibold h-12 px-8"
+                onClick={handleLogin}
+                data-testid="button-footer-cta-login"
+              >
+                <LogIn className="w-4 h-4" />
+                Log In
+              </Button>
             </div>
           </div>
         </section>
@@ -404,18 +381,11 @@ export default function Landing() {
           </div>
           <nav className="flex items-center gap-4">
             <button
-              onClick={handleEnterPortal}
+              onClick={handleLogin}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-              data-testid="footer-link-industry"
+              data-testid="footer-link-login"
             >
-              For Industry
-            </button>
-            <button
-              onClick={handleEnterResearch}
-              className="text-xs text-muted-foreground hover:text-violet-500 transition-colors"
-              data-testid="footer-link-research"
-            >
-              For Researchers
+              Log In
             </button>
           </nav>
         </div>

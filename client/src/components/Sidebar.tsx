@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
+import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
 import { useState } from "react";
@@ -32,6 +33,7 @@ const NAV_ITEMS = [
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
+  const { signOut } = useAuth();
   const [location] = useLocation();
 
   const { data } = useQuery<SavedAssetsResponse>({
@@ -39,9 +41,9 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   });
   const savedCount = data?.assets?.length ?? 0;
 
-  function handleExit() {
-    localStorage.removeItem("eden-portal");
-    window.location.href = "/";
+  async function handleSignOut() {
+    await signOut();
+    window.location.href = "/login";
   }
 
   return (
@@ -120,11 +122,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
           variant="ghost"
           size="sm"
           className="w-full justify-start gap-3 px-3 h-9 text-sm font-medium text-muted-foreground hover:text-foreground hover:text-red-500 dark:hover:text-red-400"
-          onClick={handleExit}
-          data-testid="sidebar-exit-portal"
+          onClick={handleSignOut}
+          data-testid="sidebar-sign-out"
         >
           <LogOut className="w-4 h-4 shrink-0" />
-          Exit Portal
+          Sign Out
         </Button>
       </div>
     </div>
