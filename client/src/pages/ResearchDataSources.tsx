@@ -308,8 +308,8 @@ export default function ResearchDataSources() {
     setPage(1);
   }
 
-  function resetSources() {
-    setSelectedSources(ALL_SOURCE_KEYS);
+  function clearSources() {
+    setSelectedSources([]);
     setPage(1);
   }
 
@@ -337,7 +337,7 @@ export default function ResearchDataSources() {
               <div className="flex gap-1.5">
                 <button className="text-[10px] text-violet-500 hover:underline" onClick={selectAllSources} data-testid="button-select-all-sources">All</button>
                 <span className="text-[10px] text-muted-foreground">|</span>
-                <button className="text-[10px] text-violet-500 hover:underline" onClick={resetSources} data-testid="button-reset-sources">Reset</button>
+                <button className="text-[10px] text-violet-500 hover:underline" onClick={clearSources} data-testid="button-clear-sources">Clear</button>
               </div>
             </div>
             <div className="space-y-3">
