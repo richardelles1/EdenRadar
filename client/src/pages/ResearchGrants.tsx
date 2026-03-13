@@ -421,8 +421,8 @@ export default function ResearchGrants() {
   ].filter(Boolean) as { label: string; clear: () => void }[];
 
   return (
-    <div className="flex flex-col h-full min-h-0">
-      <div className="px-6 pt-6 pb-4 border-b border-border shrink-0">
+    <div className="flex flex-col min-h-screen">
+      <div className="px-6 pt-6 pb-4 border-b border-border">
         <div className="flex items-center gap-2.5">
           <BadgeDollarSign className="w-5 h-5 text-violet-500" />
           <div>
@@ -453,7 +453,7 @@ export default function ResearchGrants() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div>
         {tab === "find" && (
           <div className="p-6 max-w-3xl mx-auto space-y-4">
             <div className="flex gap-2">
