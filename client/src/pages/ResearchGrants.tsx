@@ -536,8 +536,8 @@ export default function ResearchGrants() {
             {!builtQuery && (
               <div className="text-center py-16 text-muted-foreground">
                 <BadgeDollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
-                <p className="text-sm font-medium">Search across NIH, NSF, and EU CORDIS</p>
-                <p className="text-xs mt-1 max-w-xs mx-auto">Enter keywords to find active funding opportunities matching your research</p>
+                <p className="text-sm font-medium">Search open funding opportunities</p>
+                <p className="text-xs mt-1 max-w-xs mx-auto">Enter keywords to find active grants and forecasted opportunities from Grants.gov</p>
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
                   {["CRISPR cancer therapy", "AI drug discovery", "gene editing", "immunotherapy"].map((s) => (
                     <button
