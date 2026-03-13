@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
 import {
   Search, ExternalLink, Microscope, Loader2, ChevronLeft, ChevronRight,
   Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown,
@@ -194,7 +193,6 @@ function getFilterLabel(key: keyof Filters, value: string): string {
 }
 
 export default function ResearchDataSources() {
-  const [location, navigate] = useLocation();
   const researcherId = useResearcherId();
   const researcherHeaders = useResearcherHeaders();
   const { toast } = useToast();

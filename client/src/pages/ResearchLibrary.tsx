@@ -18,13 +18,6 @@ const SOURCE_TYPE_LABELS: Record<string, string> = {
   researcher: "Researcher",
 };
 
-function formatDate(d: string | Date) {
-  if (!d) return "";
-  const date = new Date(d);
-  if (isNaN(date.getTime())) return String(d);
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
 export default function ResearchLibrary() {
   const researcherId = useResearcherId();
   const researcherHeaders = useResearcherHeaders();
