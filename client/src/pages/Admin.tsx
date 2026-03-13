@@ -1140,7 +1140,7 @@ function SchedulerPanel({ pw }: { pw: string }) {
       }
       return res.json();
     },
-    onSuccess: (d: any) => {
+    onSuccess: (d: { ok: boolean; message?: string }) => {
       if (d.ok) {
         toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
       } else {
@@ -1149,7 +1149,7 @@ function SchedulerPanel({ pw }: { pw: string }) {
       refetchScheduler();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Start failed", description: err.message, variant: "destructive" });
     },
   });
@@ -1166,7 +1166,7 @@ function SchedulerPanel({ pw }: { pw: string }) {
       }
       return res.json();
     },
-    onSuccess: (d: any) => {
+    onSuccess: (d: { ok: boolean; message?: string }) => {
       if (d.ok) {
         toast({ title: "Scheduler paused" });
       } else {
@@ -1174,7 +1174,7 @@ function SchedulerPanel({ pw }: { pw: string }) {
       }
       refetchScheduler();
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Pause failed", description: err.message, variant: "destructive" });
     },
   });
