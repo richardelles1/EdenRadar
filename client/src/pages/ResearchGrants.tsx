@@ -35,7 +35,7 @@ const CAREER_STAGES = [
 ];
 
 const AMOUNT_RANGES = [
-  { label: "Any amount", value: "" },
+  { label: "Any amount", value: "all" },
   { label: "< $50K", value: "<$50K" },
   { label: "$50K – $100K", value: "$50K-$100K" },
   { label: "$100K – $500K", value: "$100K-$500K" },
@@ -141,14 +141,14 @@ function GrantResultCard({
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">Link to project (optional)</p>
                   <Select
-                    value={projectId?.toString() ?? ""}
-                    onValueChange={(v) => setProjectId(v ? parseInt(v) : undefined)}
+                    value={projectId?.toString() ?? "none"}
+                    onValueChange={(v) => setProjectId(v === "none" ? undefined : parseInt(v))}
                   >
                     <SelectTrigger className="h-7 text-xs" data-testid="grant-save-project-select">
                       <SelectValue placeholder="No project" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">No project</SelectItem>
+                      <SelectItem value="none">No project</SelectItem>
                       {projects.map((p) => (
                         <SelectItem key={p.id} value={p.id.toString()}>{p.title}</SelectItem>
                       ))}
@@ -490,7 +490,7 @@ export default function ResearchGrants() {
                   {CAREER_STAGES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <Select value={amountFilter} onValueChange={setAmountFilter}>
+              <Select value={amountFilter || "all"} onValueChange={(v) => setAmountFilter(v === "all" ? "" : v)}>
                 <SelectTrigger className="h-7 text-xs w-40" data-testid="grants-filter-amount">
                   <SelectValue placeholder="Funding amount" />
                 </SelectTrigger>
@@ -672,14 +672,14 @@ export default function ResearchGrants() {
               <div>
                 <p className="text-xs font-medium text-foreground mb-1">Link to Project</p>
                 <Select
-                  value={addProjectId?.toString() ?? ""}
-                  onValueChange={(v) => setAddProjectId(v ? parseInt(v) : undefined)}
+                  value={addProjectId?.toString() ?? "none"}
+                  onValueChange={(v) => setAddProjectId(v === "none" ? undefined : parseInt(v))}
                 >
                   <SelectTrigger className="text-sm h-9" data-testid="add-grant-project">
                     <SelectValue placeholder="None" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None</SelectItem>
+                    <SelectItem value="none">None</SelectItem>
                     {projects.map((p) => (
                       <SelectItem key={p.id} value={p.id.toString()}>{p.title}</SelectItem>
                     ))}
