@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, type InsertResearchProject } from "@shared/schema";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -1023,10 +1023,72 @@ export async function registerRoutes(
   app.post("/api/research/projects", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
-    const parsed = insertResearchProjectSchema.safeParse({ ...req.body, researcherId });
+    const body = { ...req.body, researcherId };
+    if (body.targetCompletion === "") body.targetCompletion = null;
+    if (body.status && !["planning", "active", "on_hold", "completed"].includes(body.status)) {
+      return res.status(400).json({ error: "Invalid status value" });
+    }
+    if (body.targetCompletion && isNaN(Date.parse(body.targetCompletion))) {
+      return res.status(400).json({ error: "Invalid targetCompletion date" });
+    }
+    const parsed = insertResearchProjectSchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
       const project = await storage.createResearchProject(parsed.data);
+      res.json({ project });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/research/projects/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      const project = await storage.getResearchProject(id, researcherId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      res.json({ project });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/research/projects/:id", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const patchSchema = z.object({
+      title: z.string().min(1).optional(),
+      description: z.string().nullable().optional(),
+      researchArea: z.string().nullable().optional(),
+      hypothesis: z.string().nullable().optional(),
+      status: z.enum(["planning", "active", "on_hold", "completed"]).optional(),
+      objectives: z.string().nullable().optional(),
+      methodology: z.string().nullable().optional(),
+      targetCompletion: z.string().nullable().optional().refine(
+        (val) => val === undefined || val === null || !isNaN(Date.parse(val)),
+        { message: "Invalid date format" }
+      ),
+    });
+    const parsed = patchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+    const validated = parsed.data;
+    const updates: Partial<InsertResearchProject> = {};
+    if (validated.title !== undefined) updates.title = validated.title;
+    if (validated.description !== undefined) updates.description = validated.description;
+    if (validated.researchArea !== undefined) updates.researchArea = validated.researchArea;
+    if (validated.hypothesis !== undefined) updates.hypothesis = validated.hypothesis;
+    if (validated.status !== undefined) updates.status = validated.status;
+    if (validated.objectives !== undefined) updates.objectives = validated.objectives;
+    if (validated.methodology !== undefined) updates.methodology = validated.methodology;
+    if (validated.targetCompletion !== undefined) updates.targetCompletion = validated.targetCompletion;
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
+    try {
+      const project = await storage.updateResearchProject(id, researcherId, updates);
+      if (!project) return res.status(404).json({ error: "Project not found" });
       res.json({ project });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

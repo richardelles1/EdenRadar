@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -180,6 +180,11 @@ export const researchProjects = pgTable("research_projects", {
   title: text("title").notNull(),
   description: text("description"),
   researchArea: text("research_area"),
+  hypothesis: text("hypothesis"),
+  status: text("status").default("planning").notNull(),
+  objectives: text("objectives"),
+  methodology: text("methodology"),
+  targetCompletion: date("target_completion"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   lastEditedAt: timestamp("last_edited_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

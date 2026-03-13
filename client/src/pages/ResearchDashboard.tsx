@@ -12,11 +12,27 @@ import {
   FlaskConical,
   TrendingUp,
   Layers,
+  FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useResearcherId, useResearcherHeaders, getResearcherProfile } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject, SavedReference } from "@shared/schema";
@@ -32,6 +48,13 @@ type SearchResult = {
 };
 type SearchResponse = { assets: { signals: SearchResult[] }[] };
 
+const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
+  planning: { label: "Planning", color: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30" },
+  active: { label: "Active", color: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30" },
+  on_hold: { label: "On Hold", color: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" },
+  completed: { label: "Completed", color: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" },
+};
+
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -43,9 +66,14 @@ export default function ResearchDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [newProjectTitle, setNewProjectTitle] = useState("");
-  const [newProjectArea, setNewProjectArea] = useState("");
-  const [showNewProject, setShowNewProject] = useState(false);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newArea, setNewArea] = useState("");
+  const [newHypothesis, setNewHypothesis] = useState("");
+  const [newStatus, setNewStatus] = useState("planning");
+  const [newObjectives, setNewObjectives] = useState("");
+  const [newMethodology, setNewMethodology] = useState("");
+  const [newTargetCompletion, setNewTargetCompletion] = useState("");
 
   const primaryArea = profile.researchAreas[0] ?? "CRISPR gene editing";
 
@@ -70,28 +98,52 @@ export default function ResearchDashboard() {
       fetch("/api/research/discoveries", { headers: researcherHeaders }).then((r) => r.json()),
   });
 
+  function resetDialog() {
+    setNewTitle("");
+    setNewArea("");
+    setNewHypothesis("");
+    setNewStatus("planning");
+    setNewObjectives("");
+    setNewMethodology("");
+    setNewTargetCompletion("");
+  }
+
   const createProject = useMutation({
-    mutationFn: () =>
-      fetch("/api/research/projects", {
+    mutationFn: async () => {
+      const r = await fetch("/api/research/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...researcherHeaders },
-        body: JSON.stringify({ title: newProjectTitle, researchArea: newProjectArea, researcherId }),
-      }).then((r) => r.json()),
+        body: JSON.stringify({
+          title: newTitle,
+          researchArea: newArea || null,
+          hypothesis: newHypothesis || null,
+          status: newStatus,
+          objectives: newObjectives || null,
+          methodology: newMethodology || null,
+          targetCompletion: newTargetCompletion || null,
+          researcherId,
+        }),
+      });
+      if (!r.ok) throw new Error("Failed to create project");
+      return r.json();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/projects", researcherId] });
-      setNewProjectTitle("");
-      setNewProjectArea("");
-      setShowNewProject(false);
+      resetDialog();
+      setDialogOpen(false);
       toast({ title: "Project created" });
     },
   });
 
   const deleteProject = useMutation({
-    mutationFn: (id: number) =>
-      fetch(`/api/research/projects/${id}`, {
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/research/projects/${id}`, {
         method: "DELETE",
         headers: researcherHeaders,
-      }).then((r) => r.json()),
+      });
+      if (!r.ok) throw new Error("Failed to delete project");
+      return r.json();
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/research/projects", researcherId] });
       toast({ title: "Project deleted" });
@@ -200,48 +252,13 @@ export default function ResearchDashboard() {
             variant="ghost"
             size="sm"
             className="gap-1.5 text-xs text-muted-foreground hover:text-foreground"
-            onClick={() => setShowNewProject((v) => !v)}
+            onClick={() => setDialogOpen(true)}
             data-testid="button-toggle-new-project"
           >
             <Plus className="w-3.5 h-3.5" />
             New
           </Button>
         </div>
-
-        {showNewProject && (
-          <div className="border border-violet-500/30 bg-violet-500/5 rounded-lg p-4 mb-3 flex flex-col gap-3">
-            <Input
-              placeholder="Project title"
-              value={newProjectTitle}
-              onChange={(e) => setNewProjectTitle(e.target.value)}
-              data-testid="input-new-project-title"
-            />
-            <Input
-              placeholder="Research area (e.g., KRAS inhibitor)"
-              value={newProjectArea}
-              onChange={(e) => setNewProjectArea(e.target.value)}
-              data-testid="input-new-project-area"
-            />
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                disabled={!newProjectTitle.trim() || createProject.isPending}
-                onClick={() => createProject.mutate()}
-                className="bg-violet-600 hover:bg-violet-700 text-white"
-                data-testid="button-create-project-submit"
-              >
-                Create Project
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => setShowNewProject(false)}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
 
         {projectsLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -257,7 +274,11 @@ export default function ResearchDashboard() {
               <ProjectCard
                 key={p.id}
                 project={p}
-                onDelete={() => deleteProject.mutate(p.id)}
+                onDelete={(e) => {
+                  e.stopPropagation();
+                  deleteProject.mutate(p.id);
+                }}
+                onClick={() => navigate(`/research/projects/${p.id}`)}
                 researcherHeaders={researcherHeaders}
                 researcherId={researcherId}
               />
@@ -302,6 +323,100 @@ export default function ResearchDashboard() {
           </Button>
         </div>
       </section>
+
+      <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) { resetDialog(); } setDialogOpen(open); }}>
+        <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto" data-testid="dialog-create-project">
+          <DialogHeader>
+            <DialogTitle>New Research Project</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Title *</label>
+              <Input
+                placeholder="Project title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                data-testid="input-new-project-title"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Research Question / Hypothesis</label>
+              <Textarea
+                placeholder="What question does this project aim to answer?"
+                value={newHypothesis}
+                onChange={(e) => setNewHypothesis(e.target.value)}
+                rows={3}
+                data-testid="input-new-project-hypothesis"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Research Area</label>
+              <Input
+                placeholder="e.g., KRAS inhibitor, mRNA delivery"
+                value={newArea}
+                onChange={(e) => setNewArea(e.target.value)}
+                data-testid="input-new-project-area"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Status</label>
+              <Select value={newStatus} onValueChange={setNewStatus}>
+                <SelectTrigger data-testid="select-new-project-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planning">Planning</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="on_hold">On Hold</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Objectives</label>
+              <Textarea
+                placeholder="Key objectives for this project"
+                value={newObjectives}
+                onChange={(e) => setNewObjectives(e.target.value)}
+                rows={3}
+                data-testid="input-new-project-objectives"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Methodology</label>
+              <Textarea
+                placeholder="Research methodology and approach"
+                value={newMethodology}
+                onChange={(e) => setNewMethodology(e.target.value)}
+                rows={3}
+                data-testid="input-new-project-methodology"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1 block">Target Completion</label>
+              <Input
+                type="date"
+                value={newTargetCompletion}
+                onChange={(e) => setNewTargetCompletion(e.target.value)}
+                data-testid="input-new-project-target-completion"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => { resetDialog(); setDialogOpen(false); }} data-testid="button-cancel-create-project">
+              Cancel
+            </Button>
+            <Button
+              disabled={!newTitle.trim() || createProject.isPending}
+              onClick={() => createProject.mutate()}
+              className="bg-violet-600 hover:bg-violet-700 text-white"
+              data-testid="button-create-project-submit"
+            >
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -309,11 +424,13 @@ export default function ResearchDashboard() {
 function ProjectCard({
   project,
   onDelete,
+  onClick,
   researcherHeaders,
   researcherId,
 }: {
   project: ResearchProject;
-  onDelete: () => void;
+  onDelete: (e: React.MouseEvent) => void;
+  onClick: () => void;
   researcherHeaders: Record<string, string>;
   researcherId: string;
 }) {
@@ -325,10 +442,12 @@ function ProjectCard({
   });
 
   const refs = refsData?.references ?? [];
+  const statusConf = STATUS_CONFIG[project.status] ?? STATUS_CONFIG.planning;
 
   return (
     <div
-      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors flex flex-col gap-2"
+      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors flex flex-col gap-2 cursor-pointer"
+      onClick={onClick}
       data-testid={`project-card-${project.id}`}
     >
       <div className="flex items-start justify-between gap-2">
@@ -341,37 +460,26 @@ function ProjectCard({
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
-      {project.researchArea && (
-        <Badge variant="secondary" className="text-[11px] w-fit bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
-          {project.researchArea}
+      <div className="flex items-center gap-2 flex-wrap">
+        <Badge className={`text-[11px] ${statusConf.color}`} data-testid={`badge-status-${project.id}`}>
+          {statusConf.label}
         </Badge>
+        {project.researchArea && (
+          <Badge variant="secondary" className="text-[11px] w-fit bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30">
+            {project.researchArea}
+          </Badge>
+        )}
+      </div>
+      {project.hypothesis && (
+        <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{project.hypothesis}</p>
       )}
-      <p className="text-[11px] text-muted-foreground">
-        Last edited {formatDate(project.lastEditedAt)}
-      </p>
-      {refs.length > 0 && (
-        <div className="mt-1 pt-2 border-t border-border space-y-1" data-testid={`project-refs-${project.id}`}>
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
-            Reference Literature ({refs.length})
-          </p>
-          {refs.slice(0, 3).map((ref) => (
-            <a
-              key={ref.id}
-              href={ref.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-1.5 text-[11px] text-foreground hover:text-violet-500 transition-colors line-clamp-1"
-              data-testid={`project-ref-link-${ref.id}`}
-            >
-              <ExternalLink className="w-3 h-3 shrink-0 text-muted-foreground" />
-              <span className="truncate">{ref.title}</span>
-            </a>
-          ))}
-          {refs.length > 3 && (
-            <p className="text-[10px] text-muted-foreground">+{refs.length - 3} more</p>
-          )}
-        </div>
-      )}
+      <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-auto">
+        <span className="flex items-center gap-1">
+          <FileText className="w-3 h-3" />
+          {refs.length} ref{refs.length !== 1 ? "s" : ""}
+        </span>
+        <span>Last edited {formatDate(project.lastEditedAt)}</span>
+      </div>
     </div>
   );
 }
