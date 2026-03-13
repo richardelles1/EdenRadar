@@ -28,7 +28,7 @@ type SearchResult = {
   url: string;
   date: string;
   institution_or_sponsor: string;
-  metadata?: Record<string, unknown>;
+  metadata?: { award_range?: string; [key: string]: unknown };
 };
 type SearchResponse = { assets: { signals: SearchResult[] }[] };
 type DiscoveryCard = { id: number; title: string; summary: string; published: boolean; adminStatus: string; researchArea: string; createdAt: string };
@@ -142,10 +142,10 @@ export default function ResearchDashboard() {
 
       <section>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/research/projects")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <FolderOpen className="w-4 h-4 text-violet-500" />
             <h2 className="text-base font-semibold text-foreground">Recent Projects</h2>
-          </div>
+          </button>
           <Button
             variant="ghost"
             size="sm"
@@ -191,10 +191,10 @@ export default function ResearchDashboard() {
 
       <section>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/research/my-discoveries")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <FlaskConical className="w-4 h-4 text-amber-500" />
             <h2 className="text-base font-semibold text-foreground">Recent Discoveries</h2>
-          </div>
+          </button>
           <Button
             variant="ghost"
             size="sm"
@@ -257,15 +257,15 @@ export default function ResearchDashboard() {
 
       <section>
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
+          <button onClick={() => navigate("/research/grants")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <BadgeDollarSign className="w-4 h-4 text-emerald-500" />
             <h2 className="text-base font-semibold text-foreground">Grants Spotlight</h2>
-            {primaryArea && (
-              <Badge variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
-                {primaryArea}
-              </Badge>
-            )}
-          </div>
+          </button>
+          {primaryArea && (
+            <Badge variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+              {primaryArea}
+            </Badge>
+          )}
           <Button
             variant="ghost"
             size="sm"
@@ -308,9 +308,9 @@ export default function ResearchDashboard() {
                   Deadline: {spotlightGrant.date}
                 </span>
               )}
-              {(spotlightGrant.metadata as any)?.award_range && (
+              {spotlightGrant.metadata?.award_range && (
                 <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                  {(spotlightGrant.metadata as any).award_range}
+                  {spotlightGrant.metadata.award_range}
                 </span>
               )}
             </div>
@@ -330,8 +330,10 @@ export default function ResearchDashboard() {
 
       <section>
         <div className="flex items-center gap-2 mb-3">
-          <Bell className="w-4 h-4 text-amber-500" />
-          <h2 className="text-base font-semibold text-foreground">Breaking Research Alert</h2>
+          <button onClick={() => navigate("/research/alerts")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <Bell className="w-4 h-4 text-amber-500" />
+            <h2 className="text-base font-semibold text-foreground">Breaking Research Alert</h2>
+          </button>
           {primaryArea && (
             <Badge variant="secondary" className="text-[11px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
               {primaryArea}
@@ -377,8 +379,10 @@ export default function ResearchDashboard() {
 
       <section>
         <div className="flex items-center gap-2 mb-3">
-          <Database className="w-4 h-4 text-blue-500" />
-          <h2 className="text-base font-semibold text-foreground">Quick Actions</h2>
+          <button onClick={() => navigate("/research/data-sources")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
+            <Database className="w-4 h-4 text-blue-500" />
+            <h2 className="text-base font-semibold text-foreground">Quick Actions</h2>
+          </button>
         </div>
         <div className="flex flex-wrap gap-3">
           <Button

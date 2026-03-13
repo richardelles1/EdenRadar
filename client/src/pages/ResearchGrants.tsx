@@ -58,6 +58,16 @@ type SignalResult = {
   date: string;
   institution_or_sponsor: string;
   source_key?: string;
+  metadata?: {
+    award_range?: string;
+    award_ceiling?: number;
+    award_floor?: number;
+    opp_num?: string;
+    open_date?: string;
+    close_date?: string;
+    category?: string;
+    [key: string]: unknown;
+  };
 };
 
 function GrantResultCard({
@@ -107,6 +117,12 @@ function GrantResultCard({
               <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                 <Calendar className="w-3 h-3" />
                 Deadline: {signal.date}
+              </span>
+            )}
+            {signal.metadata?.award_range && (
+              <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <DollarSign className="w-3 h-3" />
+                {signal.metadata.award_range}
               </span>
             )}
           </div>
@@ -343,8 +359,10 @@ export default function ResearchGrants() {
   });
   const results = useMemo(() => searchData?.assets?.flatMap((a) => a.signals ?? []) ?? [], [searchData]);
 
+  type SaveGrantPayload = { title: string; url?: string; agencyName?: string; notes?: string; projectId?: number; deadline?: string; amount?: string; status?: string };
+
   const saveGrant = useMutation({
-    mutationFn: async (data: Partial<SavedGrant>) => {
+    mutationFn: async (data: SaveGrantPayload) => {
       const r = await fetch("/api/research/grants", {
         method: "POST",
         headers: { "Content-Type": "application/json", ...researcherHeaders },
@@ -408,7 +426,7 @@ export default function ResearchGrants() {
       notes: addNotes || undefined,
       status: addStatus,
       projectId: addProjectId,
-    } as any);
+    });
     setAddOpen(false);
     setAddTitle(""); setAddAgency(""); setAddDeadline(""); setAddAmount(""); setAddNotes("");
     setAddStatus("not_started"); setAddProjectId(undefined);
@@ -558,7 +576,7 @@ export default function ResearchGrants() {
                     key={signal.id}
                     signal={signal}
                     isSaved={savedUrls.has(signal.url)}
-                    onSave={(g) => saveGrant.mutate(g as any)}
+                    onSave={(g) => saveGrant.mutate(g)}
                     projects={projects}
                   />
                 ))}
