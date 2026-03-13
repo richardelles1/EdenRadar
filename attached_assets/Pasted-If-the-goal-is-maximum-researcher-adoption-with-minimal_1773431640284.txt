@@ -1,0 +1,120 @@
+If the goal is maximum researcher adoption with minimal complexity, the three highest-impact additions are the ones that:
+	•	reduce work researchers already do manually
+	•	produce credible outputs they can reuse
+	•	integrate directly into their workflow
+
+Everything else is nice, but these three create real stickiness.
+
+⸻
+
+1. Evidence Extraction Tables
+
+This is arguably the single most useful feature for researchers doing structured analysis.
+
+Researchers currently read papers and manually summarize them in spreadsheets or notes. If your platform lets them extract structured data directly from each paper, it becomes much more valuable.
+
+Example table fields:
+	•	Study title
+	•	Study type
+	•	Sample size
+	•	Population
+	•	Intervention
+	•	Outcome
+	•	Key findings
+	•	Evidence strength
+
+Once multiple studies are added, the platform automatically generates a comparison table across studies.
+
+This is extremely valuable for:
+	•	systematic reviews
+	•	grant proposals
+	•	literature reviews
+	•	research briefs
+
+It turns your tool from a paper organizer into an analysis tool.
+
+⸻
+
+2. Exportable Research Outputs
+
+Researchers adopt tools that generate usable documents.
+
+If your project can export structured outputs, the platform becomes part of their writing workflow.
+
+Examples of outputs:
+	•	Research brief (PDF)
+	•	Grant proposal summary
+	•	Literature review summary
+	•	Industry opportunity brief
+
+Even a simple export like:
+
+Executive Summary
+Research Question
+Evidence Summary
+Methods
+Key Findings
+Commercialization Potential
+
+is extremely useful.
+
+Researchers often need to generate documents like this for:
+	•	lab meetings
+	•	grant proposals
+	•	investor decks
+	•	collaborators
+
+If your tool can generate those automatically, it saves time.
+
+⸻
+
+3. Project-Linked Research Alerts
+
+Once a researcher creates a project, the platform should continuously monitor relevant signals.
+
+Example alerts:
+	•	new papers related to the project topic
+	•	new patents filed
+	•	new grants announced
+	•	new clinical trials started
+
+This turns the platform into a live intelligence system instead of a static workspace.
+
+Researchers receive notifications like:
+
+“3 new publications related to your project topic were published this week.”
+
+This creates ongoing engagement and keeps projects updated.
+
+⸻
+
+Why These Three Matter Most
+
+Together they form a powerful loop:
+	1.	Evidence extraction tables
+→ organize research evidence.
+	2.	Exportable outputs
+→ turn projects into credible documents.
+	3.	Research alerts
+→ keep projects continuously updated.
+
+This combination makes the platform useful for daily work, not just occasional research.
+
+⸻
+
+Bonus (Very Close #4)
+
+Your Discovery Card → Industry pipeline is already a strong differentiator.
+
+If the system can automatically convert a completed research project into an industry-ready summary, that becomes a natural next step in the workflow.
+
+⸻
+
+In short, the platform becomes:
+
+research workspace
+→ evidence analysis
+→ research brief
+→ industry opportunity
+
+That’s a workflow most research tools don’t offer.
