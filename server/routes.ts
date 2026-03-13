@@ -83,7 +83,7 @@ function applySignalFilters(
   if (filters.trialPhase) {
     const allowed = PHASE_MAP[filters.trialPhase] ?? [filters.trialPhase];
     filtered = filtered.filter((s) => {
-      if (s.source_type !== "clinical_trial") return true;
+      if (s.source_type !== "clinical_trial") return false;
       const hint = s.stage_hint.toLowerCase();
       return allowed.some((p) => hint.includes(p));
     });

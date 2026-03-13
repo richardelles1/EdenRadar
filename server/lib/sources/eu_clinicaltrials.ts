@@ -1,5 +1,9 @@
 import type { RawSignal } from "../types";
 
+// EU Clinical Trials Register (clinicaltrialsregister.eu) does not offer a public
+// machine-readable API — its REST endpoint returns HTML error pages. We use
+// Europe PMC's CTX source, which indexes EU clinical trial records, as the
+// data provider for this source.
 const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
 export async function searchEuClinicalTrials(query: string, maxResults = 12): Promise<RawSignal[]> {

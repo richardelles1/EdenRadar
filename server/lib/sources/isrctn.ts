@@ -1,5 +1,8 @@
 import type { RawSignal } from "../types";
 
+// ISRCTN (isrctn.com) does not offer a public JSON API — its /api/query endpoint
+// returns HTML. We use Europe PMC, which indexes ISRCTN-registered trials, as the
+// data provider for this source.
 const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
 
 export async function searchIsrctn(query: string, maxResults = 12): Promise<RawSignal[]> {
