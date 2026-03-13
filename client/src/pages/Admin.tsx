@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, Building2, AlertCircle, XCircle } from "lucide-react";
+import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, Building2, AlertCircle, XCircle, Microscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1163,6 +1163,226 @@ function DataRefresh({ pw }: { pw: string }) {
   );
 }
 
+function ResearchQueue({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
+  const [rejectNote, setRejectNote] = useState("");
+
+  const { data, isLoading, refetch } = useQuery<{ cards: any[] }>({
+    queryKey: ["/api/admin/research-queue"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/research-queue", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, adminStatus, adminNote }: { id: number; adminStatus: string; adminNote?: string }) => {
+      const res = await fetch(`/api/admin/research-queue/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminStatus, adminNote }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      refetch();
+      setRejectingId(null);
+      setRejectNote("");
+      const label = vars.adminStatus === "approved" ? "Approved" : vars.adminStatus === "rejected" ? "Rejected" : "Revoked";
+      toast({ title: `${label}`, description: "Card status updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update status.", variant: "destructive" }),
+  });
+
+  const cards = data?.cards ?? [];
+  const pending = cards.filter((c) => c.adminStatus === "pending");
+  const approved = cards.filter((c) => c.adminStatus === "approved");
+  const rejected = cards.filter((c) => c.adminStatus === "rejected");
+
+  function CardRow({ card, actions }: { card: any; actions: ReactNode }) {
+    return (
+      <div className="p-4 border-b border-border last:border-0" data-testid={`research-queue-card-${card.id}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-sm font-semibold text-foreground">{card.title}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary">{card.technologyType}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{card.developmentStage}</span>
+              <span className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{card.ipStatus}</span>
+            </div>
+            <div className="text-xs text-muted-foreground mb-1.5">
+              <span className="font-medium text-foreground">{card.institution}</span>
+              {card.lab && <span> · {card.lab}</span>}
+              <span className="mx-1">·</span>
+              <span>{card.contactEmail}</span>
+              <span className="mx-1">·</span>
+              <span>{card.seeking}</span>
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-2">{card.summary}</p>
+            {card.adminNote && (
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">Note: {card.adminNote}</p>
+            )}
+          </div>
+          <div className="shrink-0 flex flex-col gap-2">{actions}</div>
+        </div>
+        {rejectingId === card.id && (
+          <div className="mt-3 flex gap-2" data-testid={`reject-note-row-${card.id}`}>
+            <input
+              className="flex-1 text-xs border border-border rounded px-2 py-1.5 bg-background text-foreground placeholder:text-muted-foreground"
+              placeholder="Optional rejection note…"
+              value={rejectNote}
+              onChange={(e) => setRejectNote(e.target.value)}
+              data-testid={`input-reject-note-${card.id}`}
+            />
+            <Button
+              size="sm"
+              variant="destructive"
+              className="text-xs"
+              onClick={() => updateStatus.mutate({ id: card.id, adminStatus: "rejected", adminNote: rejectNote || undefined })}
+              disabled={updateStatus.isPending}
+              data-testid={`button-confirm-reject-${card.id}`}
+            >
+              Confirm
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs"
+              onClick={() => { setRejectingId(null); setRejectNote(""); }}
+              data-testid={`button-cancel-reject-${card.id}`}
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  function Panel({ title, count, color, children }: { title: string; count: number; color: string; children: ReactNode }) {
+    return (
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
+        <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${color}`}>{count}</span>
+        </div>
+        {count === 0 ? (
+          <p className="px-5 py-4 text-sm text-muted-foreground">No cards here.</p>
+        ) : (
+          <div>{children}</div>
+        )}
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-16" data-testid="research-queue-loading">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="research-queue-tab">
+      <div className="grid grid-cols-3 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-amber-500" data-testid="stat-pending-count">{pending.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">Pending Review</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400" data-testid="stat-approved-count">{approved.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">Approved · Live in Scout</div>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 text-center">
+          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-rejected-count">{rejected.length}</div>
+          <div className="text-xs text-muted-foreground mt-1">Rejected</div>
+        </div>
+      </div>
+
+      <Panel title="Pending Review" count={pending.length} color="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400">
+        {pending.map((card) => (
+          <CardRow
+            key={card.id}
+            card={card}
+            actions={
+              <>
+                <Button
+                  size="sm"
+                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => updateStatus.mutate({ id: card.id, adminStatus: "approved" })}
+                  disabled={updateStatus.isPending}
+                  data-testid={`button-approve-${card.id}`}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Approve
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs border-destructive/50 text-destructive hover:bg-destructive/10"
+                  onClick={() => { setRejectingId(card.id); setRejectNote(""); }}
+                  disabled={updateStatus.isPending}
+                  data-testid={`button-reject-${card.id}`}
+                >
+                  <XCircle className="h-3.5 w-3.5 mr-1" /> Reject
+                </Button>
+              </>
+            }
+          />
+        ))}
+      </Panel>
+
+      <Panel title="Approved · Live in Scout" count={approved.length} color="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400">
+        {approved.map((card) => (
+          <CardRow
+            key={card.id}
+            card={card}
+            actions={
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => updateStatus.mutate({ id: card.id, adminStatus: "pending" })}
+                disabled={updateStatus.isPending}
+                data-testid={`button-revoke-${card.id}`}
+              >
+                Revoke
+              </Button>
+            }
+          />
+        ))}
+      </Panel>
+
+      <Panel title="Rejected" count={rejected.length} color="bg-muted text-muted-foreground">
+        {rejected.map((card) => (
+          <CardRow
+            key={card.id}
+            card={card}
+            actions={
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs"
+                onClick={() => updateStatus.mutate({ id: card.id, adminStatus: "pending" })}
+                disabled={updateStatus.isPending}
+                data-testid={`button-requeue-${card.id}`}
+              >
+                Re-queue
+              </Button>
+            }
+          />
+        ))}
+      </Panel>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("scan-tracking");
@@ -1176,6 +1396,29 @@ export default function Admin() {
   if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
 
   const pw = localStorage.getItem(ADMIN_KEY) ?? "";
+
+  return <AdminPanel pw={pw} setAuthed={setAuthed} theme={theme} setTheme={setTheme} activeTab={activeTab} setActiveTab={setActiveTab} />;
+}
+
+function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
+  pw: string;
+  setAuthed: (v: boolean) => void;
+  theme: string;
+  setTheme: (v: string) => void;
+  activeTab: string;
+  setActiveTab: (v: string) => void;
+}) {
+  const { data: queueData } = useQuery<{ cards: any[] }>({
+    queryKey: ["/api/admin/research-queue"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/research-queue", { headers: { "x-admin-password": pw } });
+      if (!res.ok) return { cards: [] };
+      return res.json();
+    },
+    staleTime: 30000,
+    enabled: !!pw,
+  });
+  const pendingCount = (queueData?.cards ?? []).filter((c) => c.adminStatus === "pending").length;
 
   return (
     <div className="min-h-screen bg-background" data-testid="admin-panel">
@@ -1257,6 +1500,23 @@ export default function Admin() {
               <Sparkles className="h-4 w-4" />
               Enrichment
             </button>
+            <button
+              onClick={() => setActiveTab("research-queue")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "research-queue"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-research-queue"
+            >
+              <Microscope className="h-4 w-4" />
+              <span>Research Queue</span>
+              {pendingCount > 0 && (
+                <span className="ml-auto text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center" data-testid="badge-pending-count">
+                  {pendingCount}
+                </span>
+              )}
+            </button>
           </nav>
         </aside>
 
@@ -1300,6 +1560,16 @@ export default function Admin() {
                 <p className="text-sm text-muted-foreground mt-1">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
               </div>
               <Enrichment pw={pw} />
+            </>
+          )}
+
+          {activeTab === "research-queue" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Research Queue</h2>
+                <p className="text-sm text-muted-foreground mt-1">Review researcher-submitted Discovery Cards. Approved cards enter Scout as the "Lab Discoveries" source.</p>
+              </div>
+              <ResearchQueue pw={pw} />
             </>
           )}
         </main>

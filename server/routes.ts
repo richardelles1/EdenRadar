@@ -844,11 +844,42 @@ export async function registerRoutes(
 
   // ── Researcher portal routes ──────────────────────────────────────────────
 
-  // Public: published discovery cards (used by industry Scout)
+  // Public: admin-approved discovery cards (used by industry Scout)
   app.get("/api/discoveries", async (_req, res) => {
     try {
       const cards = await storage.getPublishedDiscoveryCards();
       res.json({ cards });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: research queue — all published discovery cards for review
+  app.get("/api/admin/research-queue", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const cards = await storage.getAllDiscoveryCardsForAdmin();
+      res.json({ cards });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin: approve or reject a discovery card
+  app.patch("/api/admin/research-queue/:id", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const { adminStatus, adminNote } = req.body as { adminStatus: string; adminNote?: string };
+    if (!["pending", "approved", "rejected"].includes(adminStatus)) {
+      return res.status(400).json({ error: "Invalid adminStatus" });
+    }
+    try {
+      const card = await storage.updateDiscoveryCardAdmin(id, { adminStatus, adminNote });
+      if (!card) return res.status(404).json({ error: "Card not found" });
+      res.json({ card });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

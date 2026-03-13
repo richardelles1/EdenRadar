@@ -81,9 +81,12 @@ export interface IStorage {
 
   getDiscoveryCards(researcherId: string): Promise<DiscoveryCard[]>;
   getPublishedDiscoveryCards(): Promise<DiscoveryCard[]>;
+  getAllDiscoveryCardsForAdmin(): Promise<DiscoveryCard[]>;
+  getApprovedDiscoveryCards(): Promise<DiscoveryCard[]>;
   createDiscoveryCard(data: InsertDiscoveryCard): Promise<DiscoveryCard>;
   publishDiscoveryCard(id: number, researcherId: string): Promise<DiscoveryCard | undefined>;
   updateDiscoveryCard(id: number, researcherId: string, data: Partial<InsertDiscoveryCard>): Promise<DiscoveryCard | undefined>;
+  updateDiscoveryCardAdmin(id: number, data: { adminStatus: string; adminNote?: string }): Promise<DiscoveryCard | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -539,7 +542,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPublishedDiscoveryCards(): Promise<DiscoveryCard[]> {
+    return db.select().from(discoveryCards)
+      .where(and(eq(discoveryCards.published, true), eq(discoveryCards.adminStatus, "approved")))
+      .orderBy(desc(discoveryCards.createdAt));
+  }
+
+  async getAllDiscoveryCardsForAdmin(): Promise<DiscoveryCard[]> {
     return db.select().from(discoveryCards).where(eq(discoveryCards.published, true)).orderBy(desc(discoveryCards.createdAt));
+  }
+
+  async getApprovedDiscoveryCards(): Promise<DiscoveryCard[]> {
+    return db.select().from(discoveryCards)
+      .where(and(eq(discoveryCards.published, true), eq(discoveryCards.adminStatus, "approved")))
+      .orderBy(desc(discoveryCards.createdAt));
   }
 
   async createDiscoveryCard(data: InsertDiscoveryCard): Promise<DiscoveryCard> {
@@ -559,6 +574,14 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.update(discoveryCards)
       .set(data)
       .where(and(eq(discoveryCards.id, id), eq(discoveryCards.researcherId, researcherId)))
+      .returning();
+    return row;
+  }
+
+  async updateDiscoveryCardAdmin(id: number, data: { adminStatus: string; adminNote?: string }): Promise<DiscoveryCard | undefined> {
+    const [row] = await db.update(discoveryCards)
+      .set({ adminStatus: data.adminStatus, adminNote: data.adminNote ?? null })
+      .where(eq(discoveryCards.id, id))
       .returning();
     return row;
   }

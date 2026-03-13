@@ -7,6 +7,9 @@ import { searchTechTransfer } from "./techtransfer/index";
 import { searchNihReporter } from "./nih_reporter";
 import { searchOpenAlex } from "./openalex";
 import type { RawSignal } from "../types";
+import { db } from "../../db";
+import { discoveryCards } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
 
 export { type RawPaper } from "./pubmed";
 export type { RawSignal };
@@ -19,7 +22,8 @@ export type SourceKey =
   | "patents"
   | "techtransfer"
   | "nih_reporter"
-  | "openalex";
+  | "openalex"
+  | "lab_discoveries";
 
 export interface DataSource {
   id: SourceKey;
@@ -44,6 +48,42 @@ async function pubmedToSignals(query: string, maxResults = 10): Promise<RawSigna
       metadata: { pmid: p.pmid, journal: p.journal, year: p.year },
     })
   );
+}
+
+async function searchLabDiscoveries(query: string): Promise<RawSignal[]> {
+  const cards = await db.select().from(discoveryCards)
+    .where(and(eq(discoveryCards.published, true), eq(discoveryCards.adminStatus, "approved")));
+
+  const q = query.toLowerCase();
+  const scored = cards
+    .map((c) => {
+      const text = `${c.title} ${c.summary} ${c.researchArea} ${c.technologyType} ${c.institution}`.toLowerCase();
+      const words = q.split(/\s+/).filter(Boolean);
+      const matches = words.filter((w) => text.includes(w)).length;
+      return { card: c, score: matches };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+
+  return scored.map(({ card: c }): RawSignal => ({
+    id: `lab-discovery-${c.id}`,
+    source_type: "researcher",
+    title: c.title,
+    text: c.summary,
+    authors_or_owner: c.contactEmail,
+    institution_or_sponsor: c.institution,
+    date: c.createdAt.toISOString().slice(0, 10),
+    stage_hint: c.developmentStage,
+    url: c.publicationLink ?? c.patentLink ?? undefined,
+    metadata: {
+      researchArea: c.researchArea,
+      technologyType: c.technologyType,
+      ipStatus: c.ipStatus,
+      seeking: c.seeking,
+      lab: c.lab,
+    },
+  }));
 }
 
 export const dataSources: Record<SourceKey, DataSource> = {
@@ -94,6 +134,12 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "OpenAlex",
     description: "Open scholarly database — broader journal coverage beyond PubMed",
     search: searchOpenAlex,
+  },
+  lab_discoveries: {
+    id: "lab_discoveries",
+    label: "Lab Discoveries",
+    description: "Admin-curated researcher Discovery Cards — direct submissions from academic labs seeking licensing partners",
+    search: searchLabDiscoveries,
   },
 };
 

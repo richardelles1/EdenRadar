@@ -37,7 +37,7 @@ type SavedAssetsResponse = {
 };
 
 
-const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
+const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex", "lab_discoveries"];
 
 const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
 
