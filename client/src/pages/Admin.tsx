@@ -363,24 +363,25 @@ function CollectorHealth({ pw }: { pw: string }) {
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Total assets in database for this institution">Total</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]">Last Sync</th>
+              <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
             </tr>
           </thead>
           <tbody>
             {displayRows.map((row) => (
-              <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.lastSyncError ? `${row.institution} — Error: ${row.lastSyncError}` : row.institution}>
+              <tr key={row.institution} className={`border-b border-border/50 hover:bg-muted/20 ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""}`} data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
                   <div className="flex items-center gap-1.5">
                     <span className="truncate">{row.institution}</span>
                     {row.consecutiveFailures >= 3 && (
                       <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                        {row.consecutiveFailures}x failed
+                        Broken Connection
                       </Badge>
                     )}
-                    {row.lastSyncError && (row.health === "failing" || row.health === "degraded") && (
-                      <span className="shrink-0" title={row.lastSyncError}>
-                        <AlertCircle className="h-3 w-3 text-red-400" />
-                      </span>
+                    {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
+                      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
+                        {row.consecutiveFailures}x failed
+                      </Badge>
                     )}
                   </div>
                 </td>
@@ -396,11 +397,20 @@ function CollectorHealth({ pw }: { pw: string }) {
                 <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
                   {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
                 </td>
-                <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`} title={row.lastSyncError ?? undefined}>
+                <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                   {row.health === "syncing" ? (
                     <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
                   ) : (
                     relativeTime(row.lastSyncAt)
+                  )}
+                </td>
+                <td className="text-left py-2 px-3" data-testid={`error-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
+                  {row.lastSyncError ? (
+                    <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
+                      {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
+                    </span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground/40">&mdash;</span>
                   )}
                 </td>
                 <td className="text-center py-2 px-3">
@@ -1314,13 +1324,22 @@ function DataRefresh({ pw }: { pw: string }) {
               className="h-2 bg-blue-500/10"
               data-testid="scheduler-cycle-progress"
             />
-            {sched.cycleStartedAt && (
-              <p className="text-[11px] text-muted-foreground/70">
-                Cycle started {relativeTime(sched.cycleStartedAt)}
-                {sched.lastActivityAt && <> · last activity {relativeTime(sched.lastActivityAt)}</>}
-                {sched.priorityQueue.length > 0 && <> · {sched.priorityQueue.length} priority queued</>}
-              </p>
-            )}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
+              {sched.cycleStartedAt && (
+                <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
+              )}
+              {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
+              {sched.nextInstitution && (
+                <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
+              )}
+              {sched.estimatedRemainingMs != null && (
+                <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
+              )}
+              {sched.priorityQueue.length > 0 && (
+                <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
+              )}
+              <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
+            </div>
           </div>
         )}
       </div>

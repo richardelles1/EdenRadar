@@ -13,7 +13,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
@@ -787,6 +787,16 @@ export async function registerRoutes(
     const { institution } = req.body ?? {};
     if (!institution) return res.status(400).json({ error: "institution is required" });
     const result = bumpToFront(institution);
+    res.json(result);
+  });
+
+  app.post("/api/ingest/scheduler/delay", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { delayMs } = req.body ?? {};
+    if (typeof delayMs !== "number") return res.status(400).json({ error: "delayMs (number) is required" });
+    const result = setDelay(delayMs);
+    if (!result.ok) return res.status(400).json(result);
     res.json(result);
   });
 

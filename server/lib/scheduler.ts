@@ -4,6 +4,7 @@ import { runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, isIngestionRun
 export interface SchedulerStatus {
   state: "idle" | "running" | "paused";
   currentInstitution: string | null;
+  nextInstitution: string | null;
   queuePosition: number;
   queueTotal: number;
   completedThisCycle: number;
@@ -12,6 +13,9 @@ export interface SchedulerStatus {
   lastActivityAt: string | null;
   cycleCount: number;
   priorityQueue: string[];
+  delayMs: number;
+  avgSyncMs: number | null;
+  estimatedRemainingMs: number | null;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -24,8 +28,10 @@ let lastActivityAt: Date | null = null;
 let schedulerTimer: ReturnType<typeof setTimeout> | null = null;
 let cycleCount = 0;
 let priorityQueue: string[] = [];
+let syncDurations: number[] = [];
+let syncStartedAt: number | null = null;
 
-const DELAY_BETWEEN_SYNCS_MS = 5_000;
+let delayBetweenSyncsMs = 5_000;
 
 function getInstitutionQueue(): string[] {
   return ALL_SCRAPERS.map((s) => s.institution);
@@ -33,9 +39,25 @@ function getInstitutionQueue(): string[] {
 
 export function getSchedulerStatus(): SchedulerStatus {
   const queue = getInstitutionQueue();
+  const remaining = queue.length - queueIndex + priorityQueue.length;
+  const avgMs = syncDurations.length > 0
+    ? Math.round(syncDurations.reduce((a, b) => a + b, 0) / syncDurations.length)
+    : null;
+  const estimatedRemainingMs = avgMs && remaining > 0
+    ? remaining * (avgMs + delayBetweenSyncsMs)
+    : null;
+
+  let nextInst: string | null = null;
+  if (priorityQueue.length > 0) {
+    nextInst = priorityQueue[0];
+  } else if (queueIndex < queue.length) {
+    nextInst = currentInstitution ? (queue[queueIndex + 1] ?? queue[0]) : queue[queueIndex];
+  }
+
   return {
     state: schedulerState,
     currentInstitution,
+    nextInstitution: nextInst,
     queuePosition: queueIndex,
     queueTotal: queue.length,
     completedThisCycle,
@@ -44,7 +66,18 @@ export function getSchedulerStatus(): SchedulerStatus {
     lastActivityAt: lastActivityAt?.toISOString() ?? null,
     cycleCount,
     priorityQueue: [...priorityQueue],
+    delayMs: delayBetweenSyncsMs,
+    avgSyncMs: avgMs,
+    estimatedRemainingMs,
   };
+}
+
+export function setDelay(ms: number): { ok: boolean; message: string } {
+  if (ms < 1000 || ms > 300_000) {
+    return { ok: false, message: "Delay must be between 1000ms and 300000ms" };
+  }
+  delayBetweenSyncsMs = ms;
+  return { ok: true, message: `Delay set to ${ms}ms` };
 }
 
 export function startScheduler(): { ok: boolean; message: string } {
@@ -105,12 +138,18 @@ function scheduleNext(): void {
   if (priorityQueue.length > 0) {
     const institution = priorityQueue.shift()!;
     currentInstitution = institution;
+    syncStartedAt = Date.now();
     console.log(`[scheduler] Priority sync: ${institution}`);
     runOne(institution).finally(() => {
+      if (syncStartedAt) {
+        syncDurations.push(Date.now() - syncStartedAt);
+        if (syncDurations.length > 20) syncDurations.shift();
+        syncStartedAt = null;
+      }
       currentInstitution = null;
       lastActivityAt = new Date();
       if (schedulerState === "running") {
-        schedulerTimer = setTimeout(() => scheduleNext(), DELAY_BETWEEN_SYNCS_MS);
+        schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
       }
     });
     return;
@@ -128,14 +167,20 @@ function scheduleNext(): void {
 
   const institution = queue[queueIndex];
   currentInstitution = institution;
+  syncStartedAt = Date.now();
 
   runOne(institution).finally(() => {
+    if (syncStartedAt) {
+      syncDurations.push(Date.now() - syncStartedAt);
+      if (syncDurations.length > 20) syncDurations.shift();
+      syncStartedAt = null;
+    }
     queueIndex++;
     currentInstitution = null;
     lastActivityAt = new Date();
 
     if (schedulerState === "running") {
-      schedulerTimer = setTimeout(() => scheduleNext(), DELAY_BETWEEN_SYNCS_MS);
+      schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
     }
   });
 }
