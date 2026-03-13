@@ -52,9 +52,15 @@ export default function ResearchDataSources() {
   const { data, isLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", activeQuery, "all-sources"],
     queryFn: () =>
-      fetch(
-        `/api/search?q=${encodeURIComponent(activeQuery)}&sources=pubmed,biorxiv,medrxiv,clinicaltrials,patents,nih_reporter,openalex&maxPerSource=6`
-      ).then((r) => r.json()),
+      fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query: activeQuery,
+          sources: ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "nih_reporter", "openalex"],
+          maxPerSource: 6,
+        }),
+      }).then((r) => r.json()),
     enabled: !!activeQuery,
   });
 
