@@ -1,14 +1,13 @@
-import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, BarChart3, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, Building2, AlertCircle, XCircle, Microscope } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { IngestionRun } from "@shared/schema";
+import { queryClient } from "@/lib/queryClient";
 
 const ADMIN_KEY = "eden-admin-pw";
 
@@ -91,6 +90,7 @@ interface CollectorHealthRow {
 interface SchedulerStatus {
   state: "idle" | "running" | "paused";
   currentInstitution: string | null;
+  nextInstitution: string | null;
   queuePosition: number;
   queueTotal: number;
   completedThisCycle: number;
@@ -99,6 +99,9 @@ interface SchedulerStatus {
   lastActivityAt: string | null;
   cycleCount: number;
   priorityQueue: string[];
+  delayMs: number;
+  avgSyncMs: number | null;
+  estimatedRemainingMs: number | null;
 }
 
 interface CollectorHealthData {
@@ -1106,34 +1109,8 @@ function Enrichment({ pw }: { pw: string }) {
   );
 }
 
-type ScrapingProgress = { done: number; total: number; found: number; active?: string[] };
-type IngestStatus = (IngestionRun & { status: string; enrichingCount?: number; scrapingProgress?: ScrapingProgress; upsertProgress?: { done: number; total: number }; syncRunning?: boolean; syncRunningFor?: string | null }) | { status: "never_run"; totalFound: 0; newCount: 0; ranAt: null };
-
-function formatRelativeTime(dt: Date | string | null): string {
-  if (!dt) return "unknown";
-  const d = new Date(dt);
-  const diff = Date.now() - d.getTime();
-  const hours = Math.floor(diff / 3600000);
-  if (hours < 1) return "just now";
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-}
-
-function DataRefresh({ pw }: { pw: string }) {
+function SchedulerPanel({ pw }: { pw: string }) {
   const { toast } = useToast();
-
-  const { data: statusData } = useQuery<IngestStatus>({
-    queryKey: ["/api/ingest/status"],
-    refetchInterval: (query) => {
-      const d = query.state.data as IngestStatus | undefined;
-      if (d?.status === "running") return 3000;
-      if ((d as any)?.enrichingCount > 0) return 5000;
-      return 30000;
-    },
-    staleTime: 0,
-  });
 
   const { data: schedulerData, refetch: refetchScheduler } = useQuery<SchedulerStatus>({
     queryKey: ["/api/ingest/scheduler/status", pw],
@@ -1148,28 +1125,6 @@ function DataRefresh({ pw }: { pw: string }) {
       const d = query.state.data as SchedulerStatus | undefined;
       if (d?.state === "running") return 5_000;
       return 30_000;
-    },
-  });
-
-  const { data: historyData, refetch: refetchHistory } = useQuery<IngestionRun[]>({
-    queryKey: ["/api/ingest/history"],
-    queryFn: async () => {
-      const res = await fetch("/api/ingest/history", { headers: { "x-admin-password": pw } });
-      return res.json();
-    },
-    staleTime: 30000,
-  });
-
-  const scanMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/ingest/run", {});
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/ingest/status"] });
-    },
-    onError: (err: any) => {
-      toast({ title: "Scan failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1224,273 +1179,152 @@ function DataRefresh({ pw }: { pw: string }) {
     },
   });
 
-  const s = statusData as any;
-  const syncIsRunning = s?.syncRunning ?? false;
-  const syncRunningFor = s?.syncRunningFor ?? null;
-  const isRunning = statusData?.status === "running" || scanMutation.isPending;
-  const enrichingCount = s?.enrichingCount ?? 0;
-  const scrapingProgress: ScrapingProgress = s?.scrapingProgress ?? { done: 0, total: 0, found: 0 };
-  const upsertProgress = s?.upsertProgress ?? { done: 0, total: 0 };
-  const isSaving = scrapingProgress.total > 0 && scrapingProgress.done >= scrapingProgress.total && upsertProgress.total > 0;
-  const progressPct = scrapingProgress.total > 0 ? Math.round((scrapingProgress.done / scrapingProgress.total) * 100) : 0;
-  const savePct = upsertProgress.total > 0 ? Math.round((upsertProgress.done / upsertProgress.total) * 100) : 0;
-
-  const handleScan = () => {
-    scanMutation.mutate();
-  };
-
-  const prevRunningRef = useRef(false);
-  useEffect(() => {
-    if (prevRunningRef.current && !isRunning) {
-      refetchHistory();
-    }
-    prevRunningRef.current = isRunning;
-  }, [isRunning, refetchHistory]);
-
   const sched = schedulerData;
   const schedRunning = sched?.state === "running";
   const schedPaused = sched?.state === "paused";
 
   return (
-    <div className="space-y-6">
-      <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="scheduler-panel">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Activity className="w-4 h-4 text-primary" />
-              Sequential Sync Scheduler
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Syncs institutions one-by-one to avoid timeouts. Recommended over bulk scan.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {schedRunning ? (
-              <Button
-                size="sm"
-                variant="outline"
-                className="border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
-                onClick={() => schedulerPauseMutation.mutate()}
-                disabled={schedulerPauseMutation.isPending}
-                data-testid="button-pause-scheduler"
-              >
-                <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
-                Pause
-              </Button>
-            ) : (
-              <Button
-                size="sm"
-                className="bg-primary text-primary-foreground hover:bg-primary/90"
-                onClick={() => schedulerStartMutation.mutate()}
-                disabled={schedulerStartMutation.isPending || isRunning}
-                data-testid="button-start-scheduler"
-              >
-                {schedulerStartMutation.isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-                ) : (
-                  <Zap className="w-3.5 h-3.5 mr-1.5" />
-                )}
-                {schedPaused ? "Resume" : "Start Cycle"}
-              </Button>
-            )}
-          </div>
+    <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="scheduler-panel">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Activity className="w-4 h-4 text-primary" />
+            Sequential Sync Scheduler
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Syncs all institutions one-by-one. Press Start Cycle to begin.
+          </p>
         </div>
-
-        {(schedRunning || schedPaused) && sched && (
-          <div className="space-y-2" data-testid="scheduler-status">
-            <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center gap-2">
-                {schedRunning && sched.currentInstitution ? (
-                  <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    {sched.currentInstitution}
-                  </Badge>
-                ) : schedRunning ? (
-                  <span className="text-blue-600 font-medium">Waiting for next...</span>
-                ) : (
-                  <span className="text-amber-600 font-medium">Paused</span>
-                )}
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
-                <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
-                {sched.failedThisCycle > 0 && (
-                  <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
-                )}
-              </div>
-            </div>
-            <Progress
-              value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
-              className="h-2 bg-blue-500/10"
-              data-testid="scheduler-cycle-progress"
-            />
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
-              {sched.cycleStartedAt && (
-                <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
+        <div className="flex items-center gap-2">
+          {schedRunning ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+              onClick={() => schedulerPauseMutation.mutate()}
+              disabled={schedulerPauseMutation.isPending}
+              data-testid="button-pause-scheduler"
+            >
+              <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
+              Pause
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              onClick={() => schedulerStartMutation.mutate()}
+              disabled={schedulerStartMutation.isPending}
+              data-testid="button-start-scheduler"
+            >
+              {schedulerStartMutation.isPending ? (
+                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+              ) : (
+                <Zap className="w-3.5 h-3.5 mr-1.5" />
               )}
-              {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
-              {sched.nextInstitution && (
-                <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
-              )}
-              {sched.estimatedRemainingMs != null && (
-                <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
-              )}
-              {sched.priorityQueue.length > 0 && (
-                <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
-              )}
-              <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="data-refresh-panel">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-              <Building2 className="w-4 h-4 text-muted-foreground" />
-              Legacy Bulk Scan
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">
-              Runs all scrapers concurrently. May cause timeouts with many institutions.
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            className="shrink-0"
-            onClick={handleScan}
-            disabled={isRunning || syncIsRunning || schedRunning}
-            data-testid="button-run-full-scan"
-            title={syncIsRunning ? `Institution sync running for ${syncRunningFor}` : schedRunning ? "Scheduler is running" : undefined}
-          >
-            {isRunning && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
-            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-            {isRunning ? "Running..." : syncIsRunning ? "Sync Active" : "Run Bulk Scan"}
-          </Button>
-        </div>
-
-        {isRunning && (
-          <div className="space-y-3" data-testid="scan-progress">
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Loader2 className="w-4 h-4 text-primary animate-spin shrink-0" />
-                <span className="text-sm text-primary font-medium">
-                  {isSaving ? "Saving to database…" : "Scanning TTO sources…"}
-                </span>
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                {isSaving ? (
-                  <span data-testid="progress-saving">{upsertProgress.done.toLocaleString()} / {upsertProgress.total.toLocaleString()} listings saved</span>
-                ) : scrapingProgress.total > 0 ? (
-                  <>
-                    <Building2 className="w-3.5 h-3.5" />
-                    <span data-testid="progress-institutions">{scrapingProgress.done} / {scrapingProgress.total} institutions</span>
-                    <span className="text-muted-foreground/40">·</span>
-                    <span data-testid="progress-listings">{scrapingProgress.found.toLocaleString()} found</span>
-                  </>
-                ) : (
-                  <span>Starting up…</span>
-                )}
-              </div>
-            </div>
-            <Progress value={isSaving ? savePct : progressPct} className="h-2 bg-primary/10" data-testid="progress-bar" />
-            {!isSaving && (scrapingProgress.active ?? []).length > 0 && (
-              <p className="text-[11px] text-muted-foreground/70 truncate" data-testid="progress-active">
-                <span className="font-medium text-muted-foreground">Now:</span>{" "}
-                {(scrapingProgress.active ?? []).join(" · ")}
-              </p>
-            )}
-          </div>
-        )}
-
-        {statusData && statusData.status === "completed" && !isRunning && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-            <span>Last bulk scan: {formatRelativeTime((statusData as any).ranAt)}</span>
-            <span className="text-muted-foreground/40">·</span>
-            <span>{(statusData as any).totalFound?.toLocaleString()} found</span>
-            {enrichingCount > 0 && (
-              <Badge variant="outline" className="ml-1 gap-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Enriching {enrichingCount.toLocaleString()}…
-              </Badge>
-            )}
-          </div>
-        )}
-
-        {statusData && statusData.status === "failed" && !isRunning && (
-          <div className="flex items-center gap-2 text-xs text-red-500">
-            <XCircle className="w-3.5 h-3.5" />
-            <span>Last bulk scan failed</span>
-            {(statusData as any).errorMessage && (
-              <span className="text-muted-foreground">— {(statusData as any).errorMessage}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div data-testid="scan-history">
-        <h3 className="text-sm font-semibold text-foreground mb-3">Recent Bulk Scans</h3>
-        <div className="border border-border rounded-xl bg-card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/30">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Date / Time</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">Total Found</th>
-                <th className="text-right px-4 py-2.5 text-xs font-medium text-muted-foreground">New Assets</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!historyData && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground text-xs">
-                    <Loader2 className="w-4 h-4 animate-spin mx-auto mb-1" />
-                    Loading…
-                  </td>
-                </tr>
-              )}
-              {historyData && historyData.length === 0 && (
-                <tr>
-                  <td colSpan={4} className="px-4 py-6 text-center text-muted-foreground text-xs">No scans recorded yet</td>
-                </tr>
-              )}
-              {historyData?.map((run) => (
-                <tr key={run.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors" data-testid={`scan-run-${run.id}`}>
-                  <td className="px-4 py-3 text-xs text-muted-foreground tabular-nums">
-                    {run.ranAt ? new Date(run.ranAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    {run.status === "completed" && (
-                      <Badge variant="outline" className="text-[10px] text-primary border-primary/30 bg-primary/5">Completed</Badge>
-                    )}
-                    {run.status === "running" && (
-                      <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30 bg-amber-500/5 gap-1">
-                        <Loader2 className="w-2.5 h-2.5 animate-spin" />Running
-                      </Badge>
-                    )}
-                    {run.status === "failed" && (
-                      <Badge variant="outline" className="text-[10px] text-destructive border-destructive/30 bg-destructive/5">Failed</Badge>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs tabular-nums font-medium text-foreground">
-                    {run.totalFound?.toLocaleString() ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs tabular-nums">
-                    {run.newCount > 0 ? (
-                      <span className="text-primary font-semibold">+{run.newCount.toLocaleString()}</span>
-                    ) : (
-                      <span className="text-muted-foreground">{run.newCount?.toLocaleString() ?? "—"}</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+              {schedPaused ? "Resume" : "Start Cycle"}
+            </Button>
+          )}
         </div>
       </div>
+
+      {(schedRunning || schedPaused) && sched && (
+        <div className="space-y-2" data-testid="scheduler-status">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              {schedRunning && sched.currentInstitution ? (
+                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {sched.currentInstitution}
+                </Badge>
+              ) : schedRunning ? (
+                <span className="text-blue-600 font-medium">Waiting for next...</span>
+              ) : (
+                <span className="text-amber-600 font-medium">Paused</span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
+              <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
+              {sched.failedThisCycle > 0 && (
+                <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
+              )}
+            </div>
+          </div>
+          <Progress
+            value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
+            className="h-2 bg-blue-500/10"
+            data-testid="scheduler-cycle-progress"
+          />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
+            {sched.cycleStartedAt && (
+              <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
+            )}
+            {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
+            {sched.nextInstitution && (
+              <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
+            )}
+            {sched.estimatedRemainingMs != null && (
+              <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
+            )}
+            {sched.priorityQueue.length > 0 && (
+              <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
+            )}
+            <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function DataHealth({ pw }: { pw: string }) {
+  const [subView, setSubView] = useState<"collector" | "sync">("collector");
+
+  return (
+    <>
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Health</h2>
+        <p className="text-sm text-muted-foreground mt-1">Monitor collector status, run institution syncs, and manage the sync scheduler</p>
+      </div>
+
+      <div className="flex items-center gap-1 mb-6 p-1 bg-muted/50 rounded-lg w-fit" data-testid="data-health-toggle">
+        <button
+          onClick={() => setSubView("collector")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            subView === "collector"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="toggle-collector-health"
+        >
+          Collector Health
+        </button>
+        <button
+          onClick={() => setSubView("sync")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            subView === "sync"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="toggle-institution-sync"
+        >
+          Institution Sync
+        </button>
+      </div>
+
+      {subView === "collector" && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <CollectorHealth pw={pw} />
+        </div>
+      )}
+
+      {subView === "sync" && (
+        <div className="space-y-6">
+          <SchedulerPanel pw={pw} />
+          <InstitutionSync pw={pw} />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1716,7 +1550,7 @@ function ResearchQueue({ pw }: { pw: string }) {
 
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
-  const [activeTab, setActiveTab] = useState("scan-tracking");
+  const [activeTab, setActiveTab] = useState("data-health");
   const { theme, setTheme } = useTheme();
 
   useEffect(() => {
@@ -1784,40 +1618,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
         <aside className="w-56 border-r border-border min-h-[calc(100vh-57px)] p-4 shrink-0">
           <nav className="space-y-1">
             <button
-              onClick={() => setActiveTab("scan-tracking")}
+              onClick={() => setActiveTab("data-health")}
               className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "scan-tracking"
+                activeTab === "data-health"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
-              data-testid="nav-scan-tracking"
+              data-testid="nav-data-health"
             >
               <Activity className="h-4 w-4" />
-              Collector Health
-            </button>
-            <button
-              onClick={() => setActiveTab("institution-sync")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "institution-sync"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-institution-sync"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Institution Sync
-            </button>
-            <button
-              onClick={() => setActiveTab("data-refresh")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "data-refresh"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-data-refresh"
-            >
-              <Activity className="h-4 w-4" />
-              Data Refresh
+              Data Health
             </button>
             <button
               onClick={() => setActiveTab("enrichment")}
@@ -1852,36 +1662,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
         </aside>
 
         <main className="flex-1 p-6 overflow-hidden">
-          {activeTab === "scan-tracking" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Collector Health</h2>
-                <p className="text-sm text-muted-foreground mt-1">Per-institution collector status, indexed assets, and scan history</p>
-              </div>
-              <div className="border border-border rounded-xl bg-card overflow-hidden">
-                <CollectorHealth pw={pw} />
-              </div>
-            </>
-          )}
-
-          {activeTab === "institution-sync" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Institution Sync</h2>
-                <p className="text-sm text-muted-foreground mt-1">Test scraper connections and refresh individual institution sources</p>
-              </div>
-              <InstitutionSync pw={pw} />
-            </>
-          )}
-
-          {activeTab === "data-refresh" && (
-            <>
-              <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Refresh</h2>
-                <p className="text-sm text-muted-foreground mt-1">Trigger a full scan across all TTO sources and track recent scan history</p>
-              </div>
-              <DataRefresh pw={pw} />
-            </>
+          {activeTab === "data-health" && (
+            <DataHealth pw={pw} />
           )}
 
           {activeTab === "enrichment" && (
