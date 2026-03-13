@@ -135,6 +135,7 @@ export const syncSessions = pgTable("sync_sessions", {
   relevantCount: integer("relevant_count").notNull().default(0),
   pushedCount: integer("pushed_count").notNull().default(0),
   currentIndexed: integer("current_indexed").notNull().default(0),
+  errorMessage: text("error_message"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   completedAt: timestamp("completed_at"),
   lastRefreshedAt: timestamp("last_refreshed_at"),

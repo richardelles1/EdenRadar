@@ -12,7 +12,8 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock } from "./lib/ingestion";
+import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
+import { getSchedulerStatus, startScheduler, pauseScheduler } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
@@ -654,65 +655,72 @@ export async function registerRoutes(
 
       const allInstitutionNames = ALL_SCRAPERS.map((s) => s.institution);
 
-      const [healthData, runHistory] = await Promise.all([
-        storage.getCollectorHealthData(),
-        storage.getIngestionRunHistory(6),
-      ]);
-
-      const { institutions: instRows, lastTwoRunCounts, lastTwoRuns } = healthData;
+      const healthData = await storage.getCollectorHealthData();
+      const { institutions: instRows, syncSessions: sessions } = healthData;
 
       const instMap = new Map(instRows.map((r) => [r.institution, r]));
-
-      const lastRunId = lastTwoRuns[0]?.id ?? -1;
-      const prevRunId = lastTwoRuns[1]?.id ?? -1;
-      const scanMap: Record<string, { last: number; prev: number }> = {};
-      for (const sc of lastTwoRunCounts) {
-        if (!scanMap[sc.institution]) scanMap[sc.institution] = { last: 0, prev: 0 };
-        if (sc.runId === lastRunId) scanMap[sc.institution].last = sc.count;
-        if (sc.runId === prevRunId) scanMap[sc.institution].prev = sc.count;
+      const sessionMap = new Map<string, typeof sessions[0]>();
+      for (const s of sessions) {
+        if (!sessionMap.has(s.institution)) {
+          sessionMap.set(s.institution, s);
+        }
       }
+
+      const STALE_THRESHOLD_MS = 10 * 60 * 1000;
+      const now = Date.now();
 
       const rows = allInstitutionNames.map((name) => {
         const dbRow = instMap.get(name);
-        const indexed = dbRow?.indexed ?? 0;
-        const lastSeenAt = dbRow?.lastSeenAt ?? null;
-        const netNew = dbRow?.netNew ?? 0;
-        const sc = scanMap[name] ?? { last: 0, prev: 0 };
+        const totalInDb = dbRow?.totalInDb ?? 0;
+        const biotechRelevant = dbRow?.biotechRelevant ?? 0;
+        const session = sessionMap.get(name);
 
-        let health: "ok" | "degraded" | "failing";
-        if (lastTwoRuns.length === 0) {
+        let health: "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
+        if (!session) {
+          health = "never";
+        } else if (session.status === "running") {
+          const heartbeat = session.lastRefreshedAt ?? session.createdAt;
+          const elapsed = now - new Date(heartbeat).getTime();
+          health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
+        } else if (session.status === "failed") {
           health = "failing";
-        } else if (sc.last > 0) {
+        } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           health = "ok";
-        } else if (sc.prev > 0) {
-          health = "degraded";
         } else {
-          health = "failing";
+          health = "degraded";
         }
 
-        return { institution: name, indexed, lastSeenAt, netNew, lastRunCount: sc.last, prevRunCount: sc.prev, health };
+        return {
+          institution: name,
+          totalInDb,
+          biotechRelevant,
+          lastSyncAt: session?.completedAt ?? session?.createdAt ?? null,
+          lastSyncStatus: session?.status ?? null,
+          lastSyncError: session?.errorMessage ?? null,
+          rawCount: session?.rawCount ?? 0,
+          newCount: session?.newCount ?? 0,
+          relevantCount: session?.relevantCount ?? 0,
+          phase: session?.phase ?? null,
+          sessionId: session?.sessionId ?? null,
+          health,
+        };
       });
 
-      const totalIndexed = rows.reduce((s, r) => s + r.indexed, 0);
-      const totalNetNew = rows.reduce((s, r) => s + r.netNew, 0);
-      const issueCount = rows.filter((r) => r.health !== "ok").length;
-      const lastScanAt = runHistory[0]?.ranAt ?? null;
+      const totalInDb = rows.reduce((s, r) => s + r.totalInDb, 0);
+      const totalBiotechRelevant = rows.reduce((s, r) => s + r.biotechRelevant, 0);
+      const issueCount = rows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never").length;
+      const syncingCount = rows.filter((r) => r.health === "syncing").length;
+
+      const scheduler = getSchedulerStatus();
 
       res.json({
         rows,
-        totalIndexed,
+        totalInDb,
+        totalBiotechRelevant,
         totalInstitutions: allInstitutionNames.length,
-        totalNetNew,
         issueCount,
-        lastScanAt,
-        runs: runHistory.map((r) => ({
-          id: r.id,
-          ranAt: r.ranAt,
-          totalFound: r.totalFound,
-          newCount: r.newCount,
-          relevantNewCount: r.relevantNewCount ?? 0,
-          status: r.status,
-        })),
+        syncingCount,
+        scheduler,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch collector health" });
@@ -739,6 +747,54 @@ export async function registerRoutes(
       syncRunningFor: getSyncRunningFor(),
       ingestionRunning: isIngestionRunning(),
     });
+  });
+
+  app.get("/api/ingest/scheduler/status", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    res.json(getSchedulerStatus());
+  });
+
+  app.post("/api/ingest/scheduler/start", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const result = startScheduler();
+    res.json(result);
+  });
+
+  app.post("/api/ingest/scheduler/pause", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const result = pauseScheduler();
+    res.json(result);
+  });
+
+  app.post("/api/ingest/sync/:institution/cancel", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const institution = decodeURIComponent(req.params.institution);
+      const sessions = await storage.getLatestSyncSessions();
+      const session = sessions.find((s) => s.institution === institution && s.status === "running");
+
+      if (!session) return res.status(404).json({ error: "No running session found for this institution" });
+
+      await storage.updateSyncSession(session.sessionId, {
+        status: "failed",
+        phase: "done",
+        completedAt: new Date(),
+        errorMessage: "Cancelled by admin (stale session)",
+      });
+
+      if (isSyncRunning() && getSyncRunningFor() === institution) {
+        releaseSyncLock();
+      }
+
+      res.json({ ok: true, message: `Session for ${institution} cancelled` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Cancel failed" });
+    }
   });
 
   app.post("/api/ingest/sync/:institution", async (req, res) => {

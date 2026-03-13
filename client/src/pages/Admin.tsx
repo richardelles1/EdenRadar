@@ -70,40 +70,59 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-interface CollectorHealthData {
-  rows: Array<{
-    institution: string;
-    indexed: number;
-    lastSeenAt: string | null;
-    netNew: number;
-    lastRunCount: number;
-    prevRunCount: number;
-    health: "ok" | "degraded" | "failing";
-  }>;
-  totalIndexed: number;
-  totalInstitutions: number;
-  totalNetNew: number;
-  issueCount: number;
-  lastScanAt: string | null;
-  runs: Array<{
-    id: number;
-    ranAt: string;
-    totalFound: number;
-    newCount: number;
-    relevantNewCount: number;
-    status: string;
-  }>;
+type HealthStatus = "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
+
+interface CollectorHealthRow {
+  institution: string;
+  totalInDb: number;
+  biotechRelevant: number;
+  lastSyncAt: string | null;
+  lastSyncStatus: string | null;
+  lastSyncError: string | null;
+  rawCount: number;
+  newCount: number;
+  relevantCount: number;
+  phase: string | null;
+  sessionId: string | null;
+  health: HealthStatus;
 }
 
-function HealthDot({ health }: { health: "ok" | "degraded" | "failing" }) {
+interface SchedulerStatus {
+  state: "idle" | "running" | "paused";
+  currentInstitution: string | null;
+  queuePosition: number;
+  queueTotal: number;
+  completedThisCycle: number;
+  failedThisCycle: number;
+  cycleStartedAt: string | null;
+  lastActivityAt: string | null;
+}
+
+interface CollectorHealthData {
+  rows: CollectorHealthRow[];
+  totalInDb: number;
+  totalBiotechRelevant: number;
+  totalInstitutions: number;
+  issueCount: number;
+  syncingCount: number;
+  scheduler: SchedulerStatus;
+}
+
+function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid="health-ok" />;
+  if (health === "syncing") return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" data-testid="health-syncing" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
+  if (health === "stale") return <AlertCircle className="h-4 w-4 text-orange-500" data-testid="health-stale" />;
+  if (health === "never") return <Database className="h-4 w-4 text-muted-foreground/40" data-testid="health-never" />;
   return <XCircle className="h-4 w-4 text-red-500" data-testid="health-failing" />;
 }
 
-function HealthLabel({ health }: { health: "ok" | "degraded" | "failing" }) {
+function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "ok") return <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Working</span>;
+  if (health === "syncing") return <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">Syncing</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
+  if (health === "stale") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Stale</span>;
+  if (health === "never") return <span className="text-muted-foreground/50 text-xs font-medium">Never synced</span>;
   return <span className="text-red-500 dark:text-red-400 text-xs font-medium">Failing</span>;
 }
 
@@ -133,7 +152,12 @@ function CollectorHealth({ pw }: { pw: string }) {
       if (!res.ok) throw new Error("Failed to load collector health");
       return res.json();
     },
-    refetchInterval: 30_000,
+    refetchInterval: (query) => {
+      const d = query.state.data as CollectorHealthData | undefined;
+      if (d?.syncingCount && d.syncingCount > 0) return 3_000;
+      if (d?.scheduler?.state === "running") return 5_000;
+      return 30_000;
+    },
   });
 
   const syncMutation = useMutation({
@@ -150,9 +174,31 @@ function CollectorHealth({ pw }: { pw: string }) {
     },
     onSuccess: (_d, institution) => {
       toast({ title: "Sync started", description: `Syncing ${institution}...` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
     onError: (err: Error) => {
       toast({ title: "Sync failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Cancel failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_d, institution) => {
+      toast({ title: "Session cancelled", description: `Stale session for ${institution} cleared` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cancel failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -172,24 +218,25 @@ function CollectorHealth({ pw }: { pw: string }) {
     );
   }
 
+  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, degraded: 2, syncing: 3, never: 4, ok: 5 };
   const sortedRows = [...data.rows].sort((a, b) => {
-    const healthOrder = { failing: 0, degraded: 1, ok: 2 };
     const hDiff = healthOrder[a.health] - healthOrder[b.health];
     if (hDiff !== 0) return hDiff;
-    return b.indexed - a.indexed;
+    return b.biotechRelevant - a.biotechRelevant;
   });
 
-  const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok") : sortedRows;
+  const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never") : sortedRows;
 
   function exportCsv() {
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
-    const headers = ["Institution", "Indexed", "Health", "Last Seen", "Net New"];
+    const headers = ["Institution", "Total In DB", "Biotech Relevant", "Health", "Last Sync", "Error"];
     const csvRows = sortedRows.map((row) => [
       escape(row.institution),
-      String(row.indexed),
+      String(row.totalInDb),
+      String(row.biotechRelevant),
       row.health,
-      row.lastSeenAt ? new Date(row.lastSeenAt).toISOString().slice(0, 10) : "never",
-      String(row.netNew),
+      row.lastSyncAt ? new Date(row.lastSyncAt).toISOString().slice(0, 10) : "never",
+      escape(row.lastSyncError ?? ""),
     ]);
     const csv = [headers.join(","), ...csvRows.map((r) => r.join(","))].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -201,51 +248,63 @@ function CollectorHealth({ pw }: { pw: string }) {
     URL.revokeObjectURL(url);
   }
 
+  const sched = data.scheduler;
+
   return (
     <div data-testid="collector-health">
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
         <div className="text-center">
-          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-indexed">{data.totalIndexed.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground">Total Indexed</div>
+          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-in-db">{data.totalInDb.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">Total in DB</div>
+        </div>
+        <div className="text-center">
+          <div className="text-2xl font-bold text-primary tabular-nums" data-testid="stat-biotech-relevant">{data.totalBiotechRelevant.toLocaleString()}</div>
+          <div className="text-xs text-muted-foreground">Biotech Relevant</div>
         </div>
         <div className="text-center">
           <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-institutions">{data.totalInstitutions}</div>
           <div className="text-xs text-muted-foreground">Institutions</div>
         </div>
         <div className="text-center">
-          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-net-new">{data.totalNetNew}</div>
-          <div className="text-xs text-muted-foreground">Net New (Last Run)</div>
-        </div>
-        <div className="text-center">
           <div className={`text-2xl font-bold tabular-nums ${data.issueCount > 0 ? "text-amber-500" : "text-emerald-500"}`} data-testid="stat-issues">{data.issueCount}</div>
           <div className="text-xs text-muted-foreground">Need Attention</div>
         </div>
         <div className="text-center">
-          <div className="text-sm font-medium text-foreground" data-testid="stat-last-scan">{data.lastScanAt ? formatDate(data.lastScanAt) : "Never"}</div>
-          <div className="text-xs text-muted-foreground">Last Scan</div>
+          <div className={`text-2xl font-bold tabular-nums ${data.syncingCount > 0 ? "text-blue-500" : "text-muted-foreground/40"}`} data-testid="stat-syncing">{data.syncingCount}</div>
+          <div className="text-xs text-muted-foreground">Currently Syncing</div>
         </div>
       </div>
 
-      {data.runs.length > 0 && (
-        <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="run-timeline">
-          <div className="text-xs font-semibold text-muted-foreground mb-2">Recent Runs</div>
-          <div className="flex gap-2 overflow-x-auto">
-            {data.runs.map((run) => (
-              <div key={run.id} className={`shrink-0 rounded-lg border px-3 py-2 text-xs min-w-[120px] ${run.status === "completed" ? "border-border bg-card" : "border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950"}`} data-testid={`timeline-run-${run.id}`}>
-                <div className="font-medium text-foreground">Run #{run.id}</div>
-                <div className="text-muted-foreground">{formatDate(run.ranAt)}</div>
-                <div className="mt-1 flex items-center gap-1.5">
-                  <span className="tabular-nums">{run.totalFound.toLocaleString()} found</span>
-                  {run.status === "completed" ? <CheckCircle2 className="h-3 w-3 text-emerald-500" /> : <XCircle className="h-3 w-3 text-red-500" />}
-                </div>
-                {run.status === "completed" && (
-                  <div className={`font-medium mt-0.5 ${run.relevantNewCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground"}`}>
-                    {run.relevantNewCount > 0 ? `+${run.relevantNewCount} new` : "0 new"}
-                  </div>
-                )}
-              </div>
-            ))}
+      {sched.state !== "idle" && (
+        <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="scheduler-strip">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm">
+              {sched.state === "running" ? (
+                <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+              )}
+              <span className="font-medium text-foreground">
+                Scheduler {sched.state === "running" ? "Running" : "Paused"}
+              </span>
+              <span className="text-muted-foreground">
+                {sched.queuePosition}/{sched.queueTotal} institutions
+              </span>
+              {sched.currentInstitution && (
+                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  {sched.currentInstitution}
+                </Badge>
+              )}
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
+              {sched.failedThisCycle > 0 && (
+                <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
+              )}
+            </div>
           </div>
+          <Progress value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0} className="h-1.5 mt-2 bg-blue-500/10" data-testid="scheduler-progress" />
         </div>
       )}
 
@@ -275,10 +334,10 @@ function CollectorHealth({ pw }: { pw: string }) {
           <thead>
             <tr className="border-b border-border">
               <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[100px]">Collector Health</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="Relevant assets in database">DB Indexed</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="When any asset was last seen by a scraper">Last Seen</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]" title="New relevant assets from last scan run">Net New</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[90px]">Health</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Total assets in database for this institution">Total</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
+              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]">Last Sync</th>
               <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
             </tr>
           </thead>
@@ -286,7 +345,14 @@ function CollectorHealth({ pw }: { pw: string }) {
             {displayRows.map((row) => (
               <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
                 <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
-                  {row.institution}
+                  <div className="flex items-center gap-1.5">
+                    <span className="truncate">{row.institution}</span>
+                    {row.lastSyncError && row.health === "failing" && (
+                      <span className="shrink-0" title={row.lastSyncError}>
+                        <AlertCircle className="h-3 w-3 text-red-400" />
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="text-center py-2 px-3">
                   <div className="flex items-center justify-center gap-1.5">
@@ -294,27 +360,48 @@ function CollectorHealth({ pw }: { pw: string }) {
                     <HealthLabel health={row.health} />
                   </div>
                 </td>
-                <td className={`text-center py-2 px-3 tabular-nums ${row.indexed === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
-                  {row.indexed > 0 ? row.indexed.toLocaleString() : "\u2014"}
+                <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
+                  {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
                 </td>
-                <td className={`text-center py-2 px-3 text-xs ${!row.lastSeenAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
-                  {relativeTime(row.lastSeenAt)}
+                <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
+                  {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
                 </td>
-                <td className={`text-center py-2 px-3 tabular-nums ${row.netNew === 0 ? "text-muted-foreground/40" : "text-emerald-600 dark:text-emerald-400 font-medium"}`}>
-                  {row.netNew > 0 ? `+${row.netNew}` : "\u2014"}
+                <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`} title={row.lastSyncError ?? undefined}>
+                  {row.health === "syncing" ? (
+                    <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
+                  ) : (
+                    relativeTime(row.lastSyncAt)
+                  )}
                 </td>
                 <td className="text-center py-2 px-3">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0"
-                    onClick={() => syncMutation.mutate(row.institution)}
-                    disabled={syncMutation.isPending}
-                    title={`Sync ${row.institution}`}
-                    data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                  >
-                    <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                  </Button>
+                  {row.health === "stale" ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
+                      onClick={() => cancelMutation.mutate(row.institution)}
+                      disabled={cancelMutation.isPending}
+                      title={`Cancel stale session for ${row.institution}`}
+                      data-testid={`button-cancel-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <XCircle className="h-3.5 w-3.5 mr-1" />
+                      Cancel
+                    </Button>
+                  ) : row.health === "syncing" ? (
+                    <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin mx-auto" />
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 w-7 p-0"
+                      onClick={() => syncMutation.mutate(row.institution)}
+                      disabled={syncMutation.isPending}
+                      title={`Sync ${row.institution}`}
+                      data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                    </Button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -991,6 +1078,22 @@ function DataRefresh({ pw }: { pw: string }) {
     staleTime: 0,
   });
 
+  const { data: schedulerData, refetch: refetchScheduler } = useQuery<SchedulerStatus>({
+    queryKey: ["/api/ingest/scheduler/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/status", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch scheduler status");
+      return res.json();
+    },
+    refetchInterval: (query) => {
+      const d = query.state.data as SchedulerStatus | undefined;
+      if (d?.state === "running") return 5_000;
+      return 30_000;
+    },
+  });
+
   const { data: historyData, refetch: refetchHistory } = useQuery<IngestionRun[]>({
     queryKey: ["/api/ingest/history"],
     queryFn: async () => {
@@ -1010,6 +1113,57 @@ function DataRefresh({ pw }: { pw: string }) {
     },
     onError: (err: any) => {
       toast({ title: "Scan failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const schedulerStartMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/start", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: any) => {
+      if (d.ok) {
+        toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
+      } else {
+        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
+      }
+      refetchScheduler();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Start failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const schedulerPauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/pause", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: any) => {
+      if (d.ok) {
+        toast({ title: "Scheduler paused" });
+      } else {
+        toast({ title: "Cannot pause", description: d.message, variant: "destructive" });
+      }
+      refetchScheduler();
+    },
+    onError: (err: any) => {
+      toast({ title: "Pause failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1036,29 +1190,118 @@ function DataRefresh({ pw }: { pw: string }) {
     prevRunningRef.current = isRunning;
   }, [isRunning, refetchHistory]);
 
+  const sched = schedulerData;
+  const schedRunning = sched?.state === "running";
+  const schedPaused = sched?.state === "paused";
+
   return (
     <div className="space-y-6">
-      <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="data-refresh-panel">
-        {(!statusData || statusData.status === "never_run") && (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              <span className="font-medium">Sources not yet indexed</span>
-              <span className="hidden sm:inline text-muted-foreground">— run a full scan to index all TTO listings</span>
+      <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="scheduler-panel">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Activity className="w-4 h-4 text-primary" />
+              Sequential Sync Scheduler
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Syncs institutions one-by-one to avoid timeouts. Recommended over bulk scan.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {schedRunning ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                onClick={() => schedulerPauseMutation.mutate()}
+                disabled={schedulerPauseMutation.isPending}
+                data-testid="button-pause-scheduler"
+              >
+                <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
+                Pause
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => schedulerStartMutation.mutate()}
+                disabled={schedulerStartMutation.isPending || isRunning}
+                data-testid="button-start-scheduler"
+              >
+                {schedulerStartMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5 mr-1.5" />
+                )}
+                {schedPaused ? "Resume" : "Start Cycle"}
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {(schedRunning || schedPaused) && sched && (
+          <div className="space-y-2" data-testid="scheduler-status">
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <div className="flex items-center gap-2">
+                {schedRunning && sched.currentInstitution ? (
+                  <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    {sched.currentInstitution}
+                  </Badge>
+                ) : schedRunning ? (
+                  <span className="text-blue-600 font-medium">Waiting for next...</span>
+                ) : (
+                  <span className="text-amber-600 font-medium">Paused</span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done</span>
+                <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
+                {sched.failedThisCycle > 0 && (
+                  <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
+                )}
+              </div>
             </div>
-            <Button
-              size="sm"
-              className="shrink-0 bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={handleScan}
-              disabled={isRunning || syncIsRunning}
-              data-testid="button-run-full-scan"
-              title={syncIsRunning ? `Institution sync running for ${syncRunningFor}` : undefined}
-            >
-              {isRunning && <Loader2 className="w-4 h-4 animate-spin mr-1.5" />}
-              {syncIsRunning ? "Sync Active" : "Run Full Scan"}
-            </Button>
+            <Progress
+              value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
+              className="h-2 bg-blue-500/10"
+              data-testid="scheduler-cycle-progress"
+            />
+            {sched.cycleStartedAt && (
+              <p className="text-[11px] text-muted-foreground/70">
+                Cycle started {relativeTime(sched.cycleStartedAt)}
+                {sched.lastActivityAt && <> · last activity {relativeTime(sched.lastActivityAt)}</>}
+              </p>
+            )}
           </div>
         )}
+      </div>
+
+      <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="data-refresh-panel">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-muted-foreground" />
+              Legacy Bulk Scan
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Runs all scrapers concurrently. May cause timeouts with many institutions.
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            className="shrink-0"
+            onClick={handleScan}
+            disabled={isRunning || syncIsRunning || schedRunning}
+            data-testid="button-run-full-scan"
+            title={syncIsRunning ? `Institution sync running for ${syncRunningFor}` : schedRunning ? "Scheduler is running" : undefined}
+          >
+            {isRunning && <Loader2 className="w-3.5 h-3.5 animate-spin mr-1.5" />}
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+            {isRunning ? "Running..." : syncIsRunning ? "Sync Active" : "Run Bulk Scan"}
+          </Button>
+        </div>
 
         {isRunning && (
           <div className="space-y-3" data-testid="scan-progress">
@@ -1094,71 +1337,34 @@ function DataRefresh({ pw }: { pw: string }) {
           </div>
         )}
 
-        {statusData && statusData.status === "failed" && !isRunning && (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-destructive">
-              <XCircle className="w-4 h-4 shrink-0" />
-              <span className="font-medium">Last scan failed</span>
-              {(statusData as any).errorMessage && (
-                <span className="hidden sm:inline text-muted-foreground">— {(statusData as any).errorMessage}</span>
-              )}
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/5"
-              onClick={handleScan}
-              disabled={syncIsRunning}
-              data-testid="button-retry-scan"
-            >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-              {syncIsRunning ? "Sync Active" : "Retry"}
-            </Button>
+        {statusData && statusData.status === "completed" && !isRunning && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+            <span>Last bulk scan: {formatRelativeTime((statusData as any).ranAt)}</span>
+            <span className="text-muted-foreground/40">·</span>
+            <span>{(statusData as any).totalFound?.toLocaleString()} found</span>
+            {enrichingCount > 0 && (
+              <Badge variant="outline" className="ml-1 gap-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                Enriching {enrichingCount.toLocaleString()}…
+              </Badge>
+            )}
           </div>
         )}
 
-        {statusData && statusData.status === "completed" && !isRunning && (
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm">
-              <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-muted-foreground">
-                Last scan: <span className="text-foreground font-medium">{formatRelativeTime((statusData as any).ranAt)}</span>
-              </span>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-muted-foreground">
-                <span className="text-foreground font-medium">{(statusData as any).totalFound?.toLocaleString()}</span> assets indexed
-              </span>
-              {(statusData as any).newCount > 0 && (
-                <>
-                  <span className="text-muted-foreground/40">·</span>
-                  <span className="text-primary font-medium">+{(statusData as any).newCount} new</span>
-                </>
-              )}
-              {enrichingCount > 0 && (
-                <Badge variant="outline" className="ml-1 gap-1 text-amber-600 border-amber-500/30 bg-amber-500/10">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Enriching {enrichingCount.toLocaleString()}…
-                </Badge>
-              )}
-            </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="shrink-0 border-primary/30 text-primary hover:bg-primary/5"
-              onClick={handleScan}
-              disabled={syncIsRunning}
-              data-testid="button-refresh-scan"
-              title={syncIsRunning ? `Institution sync running for ${syncRunningFor}` : undefined}
-            >
-              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
-              {syncIsRunning ? "Sync Active" : "Refresh"}
-            </Button>
+        {statusData && statusData.status === "failed" && !isRunning && (
+          <div className="flex items-center gap-2 text-xs text-red-500">
+            <XCircle className="w-3.5 h-3.5" />
+            <span>Last bulk scan failed</span>
+            {(statusData as any).errorMessage && (
+              <span className="text-muted-foreground">— {(statusData as any).errorMessage}</span>
+            )}
           </div>
         )}
       </div>
 
       <div data-testid="scan-history">
-        <h3 className="text-sm font-semibold text-foreground mb-3">Recent Scans</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Recent Bulk Scans</h3>
         <div className="border border-border rounded-xl bg-card overflow-hidden">
           <table className="w-full text-sm">
             <thead>

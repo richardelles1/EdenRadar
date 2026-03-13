@@ -53,13 +53,12 @@ export interface IStorage {
   }>;
 
   getCollectorHealthData(): Promise<{
-    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null; netNew: number }>;
-    lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
-    lastTwoRuns: Array<{ id: number; ranAt: Date }>;
+    institutions: Array<{ institution: string; totalInDb: number; biotechRelevant: number }>;
+    syncSessions: SyncSession[];
   }>;
 
   createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
-  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt">>): Promise<SyncSession>;
+  updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
   getLatestSyncSessions(): Promise<SyncSession[]>;
   clearSyncStaging(institution: string): Promise<void>;
@@ -388,44 +387,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getCollectorHealthData(): Promise<{
-    institutions: Array<{ institution: string; indexed: number; lastSeenAt: Date | null; netNew: number }>;
-    lastTwoRunCounts: Array<{ runId: number; institution: string; count: number }>;
-    lastTwoRuns: Array<{ id: number; ranAt: Date }>;
+    institutions: Array<{ institution: string; totalInDb: number; biotechRelevant: number }>;
+    syncSessions: SyncSession[];
   }> {
-    const runs = await db
-      .select({ id: ingestionRuns.id, ranAt: ingestionRuns.ranAt })
-      .from(ingestionRuns)
-      .where(eq(ingestionRuns.status, "completed"))
-      .orderBy(desc(ingestionRuns.ranAt))
-      .limit(2);
-
-    const lastCompletedRunAt = runs[0]?.ranAt ?? null;
-
     const instRows = await db
       .select({
         institution: ingestedAssets.institution,
-        indexed: sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true)::int`,
-        lastSeenAt: sql<Date>`max(${ingestedAssets.lastSeenAt})`,
-        netNew: lastCompletedRunAt
-          ? sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true and ${ingestedAssets.firstSeenAt} >= ${lastCompletedRunAt})::int`
-          : sql<number>`0`,
+        totalInDb: sql<number>`count(*)::int`,
+        biotechRelevant: sql<number>`count(*) filter (where ${ingestedAssets.relevant} = true)::int`,
       })
       .from(ingestedAssets)
       .groupBy(ingestedAssets.institution);
 
-    let scanCounts: Array<{ runId: number; institution: string; count: number }> = [];
-    if (runs.length > 0) {
-      scanCounts = await db
-        .select({
-          runId: scanInstitutionCounts.runId,
-          institution: scanInstitutionCounts.institution,
-          count: scanInstitutionCounts.count,
-        })
-        .from(scanInstitutionCounts)
-        .where(inArray(scanInstitutionCounts.runId, runs.map((r) => r.id)));
-    }
+    const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
 
-    return { institutions: instRows, lastTwoRunCounts: scanCounts, lastTwoRuns: runs };
+    return { institutions: instRows, syncSessions: sessions };
   }
 
   async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {
@@ -444,7 +420,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt">>): Promise<SyncSession> {
+  async updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession> {
     const [row] = await db.update(syncSessions).set(data).where(eq(syncSessions.sessionId, sessionId)).returning();
     return row;
   }

@@ -176,6 +176,11 @@ export function tryAcquireSyncLock(institution: string): boolean {
   return true;
 }
 
+export function releaseSyncLock(): void {
+  syncRunning = false;
+  syncInstitution = null;
+}
+
 export interface SyncResult {
   sessionId: string;
   rawCount: number;
@@ -220,6 +225,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         status: "failed",
         phase: "done",
         completedAt: new Date(),
+        errorMessage: err?.message ?? "Unknown scraper error",
       });
       throw new Error(`Scraper failed: ${err?.message}`);
     }
@@ -325,6 +331,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         status: "failed",
         phase: "done",
         completedAt: new Date(),
+        errorMessage: err?.message ?? "Unknown error",
       }).catch(() => {});
     }
     throw err;

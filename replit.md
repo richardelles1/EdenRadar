@@ -58,8 +58,11 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
 - **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
-- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all 86 TTOs with concurrency=5, upserts to DB, diffs for new
+- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all TTOs with concurrency=5, upserts to DB, diffs for new (legacy bulk scan — causes timeouts with 143+ institutions)
 - **Per-institution sync**: `runInstitutionSync(institution)` — single-institution scrape → fingerprint compare → AI enrich → staging table. Two-step push: preview results then explicit "Push to Index". Zero guard blocks push if rawCount=0. Soft warning if rawCount < 50% of currentIndexed. Mutual exclusion with full ingestion.
+- **Sequential Scheduler**: `server/lib/scheduler.ts` — round-robin scheduler syncs one institution at a time with 5s delay between. Start/pause controls. Replaces bulk scan as primary mechanism. Routes: GET `/api/ingest/scheduler/status`, POST `/api/ingest/scheduler/start`, POST `/api/ingest/scheduler/pause`
+- **Stale session cancel**: POST `/api/ingest/sync/:institution/cancel` — clears running sessions stuck > 10min (from server restart losing in-memory lock)
+- **Collector Health**: Derived from `syncSessions` table (latest per institution), not bulk `scanInstitutionCounts`. Shows: totalInDb, biotechRelevant, health status (ok/degraded/failing/stale/syncing/never), error messages.
 - **Daily cron**: `node-cron` at 8:00 AM runs ingestion automatically
 
 ### Folder Structure
