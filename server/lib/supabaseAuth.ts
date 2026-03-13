@@ -23,6 +23,11 @@ export async function verifyResearcherAuth(
     return res.status(401).json({ error: "Invalid or expired token" });
   }
 
+  const role = data.user.user_metadata?.role;
+  if (role !== "researcher") {
+    return res.status(403).json({ error: "Researcher role required" });
+  }
+
   req.headers["x-researcher-id"] = data.user.id;
   return next();
 }
