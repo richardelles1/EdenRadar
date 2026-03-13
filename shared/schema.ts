@@ -223,7 +223,7 @@ export type DiscoveryCard = typeof discoveryCards.$inferSelect;
 export const savedReferences = pgTable("saved_references", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
-  projectId: integer("project_id"),
+  projectId: integer("project_id").references(() => researchProjects.id),
   title: text("title").notNull(),
   url: text("url").notNull(),
   sourceType: text("source_type").notNull().default("paper"),

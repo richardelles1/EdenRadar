@@ -38,9 +38,25 @@ const PHASE_MAP: Record<string, string[]> = {
 
 function applySignalFilters(
   signals: RawSignal[],
-  filters: { sourceType?: string; dateRange?: string; trialPhase?: string }
+  filters: { sourceType?: string; dateRange?: string; trialPhase?: string; field?: string; technologyType?: string }
 ): RawSignal[] {
   let filtered = signals;
+
+  if (filters.field) {
+    const fieldLower = filters.field.toLowerCase();
+    filtered = filtered.filter((s) => {
+      const haystack = `${s.title} ${s.text}`.toLowerCase();
+      return haystack.includes(fieldLower);
+    });
+  }
+
+  if (filters.technologyType) {
+    const techLower = filters.technologyType.toLowerCase();
+    filtered = filtered.filter((s) => {
+      const haystack = `${s.title} ${s.text}`.toLowerCase();
+      return haystack.includes(techLower);
+    });
+  }
 
   if (filters.sourceType) {
     const allowed = SOURCE_TYPE_MAP[filters.sourceType] ?? [filters.sourceType];
@@ -182,7 +198,7 @@ export async function registerRoutes(
 
       let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
 
-      signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase });
+      signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
 
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });

@@ -24,7 +24,7 @@ export async function searchZenodo(query: string, maxResults = 12): Promise<RawS
       const creators = (m.creators ?? []).slice(0, 4).map((c: any) => c.name ?? "").filter(Boolean).join(", ");
       const doi = h.doi ?? m.doi ?? "";
       const resourceType = m.resource_type?.type ?? "";
-      const sourceType = resourceType === "dataset" || resourceType === "software" ? "dataset" as const : "preprint" as const;
+      const sourceType = "dataset" as const;
 
       return {
         id: `zenodo-${h.id || Math.random()}`,
