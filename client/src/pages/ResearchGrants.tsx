@@ -22,7 +22,7 @@ import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedGrant, ResearchProject } from "@shared/schema";
 
-const GRANT_SOURCES = ["nih_reporter", "nsf_awards", "eu_cordis"];
+const GRANT_SOURCES = ["grants_gov"];
 
 const RESEARCH_FIELDS = [
   "Biotech", "Drug Discovery", "Genomics", "Immunology", "Oncology",
@@ -104,9 +104,9 @@ function GrantResultCard({
               </span>
             )}
             {signal.date && (
-              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
                 <Calendar className="w-3 h-3" />
-                {signal.date}
+                Deadline: {signal.date}
               </span>
             )}
           </div>
@@ -426,12 +426,12 @@ export default function ResearchGrants() {
         <div className="flex items-center gap-2.5">
           <BadgeDollarSign className="w-5 h-5 text-violet-500" />
           <div>
-            <h1 className="text-lg font-bold text-foreground">My Grants</h1>
+            <h1 className="text-lg font-bold text-foreground">Grants</h1>
             <p className="text-xs text-muted-foreground">Discover and track research funding opportunities</p>
           </div>
         </div>
         <div className="flex gap-1 mt-4">
-          {([["find", "Find Grants"], ["my", "My Grants"]] as const).map(([t, label]) => (
+          {([["find", "Find Grants"], ["my", "Saved Grants"]] as const).map(([t, label]) => (
             <button
               key={t}
               onClick={() => setTab(t)}

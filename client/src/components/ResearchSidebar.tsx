@@ -4,7 +4,7 @@ import {
   LayoutDashboard,
   FolderOpen,
   Bell,
-  BookOpen,
+  FlaskConical,
   Database,
   Library,
   User,
@@ -22,12 +22,12 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/research/projects", label: "My Projects", icon: FolderOpen },
-  { href: "/research/alerts", label: "My Alerts", icon: Bell },
-  { href: "/research/grants", label: "My Grants", icon: BadgeDollarSign },
-  { href: "/research/my-discoveries", label: "My Discoveries", icon: BookOpen },
-  { href: "/research/data-sources", label: "Data Sources", icon: Database },
-  { href: "/research/library", label: "Library", icon: Library },
+  { href: "/research/projects", label: "Projects", icon: FolderOpen },
+  { href: "/research/my-discoveries", label: "Discoveries", icon: FlaskConical },
+  { href: "/research/grants", label: "Grants", icon: BadgeDollarSign },
+  { href: "/research/alerts", label: "Alerts", icon: Bell },
+  { href: "/research/library", label: "My Library", icon: Library },
+  { href: "/research/data-sources", label: "Database Search", icon: Database },
   { href: "/research/profile", label: "Profile", icon: User },
 ];
 

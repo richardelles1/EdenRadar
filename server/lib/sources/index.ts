@@ -10,6 +10,7 @@ import { searchSemanticScholar } from "./semantic_scholar";
 import { searchArxiv } from "./arxiv";
 import { searchNsfAwards } from "./nsf_awards";
 import { searchEuCordis } from "./eu_cordis";
+import { searchGrantsGov } from "./grants_gov";
 import { searchLens } from "./lens";
 import { searchEuropePmc } from "./europepmc";
 import { searchZenodo } from "./zenodo";
@@ -45,13 +46,14 @@ export type SourceKey =
   | "eu_clinicaltrials"
   | "isrctn"
   | "geo"
-  | "pdb";
+  | "pdb"
+  | "grants_gov";
 
 export const ALL_SOURCE_KEYS: SourceKey[] = [
   "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
   "nih_reporter", "openalex", "lab_discoveries",
   "semantic_scholar", "arxiv", "nsf_awards", "eu_cordis", "lens",
-  "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb",
+  "europepmc", "zenodo", "eu_clinicaltrials", "isrctn", "geo", "pdb", "grants_gov",
 ];
 
 export interface DataSource {
@@ -235,6 +237,12 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "PDB",
     description: "Protein Data Bank — 3D structures of proteins and nucleic acids",
     search: searchPdb,
+  },
+  grants_gov: {
+    id: "grants_gov",
+    label: "Grants.gov",
+    description: "Federal funding opportunities — open and forecasted grants from US agencies",
+    search: searchGrantsGov,
   },
 };
 
