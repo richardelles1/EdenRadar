@@ -265,7 +265,10 @@ export default function ResearchDataSources() {
   const { data: projectsData } = useQuery<{ projects: ResearchProject[] }>({
     queryKey: ["/api/research/projects", researcherId],
     queryFn: () =>
-      fetch("/api/research/projects", { headers: researcherHeaders }).then((r) => r.json()),
+      fetch("/api/research/projects", { headers: researcherHeaders }).then((r) => {
+        if (!r.ok) throw new Error("Failed to load projects");
+        return r.json();
+      }),
     enabled: !!researcherId,
   });
 
