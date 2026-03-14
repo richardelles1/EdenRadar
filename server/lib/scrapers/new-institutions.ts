@@ -946,7 +946,7 @@ export const lsuItcScraper = createFlintboxScraper(
 );
 export const uhnScraper = createFlintboxScraper(
   { slug: "uhn", orgId: 0, accessKey: "" },
-  "University Health Network"
+  "University Health Network (Toronto)"
 );
 export const lsuScraper = createFlintboxScraper(
   { slug: "lsu", orgId: 0, accessKey: "" },

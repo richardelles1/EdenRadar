@@ -68,7 +68,7 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
         }
 
         const results: ScrapedListing[] = [];
-        const seen = new Set<string>();
+        const seenUrls = new Set<string>();
 
         for (const path of ["/technologies", "/categories"]) {
           const $ = await fetchHtml(`${base}${path}`);
@@ -76,12 +76,14 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
           $("a[href*='/technologies/']").each((_, el) => {
             const href = $(el).attr("href") ?? "";
             const title = cleanText($(el).text());
-            if (!title || title.length < 8 || seen.has(title)) return;
-            seen.add(title);
+            if (!title || title.length < 8) return;
+            const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+            if (seenUrls.has(fullUrl)) return;
+            seenUrls.add(fullUrl);
             results.push({
               title,
               description: "",
-              url: href.startsWith("http") ? href : `${base}${href}`,
+              url: fullUrl,
               institution,
             });
           });
