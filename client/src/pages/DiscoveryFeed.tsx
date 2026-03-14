@@ -120,9 +120,12 @@ export default function DiscoveryFeed() {
     return areaMatch && stageMatch;
   });
 
+  const { session, role } = useAuth();
+  const hasSidebar = session && role === "concept";
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <DiscoveryNav />
+      {!hasSidebar && <DiscoveryNav />}
 
       <main className="flex-1 p-6 md:p-8 max-w-4xl mx-auto w-full">
         <div className="mb-6">
@@ -135,7 +138,7 @@ export default function DiscoveryFeed() {
             </h1>
           </div>
           <p className="text-sm text-muted-foreground ml-12">
-            Early-stage biotech concepts scored by AI for scientific credibility. Browse freely — no login required.
+            Early-stage biotech concepts scored by AI for scientific credibility.
           </p>
         </div>
 

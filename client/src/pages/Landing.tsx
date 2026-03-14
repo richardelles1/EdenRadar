@@ -302,7 +302,7 @@ const RESEARCH_TILES = [
 const DISCOVERY_TILES = [
   {
     icon: Lightbulb,
-    title: "Pre-Research Concept Registry",
+    title: "Concept Registry",
     desc: "Submit early-stage ideas before formal research begins. Capture the spark that could become the next breakthrough.",
   },
   {
@@ -357,7 +357,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
 
         <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
           {(["discovery", "research", "industry"] as const).map((tab) => {
-            const label = tab === "discovery" ? "Pre-Research" : tab === "research" ? "Research" : "Industry";
+            const label = tab === "discovery" ? "Discovery" : tab === "research" ? "Research" : "Industry";
             const style = TAB_STYLE[tab];
             return (
               <button
@@ -401,7 +401,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
             style={{ color: "hsl(38 92% 50%)" }}
             data-testid="button-discovery-cta"
           >
-            Browse Eden Discovery — free, no login required
+            Browse Eden Discovery
             <ArrowRight className="w-3.5 h-3.5" />
           </a>
         ) : (
@@ -529,7 +529,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             }}
           >
             <Lightbulb className="w-4 h-4" />
-            For Pre-Research
+            For Discovery
           </Button>
         </div>
 
@@ -623,7 +623,7 @@ export default function Landing() {
                 }}
               >
                 <Lightbulb className="w-4 h-4" />
-                For Pre-Research
+                For Discovery
                 <ArrowRight className="w-3.5 h-3.5 opacity-70" />
               </Button>
               <Button

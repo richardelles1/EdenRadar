@@ -96,10 +96,11 @@ const INTEREST_TYPES = [
 ] as const;
 
 export default function ConceptDetail() {
+  const { session, role } = useAuth();
+  const hasSidebar = session && role === "concept";
   const [, params] = useRoute("/discovery/concept/:id");
   const id = params?.id;
   const { toast } = useToast();
-  const { session } = useAuth();
 
   const { data, isLoading } = useQuery<{ concept: ConceptCard }>({
     queryKey: ["/api/discovery/concepts", id],
@@ -161,7 +162,7 @@ export default function ConceptDetail() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <DiscoveryDetailNav />
+        {!hasSidebar && <DiscoveryDetailNav />}
         <div className="p-8 flex items-center justify-center">
           <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
         </div>
@@ -173,7 +174,7 @@ export default function ConceptDetail() {
   if (!c) {
     return (
       <div className="min-h-screen bg-background">
-        <DiscoveryDetailNav />
+        {!hasSidebar && <DiscoveryDetailNav />}
         <div className="p-8 text-center">
           <AlertTriangle className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
           <p className="text-muted-foreground">Concept not found.</p>
@@ -186,7 +187,7 @@ export default function ConceptDetail() {
 
   return (
     <div className="min-h-screen bg-background">
-      <DiscoveryDetailNav />
+      {!hasSidebar && <DiscoveryDetailNav />}
 
       <div className="p-6 md:p-8 max-w-3xl mx-auto">
         <Link href="/discovery">

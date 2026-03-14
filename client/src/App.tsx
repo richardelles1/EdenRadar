@@ -166,8 +166,16 @@ function Router() {
 
       <Route path="/pitch" component={PitchDeck} />
 
-      <Route path="/discovery" component={DiscoveryFeed} />
-      <Route path="/discovery/concept/:id" component={ConceptDetail} />
+      <Route path="/discovery">
+        <DiscoveryLayout requireAuth={false}>
+          <DiscoveryFeed />
+        </DiscoveryLayout>
+      </Route>
+      <Route path="/discovery/concept/:id">
+        <DiscoveryLayout requireAuth={false}>
+          <ConceptDetail />
+        </DiscoveryLayout>
+      </Route>
       <Route path="/discovery/join" component={DiscoveryJoin} />
       <Route path="/discovery/submit">
         <DiscoveryLayout>
