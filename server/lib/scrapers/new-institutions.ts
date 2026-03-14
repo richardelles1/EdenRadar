@@ -569,12 +569,18 @@ export const usaskScraper = createTechPublisherScraper("usask", "University of S
 
 // ── New US: no TechPublisher portal (stubs) ──────────────────────────────
 export { fsuScraper } from "./fsu";
-export const ucfScraper = createStubScraper("University of Central Florida", "Flintbox API deprecated, no public alternative found");
+export const ucfScraper = createFlintboxScraper(
+  { slug: "ucf", orgId: 0, accessKey: "" },
+  "University of Central Florida"
+);
 export const fiuScraper = createFlintboxScraper(
   { slug: "fiu", orgId: 21, accessKey: "283480d5-1f72-4bb5-bb3e-c46d7ce23ea3" },
   "Florida International University"
 );
-export const tamuScraper = createStubScraper("Texas A&M University");
+export const tamuScraper = createFlintboxScraper(
+  { slug: "tamus", orgId: 0, accessKey: "" },
+  "Texas A&M University"
+);
 export const riceScraper = createInPartScraper("rice", "Rice University");
 export const uhoustonScraper: InstitutionScraper = {
   institution: "University of Houston",
@@ -612,7 +618,10 @@ export const unmScraper = createStubScraper("University of New Mexico", "unm.fli
 export const nmsuScraper = createStubScraper("New Mexico State University");
 export const unrScraper = createStubScraper("University of Nevada, Reno");
 export const unlvScraper = createTechPublisherScraper("unlvecondev", "University of Nevada, Las Vegas");
-export const usuScraper = createStubScraper("Utah State University", "Flintbox API deprecated, no public alternative found");
+export const usuScraper = createFlintboxScraper(
+  { slug: "usu", orgId: 0, accessKey: "" },
+  "Utah State University"
+);
 export const byuScraper = createStubScraper("Brigham Young University");
 export const uaaScraper = createStubScraper("University of Alaska Anchorage");
 export const undScraper: InstitutionScraper = {
@@ -873,3 +882,113 @@ export const ntuScraper = createInPartScraper("ntu", "Nottingham Trent Universit
 
 // ── Additional US (in-part) ─────────────────────────────────────────────
 export const uhawScraper = createInPartScraper("hawaii", "University of Hawaii");
+
+// ── Flintbox HTML fallback batch (March 2026) ────────────────────────────
+export const uiowaScraper = createFlintboxScraper(
+  { slug: "uiowa", orgId: 0, accessKey: "" },
+  "University of Iowa"
+);
+export const bidmcScraper = createFlintboxScraper(
+  { slug: "bidmc", orgId: 0, accessKey: "" },
+  "Beth Israel Deaconess Medical Center"
+);
+export const northumbriaScraper = createFlintboxScraper(
+  { slug: "northumbriaknowledgebank", orgId: 0, accessKey: "" },
+  "Northumbria University"
+);
+export const cmuScraper = createFlintboxScraper(
+  { slug: "cmu", orgId: 0, accessKey: "" },
+  "Carnegie Mellon University"
+);
+export const kyotoIcemsScraper = createFlintboxScraper(
+  { slug: "icems", orgId: 0, accessKey: "" },
+  "Kyoto University (ICEMS)"
+);
+export const smuFlintboxScraper = createFlintboxScraper(
+  { slug: "smutechnologies", orgId: 0, accessKey: "" },
+  "Southern Methodist University"
+);
+export const clevelandClinicScraper = createFlintboxScraper(
+  { slug: "ccf", orgId: 0, accessKey: "" },
+  "Cleveland Clinic"
+);
+export const uabScraper = createFlintboxScraper(
+  { slug: "uab", orgId: 0, accessKey: "" },
+  "University of Alabama at Birmingham"
+);
+export const cercaScraper = createFlintboxScraper(
+  { slug: "cerca", orgId: 0, accessKey: "" },
+  "CERCA"
+);
+export const kstateScraper = createFlintboxScraper(
+  { slug: "k-state", orgId: 0, accessKey: "" },
+  "Kansas State University"
+);
+export const cedarsScraper = createFlintboxScraper(
+  { slug: "cedars", orgId: 0, accessKey: "" },
+  "Cedars-Sinai"
+);
+export const fauScraper = createFlintboxScraper(
+  { slug: "fau", orgId: 0, accessKey: "" },
+  "Florida Atlantic University"
+);
+export const tulaneScraper = createFlintboxScraper(
+  { slug: "tulane", orgId: 0, accessKey: "" },
+  "Tulane University"
+);
+export const louisvilleScraper = createFlintboxScraper(
+  { slug: "louisville", orgId: 0, accessKey: "" },
+  "University of Louisville"
+);
+export const lsuItcScraper = createFlintboxScraper(
+  { slug: "lsuitc", orgId: 0, accessKey: "" },
+  "LSU Innovation and Technology Commercialization"
+);
+export const uhnScraper = createFlintboxScraper(
+  { slug: "uhn", orgId: 0, accessKey: "" },
+  "University Health Network"
+);
+export const lsuScraper = createFlintboxScraper(
+  { slug: "lsu", orgId: 0, accessKey: "" },
+  "Louisiana State University"
+);
+export const uahScraper = createFlintboxScraper(
+  { slug: "uah", orgId: 0, accessKey: "" },
+  "University of Alabama in Huntsville"
+);
+export const wvuScraper = createFlintboxScraper(
+  { slug: "wvu", orgId: 0, accessKey: "" },
+  "West Virginia University"
+);
+export const cmhScraper = createFlintboxScraper(
+  { slug: "cmh", orgId: 0, accessKey: "" },
+  "Children's Mercy Hospital"
+);
+export const kcvScraper = createFlintboxScraper(
+  { slug: "kcv", orgId: 0, accessKey: "" },
+  "KCV"
+);
+export const strathclydeScraper = createFlintboxScraper(
+  { slug: "strathclyde", orgId: 0, accessKey: "" },
+  "University of Strathclyde"
+);
+export const syracuseScraper = createFlintboxScraper(
+  { slug: "syr", orgId: 0, accessKey: "" },
+  "Syracuse University"
+);
+export const swanseaScraper = createFlintboxScraper(
+  { slug: "swansea", orgId: 0, accessKey: "" },
+  "Swansea University"
+);
+export const utsaScraper = createFlintboxScraper(
+  { slug: "utsa", orgId: 0, accessKey: "" },
+  "UT San Antonio"
+);
+export const ncsuScraper = createFlintboxScraper(
+  { slug: "ncsu", orgId: 0, accessKey: "" },
+  "NC State University"
+);
+export const dalhousieScraper = createFlintboxScraper(
+  { slug: "dal", orgId: 0, accessKey: "" },
+  "Dalhousie University"
+);

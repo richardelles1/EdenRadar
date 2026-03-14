@@ -67,10 +67,12 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
           }
         }
 
-        const $ = await fetchHtml(`${base}/technologies`);
-        if ($) {
-          const results: ScrapedListing[] = [];
-          const seen = new Set<string>();
+        const results: ScrapedListing[] = [];
+        const seen = new Set<string>();
+
+        for (const path of ["/technologies", "/categories"]) {
+          const $ = await fetchHtml(`${base}${path}`);
+          if (!$) continue;
           $("a[href*='/technologies/']").each((_, el) => {
             const href = $(el).attr("href") ?? "";
             const title = cleanText($(el).text());
@@ -83,10 +85,11 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
               institution,
             });
           });
-          if (results.length > 0) {
-            console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox HTML`);
-            return results;
-          }
+        }
+
+        if (results.length > 0) {
+          console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox HTML`);
+          return results;
         }
 
         console.log(`[scraper] ${institution}: Flintbox (${org.slug}) — 0 results`);

@@ -1,11 +1,6 @@
-import type { InstitutionScraper, ScrapedListing } from "./types";
+import { createFlintboxScraper } from "./flintbox";
 
-const INST = "Boston University";
-
-export const buScraper: InstitutionScraper = {
-  institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: skipped — technologies-database page is JS-rendered with no public API`);
-    return [];
-  },
-};
+export const buScraper = createFlintboxScraper(
+  { slug: "bu", orgId: 0, accessKey: "" },
+  "Boston University"
+);
