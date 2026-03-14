@@ -487,7 +487,7 @@ function PortalsSlide() {
         Three portals, one{" "}
         <span style={{ color: COLORS.green }}>ecosystem</span>
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-stretch">
         <PortalCard
           title="Eden Discovery"
           tagline="Tier 1 — Pre-research concept registry"
@@ -501,6 +501,12 @@ function PortalsSlide() {
             "Landscape intelligence from PubMed + bioRxiv",
           ]}
         />
+        <div className="hidden sm:flex items-center justify-center">
+          <div className="flex flex-col items-center gap-1">
+            <ArrowRight className="w-6 h-6" style={{ color: COLORS.textMuted }} />
+            <span className="text-xs" style={{ color: COLORS.textMuted }}>Graduate</span>
+          </div>
+        </div>
         <PortalCard
           title="EdenLab"
           tagline="Tier 2 — Researcher workspace"
@@ -514,6 +520,12 @@ function PortalsSlide() {
             "Grant discovery (NIH, NSF, SBIR)",
           ]}
         />
+        <div className="hidden sm:flex items-center justify-center">
+          <div className="flex flex-col items-center gap-1">
+            <ArrowRight className="w-6 h-6" style={{ color: COLORS.textMuted }} />
+            <span className="text-xs" style={{ color: COLORS.textMuted }}>Publish</span>
+          </div>
+        </div>
         <PortalCard
           title="EdenRadar"
           tagline="Tier 3 — Industry intelligence"
@@ -891,7 +903,9 @@ function ContactSlide() {
         </p>
 
         <a
-          href="/"
+          href="https://edenradar.com"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-base font-semibold transition-all hover:scale-105"
           style={{
             background: COLORS.green,
@@ -903,13 +917,29 @@ function ContactSlide() {
           <ExternalLink className="w-4 h-4" />
         </a>
 
-        <div className="mt-12 space-y-3">
-          <p className="text-sm font-medium" style={{ color: COLORS.text }}>
-            EdenRadar
-          </p>
-          <p className="text-sm" style={{ color: COLORS.textMuted }}>
-            edenradar.com
-          </p>
+        <div className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-8 text-left max-w-md">
+          <div>
+            <p className="text-sm font-semibold mb-1" style={{ color: COLORS.text }}>
+              Ariel Boucheikhchoukh
+            </p>
+            <p className="text-xs" style={{ color: COLORS.textMuted }}>
+              Founder & CEO
+            </p>
+            <p className="text-xs mt-1" style={{ color: COLORS.accent }}>
+              ariel@edenradar.com
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-semibold mb-1" style={{ color: COLORS.text }}>
+              EdenRadar
+            </p>
+            <p className="text-xs" style={{ color: COLORS.textMuted }}>
+              edenradar.com
+            </p>
+            <p className="text-xs mt-1" style={{ color: COLORS.accent }}>
+              hello@edenradar.com
+            </p>
+          </div>
         </div>
       </div>
     </Slide>
