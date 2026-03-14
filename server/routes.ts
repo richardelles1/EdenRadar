@@ -2048,6 +2048,21 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.get("/api/admin/concepts", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const results = await db
+        .select()
+        .from(conceptCards)
+        .orderBy(desc(conceptCards.createdAt))
+        .limit(200);
+      res.json({ concepts: results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/discovery/concepts", async (_req, res) => {
     try {
       const results = await db

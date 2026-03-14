@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import { Lightbulb, Loader2, Send } from "lucide-react";
 
 const THERAPY_AREAS = [
@@ -68,17 +69,29 @@ export default function SubmitConcept() {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/discovery/concepts", {
-        title,
-        submitterName,
-        oneLiner,
-        problemStatement,
-        proposedApproach,
-        therapyArea,
-        modality,
-        stage,
-        status: "active",
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch("/api/discovery/concepts", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          title,
+          submitterName,
+          oneLiner,
+          problemStatement,
+          proposedApproach,
+          therapyArea,
+          modality,
+          stage,
+          status: "active",
+        }),
       });
+      if (!res.ok) {
+        const body = await res.text();
+        throw new Error(body || "Submission failed");
+      }
       return res.json();
     },
     onSuccess: (data) => {

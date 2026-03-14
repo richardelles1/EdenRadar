@@ -28,6 +28,8 @@ import ProjectDetail from "@/pages/ProjectDetail";
 import DiscoveryFeed from "@/pages/DiscoveryFeed";
 import SubmitConcept from "@/pages/SubmitConcept";
 import ConceptDetail from "@/pages/ConceptDetail";
+import DiscoveryJoin from "@/pages/DiscoveryJoin";
+import MyConcepts from "@/pages/MyConcepts";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -160,19 +162,17 @@ function Router() {
         </ResearchLayout>
       </Route>
 
-      <Route path="/discovery">
-        <DiscoveryLayout>
-          <DiscoveryFeed />
-        </DiscoveryLayout>
-      </Route>
+      <Route path="/discovery" component={DiscoveryFeed} />
+      <Route path="/discovery/concept/:id" component={ConceptDetail} />
+      <Route path="/discovery/join" component={DiscoveryJoin} />
       <Route path="/discovery/submit">
         <DiscoveryLayout>
           <SubmitConcept />
         </DiscoveryLayout>
       </Route>
-      <Route path="/discovery/concept/:id">
+      <Route path="/discovery/my-concepts">
         <DiscoveryLayout>
-          <ConceptDetail />
+          <MyConcepts />
         </DiscoveryLayout>
       </Route>
 

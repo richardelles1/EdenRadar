@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb } from "lucide-react";
+import type { ConceptCard } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1503,6 +1504,62 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
   );
 }
 
+function ConceptQueue({ pw }: { pw: string }) {
+  const { data, isLoading } = useQuery<{ concepts: ConceptCard[] }>({
+    queryKey: ["/api/admin/concepts"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/concepts", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const concepts = data?.concepts ?? [];
+
+  if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading concepts...</div>;
+  if (concepts.length === 0) return <p className="text-sm text-muted-foreground">No concept cards submitted yet.</p>;
+
+  return (
+    <div className="space-y-3">
+      {concepts.map((c) => (
+        <div key={c.id} className="border border-border rounded-lg p-4 bg-card" data-testid={`admin-concept-${c.id}`}>
+          <div className="flex items-start justify-between gap-3 mb-2">
+            <div className="flex-1 min-w-0">
+              <h3 className="font-semibold text-foreground text-sm">{c.title}</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{c.oneLiner}</p>
+            </div>
+            {c.aiCredibilityScore !== null && (
+              <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
+                c.aiCredibilityScore >= 70
+                  ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                  : c.aiCredibilityScore >= 40
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                    : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+              }`}>
+                <Sparkles className="w-3 h-3" />
+                {c.aiCredibilityScore}/100
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">{c.therapyArea}</span>
+            <span className="px-2 py-0.5 rounded-full bg-muted font-medium">{c.modality}</span>
+            <span className="px-2 py-0.5 rounded-full bg-muted font-medium capitalize">{c.stage?.replace(/_/g, " ")}</span>
+            <span>by {c.submitterName}</span>
+            <span className="ml-auto">{c.interestCount} interest · {new Date(c.createdAt).toLocaleDateString()}</span>
+          </div>
+          {c.aiCredibilityRationale && (
+            <p className="text-xs text-muted-foreground italic mt-2 border-t border-border pt-2">AI: {c.aiCredibilityRationale}</p>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function ResearchQueue({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [rejectingId, setRejectingId] = useState<number | null>(null);
@@ -1845,6 +1902,18 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("concept-queue")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "concept-queue"
+                  ? "bg-amber-500/10 text-amber-600"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-concept-queue"
+            >
+              <Lightbulb className="h-4 w-4" />
+              Concept Queue
+            </button>
           </nav>
         </aside>
 
@@ -1880,6 +1949,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">Review researcher-submitted Discovery Cards. Approved cards enter Scout as the "Lab Discoveries" source.</p>
               </div>
               <ResearchQueue pw={pw} />
+            </>
+          )}
+
+          {activeTab === "concept-queue" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Concept Queue</h2>
+                <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the Eden Discovery portal with AI credibility scores.</p>
+              </div>
+              <ConceptQueue pw={pw} />
             </>
           )}
 

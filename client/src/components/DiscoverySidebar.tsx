@@ -4,6 +4,7 @@ import {
   Lightbulb,
   PlusCircle,
   Compass,
+  FolderOpen,
   Moon,
   Sun,
   LogOut,
@@ -16,6 +17,7 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/discovery", label: "Concept Feed", icon: Compass, exact: true },
+  { href: "/discovery/my-concepts", label: "My Concepts", icon: FolderOpen },
   { href: "/discovery/submit", label: "Submit Concept", icon: PlusCircle },
 ];
 
