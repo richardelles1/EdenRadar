@@ -2119,9 +2119,14 @@ If a field cannot be determined, use "N/A".`
 
   app.post("/api/discovery/concepts", verifyConceptAuth, async (req, res) => {
     try {
+      const conceptUserId = req.headers["x-concept-user-id"] as string;
+      if (!conceptUserId) {
+        console.error("[concept POST] x-concept-user-id header is empty — auth middleware may have failed");
+        return res.status(401).json({ error: "User identification failed" });
+      }
       const parsed = insertConceptCardSchema.parse({
         ...req.body,
-        userId: req.headers["x-concept-user-id"] as string,
+        userId: conceptUserId,
       });
 
       let aiScore: number | null = null;

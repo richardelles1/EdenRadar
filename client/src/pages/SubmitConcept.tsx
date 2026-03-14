@@ -105,6 +105,7 @@ export default function SubmitConcept() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });
       toast({ title: "Concept submitted!", description: "AI credibility scoring is complete." });
       navigate(`/discovery/concept/${data.concept.id}`);
     },
