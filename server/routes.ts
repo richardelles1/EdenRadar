@@ -393,6 +393,83 @@ export async function registerRoutes(
     res.json({ institutions: ALL_SCRAPERS.map((s) => s.institution) });
   });
 
+  app.get("/api/admin/scraper-health", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const dbRows = await storage.getScraperHealthData();
+      const dbMap = new Map(dbRows.map((r) => [r.institution, r]));
+      const now = Date.now();
+      const STALE_MS = 48 * 60 * 60 * 1000;
+
+      const rows = ALL_SCRAPERS.map((scraper) => {
+        const db = dbMap.get(scraper.institution);
+        const count = db?.count ?? 0;
+        const lastSeenAt = db?.lastSeenAt ?? null;
+        const ageMs = lastSeenAt ? now - new Date(lastSeenAt).getTime() : null;
+        let status: "green" | "yellow" | "red";
+        if (count > 0 && ageMs !== null && ageMs < STALE_MS) {
+          status = "green";
+        } else if (count > 0) {
+          status = "yellow";
+        } else {
+          status = "red";
+        }
+        return { institution: scraper.institution, count, lastSeenAt, status };
+      });
+
+      rows.sort((a, b) => {
+        const order = { red: 0, yellow: 1, green: 2 };
+        return order[a.status] - order[b.status];
+      });
+
+      res.json({ rows, total: ALL_SCRAPERS.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/scraper-health/ping", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const PING_TIMEOUT_MS = 10_000;
+      const CONCURRENCY = 3;
+
+      const tasks = ALL_SCRAPERS.map((scraper) => async () => {
+        const start = Date.now();
+        try {
+          const result = await Promise.race([
+            scraper.scrape(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error("timeout")), PING_TIMEOUT_MS)
+            ),
+          ]);
+          return { institution: scraper.institution, count: result.length, error: null, durationMs: Date.now() - start };
+        } catch (err: any) {
+          return { institution: scraper.institution, count: 0, error: err?.message ?? "error", durationMs: Date.now() - start };
+        }
+      });
+
+      const results: Array<{ institution: string; count: number; error: string | null; durationMs: number }> = [];
+      let idx = 0;
+
+      async function worker() {
+        while (idx < tasks.length) {
+          const i = idx++;
+          results[i] = await tasks[i]();
+        }
+      }
+
+      const workers = Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker);
+      await Promise.all(workers);
+
+      res.json({ results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/ingest/run", async (_req, res) => {
     if (isIngestionRunning()) {
       const lastRun = await storage.getLastIngestionRun();

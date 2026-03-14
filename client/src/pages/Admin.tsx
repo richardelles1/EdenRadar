@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Wifi } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1548,6 +1548,155 @@ function ResearchQueue({ pw }: { pw: string }) {
   );
 }
 
+type PingRow = { institution: string; count: number; error: string | null; durationMs: number };
+type HealthRow = { institution: string; count: number; lastSeenAt: string | null; status: "green" | "yellow" | "red" };
+
+function ScraperHealth({ pw }: { pw: string }) {
+  const [pingResults, setPingResults] = useState<Record<string, PingRow>>({});
+  const [pinging, setPinging] = useState(false);
+
+  const { data, isLoading, refetch } = useQuery<{ rows: HealthRow[]; total: number }>({
+    queryKey: ["/api/admin/scraper-health"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/scraper-health", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60_000,
+    enabled: !!pw,
+  });
+
+  async function pingAll() {
+    setPinging(true);
+    try {
+      const res = await fetch("/api/admin/scraper-health/ping", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const map: Record<string, PingRow> = {};
+        for (const r of json.results as PingRow[]) map[r.institution] = r;
+        setPingResults(map);
+        refetch();
+      }
+    } finally {
+      setPinging(false);
+    }
+  }
+
+  const rows = data?.rows ?? [];
+  const greenCount = rows.filter((r) => r.status === "green").length;
+  const yellowCount = rows.filter((r) => r.status === "yellow").length;
+  const redCount = rows.filter((r) => r.status === "red").length;
+
+  function StatusDot({ status }: { status: "green" | "yellow" | "red" }) {
+    const cls = status === "green"
+      ? "bg-emerald-500"
+      : status === "yellow"
+      ? "bg-amber-400"
+      : "bg-red-500";
+    return <span className={`inline-block w-2.5 h-2.5 rounded-full ${cls}`} />;
+  }
+
+  function formatAge(lastSeenAt: string | null) {
+    if (!lastSeenAt) return <span className="text-muted-foreground/40">never</span>;
+    const ms = Date.now() - new Date(lastSeenAt).getTime();
+    const h = Math.floor(ms / 3600000);
+    if (h < 24) return <span className="text-emerald-600 dark:text-emerald-400">{h}h ago</span>;
+    const d = Math.floor(h / 24);
+    if (d < 7) return <span className="text-amber-500">{d}d ago</span>;
+    return <span className="text-red-500">{d}d ago</span>;
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scraper Health</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {data?.total ?? "…"} registered scrapers — DB presence and live ping status
+          </p>
+        </div>
+        <Button
+          onClick={pingAll}
+          disabled={pinging}
+          size="sm"
+          data-testid="button-ping-all"
+        >
+          {pinging ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wifi className="h-4 w-4 mr-2" />}
+          {pinging ? "Pinging…" : "Ping All"}
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="border border-border rounded-lg p-4 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Healthy</div>
+          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="stat-scraper-green">{greenCount}</div>
+        </div>
+        <div className="border border-border rounded-lg p-4 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Stale / Empty</div>
+          <div className="text-2xl font-bold text-amber-500 tabular-nums" data-testid="stat-scraper-yellow">{yellowCount}</div>
+        </div>
+        <div className="border border-border rounded-lg p-4 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">No Data</div>
+          <div className="text-2xl font-bold text-red-500 tabular-nums" data-testid="stat-scraper-red">{redCount}</div>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground py-8">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading scraper registry…
+        </div>
+      ) : (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-left py-2 px-3 font-medium text-muted-foreground">Institution</th>
+                <th className="text-right py-2 px-3 font-medium text-muted-foreground">DB Count</th>
+                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Last Seen</th>
+                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Ping</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => {
+                const ping = pingResults[row.institution];
+                return (
+                  <tr key={row.institution} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-muted/20"}`} data-testid={`row-scraper-${i}`}>
+                    <td className="py-2 px-3">
+                      <StatusDot status={ping ? (ping.error ? "red" : ping.count > 0 ? "green" : "yellow") : row.status} />
+                    </td>
+                    <td className="py-2 px-3 font-medium text-foreground">{row.institution}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-foreground">
+                      {row.count > 0 ? row.count.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums">{formatAge(row.lastSeenAt)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-xs">
+                      {pinging && !ping ? (
+                        <Loader2 className="h-3 w-3 animate-spin inline-block text-muted-foreground" />
+                      ) : ping ? (
+                        ping.error ? (
+                          <span className="text-red-500" title={ping.error}>err ({Math.round(ping.durationMs / 1000)}s)</span>
+                        ) : (
+                          <span className="text-emerald-600 dark:text-emerald-400">{ping.count} ({Math.round(ping.durationMs / 1000)}s)</span>
+                        )
+                      ) : (
+                        <span className="text-muted-foreground/40">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("data-health");
@@ -1658,6 +1807,18 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 </span>
               )}
             </button>
+            <button
+              onClick={() => setActiveTab("scraper-health")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "scraper-health"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-scraper-health"
+            >
+              <Wifi className="h-4 w-4" />
+              Scraper Health
+            </button>
           </nav>
         </aside>
 
@@ -1684,6 +1845,10 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               </div>
               <ResearchQueue pw={pw} />
             </>
+          )}
+
+          {activeTab === "scraper-health" && (
+            <ScraperHealth pw={pw} />
           )}
         </main>
       </div>
