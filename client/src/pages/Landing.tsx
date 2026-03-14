@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
+import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { useAuth } from "@/hooks/use-auth";
@@ -43,23 +44,23 @@ function RadarBackground() {
       <div
         className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{
-          width: "min(140vw, 1100px)",
-          height: "min(140vw, 1100px)",
+          width: "min(75vw, 700px)",
+          height: "min(75vw, 700px)",
           animation: "radar-bg-slow 18s linear infinite",
           transformOrigin: "center center",
           background:
-            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.04) 310deg, hsl(142 65% 48% / 0.13) 360deg)",
+            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.05) 310deg, hsl(142 65% 48% / 0.22) 360deg)",
           borderRadius: "50%",
         }}
       />
-      {[320, 520, 720, 920].map((r, i) => (
+      {[220, 360, 480, 600].map((r, i) => (
         <div
           key={r}
           className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
           style={{
             width: r,
             height: r,
-            borderColor: `hsl(142 55% 45% / ${0.07 - i * 0.01})`,
+            borderColor: `hsl(142 55% 45% / ${0.08 - i * 0.012})`,
           }}
         />
       ))}
@@ -71,18 +72,29 @@ function RadarBackground() {
   );
 }
 
-/* ─────────────────────────── HeroVine ────────────────────────── */
+/* ─────────────────────────── HeroVine (Framer Motion) ────────── */
+
+const STEM_DUR = 9;
+const BRANCH_DUR = 2.2;
+const BRANCH_EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 const BRANCHES = [
-  { y: 760, dir: 1,  ex: 280, ey: 730, leafR: 8,   stemDelay: "1.0s", branchDelay: "1.3s", leafDelay: "2.55s" },
-  { y: 670, dir: -1, ex: 30,  ey: 640, leafR: 7,   stemDelay: "1.0s", branchDelay: "1.7s", leafDelay: "2.95s" },
-  { y: 580, dir: 1,  ex: 285, ey: 548, leafR: 9,   stemDelay: "1.0s", branchDelay: "2.1s", leafDelay: "3.35s" },
-  { y: 490, dir: -1, ex: 25,  ey: 460, leafR: 7.5, stemDelay: "1.0s", branchDelay: "2.5s", leafDelay: "3.75s" },
-  { y: 400, dir: 1,  ex: 278, ey: 370, leafR: 8.5, stemDelay: "1.0s", branchDelay: "2.85s", leafDelay: "4.1s" },
-  { y: 310, dir: -1, ex: 30,  ey: 280, leafR: 6.5, stemDelay: "1.0s", branchDelay: "3.15s", leafDelay: "4.4s" },
-  { y: 220, dir: 1,  ex: 265, ey: 192, leafR: 7,   stemDelay: "1.0s", branchDelay: "3.4s",  leafDelay: "4.65s" },
-  { y: 130, dir: -1, ex: 40,  ey: 104, leafR: 6,   stemDelay: "1.0s", branchDelay: "3.6s",  leafDelay: "4.85s" },
+  { y: 760, dir: 1,  ex: 280, ey: 730, leafR: 8   },
+  { y: 670, dir: -1, ex: 30,  ey: 640, leafR: 7   },
+  { y: 580, dir: 1,  ex: 285, ey: 548, leafR: 9   },
+  { y: 490, dir: -1, ex: 25,  ey: 460, leafR: 7.5 },
+  { y: 400, dir: 1,  ex: 278, ey: 370, leafR: 8.5 },
+  { y: 310, dir: -1, ex: 30,  ey: 280, leafR: 6.5 },
+  { y: 220, dir: 1,  ex: 265, ey: 192, leafR: 7   },
+  { y: 130, dir: -1, ex: 40,  ey: 104, leafR: 6   },
 ];
+
+function branchDelay(y: number) {
+  return ((900 - y) / 900) * STEM_DUR;
+}
+function leafDelay(y: number) {
+  return branchDelay(y) + BRANCH_DUR + 0.2;
+}
 
 function HeroVine() {
   return (
@@ -119,70 +131,84 @@ function HeroVine() {
           </filter>
         </defs>
 
-        <path
+        <motion.path
           d="M 155 900 C 125 820, 185 740, 155 660 C 125 580, 185 500, 155 420 C 125 340, 185 260, 155 180 C 130 120, 165 60, 155 0"
           fill="none"
           stroke="url(#stemGrad2)"
           strokeWidth="2.8"
-          pathLength="1"
-          className="vine-path"
-          style={{ animationDelay: "0s", animationDuration: "3.6s" }}
           filter="url(#stemGlow2)"
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: STEM_DUR, ease: "easeInOut" }}
         />
 
         {BRANCHES.map((b, i) => (
-          <path
+          <motion.path
             key={`br-${i}`}
             d={`M 155 ${b.y} Q ${b.dir > 0 ? 215 : 95} ${b.y - 15}, ${b.ex} ${b.ey}`}
             fill="none"
             stroke="hsl(142 62% 50%)"
             strokeWidth="1.8"
             strokeOpacity={0.72}
-            pathLength="1"
-            className="vine-branch"
-            style={{ animationDelay: b.branchDelay, animationDuration: "1.2s" }}
+            initial={{ pathLength: 0 }}
+            animate={{ pathLength: 1 }}
+            transition={{ delay: branchDelay(b.y), duration: BRANCH_DUR, ease: BRANCH_EASE }}
           />
         ))}
 
         {BRANCHES.map((b, i) => (
-          <circle
+          <motion.circle
             key={`jn-${i}`}
             cx={155}
             cy={b.y}
             r={2.5}
             fill="hsl(142 65% 58%)"
             fillOpacity="0.5"
+            style={{ transformBox: "fill-box", transformOrigin: "center" }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ delay: branchDelay(b.y) - 0.15, duration: 0.3, ease: "easeOut" }}
           />
         ))}
 
         {BRANCHES.map((b, i) => (
-          <circle
+          <motion.circle
             key={`lf-${i}`}
             cx={b.ex}
             cy={b.ey}
             r={b.leafR}
             fill="url(#leafGrad2)"
             filter="url(#leafGlow2)"
-            className="vine-leaf"
-            style={{
-              animationDelay: b.leafDelay,
-              transformOrigin: `${b.ex}px ${b.ey}px`,
+            style={{ transformBox: "fill-box", transformOrigin: "center" }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{
+              delay: leafDelay(b.y),
+              duration: 0.5,
+              type: "spring",
+              stiffness: 180,
+              damping: 14,
             }}
           />
         ))}
 
         {BRANCHES.map((b, i) => (
-          <circle
+          <motion.circle
             key={`sp-${i}`}
             cx={b.dir > 0 ? b.ex + 18 : b.ex - 18}
             cy={b.ey - 10}
             r={b.leafR * 0.45}
             fill="hsl(142 65% 62%)"
             fillOpacity="0.38"
-            className="vine-leaf"
-            style={{
-              animationDelay: `calc(${b.leafDelay} + 0.2s)`,
-              transformOrigin: `${b.dir > 0 ? b.ex + 18 : b.ex - 18}px ${b.ey - 10}px`,
+            style={{ transformBox: "fill-box", transformOrigin: "center" }}
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{
+              delay: leafDelay(b.y) + 0.25,
+              duration: 0.4,
+              type: "spring",
+              stiffness: 200,
+              damping: 16,
             }}
           />
         ))}
@@ -231,7 +257,7 @@ const INDUSTRY_TILES = [
   {
     icon: TrendingUp,
     title: "Market Intelligence",
-    desc: "AI-scanned signals from 150+ TTOs, patent filings, and live academic publications — structured and scored.",
+    desc: "AI-scanned signals from 150+ TTOs, patent filings, and live academic publications, structured and scored.",
   },
   {
     icon: GitMerge,
@@ -254,7 +280,7 @@ const RESEARCH_TILES = [
   {
     icon: Layers,
     title: "Structured Project Workspace",
-    desc: "An 11-section project canvas guiding your work from hypothesis through publication — organized, versioned, and shareable.",
+    desc: "An 11-section project canvas guiding your work from hypothesis through publication. Organized, versioned, and shareable.",
   },
   {
     icon: Eye,
@@ -448,7 +474,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
         </div>
 
         <p className="mt-6 text-xs" style={{ color: "hsl(210 15% 45%)" }}>
-          Both portals share the same secure login — choose your path once you're in.
+          Both portals share the same secure login. Choose your path once you're in.
         </p>
       </div>
     </section>
@@ -513,15 +539,15 @@ export default function Landing() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl">
-              <span className="text-foreground">Where Biotech Research</span>
+              <span className="text-foreground">Where Biotech Research Meets</span>
               <br />
               <span className="gradient-text dark:gradient-text gradient-text-light">
-                Meets Industry.
+                Industry Intelligence.
               </span>
             </h1>
 
             <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-10">
-              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies — powered by AI that reads the science so you don't have to.
+              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by AI that reads the science so you don't have to.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
@@ -549,7 +575,7 @@ export default function Landing() {
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground">
-              Both portals share the same secure login — choose your path once you're in.
+              Both portals share the same secure login. Choose your path once you're in.
             </p>
 
             <div
@@ -581,12 +607,12 @@ export default function Landing() {
                 {
                   icon: TrendingUp,
                   title: "Discover before the crowd",
-                  desc: "Surface pre-clinical assets from 150+ tech transfer offices the moment they're published — enriched by AI with target, modality, and stage.",
+                  desc: "Surface pre-clinical assets from 150+ tech transfer offices the moment they're published, enriched by AI with target, modality, and stage.",
                 },
                 {
                   icon: Layers,
                   title: "Structure your science",
-                  desc: "EdenLab gives researchers a 11-section project workspace, grants tracker, and literature review tool — all in one place.",
+                  desc: "EdenLab gives researchers an 11-section project workspace, grants tracker, and literature review tool, all in one place.",
                 },
                 {
                   icon: Users,
