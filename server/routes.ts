@@ -407,19 +407,21 @@ export async function registerRoutes(
         const count = db?.count ?? 0;
         const lastSeenAt = db?.lastSeenAt ?? null;
         const ageMs = lastSeenAt ? now - new Date(lastSeenAt).getTime() : null;
-        let status: "green" | "yellow" | "red";
-        if (count > 0 && ageMs !== null && ageMs < STALE_MS) {
-          status = "green";
-        } else if (count > 0) {
-          status = "yellow";
+        let status: "live" | "stale" | "empty" | "never";
+        if (!db) {
+          status = "never";
+        } else if (count === 0) {
+          status = "empty";
+        } else if (ageMs !== null && ageMs < STALE_MS) {
+          status = "live";
         } else {
-          status = "red";
+          status = "stale";
         }
         return { institution: scraper.institution, count, lastSeenAt, status };
       });
 
       rows.sort((a, b) => {
-        const order = { red: 0, yellow: 1, green: 2 };
+        const order = { never: 0, empty: 1, stale: 2, live: 3 };
         return order[a.status] - order[b.status];
       });
 
@@ -429,45 +431,48 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/admin/scraper-health/ping", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    try {
-      const PING_TIMEOUT_MS = 10_000;
-      const CONCURRENCY = 3;
+  app.get("/api/admin/scraper-health/ping-stream", (req, res) => {
+    const pw = req.query.pw;
+    if (pw !== "eden") { res.status(401).json({ error: "Unauthorized" }); return; }
 
-      const tasks = ALL_SCRAPERS.map((scraper) => async () => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const PING_TIMEOUT_MS = 10_000;
+    const MAX_RESULTS = 3;
+    const CONCURRENCY = 3;
+
+    let idx = 0;
+
+    async function worker() {
+      while (idx < ALL_SCRAPERS.length) {
+        const scraper = ALL_SCRAPERS[idx++];
         const start = Date.now();
         try {
-          const result = await Promise.race([
+          const raw = await Promise.race([
             scraper.scrape(),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error("timeout")), PING_TIMEOUT_MS)
             ),
           ]);
-          return { institution: scraper.institution, count: result.length, error: null, durationMs: Date.now() - start };
+          const count = Math.min(raw.length, MAX_RESULTS);
+          res.write(`data: ${JSON.stringify({ institution: scraper.institution, count, error: null, durationMs: Date.now() - start })}\n\n`);
         } catch (err: any) {
-          return { institution: scraper.institution, count: 0, error: err?.message ?? "error", durationMs: Date.now() - start };
-        }
-      });
-
-      const results: Array<{ institution: string; count: number; error: string | null; durationMs: number }> = [];
-      let idx = 0;
-
-      async function worker() {
-        while (idx < tasks.length) {
-          const i = idx++;
-          results[i] = await tasks[i]();
+          res.write(`data: ${JSON.stringify({ institution: scraper.institution, count: 0, error: err?.message ?? "error", durationMs: Date.now() - start })}\n\n`);
         }
       }
-
-      const workers = Array.from({ length: Math.min(CONCURRENCY, tasks.length) }, worker);
-      await Promise.all(workers);
-
-      res.json({ results });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
     }
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY, ALL_SCRAPERS.length) }, () => worker());
+    Promise.all(workers).then(() => {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    }).catch(() => {
+      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+      res.end();
+    });
   });
 
   app.post("/api/ingest/run", async (_req, res) => {

@@ -1549,13 +1549,34 @@ function ResearchQueue({ pw }: { pw: string }) {
 }
 
 type PingRow = { institution: string; count: number; error: string | null; durationMs: number };
-type HealthRow = { institution: string; count: number; lastSeenAt: string | null; status: "green" | "yellow" | "red" };
+type ScraperStatus = "live" | "stale" | "empty" | "never";
+type ScraperHealthRow = { institution: string; count: number; lastSeenAt: string | null; status: ScraperStatus };
+
+function StatusBadge({ status, pingRow, pinging }: { status: ScraperStatus; pingRow?: PingRow; pinging: boolean }) {
+  if (pinging && !pingRow) {
+    return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> pinging</span>;
+  }
+  if (pingRow) {
+    if (pingRow.error) {
+      return <Badge variant="destructive" className="text-[10px] px-1.5 py-0 font-medium">Error</Badge>;
+    }
+    if (pingRow.count > 0) {
+      return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-emerald-600 hover:bg-emerald-600 text-white">Live</Badge>;
+    }
+    return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium text-amber-600">Empty</Badge>;
+  }
+  if (status === "live") return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-emerald-600 hover:bg-emerald-600 text-white">Live</Badge>;
+  if (status === "stale") return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium text-amber-600">Stale</Badge>;
+  if (status === "empty") return <Badge variant="secondary" className="text-[10px] px-1.5 py-0 font-medium text-muted-foreground">Empty</Badge>;
+  return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium text-muted-foreground/60">Never Run</Badge>;
+}
 
 function ScraperHealth({ pw }: { pw: string }) {
   const [pingResults, setPingResults] = useState<Record<string, PingRow>>({});
   const [pinging, setPinging] = useState(false);
+  const esRef = useRef<EventSource | null>(null);
 
-  const { data, isLoading, refetch } = useQuery<{ rows: HealthRow[]; total: number }>({
+  const { data, isLoading, refetch } = useQuery<{ rows: ScraperHealthRow[]; total: number }>({
     queryKey: ["/api/admin/scraper-health"],
     queryFn: async () => {
       const res = await fetch("/api/admin/scraper-health", { headers: { "x-admin-password": pw } });
@@ -1563,44 +1584,49 @@ function ScraperHealth({ pw }: { pw: string }) {
       return res.json();
     },
     staleTime: 60_000,
+    refetchInterval: 60_000,
     enabled: !!pw,
   });
 
-  async function pingAll() {
-    setPinging(true);
-    try {
-      const res = await fetch("/api/admin/scraper-health/ping", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const map: Record<string, PingRow> = {};
-        for (const r of json.results as PingRow[]) map[r.institution] = r;
-        setPingResults(map);
-        refetch();
-      }
-    } finally {
+  function pingAll() {
+    if (pinging) {
+      esRef.current?.close();
+      esRef.current = null;
       setPinging(false);
+      return;
     }
+    setPingResults({});
+    setPinging(true);
+    const es = new EventSource(`/api/admin/scraper-health/ping-stream?pw=${encodeURIComponent(pw)}`);
+    esRef.current = es;
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.done) {
+          es.close();
+          esRef.current = null;
+          setPinging(false);
+          refetch();
+          return;
+        }
+        setPingResults((prev) => ({ ...prev, [data.institution]: data as PingRow }));
+      } catch {}
+    };
+    es.onerror = () => {
+      es.close();
+      esRef.current = null;
+      setPinging(false);
+    };
   }
 
   const rows = data?.rows ?? [];
-  const greenCount = rows.filter((r) => r.status === "green").length;
-  const yellowCount = rows.filter((r) => r.status === "yellow").length;
-  const redCount = rows.filter((r) => r.status === "red").length;
-
-  function StatusDot({ status }: { status: "green" | "yellow" | "red" }) {
-    const cls = status === "green"
-      ? "bg-emerald-500"
-      : status === "yellow"
-      ? "bg-amber-400"
-      : "bg-red-500";
-    return <span className={`inline-block w-2.5 h-2.5 rounded-full ${cls}`} />;
-  }
+  const liveCount = rows.filter((r) => r.status === "live").length;
+  const staleCount = rows.filter((r) => r.status === "stale").length;
+  const emptyCount = rows.filter((r) => r.status === "empty").length;
+  const neverCount = rows.filter((r) => r.status === "never").length;
 
   function formatAge(lastSeenAt: string | null) {
-    if (!lastSeenAt) return <span className="text-muted-foreground/40">never</span>;
+    if (!lastSeenAt) return <span className="text-muted-foreground/40">—</span>;
     const ms = Date.now() - new Date(lastSeenAt).getTime();
     const h = Math.floor(ms / 3600000);
     if (h < 24) return <span className="text-emerald-600 dark:text-emerald-400">{h}h ago</span>;
@@ -1609,40 +1635,51 @@ function ScraperHealth({ pw }: { pw: string }) {
     return <span className="text-red-500">{d}d ago</span>;
   }
 
+  const pingDone = Object.keys(pingResults).length;
+  const pingTotal = data?.total ?? 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scraper Health</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            {data?.total ?? "…"} registered scrapers — DB presence and live ping status
+            {data?.total ?? "…"} registered scrapers — DB presence and live ping status. Auto-refreshes every 60s.
           </p>
         </div>
-        <Button
-          onClick={pingAll}
-          disabled={pinging}
-          size="sm"
-          data-testid="button-ping-all"
-        >
-          {pinging ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Wifi className="h-4 w-4 mr-2" />}
-          {pinging ? "Pinging…" : "Ping All"}
+        <Button onClick={pingAll} size="sm" variant={pinging ? "secondary" : "default"} data-testid="button-ping-all">
+          {pinging ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Stop ({pingDone}/{pingTotal})</> : <><Wifi className="h-4 w-4 mr-2" />Ping All</>}
         </Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground mb-1">Healthy</div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="stat-scraper-green">{greenCount}</div>
+      <div className="grid grid-cols-4 gap-3">
+        <div className="border border-border rounded-lg p-3 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Live</div>
+          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="stat-scraper-live">{liveCount}</div>
         </div>
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground mb-1">Stale / Empty</div>
-          <div className="text-2xl font-bold text-amber-500 tabular-nums" data-testid="stat-scraper-yellow">{yellowCount}</div>
+        <div className="border border-border rounded-lg p-3 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Stale (&gt;48h)</div>
+          <div className="text-2xl font-bold text-amber-500 tabular-nums" data-testid="stat-scraper-stale">{staleCount}</div>
         </div>
-        <div className="border border-border rounded-lg p-4 bg-card">
-          <div className="text-xs text-muted-foreground mb-1">No Data</div>
-          <div className="text-2xl font-bold text-red-500 tabular-nums" data-testid="stat-scraper-red">{redCount}</div>
+        <div className="border border-border rounded-lg p-3 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Empty</div>
+          <div className="text-2xl font-bold text-muted-foreground tabular-nums" data-testid="stat-scraper-empty">{emptyCount}</div>
+        </div>
+        <div className="border border-border rounded-lg p-3 bg-card">
+          <div className="text-xs text-muted-foreground mb-1">Never Run</div>
+          <div className="text-2xl font-bold text-red-500 tabular-nums" data-testid="stat-scraper-never">{neverCount}</div>
         </div>
       </div>
+
+      {pinging && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Pinging scrapers…</span>
+            <span className="tabular-nums">{pingDone} / {pingTotal}</span>
+          </div>
+          <Progress value={pingTotal > 0 ? (pingDone / pingTotal) * 100 : 0} className="h-1.5" />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-muted-foreground py-8">
@@ -1655,9 +1692,9 @@ function ScraperHealth({ pw }: { pw: string }) {
               <tr className="border-b border-border bg-muted/40">
                 <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
                 <th className="text-left py-2 px-3 font-medium text-muted-foreground">Institution</th>
-                <th className="text-right py-2 px-3 font-medium text-muted-foreground">DB Count</th>
+                <th className="text-right py-2 px-3 font-medium text-muted-foreground">DB Assets</th>
                 <th className="text-right py-2 px-3 font-medium text-muted-foreground">Last Seen</th>
-                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Ping</th>
+                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Ping Result</th>
               </tr>
             </thead>
             <tbody>
@@ -1666,7 +1703,7 @@ function ScraperHealth({ pw }: { pw: string }) {
                 return (
                   <tr key={row.institution} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-muted/20"}`} data-testid={`row-scraper-${i}`}>
                     <td className="py-2 px-3">
-                      <StatusDot status={ping ? (ping.error ? "red" : ping.count > 0 ? "green" : "yellow") : row.status} />
+                      <StatusBadge status={row.status} pingRow={ping} pinging={pinging} />
                     </td>
                     <td className="py-2 px-3 font-medium text-foreground">{row.institution}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-foreground">
@@ -1674,13 +1711,11 @@ function ScraperHealth({ pw }: { pw: string }) {
                     </td>
                     <td className="py-2 px-3 text-right tabular-nums">{formatAge(row.lastSeenAt)}</td>
                     <td className="py-2 px-3 text-right tabular-nums text-xs">
-                      {pinging && !ping ? (
-                        <Loader2 className="h-3 w-3 animate-spin inline-block text-muted-foreground" />
-                      ) : ping ? (
+                      {ping ? (
                         ping.error ? (
-                          <span className="text-red-500" title={ping.error}>err ({Math.round(ping.durationMs / 1000)}s)</span>
+                          <span className="text-red-500" title={ping.error}>error ({(ping.durationMs / 1000).toFixed(1)}s)</span>
                         ) : (
-                          <span className="text-emerald-600 dark:text-emerald-400">{ping.count} ({Math.round(ping.durationMs / 1000)}s)</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">{ping.count} found ({(ping.durationMs / 1000).toFixed(1)}s)</span>
                         )
                       ) : (
                         <span className="text-muted-foreground/40">—</span>
