@@ -388,6 +388,10 @@
     text-decoration: underline;
   }
 
+  body:has(.pitch-deck) {
+    background: #0d1117 !important;
+  }
+
   .pitch-deck {
     overflow: visible !important;
     height: auto !important;
