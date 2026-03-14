@@ -178,7 +178,8 @@ export function createTechPublisherScraper(
 
     let sitemapPageCount = 0;
     if (sitemapTechUrls.length > 0) {
-      const uncovered = sitemapTechUrls.filter((u) => !seenUrls.has(u));
+      let uncovered = sitemapTechUrls.filter((u) => !seenUrls.has(u));
+      if (opts.maxTech != null) uncovered = uncovered.slice(0, opts.maxTech);
       if (uncovered.length > 0) {
         await runConcurrent(uncovered, async (url) => {
           const title = await fetchTitle(url, signal);

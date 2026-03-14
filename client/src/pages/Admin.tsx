@@ -579,6 +579,28 @@ function InstitutionSync({ pw }: { pw: string }) {
     },
   });
 
+  const cancelStaleMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Cancel failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Session cleared", description: `Stale session for ${selectedInstitution} reset` });
+      refetchStatus();
+      refetchSessions();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cancel failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const pushMutation = useMutation({
     mutationFn: async (institution: string) => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/push`, {
@@ -703,6 +725,23 @@ function InstitutionSync({ pw }: { pw: string }) {
               <p className="text-xs text-muted-foreground mt-2">
                 {rawCount > 0 ? `${rawCount} raw listings scraped` : "Fetching listings from institution..."}
               </p>
+              {!syncIsActive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => cancelStaleMutation.mutate(selectedInstitution)}
+                  disabled={cancelStaleMutation.isPending}
+                  data-testid="button-clear-stale"
+                >
+                  {cancelStaleMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Clear stale session
+                </Button>
+              )}
             </div>
           )}
 
