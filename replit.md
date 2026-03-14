@@ -51,6 +51,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 
 **Login Page** (`/login`): Sign In / Sign Up tabs; sign-up includes role selector (Industry / Researcher / Concept).
 **Landing Page** (`/`): Three portal CTAs; auto-redirects to portal if already authenticated. Portal toggle shows Industry / Research / Discovery tabs.
+**Pitch Deck** (`/pitch`): 10-slide branded presentation (no auth, bypasses SiteGate). Dark background, scroll-snap, floating dot nav, Export PDF button. Print CSS produces one slide per page with forced dark colors. `?print` param hides nav for clean layout. File: `client/src/pages/PitchDeck.tsx`.
 **Sign Out**: All sidebars have "Sign Out" button → clears Supabase session → redirects to /login.
 **Admin**: unchanged — still uses `eden-admin-pw` localStorage gate (password: "eden").
 

@@ -387,4 +387,55 @@
     color: #0070a8 !important;
     text-decoration: underline;
   }
+
+  .pitch-deck {
+    overflow: visible !important;
+    height: auto !important;
+    scroll-snap-type: none !important;
+  }
+
+  .pitch-slide {
+    height: 100vh !important;
+    min-height: 100vh !important;
+    page-break-after: always;
+    break-after: page;
+    page-break-inside: avoid;
+    break-inside: avoid;
+    background: #0d1117 !important;
+    color: #e6edf3 !important;
+  }
+
+  .pitch-slide:last-child {
+    page-break-after: auto;
+    break-after: auto;
+  }
+
+  .pitch-nav,
+  .pitch-export {
+    display: none !important;
+  }
+
+  .pitch-deck * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+
+  .pitch-deck .bg-card,
+  .pitch-deck .bg-background,
+  .pitch-deck .bg-muted {
+    background-color: inherit !important;
+  }
+
+  .pitch-deck .text-foreground {
+    color: inherit !important;
+  }
+
+  .pitch-deck .text-muted-foreground {
+    color: #8b949e !important;
+  }
+
+  .pitch-deck body {
+    background: #0d1117 !important;
+  }
 }

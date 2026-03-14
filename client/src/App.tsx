@@ -31,6 +31,7 @@ import ConceptDetail from "@/pages/ConceptDetail";
 import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
+import PitchDeck from "@/pages/PitchDeck";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -162,6 +163,8 @@ function Router() {
           <ResearchGrants />
         </ResearchLayout>
       </Route>
+
+      <Route path="/pitch" component={PitchDeck} />
 
       <Route path="/discovery" component={DiscoveryFeed} />
       <Route path="/discovery/concept/:id" component={ConceptDetail} />
