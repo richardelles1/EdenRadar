@@ -1,192 +1,473 @@
-import { useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { useAuth } from "@/hooks/use-auth";
 import {
+  Building2,
   FlaskConical,
-  Download,
+  TrendingUp,
+  GitMerge,
+  FileBarChart2,
+  Users,
+  Layers,
+  Eye,
+  BookOpen,
+  Award,
+  ArrowRight,
   Zap,
-  Database,
-  BrainCircuit,
-  ChevronRight,
-  LogIn,
 } from "lucide-react";
 
-function EdenSVG() {
-  const branches = [
-    { y: 52,  dir: -1, ox: 80, tipX: 14,  tipY: 40,  r: 5.5, delay: "0s" },
-    { y: 102, dir:  1, ox: 80, tipX: 148, tipY: 90,  r: 4.5, delay: "0.45s" },
-    { y: 157, dir: -1, ox: 80, tipX: 12,  tipY: 145, r: 6.0, delay: "0.9s" },
-    { y: 210, dir:  1, ox: 80, tipX: 150, tipY: 198, r: 4.0, delay: "1.35s" },
-    { y: 262, dir: -1, ox: 80, tipX: 18,  tipY: 250, r: 5.0, delay: "1.8s" },
-    { y: 310, dir:  1, ox: 80, tipX: 147, tipY: 298, r: 4.5, delay: "2.25s" },
-    { y: 358, dir: -1, ox: 80, tipX: 22,  tipY: 347, r: 3.5, delay: "2.7s" },
-  ];
+/* ─────────────────────────── helpers ─────────────────────────── */
 
-  return (
-    <svg viewBox="0 0 160 380" className="w-full h-full" style={{ overflow: "visible" }}>
-      <defs>
-        <linearGradient id="stemGrad" x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%"   stopColor="hsl(142 70% 55%)" stopOpacity="0.15" />
-          <stop offset="20%"  stopColor="hsl(142 65% 52%)" stopOpacity="0.88" />
-          <stop offset="80%"  stopColor="hsl(155 60% 46%)" stopOpacity="0.88" />
-          <stop offset="100%" stopColor="hsl(155 55% 42%)" stopOpacity="0.15" />
-        </linearGradient>
-        <radialGradient id="nodeGrad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
-          <stop offset="60%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.95" />
-          <stop offset="100%" stopColor="hsl(142 58% 40%)" stopOpacity="0.55" />
-        </radialGradient>
-        <filter id="leafGlow">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-        <filter id="stemGlow">
-          <feGaussianBlur stdDeviation="1" result="blur" />
-          <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-        </filter>
-      </defs>
-
-      <circle cx="80" cy="190" r="75"  fill="none" stroke="hsl(142 55% 45%)" strokeOpacity="0.07" strokeWidth="1" />
-      <circle cx="80" cy="190" r="145" fill="none" stroke="hsl(142 55% 45%)" strokeOpacity="0.04" strokeWidth="1" />
-
-      <path
-        d="M 80 378 C 73 348, 87 318, 80 288 C 73 258, 87 228, 80 198 C 73 168, 87 138, 80 108 C 73 78, 87 48, 80 18"
-        fill="none"
-        stroke="url(#stemGrad)"
-        strokeWidth="2.5"
-        filter="url(#stemGlow)"
-      />
-
-      {branches.map((b, i) => (
-        <path
-          key={`branch-${i}`}
-          d={`M ${b.ox} ${b.y} C ${b.ox + b.dir * 22} ${b.y - 4}, ${b.tipX + b.dir * -18} ${b.tipY + 4}, ${b.tipX} ${b.tipY}`}
-          fill="none"
-          stroke="hsl(142 62% 48%)"
-          strokeWidth="1.5"
-          strokeOpacity={i % 2 === 0 ? 0.75 : 0.68}
-        />
-      ))}
-
-      {branches.map((b, i) => (
-        <circle key={`junc-${i}`} cx={b.ox} cy={b.y} r={2} fill="hsl(142 65% 58%)" fillOpacity="0.55" />
-      ))}
-
-      {branches.map((b, i) => (
-        <circle
-          key={`node-${i}`}
-          cx={b.tipX}
-          cy={b.tipY}
-          r={b.r}
-          fill="url(#nodeGrad)"
-          filter="url(#leafGlow)"
-          className="eden-node"
-          style={{ animationDelay: b.delay }}
-        />
-      ))}
-
-      <circle cx={8}   cy={44}  r={1.8} fill="hsl(142 65% 62%)" fillOpacity="0.38" />
-      <circle cx={144} cy={96}  r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.32" />
-      <circle cx={6}   cy={150} r={2.0} fill="hsl(142 65% 62%)" fillOpacity="0.38" />
-      <circle cx={146} cy={204} r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.30" />
-      <circle cx={12}  cy={255} r={1.8} fill="hsl(142 65% 62%)" fillOpacity="0.35" />
-      <circle cx={143} cy={304} r={1.5} fill="hsl(142 65% 62%)" fillOpacity="0.28" />
-    </svg>
-  );
+function useReveal(threshold = 0.18) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("is-visible"); obs.disconnect(); } },
+      { threshold }
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [threshold]);
+  return ref;
 }
 
-function RadarGraphic() {
+/* ─────────────────────────── RadarBackground ─────────────────── */
+
+function RadarBackground() {
   return (
-    <div className="relative w-64 h-64 flex items-center justify-center">
-      {[1, 0.75, 0.5, 0.3].map((scale, i) => (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      <div
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+        style={{
+          width: "min(140vw, 1100px)",
+          height: "min(140vw, 1100px)",
+          animation: "radar-bg-slow 18s linear infinite",
+          transformOrigin: "center center",
+          background:
+            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.04) 310deg, hsl(142 65% 48% / 0.13) 360deg)",
+          borderRadius: "50%",
+        }}
+      />
+      {[320, 520, 720, 920].map((r, i) => (
         <div
-          key={i}
-          className="absolute rounded-full border border-primary/20"
+          key={r}
+          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
           style={{
-            width: `${scale * 100}%`,
-            height: `${scale * 100}%`,
+            width: r,
+            height: r,
+            borderColor: `hsl(142 55% 45% / ${0.07 - i * 0.01})`,
           }}
         />
       ))}
       <div
-        className="absolute inset-0 rounded-full overflow-hidden radar-sweep"
-        style={{ transformOrigin: "center center" }}
-      >
-        <div
-          className="absolute inset-0 rounded-full"
-          style={{
-            background:
-              "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.08) 300deg, hsl(142 65% 48% / 0.35) 360deg)",
-          }}
-        />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div
-          className="w-0.5 h-1/2 origin-bottom"
-          style={{
-            background: "linear-gradient(to top, hsl(142 65% 55% / 0.9), transparent)",
-          }}
-        />
-      </div>
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
-        <div className="w-2.5 h-2.5 rounded-full bg-primary glow-pulse" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-full h-px bg-primary/10" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="w-px h-full bg-primary/10" />
-      </div>
+        className="absolute left-1/2 top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{ background: "hsl(142 65% 55%)", animation: "pulse-ring 3s ease-out infinite", opacity: 0 }}
+      />
     </div>
   );
 }
 
-const FEATURES = [
+/* ─────────────────────────── HeroVine ────────────────────────── */
+
+const BRANCHES = [
+  { y: 760, dir: 1,  ex: 280, ey: 730, leafR: 8,   stemDelay: "1.0s", branchDelay: "1.3s", leafDelay: "2.55s" },
+  { y: 670, dir: -1, ex: 30,  ey: 640, leafR: 7,   stemDelay: "1.0s", branchDelay: "1.7s", leafDelay: "2.95s" },
+  { y: 580, dir: 1,  ex: 285, ey: 548, leafR: 9,   stemDelay: "1.0s", branchDelay: "2.1s", leafDelay: "3.35s" },
+  { y: 490, dir: -1, ex: 25,  ey: 460, leafR: 7.5, stemDelay: "1.0s", branchDelay: "2.5s", leafDelay: "3.75s" },
+  { y: 400, dir: 1,  ex: 278, ey: 370, leafR: 8.5, stemDelay: "1.0s", branchDelay: "2.85s", leafDelay: "4.1s" },
+  { y: 310, dir: -1, ex: 30,  ey: 280, leafR: 6.5, stemDelay: "1.0s", branchDelay: "3.15s", leafDelay: "4.4s" },
+  { y: 220, dir: 1,  ex: 265, ey: 192, leafR: 7,   stemDelay: "1.0s", branchDelay: "3.4s",  leafDelay: "4.65s" },
+  { y: 130, dir: -1, ex: 40,  ey: 104, leafR: 6,   stemDelay: "1.0s", branchDelay: "3.6s",  leafDelay: "4.85s" },
+];
+
+function HeroVine() {
+  return (
+    <div
+      className="absolute bottom-0 left-0 pointer-events-none select-none hidden sm:block"
+      style={{ width: 320, height: "calc(100% + 40px)", zIndex: 1 }}
+      aria-hidden
+    >
+      <svg
+        viewBox="0 0 320 900"
+        preserveAspectRatio="xMinYMax meet"
+        className="w-full h-full"
+        style={{ overflow: "visible" }}
+      >
+        <defs>
+          <linearGradient id="stemGrad2" x1="0%" y1="100%" x2="0%" y2="0%">
+            <stop offset="0%"   stopColor="hsl(142 70% 55%)" stopOpacity="0.08" />
+            <stop offset="15%"  stopColor="hsl(142 65% 52%)" stopOpacity="0.85" />
+            <stop offset="85%"  stopColor="hsl(155 60% 46%)" stopOpacity="0.75" />
+            <stop offset="100%" stopColor="hsl(155 55% 42%)" stopOpacity="0.1" />
+          </linearGradient>
+          <radialGradient id="leafGrad2" cx="50%" cy="50%" r="50%">
+            <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
+            <stop offset="55%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.95" />
+            <stop offset="100%" stopColor="hsl(142 55% 38%)" stopOpacity="0.5" />
+          </radialGradient>
+          <filter id="leafGlow2">
+            <feGaussianBlur stdDeviation="3" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+          <filter id="stemGlow2">
+            <feGaussianBlur stdDeviation="1.2" result="blur" />
+            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+          </filter>
+        </defs>
+
+        <path
+          d="M 155 900 C 125 820, 185 740, 155 660 C 125 580, 185 500, 155 420 C 125 340, 185 260, 155 180 C 130 120, 165 60, 155 0"
+          fill="none"
+          stroke="url(#stemGrad2)"
+          strokeWidth="2.8"
+          pathLength="1"
+          className="vine-path"
+          style={{ animationDelay: "0s", animationDuration: "3.6s" }}
+          filter="url(#stemGlow2)"
+        />
+
+        {BRANCHES.map((b, i) => (
+          <path
+            key={`br-${i}`}
+            d={`M 155 ${b.y} Q ${b.dir > 0 ? 215 : 95} ${b.y - 15}, ${b.ex} ${b.ey}`}
+            fill="none"
+            stroke="hsl(142 62% 50%)"
+            strokeWidth="1.8"
+            strokeOpacity={0.72}
+            pathLength="1"
+            className="vine-branch"
+            style={{ animationDelay: b.branchDelay, animationDuration: "1.2s" }}
+          />
+        ))}
+
+        {BRANCHES.map((b, i) => (
+          <circle
+            key={`jn-${i}`}
+            cx={155}
+            cy={b.y}
+            r={2.5}
+            fill="hsl(142 65% 58%)"
+            fillOpacity="0.5"
+          />
+        ))}
+
+        {BRANCHES.map((b, i) => (
+          <circle
+            key={`lf-${i}`}
+            cx={b.ex}
+            cy={b.ey}
+            r={b.leafR}
+            fill="url(#leafGrad2)"
+            filter="url(#leafGlow2)"
+            className="vine-leaf"
+            style={{
+              animationDelay: b.leafDelay,
+              transformOrigin: `${b.ex}px ${b.ey}px`,
+            }}
+          />
+        ))}
+
+        {BRANCHES.map((b, i) => (
+          <circle
+            key={`sp-${i}`}
+            cx={b.dir > 0 ? b.ex + 18 : b.ex - 18}
+            cy={b.ey - 10}
+            r={b.leafR * 0.45}
+            fill="hsl(142 65% 62%)"
+            fillOpacity="0.38"
+            className="vine-leaf"
+            style={{
+              animationDelay: `calc(${b.leafDelay} + 0.2s)`,
+              transformOrigin: `${b.dir > 0 ? b.ex + 18 : b.ex - 18}px ${b.ey - 10}px`,
+            }}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+/* ─────────────────────────── FloatingParticles ───────────────── */
+
+const PARTICLES = [
+  { x: "12%", y: "18%", size: 3, delay: "0s",    dur: "6s" },
+  { x: "78%", y: "12%", size: 2, delay: "1.4s",  dur: "7.5s" },
+  { x: "88%", y: "55%", size: 2.5, delay: "2.8s", dur: "5.5s" },
+  { x: "65%", y: "82%", size: 2, delay: "0.7s",  dur: "8s" },
+  { x: "22%", y: "72%", size: 3, delay: "3.2s",  dur: "6.5s" },
+  { x: "48%", y: "8%",  size: 2, delay: "1.8s",  dur: "7s" },
+  { x: "92%", y: "28%", size: 1.5, delay: "4s",  dur: "9s" },
+  { x: "35%", y: "90%", size: 2.5, delay: "2s",  dur: "6s" },
+];
+
+function FloatingParticles() {
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+      {PARTICLES.map((p, i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            left: p.x,
+            top: p.y,
+            width: p.size * 2,
+            height: p.size * 2,
+            background: "hsl(142 65% 55%)",
+            animation: `particle-drift ${p.dur} ease-in-out ${p.delay} infinite`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─────────────────────────── PortalToggle ────────────────────── */
+
+const INDUSTRY_TILES = [
   {
-    icon: BrainCircuit,
-    title: "AI-Powered Extraction",
-    description:
-      "GPT-4o-mini reads each abstract and structures asset name, target, modality, stage, and indication automatically.",
+    icon: TrendingUp,
+    title: "Market Intelligence",
+    desc: "AI-scanned signals from 150+ TTOs, patent filings, and live academic publications — structured and scored.",
   },
   {
-    icon: Database,
-    title: "Multi-Source Intelligence",
-    description:
-      "Ingests PubMed, ClinicalTrials.gov, bioRxiv, medRxiv, patents, NIH Reporter, OpenAlex, and 205 tech transfer offices.",
+    icon: GitMerge,
+    title: "Early-Stage Deal Flow",
+    desc: "Surface pre-clinical and discovery-phase assets before they hit the market with enriched target, modality, and stage data.",
   },
   {
-    icon: Download,
-    title: "Export-Ready Data",
-    description:
-      "Save assets to your pipeline and export structured JSON or CSV for downstream analysis, CRMs, or spreadsheets.",
+    icon: FileBarChart2,
+    title: "World-Class Reporting",
+    desc: "Portfolio-grade dossiers, pipeline CSVs, and scored asset breakdowns ready for BD and board-level review.",
+  },
+  {
+    icon: Users,
+    title: "Research Team Access",
+    desc: "Connect directly with university researchers behind the science to build relationships that convert into real pipeline.",
   },
 ];
 
-const STEPS = [
+const RESEARCH_TILES = [
   {
-    num: "01",
-    title: "Type a search query",
-    description: "Enter any biomedical topic — a target, disease, modality, or combination.",
+    icon: Layers,
+    title: "Structured Project Workspace",
+    desc: "An 11-section project canvas guiding your work from hypothesis through publication — organized, versioned, and shareable.",
   },
   {
-    num: "02",
-    title: "AI reads the literature",
-    description:
-      "EdenRadar fetches signals from 8 live sources and runs each through GPT-4o-mini to extract structured drug asset data.",
+    icon: Eye,
+    title: "Visibility to Industry",
+    desc: "Your research surfaces as scored asset signals to industry teams actively seeking your areas of expertise.",
   },
   {
-    num: "03",
-    title: "Build your pipeline",
-    description:
-      "Save promising assets, filter by stage or modality, and export when you're ready to act.",
+    icon: BookOpen,
+    title: "AI Literature Review",
+    desc: "Query millions of papers and receive AI-structured summaries, key findings, and citation-ready insights.",
   },
+  {
+    icon: Award,
+    title: "Grants Discovery",
+    desc: "Track NIH, NSF, SBIR, and foundation grant opportunities matched to your research profile in real time.",
+  },
+];
+
+function PortalToggle({ onLogin }: { onLogin: () => void }) {
+  const [active, setActive] = useState<"industry" | "research">("industry");
+  const ref = useReveal();
+
+  const tiles = active === "industry" ? INDUSTRY_TILES : RESEARCH_TILES;
+
+  return (
+    <section ref={ref} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
+      <div className="text-center mb-10 sm:mb-14">
+        <p className="text-xs font-semibold text-primary uppercase tracking-widest mb-4">
+          Built for Both Sides
+        </p>
+        <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 leading-tight">
+          One platform. Two powerful portals.
+        </h2>
+        <p className="text-muted-foreground max-w-lg mx-auto text-base">
+          Whether you're sourcing pipeline or building science, EdenRadar is engineered for you.
+        </p>
+
+        <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
+          {(["industry", "research"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActive(tab)}
+              data-testid={`toggle-${tab}`}
+              className="relative px-5 sm:px-8 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
+              style={
+                active === tab
+                  ? {
+                      background: "hsl(var(--primary))",
+                      color: "hsl(var(--primary-foreground))",
+                      boxShadow: "0 2px 12px hsl(142 52% 36% / 0.35)",
+                    }
+                  : { color: "hsl(var(--muted-foreground))" }
+              }
+            >
+              {tab === "industry" ? "Industry Intelligence" : "Research Portal"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6" key={active}>
+        {tiles.map((tile, i) => (
+          <div
+            key={tile.title}
+            className="group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card hover:border-primary/40 transition-all duration-200 hover:shadow-md"
+            style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
+            data-testid={`tile-${active}-${i}`}
+          >
+            <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-200">
+              <tile.icon className="w-5 h-5 text-primary" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">{tile.desc}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="text-center mt-10">
+        <button
+          onClick={onLogin}
+          className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
+          data-testid="button-toggle-cta"
+        >
+          Explore the {active === "industry" ? "Industry" : "Research"} portal
+          <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── BottomCTA ──────────────────────── */
+
+function BottomCTA({ onLogin }: { onLogin: () => void }) {
+  const ref = useReveal();
+  return (
+    <section
+      ref={ref}
+      className="reveal-section relative overflow-hidden"
+      style={{
+        background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 10%) 60%, hsl(155 40% 12%) 100%)",
+      }}
+    >
+      <div className="absolute inset-0 pointer-events-none" aria-hidden>
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              "conic-gradient(from 200deg at 80% 50%, transparent 0deg, hsl(142 65% 48% / 0.06) 60deg, transparent 120deg)",
+          }}
+        />
+        <div className="absolute bottom-0 right-0 w-64 h-64 opacity-20" style={{ pointerEvents: "none" }}>
+          <svg viewBox="0 0 200 400" className="w-full h-full" aria-hidden>
+            <defs>
+              <linearGradient id="ctaVineGrad" x1="0%" y1="100%" x2="0%" y2="0%">
+                <stop offset="0%" stopColor="hsl(142 65% 52%)" stopOpacity="0" />
+                <stop offset="100%" stopColor="hsl(142 65% 52%)" stopOpacity="0.8" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M 100 400 C 80 340, 120 280, 100 220 C 80 160, 120 100, 100 40"
+              fill="none" stroke="url(#ctaVineGrad)" strokeWidth="2"
+            />
+            {[380, 310, 240, 170, 100, 50].map((y, i) => (
+              <circle key={y} cx={100} cy={y} r={i % 2 === 0 ? 5 : 4}
+                fill="hsl(142 65% 55%)" fillOpacity={0.5 - i * 0.05} />
+            ))}
+          </svg>
+        </div>
+      </div>
+
+      <div className="relative max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28 text-center">
+        <div
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full mb-6"
+          style={{ background: "hsl(142 52% 36% / 0.2)", border: "1px solid hsl(142 52% 36% / 0.35)" }}
+        >
+          <Zap className="w-3.5 h-3.5" style={{ color: "hsl(142 65% 60%)" }} />
+          <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: "hsl(142 65% 60%)" }}>
+            Join EdenRadar Today
+          </span>
+        </div>
+
+        <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold mb-5 leading-tight text-white">
+          Get started with{" "}
+          <span style={{
+            background: "linear-gradient(135deg, hsl(142 70% 62%) 0%, hsl(155 65% 58%) 100%)",
+            WebkitBackgroundClip: "text",
+            WebkitTextFillColor: "transparent",
+            backgroundClip: "text",
+          }}>
+            EdenRadar
+          </span>{" "}
+          today.
+        </h2>
+        <p className="text-base sm:text-lg mb-10 max-w-xl mx-auto leading-relaxed" style={{ color: "hsl(210 15% 70%)" }}>
+          The platform where world-class university research meets the industry teams ready to build the next breakthrough therapy.
+        </p>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <Button
+            size="lg"
+            onClick={onLogin}
+            data-testid="cta-bottom-industry"
+            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
+            style={{
+              background: "hsl(142 52% 36%)",
+              color: "white",
+              border: "none",
+            }}
+          >
+            <Building2 className="w-4 h-4" />
+            For Industry
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={onLogin}
+            data-testid="cta-bottom-research"
+            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
+            style={{
+              borderColor: "hsl(142 52% 36% / 0.5)",
+              color: "hsl(142 65% 62%)",
+              background: "transparent",
+            }}
+          >
+            <FlaskConical className="w-4 h-4" />
+            For Researchers
+          </Button>
+        </div>
+
+        <p className="mt-6 text-xs" style={{ color: "hsl(210 15% 45%)" }}>
+          Both portals share the same secure login — choose your path once you're in.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+/* ─────────────────────────── Main Landing ────────────────────── */
+
+const STATS = [
+  { value: "150+",   label: "Tech Transfer Offices" },
+  { value: "10M+",   label: "Papers Indexed" },
+  { value: "AI",     label: "Enriched Signals" },
+  { value: "2-Sided", label: "Ecosystem" },
 ];
 
 export default function Landing() {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
+  const statsRef = useReveal();
 
   useEffect(() => {
     if (!loading && session && role) {
@@ -197,118 +478,133 @@ export default function Landing() {
 
   if (!loading && session && role) return null;
 
-  function handleLogin() {
-    navigate("/login");
-  }
+  function handleLogin() { navigate("/login"); }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
 
       <main className="flex-1">
-        <section className="relative overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none">
+        {/* ── Hero ── */}
+        <section className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
+          <RadarBackground />
+          <FloatingParticles />
+          <HeroVine />
+
+          <div
+            className="absolute inset-0 pointer-events-none"
+            aria-hidden
+            style={{
+              background:
+                "radial-gradient(ellipse at 70% 0%, hsl(142 52% 36% / 0.06) 0%, transparent 55%)",
+            }}
+          />
+
+          <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center"
+            style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem" }}>
+
             <div
-              className="absolute top-0 right-0 w-1/2 h-full opacity-5"
-              style={{
-                background:
-                  "radial-gradient(ellipse at 80% 20%, hsl(142 65% 48%) 0%, transparent 60%)",
-              }}
-            />
+              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/5 mb-8"
+            >
+              <Zap className="w-3.5 h-3.5 text-primary" />
+              <span className="text-xs font-semibold text-primary tracking-widest uppercase">
+                AI-Powered Biotech Asset Matchmaking
+              </span>
+            </div>
+
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl">
+              <span className="text-foreground">Where Biotech Research</span>
+              <br />
+              <span className="gradient-text dark:gradient-text gradient-text-light">
+                Meets Industry.
+              </span>
+            </h1>
+
+            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-10">
+              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies — powered by AI that reads the science so you don't have to.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
+              <Button
+                size="lg"
+                onClick={handleLogin}
+                data-testid="button-cta-industry"
+                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 shadow-lg"
+              >
+                <Building2 className="w-4 h-4" />
+                For Industry
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleLogin}
+                data-testid="button-cta-research"
+                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-primary/40 hover:border-primary/70 hover:bg-primary/5 text-primary"
+              >
+                <FlaskConical className="w-4 h-4" />
+                For Researchers
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </Button>
+            </div>
+
+            <p className="mt-4 text-xs text-muted-foreground">
+              Both portals share the same secure login — choose your path once you're in.
+            </p>
+
             <div
-              className="absolute bottom-0 left-0 w-1/3 h-1/2 opacity-5"
-              style={{
-                background:
-                  "radial-gradient(ellipse at 20% 80%, hsl(90 60% 55%) 0%, transparent 60%)",
-              }}
-            />
-          </div>
-
-          <div className="max-w-screen-xl mx-auto px-6 pt-20 pb-16">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-              <div className="space-y-8">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-primary/30 bg-primary/5">
-                  <Zap className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-xs font-semibold text-primary tracking-wide uppercase">
-                    AI-Powered Biotech Intelligence
-                  </span>
-                </div>
-
-                <div className="space-y-4">
-                  <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.08]">
-                    <span className="text-foreground">Turn Research Into</span>
-                    <br />
-                    <span className="gradient-text dark:gradient-text gradient-text-light">
-                      Pipeline Intelligence
-                    </span>
-                  </h1>
-                  <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                    EdenRadar scans the biotech research landscape and uses AI to extract structured drug
-                    asset intelligence — target, modality, stage, and indication — in seconds.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:flex-row gap-3">
-                  <Button
-                    size="lg"
-                    className="gap-2 text-base font-semibold h-12 px-7"
-                    onClick={handleLogin}
-                    data-testid="button-cta-login"
-                  >
-                    <LogIn className="w-4 h-4" />
-                    Log In
-                  </Button>
-                </div>
-
-                <div className="flex items-center gap-6 pt-2">
-                  {[
-                    { value: "10M+", label: "Papers indexed" },
-                    { value: "8", label: "Data sources" },
-                    { value: "205", label: "TTOs covered" },
-                  ].map((stat) => (
-                    <div key={stat.label} className="text-center sm:text-left">
-                      <div
-                        className="text-2xl font-bold gradient-text dark:gradient-text gradient-text-light"
-                        data-testid={`stat-${stat.label.replace(" ", "-")}`}
-                      >
-                        {stat.value}
-                      </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">{stat.label}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="hidden lg:flex items-center justify-center relative">
-                <div className="absolute inset-0 flex items-center justify-center opacity-60">
-                  <RadarGraphic />
-                </div>
-                <div className="relative z-10 w-44 h-96">
-                  <div className="w-full h-full garden-scroll" style={{ height: "200%" }}>
-                    <EdenSVG />
-                    <EdenSVG />
+              ref={statsRef}
+              className="reveal-section mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10"
+            >
+              {STATS.map((s) => (
+                <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
+                  <div className="text-2xl sm:text-3xl font-bold gradient-text dark:gradient-text gradient-text-light mb-1">
+                    {s.value}
                   </div>
+                  <div className="text-xs text-muted-foreground tracking-wide">{s.label}</div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
+
+          <div
+            className="absolute bottom-0 left-0 right-0 h-24 pointer-events-none"
+            style={{ background: "linear-gradient(to bottom, transparent, hsl(var(--background)))" }}
+          />
         </section>
 
-        <section className="border-y border-border bg-card/40">
-          <div className="max-w-screen-xl mx-auto px-6 py-10">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-8">
-              {FEATURES.map((f) => (
+        {/* ── What we do strip ── */}
+        <section className="border-y border-border bg-card/50">
+          <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-10">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-center sm:text-left">
+              {[
+                {
+                  icon: TrendingUp,
+                  title: "Discover before the crowd",
+                  desc: "Surface pre-clinical assets from 150+ tech transfer offices the moment they're published — enriched by AI with target, modality, and stage.",
+                },
+                {
+                  icon: Layers,
+                  title: "Structure your science",
+                  desc: "EdenLab gives researchers a 11-section project workspace, grants tracker, and literature review tool — all in one place.",
+                },
+                {
+                  icon: Users,
+                  title: "Close the loop",
+                  desc: "Industry teams connect directly with research leads. Researchers gain visibility. The gap between lab and pipeline disappears.",
+                },
+              ].map((f) => (
                 <div
                   key={f.title}
-                  className="flex flex-col gap-4 p-6 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
-                  data-testid={`feature-card-${f.title.replace(/\s+/g, "-").toLowerCase()}`}
+                  className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4"
+                  data-testid={`feature-strip-${f.title.replace(/\s+/g, "-").toLowerCase()}`}
                 >
-                  <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center">
                     <f.icon className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-foreground mb-1.5">{f.title}</h3>
-                    <p className="text-sm text-muted-foreground leading-relaxed">{f.description}</p>
+                    <h3 className="font-semibold text-foreground text-sm mb-1">{f.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
                   </div>
                 </div>
               ))}
@@ -316,63 +612,15 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="max-w-screen-xl mx-auto px-6 py-20">
-          <div className="text-center mb-14">
-            <h2 className="text-3xl font-bold text-foreground mb-3">How it works</h2>
-            <p className="text-muted-foreground max-w-md mx-auto">
-              From query to structured pipeline intelligence in three steps.
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-            <div className="hidden md:block absolute top-8 left-1/3 right-1/3 h-px bg-border" />
-            {STEPS.map((step, i) => (
-              <div key={step.num} className="flex flex-col items-center text-center gap-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full border-2 border-primary/40 bg-primary/5 flex items-center justify-center">
-                    <span className="text-xl font-bold text-primary">{step.num}</span>
-                  </div>
-                  {i < STEPS.length - 1 && (
-                    <ChevronRight className="w-4 h-4 text-primary/30 absolute -right-6 top-1/2 -translate-y-1/2 hidden md:block" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-semibold text-foreground mb-2">{step.title}</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed max-w-xs mx-auto">
-                    {step.description}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
+        {/* ── Toggle value section ── */}
+        <PortalToggle onLogin={handleLogin} />
 
-        <section className="border-t border-border bg-card/40">
-          <div className="max-w-screen-xl mx-auto px-6 py-16 text-center">
-            <div className="max-w-xl mx-auto space-y-6">
-              <FlaskConical className="w-10 h-10 text-primary mx-auto" />
-              <h2 className="text-3xl font-bold text-foreground">
-                Ready to scan the literature?
-              </h2>
-              <p className="text-muted-foreground">
-                Start discovering drug assets from thousands of research papers — structured,
-                filtered, and ready to export.
-              </p>
-              <Button
-                size="lg"
-                className="gap-2 font-semibold h-12 px-8"
-                onClick={handleLogin}
-                data-testid="button-footer-cta-login"
-              >
-                <LogIn className="w-4 h-4" />
-                Log In
-              </Button>
-            </div>
-          </div>
-        </section>
+        {/* ── Bottom CTA ── */}
+        <BottomCTA onLogin={handleLogin} />
       </main>
 
-      <footer className="border-t border-border py-6">
-        <div className="max-w-screen-xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+      <footer className="border-t border-border py-6 bg-background">
+        <div className="max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-bold text-foreground text-sm">
               Eden<span className="text-primary">Radar</span>

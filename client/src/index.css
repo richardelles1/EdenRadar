@@ -224,6 +224,83 @@
   animation: glow-pulse 2.5s ease-in-out infinite;
 }
 
+/* Vine draw-on (uses pathLength="1" on SVG paths) */
+@keyframes vine-grow {
+  from { stroke-dashoffset: 1; }
+  to   { stroke-dashoffset: 0; }
+}
+
+/* Leaf / node bloom */
+@keyframes leaf-bloom {
+  0%   { transform: scale(0); opacity: 0; }
+  65%  { transform: scale(1.25); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Particle background drift */
+@keyframes particle-drift {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.25; }
+  33%       { transform: translateY(-14px) translateX(6px); opacity: 0.6; }
+  66%       { transform: translateY(-7px) translateX(-8px); opacity: 0.4; }
+}
+
+/* Large background radar (slow) */
+@keyframes radar-bg-slow {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Scroll-reveal fade up */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(28px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Pulsing ring (hero center) */
+@keyframes pulse-ring {
+  0%   { transform: scale(0.6); opacity: 0.5; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+
+.vine-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: vine-grow 3.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+.vine-branch {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: vine-grow 1.2s ease-out forwards;
+}
+
+.vine-leaf {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: leaf-bloom 0.5s ease-out forwards;
+}
+
+.reveal-section {
+  opacity: 0;
+  transform: translateY(28px);
+}
+
+.reveal-section.is-visible {
+  animation: fade-up 0.65s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vine-path, .vine-branch, .vine-leaf,
+  .reveal-section, .reveal-section.is-visible,
+  .radar-sweep, .garden-scroll, .eden-node, .glow-pulse {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    stroke-dashoffset: 0 !important;
+  }
+}
+
 /* Gradient text utility */
 .gradient-text {
   background: linear-gradient(135deg, hsl(142 70% 58%) 0%, hsl(155 65% 54%) 50%, hsl(170 60% 52%) 100%);
