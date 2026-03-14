@@ -2478,7 +2478,7 @@ If a field cannot be determined, use "N/A".`
           ]);
           const pubmed = pubmedItems.status === "fulfilled" ? pubmedItems.value : [];
           const biorxiv = biorxivItems.status === "fulfilled" ? biorxivItems.value : [];
-          return [...pubmed, ...biorxiv];
+          return [...pubmed, ...biorxiv].slice(0, 3);
         })(),
       ]);
 

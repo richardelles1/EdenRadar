@@ -30,7 +30,7 @@ const NAV_ITEMS = [
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
   const [location] = useLocation();
 
   async function handleSignOut() {
@@ -123,19 +123,19 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               <span>Grant &amp; IP tracking</span>
             </li>
           </ul>
-          <Link href="/login">
+          <Link href={role === "researcher" ? "/research" : "/login"}>
             <Button
               size="sm"
               className="w-full bg-violet-600 hover:bg-violet-700 text-white text-xs gap-1.5 h-8"
               data-testid="button-upgrade-edenlab"
               onClick={onClose}
             >
-              Explore EdenLab
+              {role === "researcher" ? "Go to EdenLab" : "Explore EdenLab"}
               <ArrowRight className="w-3 h-3" />
             </Button>
           </Link>
           <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-            Log in with a researcher account to upgrade
+            {role === "researcher" ? "Access your researcher workspace" : "Log in with a researcher account to upgrade"}
           </p>
         </div>
 
