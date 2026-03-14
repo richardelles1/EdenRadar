@@ -1,0 +1,46 @@
+MIT (links of category searches and then listings, they also have PDF download: 
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=&technology_areas%5B156%5D=156
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=&technology_areas%5B130%5D=130
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=&technology_areas%5B143%5D=143
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=&technology_areas%5B166%5D=166
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies?search_api_fulltext=&technology_areas%5B151%5D=151
+https://tlo.mit.edu/industry-entrepreneurs/available-technologies/branched-chain-fatty-acids-have-immune-modulatory-1
+
+UI Urbana (sitemap or playwright should work)
+https://otm.illinois.edu/browse-technologies-startups/technologies
+https://otm.illinois.edu/browse-technologies-startups/technologies/122/ultrasensitive-biosensor-using-bent-and-curved-field
+
+Georgetown Flintbox:
+https://georgetown.flintbox.com/technologies
+
+Yale (paginated with annual PDFs)
+https://ventures.yale.edu/yale-technologies
+https://ventures.yale.edu/yale-technologies?page=25
+https://ventures.yale.edu/yale-technologies/novel-rna-therapeutics-target-rig-i
+
+U New Mexico
+Flintbox URL
+https://unm.flintbox.com/technologies/48c6d834-6027-40ad-8193-c611dceb5f67
+
+Columbia:
+https://inventions.techventures.columbia.edu/search
+https://inventions.techventures.columbia.edu/technologies/safer-ibogaine-analogs-for-the--CU24362
+https://inventions.techventures.columbia.edu/technologies/clinical-application-of--CU25148
+https://inventions.techventures.columbia.edu/technologies/virome-capture-sequencing--CU18221
+
+U of Penn
+https://upenn.technologypublisher.com/
+https://upenn.technologypublisher.com/technology/60591
+https://upenn.technologypublisher.com/technology/60426
+
+Duke (still doesnt work) its just the title on the page in the URL:
+https://otc.duke.edu/technologies/c//?s=
+https://otc.duke.edu/technologies/mrna-therapy-for-mitochondrial-trifunctional-protein-deficiency/
+https://otc.duke.edu/technologies/c/biomarkers/small-molecules/?s=
+https://otc.duke.edu/technologies/c/drug-delivery/small-molecules/?s=
+https://otc.duke.edu/technologies/c/vaccines/?s=
+https://otc.duke.edu/technologies/c/stem-cells/?s=
+https://otc.duke.edu/technologies/blood-retina-barrier-brb-on-a-chip/
+https://otc.duke.edu/technologies/using-small-non-coding-rnas-for-longevity-prediction-in-older-adults/
