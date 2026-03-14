@@ -72,109 +72,130 @@ function RadarBackground() {
   );
 }
 
-/* ─────────────────── Mycelium Root Network (Framer Motion) ──── */
+/* ────────────── Mycelium Network — radiates from radar center ─── */
 
-const P_DUR = 3;
-const S_DUR = 2.2;
-const T_DUR = 1.6;
+const MYC_INIT = 1.2;
+const MYC_P_DUR = 4;
+const MYC_P_GAP = 0.9;
+const MYC_S_DUR = 2.5;
+const MYC_T_DUR = 1.8;
+const MYC_COLOR = "hsl(142 60% 48%)";
 
-interface Strand { d: string; sw: number; so: number; delay: number; dur: number; color: string }
-interface NodeDot { cx: number; cy: number; r: number; delay: number }
+function pDel(i: number) { return MYC_INIT + i * MYC_P_GAP; }
+function sDel(pi: number) { return pDel(pi) + MYC_P_DUR * 0.6; }
+function tDel(pi: number) { return sDel(pi) + MYC_S_DUR * 0.6; }
 
-const STRANDS: Strand[] = [
-  { d: "M 20 395 C 18 365, 22 330, 30 300 C 35 278, 40 252, 42 225",                        sw: 1.8, so: 0.65, delay: 0,    dur: P_DUR, color: "hsl(142 62% 50%)" },
-  { d: "M 20 395 C 28 360, 45 325, 65 295 C 78 275, 85 250, 85 218",                        sw: 1.8, so: 0.65, delay: 0.8,  dur: P_DUR, color: "hsl(142 60% 48%)" },
-  { d: "M 20 395 C 40 370, 70 340, 105 310 C 128 292, 155 268, 175 240",                     sw: 1.8, so: 0.62, delay: 1.6,  dur: P_DUR, color: "hsl(148 58% 46%)" },
-  { d: "M 20 395 C 50 383, 95 368, 140 348 C 170 335, 205 315, 235 288",                     sw: 1.8, so: 0.58, delay: 2.4,  dur: P_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 30 300 C 22 282, 15 262, 12 240",      sw: 1.2, so: 0.55, delay: 1.8,  dur: S_DUR, color: "hsl(142 60% 50%)" },
-  { d: "M 30 300 C 42 285, 55 268, 62 248",      sw: 1.2, so: 0.55, delay: 1.8,  dur: S_DUR, color: "hsl(142 62% 48%)" },
-  { d: "M 65 295 C 55 278, 48 258, 45 238",      sw: 1.2, so: 0.52, delay: 2.6,  dur: S_DUR, color: "hsl(148 58% 48%)" },
-  { d: "M 65 295 C 80 282, 100 265, 112 248",    sw: 1.2, so: 0.52, delay: 2.6,  dur: S_DUR, color: "hsl(148 60% 46%)" },
-  { d: "M 105 310 C 98 295, 88 278, 82 258",     sw: 1.2, so: 0.50, delay: 3.4,  dur: S_DUR, color: "hsl(148 58% 46%)" },
-  { d: "M 105 310 C 120 298, 138 280, 150 262",  sw: 1.2, so: 0.50, delay: 3.4,  dur: S_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 140 348 C 135 332, 128 315, 125 295",  sw: 1.2, so: 0.48, delay: 4.2,  dur: S_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 140 348 C 160 338, 182 322, 200 305",  sw: 1.2, so: 0.48, delay: 4.2,  dur: S_DUR, color: "hsl(155 52% 44%)" },
-  { d: "M 62 248 C 68 238, 75 228, 78 215",      sw: 0.8, so: 0.42, delay: 3.12, dur: T_DUR, color: "hsl(142 60% 50%)" },
-  { d: "M 112 248 C 118 238, 125 228, 130 215",  sw: 0.8, so: 0.42, delay: 3.92, dur: T_DUR, color: "hsl(148 58% 48%)" },
-  { d: "M 150 262 C 158 252, 165 240, 168 225",  sw: 0.8, so: 0.40, delay: 4.72, dur: T_DUR, color: "hsl(155 55% 45%)" },
+const PRIMARY_PATHS = [
+  "M 500 300 C 470 330, 420 380, 360 420 C 310 450, 250 485, 180 520",
+  "M 500 300 C 496 350, 490 400, 484 445 C 480 475, 476 520, 470 565",
+  "M 500 300 C 535 330, 585 375, 640 415 C 680 440, 725 468, 775 495",
+  "M 500 300 C 460 293, 400 280, 340 264 C 290 252, 240 238, 185 225",
+  "M 500 300 C 470 278, 430 250, 390 218 C 360 196, 330 172, 295 148",
+  "M 500 300 C 545 296, 600 285, 660 272 C 710 262, 760 252, 815 242",
 ];
 
-const NODES: NodeDot[] = [
-  { cx: 20,  cy: 395, r: 3.5, delay: 0.1 },
-  { cx: 30,  cy: 300, r: 3.0, delay: 1.7 },
-  { cx: 65,  cy: 295, r: 3.0, delay: 2.5 },
-  { cx: 105, cy: 310, r: 3.0, delay: 3.3 },
-  { cx: 140, cy: 348, r: 3.0, delay: 4.1 },
-  { cx: 42,  cy: 225, r: 3.2, delay: 3.15 },
-  { cx: 85,  cy: 218, r: 3.2, delay: 3.95 },
-  { cx: 175, cy: 240, r: 3.2, delay: 4.75 },
-  { cx: 235, cy: 288, r: 3.2, delay: 5.55 },
-  { cx: 12,  cy: 240, r: 2.8, delay: 4.15 },
-  { cx: 62,  cy: 248, r: 2.8, delay: 4.15 },
-  { cx: 45,  cy: 238, r: 2.8, delay: 4.95 },
-  { cx: 112, cy: 248, r: 2.8, delay: 4.95 },
-  { cx: 82,  cy: 258, r: 2.8, delay: 5.75 },
-  { cx: 150, cy: 262, r: 2.8, delay: 5.75 },
-  { cx: 125, cy: 295, r: 2.8, delay: 6.55 },
-  { cx: 200, cy: 305, r: 2.8, delay: 6.55 },
-  { cx: 78,  cy: 215, r: 2.5, delay: 4.87 },
-  { cx: 130, cy: 215, r: 2.5, delay: 5.67 },
-  { cx: 168, cy: 225, r: 2.5, delay: 6.47 },
+const SECONDARY_PATHS: [string, string][] = [
+  ["M 360 420 C 340 438, 315 458, 290 478", "M 360 420 C 378 442, 392 468, 402 495"],
+  ["M 484 445 C 462 462, 438 482, 418 502", "M 484 445 C 506 465, 528 488, 545 512"],
+  ["M 640 415 C 632 440, 622 468, 615 495", "M 640 415 C 665 432, 695 448, 722 465"],
+  ["M 340 264 C 325 245, 308 224, 292 205", "M 340 264 C 328 280, 314 298, 302 315"],
+  ["M 390 218 C 372 205, 352 188, 335 172", "M 390 218 C 382 235, 370 255, 362 272"],
+  ["M 660 272 C 675 255, 692 235, 708 218", "M 660 272 C 675 288, 692 308, 708 325"],
 ];
+
+const TERTIARY_PATHS: [string, string][] = [
+  ["M 315 458 C 300 470, 285 485, 272 498", "M 392 468 C 402 480, 412 495, 418 508"],
+  ["M 438 482 C 422 495, 408 510, 395 524", "M 528 488 C 540 500, 555 515, 565 528"],
+  ["M 622 468 C 612 482, 605 498, 598 512", "M 695 448 C 708 460, 722 475, 732 488"],
+  ["M 308 224 C 296 214, 282 200, 272 190", "M 314 298 C 302 308, 290 322, 280 335"],
+  ["M 352 188 C 340 178, 326 165, 315 155", "M 370 255 C 362 266, 352 280, 345 292"],
+  ["M 692 235 C 702 225, 715 212, 725 202", "M 692 308 C 702 318, 715 332, 725 342"],
+];
+
+const SEC_TIPS: [number, number][][] = [
+  [[290,478],[402,495]], [[418,502],[545,512]], [[615,495],[722,465]],
+  [[292,205],[302,315]], [[335,172],[362,272]], [[708,218],[708,325]],
+];
+const TER_TIPS: [number, number][][] = [
+  [[272,498],[418,508]], [[395,524],[565,528]], [[598,512],[732,488]],
+  [[272,190],[280,335]], [[315,155],[345,292]], [[725,202],[725,342]],
+];
+
+interface MycStrand { d: string; sw: number; so: number; delay: number; dur: number }
+interface MycNode { cx: number; cy: number; r: number; delay: number }
+
+function buildMycelium() {
+  const strands: MycStrand[] = [];
+  const nodes: MycNode[] = [];
+
+  PRIMARY_PATHS.forEach((d, i) => {
+    strands.push({ d, sw: 1.4, so: 0.22, delay: pDel(i), dur: MYC_P_DUR });
+  });
+
+  SECONDARY_PATHS.forEach((pair, pi) => {
+    pair.forEach((d) => {
+      strands.push({ d, sw: 0.9, so: 0.15, delay: sDel(pi), dur: MYC_S_DUR });
+    });
+  });
+
+  TERTIARY_PATHS.forEach((pair, pi) => {
+    pair.forEach((d) => {
+      strands.push({ d, sw: 0.6, so: 0.10, delay: tDel(pi), dur: MYC_T_DUR });
+    });
+  });
+
+  SEC_TIPS.forEach((pair, pi) => {
+    pair.forEach(([cx, cy]) => {
+      nodes.push({ cx, cy, r: 2.0, delay: sDel(pi) + MYC_S_DUR + 0.15 });
+    });
+  });
+
+  TER_TIPS.forEach((pair, pi) => {
+    pair.forEach(([cx, cy]) => {
+      nodes.push({ cx, cy, r: 1.6, delay: tDel(pi) + MYC_T_DUR + 0.15 });
+    });
+  });
+
+  return { strands, nodes };
+}
+
+const { strands: MYC_STRANDS, nodes: MYC_NODES } = buildMycelium();
 
 function HeroVine() {
   return (
     <div
-      className="absolute bottom-0 left-0 pointer-events-none select-none hidden sm:block"
-      style={{ width: 280, height: 400, zIndex: 1 }}
+      className="absolute inset-0 pointer-events-none select-none hidden sm:block"
+      style={{ zIndex: 1 }}
       aria-hidden
     >
       <svg
-        viewBox="0 0 280 420"
-        preserveAspectRatio="xMinYMax meet"
+        viewBox="0 0 1000 600"
+        preserveAspectRatio="xMidYMid slice"
         className="w-full h-full"
-        style={{ overflow: "visible" }}
       >
-        <defs>
-          <radialGradient id="leafGrad2" cx="50%" cy="50%" r="50%">
-            <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
-            <stop offset="55%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.9" />
-            <stop offset="100%" stopColor="hsl(142 55% 38%)" stopOpacity="0.45" />
-          </radialGradient>
-          <filter id="strandGlow">
-            <feGaussianBlur stdDeviation="1.2" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-          <filter id="nodeGlow">
-            <feGaussianBlur stdDeviation="2.5" result="blur" />
-            <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
-          </filter>
-        </defs>
-
-        {STRANDS.map((s, i) => (
+        {MYC_STRANDS.map((s, i) => (
           <motion.path
-            key={`s-${i}`}
+            key={`ms-${i}`}
             d={s.d}
             fill="none"
-            stroke={s.color}
+            stroke={MYC_COLOR}
             strokeWidth={s.sw}
             strokeOpacity={s.so}
             strokeLinecap="round"
-            filter="url(#strandGlow)"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
             transition={{ delay: s.delay, duration: s.dur, ease: "easeInOut" }}
           />
         ))}
 
-        {NODES.map((n, i) => (
+        {MYC_NODES.map((n, i) => (
           <motion.circle
-            key={`n-${i}`}
+            key={`mn-${i}`}
             cx={n.cx}
             cy={n.cy}
             r={n.r}
-            fill="url(#leafGrad2)"
-            filter="url(#nodeGlow)"
+            fill="hsl(142 65% 55%)"
+            fillOpacity={0.35}
             style={{ transformBox: "fill-box", transformOrigin: "center" }}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -182,8 +203,8 @@ function HeroVine() {
               delay: n.delay,
               duration: 0.5,
               type: "spring",
-              stiffness: 180,
-              damping: 14,
+              stiffness: 160,
+              damping: 18,
             }}
           />
         ))}
