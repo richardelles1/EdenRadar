@@ -74,53 +74,52 @@ function RadarBackground() {
 
 /* ─────────────────── Mycelium Root Network (Framer Motion) ──── */
 
-const P_DUR = 3.5;
+const P_DUR = 3;
 const S_DUR = 2.2;
 const T_DUR = 1.6;
-const EASE_ORGANIC: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
 interface Strand { d: string; sw: number; so: number; delay: number; dur: number; color: string }
 interface NodeDot { cx: number; cy: number; r: number; delay: number }
 
 const STRANDS: Strand[] = [
   { d: "M 20 395 C 18 365, 22 330, 30 300 C 35 278, 40 252, 42 225",                        sw: 1.8, so: 0.65, delay: 0,    dur: P_DUR, color: "hsl(142 62% 50%)" },
-  { d: "M 20 395 C 28 360, 45 325, 65 295 C 78 275, 85 250, 85 218",                        sw: 1.8, so: 0.65, delay: 1.0,  dur: P_DUR, color: "hsl(142 60% 48%)" },
-  { d: "M 20 395 C 40 370, 70 340, 105 310 C 128 292, 155 268, 175 240",                     sw: 1.8, so: 0.62, delay: 2.0,  dur: P_DUR, color: "hsl(148 58% 46%)" },
-  { d: "M 20 395 C 50 383, 95 368, 140 348 C 170 335, 205 315, 235 288",                     sw: 1.8, so: 0.58, delay: 3.0,  dur: P_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 30 300 C 22 282, 15 262, 12 240",      sw: 1.2, so: 0.55, delay: 2.1,  dur: S_DUR, color: "hsl(142 60% 50%)" },
-  { d: "M 30 300 C 42 285, 55 268, 62 248",      sw: 1.2, so: 0.55, delay: 2.1,  dur: S_DUR, color: "hsl(142 62% 48%)" },
-  { d: "M 65 295 C 55 278, 48 258, 45 238",      sw: 1.2, so: 0.52, delay: 3.1,  dur: S_DUR, color: "hsl(148 58% 48%)" },
-  { d: "M 65 295 C 80 282, 100 265, 112 248",    sw: 1.2, so: 0.52, delay: 3.1,  dur: S_DUR, color: "hsl(148 60% 46%)" },
-  { d: "M 105 310 C 98 295, 88 278, 82 258",     sw: 1.2, so: 0.50, delay: 4.1,  dur: S_DUR, color: "hsl(148 58% 46%)" },
-  { d: "M 105 310 C 120 298, 138 280, 150 262",  sw: 1.2, so: 0.50, delay: 4.1,  dur: S_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 140 348 C 135 332, 128 315, 125 295",  sw: 1.2, so: 0.48, delay: 5.1,  dur: S_DUR, color: "hsl(155 55% 45%)" },
-  { d: "M 140 348 C 160 338, 182 322, 200 305",  sw: 1.2, so: 0.48, delay: 5.1,  dur: S_DUR, color: "hsl(155 52% 44%)" },
-  { d: "M 62 248 C 68 238, 75 228, 78 215",      sw: 0.8, so: 0.42, delay: 3.42, dur: T_DUR, color: "hsl(142 60% 50%)" },
-  { d: "M 112 248 C 118 238, 125 228, 130 215",  sw: 0.8, so: 0.42, delay: 4.42, dur: T_DUR, color: "hsl(148 58% 48%)" },
-  { d: "M 150 262 C 158 252, 165 240, 168 225",  sw: 0.8, so: 0.40, delay: 5.42, dur: T_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 20 395 C 28 360, 45 325, 65 295 C 78 275, 85 250, 85 218",                        sw: 1.8, so: 0.65, delay: 0.8,  dur: P_DUR, color: "hsl(142 60% 48%)" },
+  { d: "M 20 395 C 40 370, 70 340, 105 310 C 128 292, 155 268, 175 240",                     sw: 1.8, so: 0.62, delay: 1.6,  dur: P_DUR, color: "hsl(148 58% 46%)" },
+  { d: "M 20 395 C 50 383, 95 368, 140 348 C 170 335, 205 315, 235 288",                     sw: 1.8, so: 0.58, delay: 2.4,  dur: P_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 30 300 C 22 282, 15 262, 12 240",      sw: 1.2, so: 0.55, delay: 1.8,  dur: S_DUR, color: "hsl(142 60% 50%)" },
+  { d: "M 30 300 C 42 285, 55 268, 62 248",      sw: 1.2, so: 0.55, delay: 1.8,  dur: S_DUR, color: "hsl(142 62% 48%)" },
+  { d: "M 65 295 C 55 278, 48 258, 45 238",      sw: 1.2, so: 0.52, delay: 2.6,  dur: S_DUR, color: "hsl(148 58% 48%)" },
+  { d: "M 65 295 C 80 282, 100 265, 112 248",    sw: 1.2, so: 0.52, delay: 2.6,  dur: S_DUR, color: "hsl(148 60% 46%)" },
+  { d: "M 105 310 C 98 295, 88 278, 82 258",     sw: 1.2, so: 0.50, delay: 3.4,  dur: S_DUR, color: "hsl(148 58% 46%)" },
+  { d: "M 105 310 C 120 298, 138 280, 150 262",  sw: 1.2, so: 0.50, delay: 3.4,  dur: S_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 140 348 C 135 332, 128 315, 125 295",  sw: 1.2, so: 0.48, delay: 4.2,  dur: S_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 140 348 C 160 338, 182 322, 200 305",  sw: 1.2, so: 0.48, delay: 4.2,  dur: S_DUR, color: "hsl(155 52% 44%)" },
+  { d: "M 62 248 C 68 238, 75 228, 78 215",      sw: 0.8, so: 0.42, delay: 3.12, dur: T_DUR, color: "hsl(142 60% 50%)" },
+  { d: "M 112 248 C 118 238, 125 228, 130 215",  sw: 0.8, so: 0.42, delay: 3.92, dur: T_DUR, color: "hsl(148 58% 48%)" },
+  { d: "M 150 262 C 158 252, 165 240, 168 225",  sw: 0.8, so: 0.40, delay: 4.72, dur: T_DUR, color: "hsl(155 55% 45%)" },
 ];
 
 const NODES: NodeDot[] = [
   { cx: 20,  cy: 395, r: 3.5, delay: 0.1 },
-  { cx: 30,  cy: 300, r: 3.0, delay: 2.0 },
-  { cx: 65,  cy: 295, r: 3.0, delay: 3.0 },
-  { cx: 105, cy: 310, r: 3.0, delay: 4.0 },
-  { cx: 140, cy: 348, r: 3.0, delay: 5.0 },
-  { cx: 42,  cy: 225, r: 3.2, delay: 3.65 },
-  { cx: 85,  cy: 218, r: 3.2, delay: 4.65 },
-  { cx: 175, cy: 240, r: 3.2, delay: 5.65 },
-  { cx: 235, cy: 288, r: 3.2, delay: 6.65 },
-  { cx: 12,  cy: 240, r: 2.8, delay: 4.45 },
-  { cx: 62,  cy: 248, r: 2.8, delay: 4.45 },
-  { cx: 45,  cy: 238, r: 2.8, delay: 5.45 },
-  { cx: 112, cy: 248, r: 2.8, delay: 5.45 },
-  { cx: 82,  cy: 258, r: 2.8, delay: 6.45 },
-  { cx: 150, cy: 262, r: 2.8, delay: 6.45 },
-  { cx: 125, cy: 295, r: 2.8, delay: 7.45 },
-  { cx: 200, cy: 305, r: 2.8, delay: 7.45 },
-  { cx: 78,  cy: 215, r: 2.5, delay: 5.17 },
-  { cx: 130, cy: 215, r: 2.5, delay: 6.17 },
-  { cx: 168, cy: 225, r: 2.5, delay: 7.17 },
+  { cx: 30,  cy: 300, r: 3.0, delay: 1.7 },
+  { cx: 65,  cy: 295, r: 3.0, delay: 2.5 },
+  { cx: 105, cy: 310, r: 3.0, delay: 3.3 },
+  { cx: 140, cy: 348, r: 3.0, delay: 4.1 },
+  { cx: 42,  cy: 225, r: 3.2, delay: 3.15 },
+  { cx: 85,  cy: 218, r: 3.2, delay: 3.95 },
+  { cx: 175, cy: 240, r: 3.2, delay: 4.75 },
+  { cx: 235, cy: 288, r: 3.2, delay: 5.55 },
+  { cx: 12,  cy: 240, r: 2.8, delay: 4.15 },
+  { cx: 62,  cy: 248, r: 2.8, delay: 4.15 },
+  { cx: 45,  cy: 238, r: 2.8, delay: 4.95 },
+  { cx: 112, cy: 248, r: 2.8, delay: 4.95 },
+  { cx: 82,  cy: 258, r: 2.8, delay: 5.75 },
+  { cx: 150, cy: 262, r: 2.8, delay: 5.75 },
+  { cx: 125, cy: 295, r: 2.8, delay: 6.55 },
+  { cx: 200, cy: 305, r: 2.8, delay: 6.55 },
+  { cx: 78,  cy: 215, r: 2.5, delay: 4.87 },
+  { cx: 130, cy: 215, r: 2.5, delay: 5.67 },
+  { cx: 168, cy: 225, r: 2.5, delay: 6.47 },
 ];
 
 function HeroVine() {
@@ -137,7 +136,7 @@ function HeroVine() {
         style={{ overflow: "visible" }}
       >
         <defs>
-          <radialGradient id="nodeGrad" cx="50%" cy="50%" r="50%">
+          <radialGradient id="leafGrad2" cx="50%" cy="50%" r="50%">
             <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
             <stop offset="55%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.9" />
             <stop offset="100%" stopColor="hsl(142 55% 38%)" stopOpacity="0.45" />
@@ -164,7 +163,7 @@ function HeroVine() {
             filter="url(#strandGlow)"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
-            transition={{ delay: s.delay, duration: s.dur, ease: EASE_ORGANIC }}
+            transition={{ delay: s.delay, duration: s.dur, ease: "easeInOut" }}
           />
         ))}
 
@@ -174,7 +173,7 @@ function HeroVine() {
             cx={n.cx}
             cy={n.cy}
             r={n.r}
-            fill="url(#nodeGrad)"
+            fill="url(#leafGrad2)"
             filter="url(#nodeGlow)"
             style={{ transformBox: "fill-box", transformOrigin: "center" }}
             initial={{ scale: 0, opacity: 0 }}
