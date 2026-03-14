@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -107,6 +107,24 @@ export const ingestedAssets = pgTable("ingested_assets", {
   lastSeenAt: timestamp("last_seen_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   enrichedAt: timestamp("enriched_at"),
   runId: integer("run_id").notNull(),
+  categories: jsonb("categories").$type<string[]>(),
+  categoryConfidence: real("category_confidence"),
+  available: boolean("available"),
+  contentHash: text("content_hash"),
+  completenessScore: real("completeness_score"),
+  lastContentChangeAt: timestamp("last_content_change_at"),
+  innovationClaim: text("innovation_claim"),
+  mechanismOfAction: text("mechanism_of_action"),
+  ipType: text("ip_type"),
+  unmetNeed: text("unmet_need"),
+  comparableDrugs: text("comparable_drugs"),
+  licensingReadiness: text("licensing_readiness"),
+  patentStatus: text("patent_status"),
+  licensingStatus: text("licensing_status"),
+  inventors: jsonb("inventors").$type<string[]>(),
+  contactEmail: text("contact_email"),
+  technologyId: text("technology_id"),
+  abstract: text("abstract"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets).omit({
@@ -309,3 +327,38 @@ export const insertSavedReferenceSchema = createInsertSchema(savedReferences).om
 });
 export type InsertSavedReference = z.infer<typeof insertSavedReferenceSchema>;
 export type SavedReference = typeof savedReferences.$inferSelect;
+
+export const reviewQueue = pgTable("review_queue", {
+  id: serial("id").primaryKey(),
+  assetId: integer("asset_id").notNull(),
+  fingerprint: text("fingerprint").notNull(),
+  reason: text("reason").notNull(),
+  status: text("status").notNull().default("pending"),
+  reviewerNote: text("reviewer_note"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+export type ReviewQueueItem = typeof reviewQueue.$inferSelect;
+
+export const therapyAreaTaxonomy = pgTable("therapy_area_taxonomy", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  parentId: integer("parent_id"),
+  level: integer("level").notNull().default(0),
+  assetCount: integer("asset_count").notNull().default(0),
+  lastUpdatedAt: timestamp("last_updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type TherapyArea = typeof therapyAreaTaxonomy.$inferSelect;
+
+export const convergenceSignals = pgTable("convergence_signals", {
+  id: serial("id").primaryKey(),
+  therapyArea: text("therapy_area").notNull(),
+  targetOrMechanism: text("target_or_mechanism").notNull(),
+  institutionCount: integer("institution_count").notNull().default(0),
+  assetIds: jsonb("asset_ids").$type<number[]>(),
+  institutions: jsonb("institutions").$type<string[]>(),
+  score: real("score").notNull().default(0),
+  detectedAt: timestamp("detected_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  lastUpdatedAt: timestamp("last_updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type ConvergenceSignal = typeof convergenceSignals.$inferSelect;

@@ -1,5 +1,6 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://tlo.mit.edu";
 const INST = "MIT";
@@ -39,7 +40,30 @@ export const mitScraper: InstitutionScraper = {
         }
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+      await enrichWithDetailPages(results, {
+        description: [
+          ".tech-brief__body",
+          ".field--name-body .field__item",
+          ".node__content p",
+          "article .content p",
+        ],
+        abstract: [
+          ".tech-brief__abstract",
+          ".field--name-field-abstract",
+        ],
+        inventors: [
+          ".tech-brief__inventors li",
+          ".field--name-field-inventors li",
+        ],
+        patentStatus: [
+          ".tech-brief__patent-status",
+          ".field--name-field-patent-status",
+        ],
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

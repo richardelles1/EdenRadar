@@ -1,5 +1,6 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { fetchHtml, cleanText } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://tech.wustl.edu";
 const INST = "Washington University in St. Louis";
@@ -38,7 +39,22 @@ export const wustlScraper: InstitutionScraper = {
         if (pageNew === 0) break;
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+      await enrichWithDetailPages(results, {
+        description: [
+          ".entry-content",
+          ".tech-summary-content",
+          "article .content p",
+          "main p",
+        ],
+        patentStatus: [
+          ".patent-status",
+          ".ip-status",
+        ],
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

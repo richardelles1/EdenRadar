@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, TrendingUp, Flame } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -123,6 +123,91 @@ function SourceSelector({
           {s.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+type ConvergenceSignal = {
+  therapyArea: string;
+  targetOrMechanism: string;
+  institutionCount: number;
+  score: number;
+  institutions: string[];
+  assetCount: number;
+};
+
+type TherapyArea = {
+  name: string;
+  assetCount: number;
+  level: number;
+};
+
+function HotAreasSidebar({ onSearchArea }: { onSearchArea: (query: string) => void }) {
+  const { data: convergenceData } = useQuery<{ signals: ConvergenceSignal[] }>({
+    queryKey: ["/api/taxonomy/convergence"],
+    staleTime: 60000,
+  });
+
+  const { data: taxonomyData } = useQuery<{ areas: TherapyArea[] }>({
+    queryKey: ["/api/taxonomy/therapy-areas"],
+    staleTime: 60000,
+  });
+
+  const signals = convergenceData?.signals ?? [];
+  const areas = (taxonomyData?.areas ?? []).filter((a) => a.assetCount > 0);
+
+  if (signals.length === 0 && areas.length === 0) return null;
+
+  return (
+    <div className="p-4 border-b border-border" data-testid="hot-areas-panel">
+      {signals.length > 0 && (
+        <div className="mb-4">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Flame className="h-3.5 w-3.5 text-orange-500" />
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Hot Areas</span>
+          </div>
+          <div className="space-y-1.5">
+            {signals.slice(0, 6).map((s, i) => (
+              <button
+                key={i}
+                onClick={() => onSearchArea(`${s.targetOrMechanism} ${s.therapyArea}`)}
+                className="w-full text-left p-2 rounded-md hover:bg-muted/50 transition-colors group"
+                data-testid={`hot-area-${i}`}
+              >
+                <div className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                  {s.targetOrMechanism}
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-muted-foreground mt-0.5">
+                  <span className="capitalize">{s.therapyArea}</span>
+                  <span>{s.institutionCount} institutions</span>
+                  <span>{s.assetCount} assets</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {areas.length > 0 && (
+        <div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="h-3.5 w-3.5 text-primary" />
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wide">Browse by Area</span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {areas.slice(0, 12).map((a) => (
+              <button
+                key={a.name}
+                onClick={() => onSearchArea(a.name)}
+                className="text-[10px] px-2 py-0.5 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
+                data-testid={`browse-area-${a.name}`}
+              >
+                {a.name} <span className="text-muted-foreground/50">{a.assetCount}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -564,7 +649,8 @@ export default function Scout() {
           </div>
         </main>
 
-        <div className="hidden lg:block w-80 shrink-0 border-l border-border sticky top-0 h-screen overflow-hidden">
+        <div className="hidden lg:block w-80 shrink-0 border-l border-border sticky top-0 h-screen overflow-y-auto">
+          <HotAreasSidebar onSearchArea={(q) => handleSearch(q)} />
           <SavedAssetsPanel
             assets={savedAssets}
             isOpen={true}

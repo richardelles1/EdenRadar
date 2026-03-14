@@ -12,6 +12,7 @@ import {
   discoveryCards, type DiscoveryCard, type InsertDiscoveryCard,
   savedReferences, type SavedReference, type InsertSavedReference,
   savedGrants, type SavedGrant, type InsertSavedGrant,
+  reviewQueue,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
@@ -39,7 +40,14 @@ export interface IStorage {
     listings: Array<{ fingerprint: string } & Omit<InsertIngestedAsset, "fingerprint">>,
     onProgress?: (done: number, total: number) => void
   ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }>;
-  updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void>;
+  updateIngestedAssetEnrichment(id: number, data: {
+    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string;
+    ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
+  }): Promise<void>;
+  wipeAllAssets(): Promise<void>;
+  getReviewQueue(): Promise<any[]>;
+  resolveReviewItem(id: number, note: string): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
@@ -195,15 +203,15 @@ export class DatabaseStorage implements IStorage {
     const total = listings.length;
     const allFingerprints = listings.map((l) => l.fingerprint);
 
-    // 1. Find which fingerprints already exist (chunked SELECT)
-    const existingSet = new Map<string, number>(); // fingerprint -> id
+    // 1. Find which fingerprints already exist (chunked SELECT) — also grab contentHash for change detection
+    const existingSet = new Map<string, { id: number; contentHash: string | null }>(); 
     for (let i = 0; i < allFingerprints.length; i += CHUNK) {
       const chunk = allFingerprints.slice(i, i + CHUNK);
       const rows = await db
-        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint })
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, contentHash: ingestedAssets.contentHash })
         .from(ingestedAssets)
         .where(inArray(ingestedAssets.fingerprint, chunk));
-      for (const row of rows) existingSet.set(row.fingerprint, row.id);
+      for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash });
     }
 
     const newListings = listings.filter((l) => !existingSet.has(l.fingerprint));
@@ -221,17 +229,47 @@ export class DatabaseStorage implements IStorage {
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
     }
 
-    // 3. Bulk UPDATE existing listings (chunked — update lastSeenAt + runId only)
+    // 3. Bulk UPDATE existing listings — update lastSeenAt + runId, detect content changes
     const runId = listings[0]?.runId;
-    for (let i = 0; i < existingListings.length; i += CHUNK) {
-      const chunk = existingListings.slice(i, i + CHUNK);
-      const fps = chunk.map((l) => l.fingerprint);
+    const now = new Date();
+    const changedFps: string[] = [];
+    const unchangedFps: string[] = [];
+    for (const listing of existingListings) {
+      const existing = existingSet.get(listing.fingerprint);
+      if (existing && listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash) {
+        changedFps.push(listing.fingerprint);
+      } else {
+        unchangedFps.push(listing.fingerprint);
+      }
+    }
+
+    for (let i = 0; i < unchangedFps.length; i += CHUNK) {
+      const chunk = unchangedFps.slice(i, i + CHUNK);
       await db
         .update(ingestedAssets)
-        .set({ lastSeenAt: new Date(), runId })
-        .where(inArray(ingestedAssets.fingerprint, fps));
-      onProgress?.(newListings.length + Math.min(i + CHUNK, existingListings.length), total);
+        .set({ lastSeenAt: now, runId })
+        .where(inArray(ingestedAssets.fingerprint, chunk));
     }
+
+    for (let i = 0; i < changedFps.length; i += CHUNK) {
+      const chunk = changedFps.slice(i, i + CHUNK);
+      const chunkListings = existingListings.filter((l) => chunk.includes(l.fingerprint));
+      for (const listing of chunkListings) {
+        await db
+          .update(ingestedAssets)
+          .set({
+            lastSeenAt: now,
+            runId,
+            contentHash: listing.contentHash,
+            lastContentChangeAt: now,
+            summary: listing.summary || undefined,
+            abstract: (listing as any).abstract || undefined,
+          })
+          .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
+      }
+    }
+
+    onProgress?.(total, total);
 
     if (total > 0 && newListings.length === 0 && existingListings.length === 0) {
       onProgress?.(total, total);
@@ -240,17 +278,46 @@ export class DatabaseStorage implements IStorage {
     return { newAssets, totalProcessed: total };
   }
 
-  async updateIngestedAssetEnrichment(id: number, data: { target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean }): Promise<void> {
+  async updateIngestedAssetEnrichment(id: number, data: {
+    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string;
+    ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
+  }): Promise<void> {
+    const updateData: Record<string, any> = {
+      target: data.target,
+      modality: data.modality,
+      indication: data.indication,
+      developmentStage: data.developmentStage,
+      relevant: data.biotechRelevant,
+      enrichedAt: new Date(),
+    };
+    if (data.categories) updateData.categories = data.categories;
+    if (data.categoryConfidence !== undefined) updateData.categoryConfidence = data.categoryConfidence;
+    if (data.innovationClaim) updateData.innovationClaim = data.innovationClaim;
+    if (data.mechanismOfAction) updateData.mechanismOfAction = data.mechanismOfAction;
+    if (data.ipType) updateData.ipType = data.ipType;
+    if (data.unmetNeed) updateData.unmetNeed = data.unmetNeed;
+    if (data.comparableDrugs) updateData.comparableDrugs = data.comparableDrugs;
+    if (data.licensingReadiness) updateData.licensingReadiness = data.licensingReadiness;
+    if (data.completenessScore !== undefined) updateData.completenessScore = data.completenessScore;
+
     await db
       .update(ingestedAssets)
-      .set({
-        target: data.target,
-        modality: data.modality,
-        indication: data.indication,
-        developmentStage: data.developmentStage,
-        relevant: data.biotechRelevant,
-      })
+      .set(updateData)
       .where(eq(ingestedAssets.id, id));
+  }
+
+  async wipeAllAssets(): Promise<void> {
+    await db.delete(ingestedAssets);
+    console.log("[storage] All ingested assets wiped");
+  }
+
+  async getReviewQueue(): Promise<any[]> {
+    return db.select().from(reviewQueue).where(eq(reviewQueue.status, "pending")).orderBy(desc(reviewQueue.createdAt));
+  }
+
+  async resolveReviewItem(id: number, note: string): Promise<void> {
+    await db.update(reviewQueue).set({ status: "resolved", reviewerNote: note, resolvedAt: new Date() }).where(eq(reviewQueue.id, id));
   }
 
   async deleteIngestedAsset(id: number): Promise<void> {

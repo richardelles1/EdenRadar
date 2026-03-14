@@ -1,5 +1,6 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText, resolveUrl, extractText } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
@@ -38,7 +39,30 @@ export const stanfordScraper: InstitutionScraper = {
         }
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+      await enrichWithDetailPages(results, {
+        description: [
+          ".field--name-body .field__item",
+          ".field--name-field-brief-description",
+          ".node__content p",
+          "article .content p",
+        ],
+        abstract: [
+          ".field--name-field-abstract",
+          ".field--name-field-description",
+        ],
+        inventors: [
+          ".field--name-field-inventors .field__item",
+          ".field--name-field-inventor li",
+        ],
+        patentStatus: [
+          ".field--name-field-patent-status .field__item",
+          ".field--name-field-ip-status .field__item",
+        ],
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

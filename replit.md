@@ -58,7 +58,11 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - **Pipeline architecture**: collect → normalize (LLM) → cluster → score (deterministic) → rank
 - **Scoring weights**: freshness×0.15 + novelty×0.20 + readiness×0.15 + licensability×0.25 + fit×0.15 + competition×0.10
 - **Tech Transfer (live)**: Real cheerio scrapers per institution. Ingested to `ingested_assets` DB table.
-- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all TTOs with concurrency=5, upserts to DB, diffs for new (legacy bulk scan — causes timeouts with 143+ institutions)
+- **Ingestion pipeline**: `runIngestionPipeline()` scrapes all TTOs with concurrency=5, pre-filters (relevance), computes content hashes, upserts to DB with content change detection (`lastContentChangeAt`), classifies new assets via AI (`classifyBatch`), computes completeness scores, and removes non-biotech-relevant assets
+- **Pipeline stages**: collect → pre-filter (keyword heuristic) → normalize (patent/licensing status) → content hash → dedup → upsert → AI classify (12-field) → completeness score → prune non-relevant
+- **Content change detection**: `bulkUpsertIngestedAssets` compares incoming `contentHash` with stored hash; when different, updates `lastContentChangeAt` + summary/abstract
+- **Review Queue**: Ambiguous assets flagged by pre-filter are stored in `reviewQueue` table for manual admin review
+- **Taxonomy pipeline**: `refreshTaxonomyCounts()` builds therapy area taxonomy from asset categories; `detectConvergenceSignals()` identifies multi-institution convergence on targets/mechanisms
 - **Per-institution sync**: `runInstitutionSync(institution)` — single-institution scrape → fingerprint compare → AI enrich → staging table. Two-step push: preview results then explicit "Push to Index". Zero guard blocks push if rawCount=0. Soft warning if rawCount < 50% of currentIndexed. Mutual exclusion with full ingestion.
 - **Sequential Scheduler**: `server/lib/scheduler.ts` — round-robin scheduler syncs one institution at a time with 5s delay between. Start/pause controls. Replaces bulk scan as primary mechanism. Routes: GET `/api/ingest/scheduler/status`, POST `/api/ingest/scheduler/start`, POST `/api/ingest/scheduler/pause`
 - **Stale session cancel**: POST `/api/ingest/sync/:institution/cancel` — clears running sessions stuck > 10min (from server restart losing in-memory lock)
@@ -110,6 +114,10 @@ server/
       base_search.ts, core.ts, ieee.ts, eric.ts, osf_preprints.ts, doaj.ts, openaire.ts, hal.ts
     pipeline/
       normalizeSignals.ts, clusterAssets.ts, scoreAssets.ts, generateReport.ts, generateDossier.ts
+      relevancePreFilter.ts  # keyword-based biotech relevance pre-filter
+      classifyAsset.ts       # 12-field AI classifier (gpt-4o-mini) for new assets
+      contentHash.ts         # SHA-256 content hash, completeness score, patent/licensing normalizers
+      taxonomyPipeline.ts    # therapy area taxonomy + convergence signal detection
   routes.ts               # All API routes
   storage.ts              # DatabaseStorage implementing IStorage
 
@@ -136,7 +144,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/institutions`** — 195 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Ingested listings with sort (Newest First / Best Commercial / A-Z / Z-A), search filter, modality/stage tags via title-signal parser, commercial score badge, expandable detail panel per asset
 - **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
-- **`/admin`** — Admin control panel (password: "eden") with scan tracking table showing per-institution counts per run, delta column, sortable
+- **`/admin`** — Admin control panel (password: "eden") with Data Health, Enrichment, Pipeline Review (review queue + wipe/re-collect), Research Queue tabs
 - **`/reports`** — Mock report cards
 - **`/asset/:id`** — Full dossier with score breakdown
 - **`/report`** — Buyer intelligence report
@@ -154,14 +162,24 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `GET /api/ingest/status` — last run status (never_run | running | completed | failed)
 - `GET /api/institutions/counts` — `Record<string, number>` count per institution
 - `GET /api/institutions/:slug/assets` — ingested assets for an institution
+- `POST /api/admin/wipe-assets` — delete all ingested assets (admin)
+- `GET /api/admin/review-queue` — pipeline review queue items (admin)
+- `PATCH /api/admin/review-queue/:id` — resolve review queue item (admin)
+- `GET /api/taxonomy/therapy-areas` — therapy area taxonomy with asset counts
+- `GET /api/taxonomy/convergence` — convergence signals (multi-institution targets)
+- `POST /api/admin/taxonomy/refresh` — refresh taxonomy + convergence (admin)
+- `GET /api/browse/assets` — browse ingested assets with filters (therapyArea, institution, modality, stage)
 
 ### Database Tables
 - `search_history`: query, source, result_count, created_at
 - `saved_assets`: full asset data from saved search results
 - `ingestion_runs`: id, ran_at, total_found, new_count, status, error_message
-- `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, enriched_at, run_id
+- `ingested_assets`: fingerprint (unique), asset_name, institution, source_url, summary, stage, first_seen_at, last_seen_at, enriched_at, run_id, categories (jsonb), categoryConfidence, available, contentHash, completenessScore, lastContentChangeAt, innovationClaim, mechanismOfAction, ipType, unmetNeed, comparableDrugs, licensingReadiness, patentStatus, licensingStatus, inventors (jsonb), contactEmail, technologyId, abstract
 - `scan_institution_counts`: run_id, institution, count — per-institution scrape counts per ingestion run (populated during ingestion)
 - `enrichment_jobs`: id, model, status, total, processed, improved, started_at, completed_at — tracks enrichment job progress in DB for resumability
+- `review_queue`: assetId, fingerprint, reason, status, reviewerNote, createdAt, resolvedAt — ambiguous assets flagged for manual review
+- `therapy_area_taxonomy`: name (unique), parentId, level, assetCount, lastUpdatedAt — therapy area hierarchy with live asset counts
+- `convergence_signals`: therapyArea, targetOrMechanism, institutionCount, assetIds (jsonb), institutions (jsonb), score, detectedAt, lastUpdatedAt — multi-institution convergence detection
 
 ### Visual Theme
 - Botanical green: `--primary: 142 52% 36%` (light) / `142 65% 48%` (dark)

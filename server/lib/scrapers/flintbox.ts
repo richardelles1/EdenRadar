@@ -16,6 +16,26 @@ interface JsonApiTech {
     brief_description?: string;
     keyPoint1?: string;
     slug?: string;
+    uuid?: string;
+    description?: string;
+    abstract?: string;
+    fullDescription?: string;
+    full_description?: string;
+    inventors?: string;
+    inventor_names?: string[];
+    patentStatus?: string;
+    patent_status?: string;
+    licensingStatus?: string;
+    licensing_status?: string;
+    status?: string;
+    categories?: string[];
+    category?: string;
+    contactEmail?: string;
+    contact_email?: string;
+    publishedDate?: string;
+    published_date?: string;
+    technologyNumber?: string;
+    technology_number?: string;
   };
 }
 
@@ -91,11 +111,35 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
                 const desc = cleanText(
                   attrs.briefDescription ?? attrs.brief_description ?? attrs.keyPoint1 ?? ""
                 );
+                const fullDesc = cleanText(
+                  attrs.fullDescription ?? attrs.full_description ?? attrs.description ?? ""
+                );
                 const techId = attrs.uuid ?? attrs.slug ?? item.id ?? "";
                 const techUrl = techId
                   ? `${base}/technologies/${techId}`
                   : `${base}/technologies`;
-                results.push({ title: name, description: desc, url: techUrl, institution });
+
+                const inventorStr = attrs.inventors ?? attrs.inventor_names?.join(", ") ?? "";
+                const inventors = inventorStr
+                  ? inventorStr.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
+                  : undefined;
+
+                const cats = attrs.categories ?? (attrs.category ? [attrs.category] : undefined);
+
+                results.push({
+                  title: name,
+                  description: desc || fullDesc,
+                  url: techUrl,
+                  institution,
+                  abstract: fullDesc || undefined,
+                  inventors: inventors && inventors.length > 0 ? inventors : undefined,
+                  patentStatus: attrs.patentStatus ?? attrs.patent_status ?? undefined,
+                  licensingStatus: attrs.licensingStatus ?? attrs.licensing_status ?? attrs.status ?? undefined,
+                  categories: cats,
+                  contactEmail: attrs.contactEmail ?? attrs.contact_email ?? undefined,
+                  publishedDate: attrs.publishedDate ?? attrs.published_date ?? undefined,
+                  technologyId: attrs.technologyNumber ?? attrs.technology_number ?? (techId ? String(techId) : undefined),
+                });
               }
               console.log(`[scraper] ${institution}: ${results.length} listings via Flintbox API`);
               return results;

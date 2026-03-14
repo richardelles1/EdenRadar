@@ -2,7 +2,9 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject, ingestedAssets } from "@shared/schema";
+import { db } from "./db";
+import { eq, and, sql } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -1171,6 +1173,42 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/wipe-assets", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      await storage.wipeAllAssets();
+      res.json({ ok: true, message: "All ingested assets wiped" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/review-queue", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const items = await storage.getReviewQueue();
+      res.json({ items });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/review-queue/:id", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const { note } = req.body as { note?: string };
+    try {
+      await storage.resolveReviewItem(id, note ?? "");
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Admin: research queue — all published discovery cards for review
   app.get("/api/admin/research-queue", async (req, res) => {
     const pw = req.headers["x-admin-password"] as string;
@@ -1511,6 +1549,91 @@ export async function registerRoutes(
     try {
       await storage.deleteSavedGrant(id, researcherId);
       res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/taxonomy/therapy-areas", async (_req, res) => {
+    try {
+      const { getTherapyAreas } = await import("./lib/pipeline/taxonomyPipeline");
+      const areas = await getTherapyAreas();
+      res.json({ areas });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/taxonomy/convergence", async (_req, res) => {
+    try {
+      const { getConvergenceSignals } = await import("./lib/pipeline/taxonomyPipeline");
+      const signals = await getConvergenceSignals();
+      res.json({ signals });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/taxonomy/refresh", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const { refreshTaxonomyCounts, detectConvergenceSignals } = await import("./lib/pipeline/taxonomyPipeline");
+      await refreshTaxonomyCounts();
+      await detectConvergenceSignals();
+      res.json({ ok: true, message: "Taxonomy and convergence refreshed" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/browse/assets", async (req, res) => {
+    try {
+      const therapyArea = req.query.therapyArea as string | undefined;
+      const institution = req.query.institution as string | undefined;
+      const modality = req.query.modality as string | undefined;
+      const stage = req.query.stage as string | undefined;
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+
+      const conditions = [eq(ingestedAssets.relevant, true)];
+      if (therapyArea) {
+        conditions.push(sql`${ingestedAssets.categories}::jsonb @> ${JSON.stringify([therapyArea])}::jsonb` as any);
+      }
+      if (institution) {
+        conditions.push(eq(ingestedAssets.institution, institution));
+      }
+      if (modality && modality !== "all") {
+        conditions.push(eq(ingestedAssets.modality, modality));
+      }
+      if (stage && stage !== "all") {
+        conditions.push(eq(ingestedAssets.developmentStage, stage));
+      }
+
+      const results = await db
+        .select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          target: ingestedAssets.target,
+          modality: ingestedAssets.modality,
+          indication: ingestedAssets.indication,
+          developmentStage: ingestedAssets.developmentStage,
+          institution: ingestedAssets.institution,
+          summary: ingestedAssets.summary,
+          sourceUrl: ingestedAssets.sourceUrl,
+          categories: ingestedAssets.categories,
+          innovationClaim: ingestedAssets.innovationClaim,
+          mechanismOfAction: ingestedAssets.mechanismOfAction,
+          completenessScore: ingestedAssets.completenessScore,
+          firstSeenAt: ingestedAssets.firstSeenAt,
+        })
+        .from(ingestedAssets)
+        .where(and(...conditions))
+        .limit(limit)
+        .offset(offset)
+        .orderBy(sql`${ingestedAssets.firstSeenAt} desc`);
+
+      res.json({ assets: results, hasMore: results.length === limit });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

@@ -1,6 +1,9 @@
 import { storage } from "../storage";
 import { runAllScrapers, ALL_SCRAPERS } from "./scrapers/index";
 import { enrichBatch } from "./scrapers/enrichAsset";
+import { preFilterBatch } from "./pipeline/relevancePreFilter";
+import { classifyBatch, type AssetClassification } from "./pipeline/classifyAsset";
+import { computeContentHash, computeCompletenessScore, normalizeLicensingStatus, normalizePatentStatus } from "./pipeline/contentHash";
 import { syncStaging, type SyncStagingRow } from "@shared/schema";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
@@ -60,20 +63,35 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
-    // Build deduplicated listing records for bulk upsert
+    const { passed, rejected, ambiguous } = preFilterBatch(listings);
+    console.log(`[ingestion] Pre-filter: ${passed.length} passed, ${rejected.length} rejected, ${ambiguous.length} ambiguous`);
+
+    const filteredListings = [...passed, ...ambiguous];
+
     const seen = new Set<string>();
-    const toUpsert = listings
+    const toUpsert = filteredListings
       .filter((l) => l.title && l.institution)
-      .map((l) => ({
-        fingerprint: makeFingerprint(l.title, l.institution),
-        assetName: l.title,
-        institution: l.institution,
-        summary: l.description || l.title,
-        sourceUrl: l.url || null,
-        sourceType: "tech_transfer" as const,
-        developmentStage: l.stage ?? "unknown",
-        runId: run.id,
-      }))
+      .map((l) => {
+        const hash = computeContentHash(l.title, l.description || "", l.abstract);
+        return {
+          fingerprint: makeFingerprint(l.title, l.institution),
+          assetName: l.title,
+          institution: l.institution,
+          summary: l.description || l.title,
+          sourceUrl: l.url || null,
+          sourceType: "tech_transfer" as const,
+          developmentStage: l.stage ?? "unknown",
+          runId: run.id,
+          contentHash: hash,
+          abstract: l.abstract || null,
+          inventors: l.inventors || null,
+          patentStatus: normalizePatentStatus(l.patentStatus) || null,
+          licensingStatus: normalizeLicensingStatus(l.licensingStatus) || null,
+          categories: l.categories || null,
+          contactEmail: l.contactEmail || null,
+          technologyId: l.technologyId || null,
+        };
+      })
       .filter((l) => {
         if (seen.has(l.fingerprint)) return false;
         seen.add(l.fingerprint);
@@ -111,35 +129,61 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 
     if (newAssets.length > 0) {
       enrichingCount = newAssets.length;
-      console.log(`[ingestion] Enriching ${newAssets.length} new assets with AI (concurrency: 50)...`);
+      console.log(`[ingestion] Classifying ${newAssets.length} new assets with AI (concurrency: 30)...`);
 
-      let enrichedCount = 0;
+      let classifiedCount = 0;
       let removedCount = 0;
 
-      enrichBatch(newAssets, 50, async (id, data) => {
-        try {
-          if (!data.biotechRelevant) {
-            await storage.deleteIngestedAsset(id);
-            removedCount++;
-          } else {
-            await storage.updateIngestedAssetEnrichment(id, data);
-            enrichedCount++;
+      const upsertLookup = new Map(toUpsert.map((u) => [u.fingerprint, u]));
+      classifyBatch(
+        newAssets.map((a) => {
+          const orig = upsertLookup.get(a.fingerprint);
+          return { id: a.id, title: a.assetName, description: orig?.summary || a.assetName, abstract: orig?.abstract || undefined };
+        }),
+        30,
+        async (id, classification) => {
+          try {
+            if (!classification.biotechRelevant) {
+              await storage.deleteIngestedAsset(id);
+              removedCount++;
+            } else {
+              const orig = newAssets.find((na) => na.id === id);
+              const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
+              const score = computeCompletenessScore({
+                target: classification.target,
+                modality: classification.modality,
+                indication: classification.indication,
+                developmentStage: classification.developmentStage,
+                summary: origData?.summary,
+                abstract: origData?.abstract,
+                categories: classification.categories,
+                innovationClaim: classification.innovationClaim,
+                mechanismOfAction: classification.mechanismOfAction,
+                inventors: origData?.inventors,
+                patentStatus: origData?.patentStatus,
+              });
+              await storage.updateIngestedAssetEnrichment(id, {
+                ...classification,
+                completenessScore: score,
+              });
+              classifiedCount++;
+            }
+          } catch (err: any) {
+            console.error(`[ingestion] Classification failed for id ${id}: ${err?.message}`);
           }
-        } catch (err: any) {
-          console.error(`[ingestion] Enrichment update failed for id ${id}: ${err?.message}`);
+          enrichingCount = Math.max(0, enrichingCount - 1);
         }
-        enrichingCount = Math.max(0, enrichingCount - 1);
-      }).then(async () => {
+      ).then(async () => {
         enrichingCount = 0;
-        console.log(`[ingestion] Enrichment complete: ${enrichedCount} relevant, ${removedCount} removed`);
+        console.log(`[ingestion] Classification complete: ${classifiedCount} relevant, ${removedCount} removed`);
         try {
-          await storage.updateIngestionRun(run.id, { relevantNewCount: enrichedCount });
+          await storage.updateIngestionRun(run.id, { relevantNewCount: classifiedCount });
         } catch (err: any) {
           console.error(`[ingestion] Failed to update relevantNewCount: ${err?.message}`);
         }
       }).catch((err: any) => {
         enrichingCount = 0;
-        console.error(`[ingestion] Enrichment batch failed: ${err?.message}`);
+        console.error(`[ingestion] Classification batch failed: ${err?.message}`);
       });
     }
 

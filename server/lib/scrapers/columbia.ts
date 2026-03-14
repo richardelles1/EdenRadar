@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { enrichWithDetailPages } from "./detailFetcher";
 
 const INST = "Columbia University";
 const BASE = "https://inventions.techventures.columbia.edu";
@@ -37,7 +38,27 @@ export const columbiaScraper: InstitutionScraper = {
         }
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings from sitemap`);
+      console.log(`[scraper] ${INST}: ${results.length} listings from sitemap, fetching details...`);
+
+      await enrichWithDetailPages(results, {
+        description: [
+          ".technology-description",
+          ".field--name-body",
+          "#description",
+          "article .content p",
+          "main p",
+        ],
+        inventors: [
+          ".technology-inventors li",
+          ".field--name-field-inventors li",
+        ],
+        patentStatus: [
+          ".technology-patent-status",
+          ".field--name-field-patent-status",
+        ],
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} sitemap failed: ${err?.message}`);

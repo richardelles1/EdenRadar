@@ -5,6 +5,14 @@ export interface ScrapedListing {
   institution: string;
   stage?: string;
   date?: string;
+  categories?: string[];
+  abstract?: string;
+  inventors?: string[];
+  patentStatus?: string;
+  licensingStatus?: string;
+  contactEmail?: string;
+  publishedDate?: string;
+  technologyId?: string;
 }
 
 export interface InstitutionScraper {

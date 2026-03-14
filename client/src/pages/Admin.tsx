@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1367,6 +1367,142 @@ function DataHealth({ pw }: { pw: string }) {
   );
 }
 
+function PipelineReviewQueue({ pw }: { pw: string }) {
+  const { toast } = useToast();
+
+  const { data, isLoading, refetch } = useQuery<{ items: any[] }>({
+    queryKey: ["/api/admin/review-queue"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/review-queue", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const resolve = useMutation({
+    mutationFn: async ({ id, note }: { id: number; note: string }) => {
+      const res = await fetch(`/api/admin/review-queue/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ note }),
+      });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      refetch();
+      toast({ title: "Resolved", description: "Review item resolved." });
+    },
+  });
+
+  const wipeMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/wipe-assets", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to wipe");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/review-queue"] });
+      toast({ title: "Wiped", description: "All ingested assets have been removed. Run a sync to re-collect." });
+    },
+    onError: () => toast({ title: "Error", description: "Wipe failed.", variant: "destructive" }),
+  });
+
+  const [confirmWipe, setConfirmWipe] = useState(false);
+
+  const items = data?.items ?? [];
+
+  return (
+    <div className="space-y-6" data-testid="pipeline-review-tab">
+      <div className="border border-border rounded-xl bg-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Asset Review Queue</h3>
+            <p className="text-sm text-muted-foreground">Ambiguous assets flagged by the pre-filter for manual review</p>
+          </div>
+          <Badge variant="secondary" data-testid="badge-review-count">{items.length} pending</Badge>
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : items.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No items pending review</div>
+        ) : (
+          <div className="space-y-2">
+            {items.slice(0, 20).map((item: any) => (
+              <div key={item.id} className="flex items-center justify-between p-3 border border-border rounded-lg" data-testid={`review-item-${item.id}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-foreground truncate">{item.fingerprint}</div>
+                  <div className="text-xs text-muted-foreground">{item.reason}</div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => resolve.mutate({ id: item.id, note: "reviewed" })}
+                  disabled={resolve.isPending}
+                  data-testid={`button-resolve-${item.id}`}
+                >
+                  Resolve
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="border border-destructive/30 rounded-xl bg-card p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <Trash2 className="h-5 w-5 text-destructive" />
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Wipe & Re-collect</h3>
+            <p className="text-sm text-muted-foreground">Delete all ingested assets and start fresh. This is irreversible.</p>
+          </div>
+        </div>
+
+        {!confirmWipe ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setConfirmWipe(true)}
+            data-testid="button-wipe-start"
+          >
+            <Trash2 className="h-4 w-4 mr-1" /> Wipe All Assets
+          </Button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-destructive font-medium">Are you sure? This deletes everything.</span>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => { wipeMutation.mutate(); setConfirmWipe(false); }}
+              disabled={wipeMutation.isPending}
+              data-testid="button-wipe-confirm"
+            >
+              {wipeMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, Wipe"}
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmWipe(false)}
+              data-testid="button-wipe-cancel"
+            >
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ResearchQueue({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [rejectingId, setRejectingId] = useState<number | null>(null);
@@ -1681,6 +1817,18 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Enrichment
             </button>
             <button
+              onClick={() => setActiveTab("pipeline-review")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "pipeline-review"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-pipeline-review"
+            >
+              <ClipboardList className="h-4 w-4" />
+              Pipeline Review
+            </button>
+            <button
               onClick={() => setActiveTab("research-queue")}
               className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "research-queue"
@@ -1712,6 +1860,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
               </div>
               <Enrichment pw={pw} />
+            </>
+          )}
+
+          {activeTab === "pipeline-review" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Pipeline Review</h2>
+                <p className="text-sm text-muted-foreground mt-1">Review ambiguous assets, manage the review queue, and wipe/re-collect data</p>
+              </div>
+              <PipelineReviewQueue pw={pw} />
             </>
           )}
 
