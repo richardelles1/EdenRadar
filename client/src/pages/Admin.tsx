@@ -1823,11 +1823,21 @@ function AccountCenter({ pw }: { pw: string }) {
       }
       return res.json();
     },
+    onMutate: async ({ userId, role }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/admin/users"] });
+      const prev = queryClient.getQueryData<{ users: AdminUser[] }>(["/api/admin/users"]);
+      queryClient.setQueryData<{ users: AdminUser[] }>(["/api/admin/users"], (old) => {
+        if (!old) return old;
+        return { users: old.users.map((u) => u.id === userId ? { ...u, role } : u) };
+      });
+      return { prev };
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Role updated" });
     },
-    onError: (err: Error) => {
+    onError: (err: Error, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
     },
   });
