@@ -147,16 +147,18 @@ export default function AssetDossier() {
   });
 
   useEffect(() => {
+    let base: ScoredAsset | null = null;
     const stored = sessionStorage.getItem(`asset-${id}`);
     if (stored) {
       try {
-        setAsset(JSON.parse(stored));
-        return;
+        base = JSON.parse(stored);
       } catch {}
     }
-    if (intelligence?.enriched && intelligence.assetRecord) {
+
+    if (intelligence?.assetRecord) {
       const rec = intelligence.assetRecord;
-      setAsset({
+      const enr = intelligence.enriched;
+      const dbAsset: ScoredAsset = {
         id: rec.fingerprint ?? String(rec.id),
         asset_name: rec.assetName ?? "Unnamed Asset",
         target: rec.target ?? "unknown",
@@ -166,20 +168,23 @@ export default function AssetDossier() {
         owner_name: rec.institution ?? "unknown",
         owner_type: "university",
         institution: rec.institution ?? "unknown",
-        patent_status: intelligence.enriched.patentStatus ?? "unknown",
-        licensing_status: intelligence.enriched.licensingStatus ?? "unknown",
+        patent_status: enr?.patentStatus ?? "unknown",
+        licensing_status: enr?.licensingStatus ?? "unknown",
         summary: rec.summary ?? "",
-        why_it_matters: "",
-        evidence_count: 0,
-        source_types: ["tech_transfer"],
-        source_urls: rec.sourceUrl ? [rec.sourceUrl] : [],
-        latest_signal_date: "",
-        score: 0,
-        score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
-        matching_tags: [],
-        confidence: "low",
-        signals: [],
-      });
+        why_it_matters: base?.why_it_matters ?? "",
+        evidence_count: base?.evidence_count ?? 0,
+        source_types: base?.source_types ?? ["tech_transfer"],
+        source_urls: rec.sourceUrl ? [rec.sourceUrl] : (base?.source_urls ?? []),
+        latest_signal_date: base?.latest_signal_date ?? "",
+        score: base?.score ?? 0,
+        score_breakdown: base?.score_breakdown ?? { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+        matching_tags: base?.matching_tags ?? [],
+        confidence: base?.confidence ?? "low",
+        signals: base?.signals ?? [],
+      };
+      setAsset(dbAsset);
+    } else if (base) {
+      setAsset(base);
     }
   }, [id, intelligence]);
 
