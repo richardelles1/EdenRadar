@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject, ingestedAssets } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
@@ -336,6 +336,141 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("Dossier error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
+  app.get("/api/assets/:fingerprint/intelligence", async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      if (!fingerprint) return res.status(400).json({ error: "Fingerprint required" });
+
+      let [enrichedRecord] = await db
+        .select()
+        .from(ingestedAssets)
+        .where(eq(ingestedAssets.fingerprint, fingerprint))
+        .limit(1);
+
+      if (!enrichedRecord) {
+        const numericId = parseInt(fingerprint, 10);
+        if (!isNaN(numericId)) {
+          [enrichedRecord] = await db
+            .select()
+            .from(ingestedAssets)
+            .where(eq(ingestedAssets.id, numericId))
+            .limit(1);
+        }
+      }
+
+      const competingAssets: IngestedAsset[] = [];
+      if (enrichedRecord) {
+        const target = enrichedRecord.target;
+        const indication = enrichedRecord.indication;
+        const institution = enrichedRecord.institution;
+
+        if (target && target !== "unknown") {
+          const byTarget = await db
+            .select()
+            .from(ingestedAssets)
+            .where(
+              and(
+                eq(ingestedAssets.target, target),
+                sql`${ingestedAssets.institution} != ${institution}`,
+                eq(ingestedAssets.relevant, true),
+                sql`${ingestedAssets.fingerprint} != ${fingerprint}`
+              )
+            )
+            .limit(5);
+          competingAssets.push(...byTarget);
+        }
+
+        if (competingAssets.length < 5 && indication && indication !== "unknown") {
+          const existingFps = new Set([fingerprint, ...competingAssets.map((a) => a.fingerprint)]);
+          const byIndication = await db
+            .select()
+            .from(ingestedAssets)
+            .where(
+              and(
+                eq(ingestedAssets.indication, indication),
+                sql`${ingestedAssets.institution} != ${institution}`,
+                eq(ingestedAssets.relevant, true),
+                sql`${ingestedAssets.fingerprint} != ${fingerprint}`
+              )
+            )
+            .limit(5 - competingAssets.length);
+          for (const a of byIndication) {
+            if (!existingFps.has(a.fingerprint)) {
+              competingAssets.push(a);
+              existingFps.add(a.fingerprint);
+            }
+          }
+        }
+      }
+
+      let literature: Array<{ title: string; url: string; date: string; source_type: string }> = [];
+      if (enrichedRecord) {
+        const searchTerms = [
+          enrichedRecord.target !== "unknown" ? enrichedRecord.target : null,
+          enrichedRecord.indication !== "unknown" ? enrichedRecord.indication : null,
+        ].filter(Boolean).join(" ");
+
+        if (searchTerms) {
+          try {
+            const pubmedSource = dataSources["pubmed" as SourceKey];
+            const biorxivSource = dataSources["biorxiv" as SourceKey];
+            const signals: RawSignal[] = [];
+            if (pubmedSource) {
+              const ps = await pubmedSource.search(searchTerms, 3);
+              signals.push(...ps);
+            }
+            if (biorxivSource) {
+              const bs = await biorxivSource.search(searchTerms, 2);
+              signals.push(...bs);
+            }
+            literature = signals.map((s) => ({
+              title: s.title,
+              url: s.url,
+              date: s.date,
+              source_type: s.source_type,
+            }));
+          } catch (err) {
+            console.error("[intelligence] Literature fetch error:", err);
+          }
+        }
+      }
+
+      return res.json({
+        enriched: enrichedRecord
+          ? {
+              mechanismOfAction: enrichedRecord.mechanismOfAction,
+              abstract: enrichedRecord.abstract,
+              categories: enrichedRecord.categories,
+              completenessScore: enrichedRecord.completenessScore,
+              innovationClaim: enrichedRecord.innovationClaim,
+              ipType: enrichedRecord.ipType,
+              unmetNeed: enrichedRecord.unmetNeed,
+              comparableDrugs: enrichedRecord.comparableDrugs,
+              licensingReadiness: enrichedRecord.licensingReadiness,
+              patentStatus: enrichedRecord.patentStatus,
+              licensingStatus: enrichedRecord.licensingStatus,
+              inventors: enrichedRecord.inventors,
+              contactEmail: enrichedRecord.contactEmail,
+            }
+          : null,
+        competingAssets: competingAssets.map((a) => ({
+          fingerprint: a.fingerprint,
+          assetName: a.assetName,
+          target: a.target,
+          modality: a.modality,
+          indication: a.indication,
+          developmentStage: a.developmentStage,
+          institution: a.institution,
+          completenessScore: a.completenessScore,
+        })),
+        literature,
+      });
+    } catch (err: any) {
+      console.error("[intelligence] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
     }
   });
 
@@ -1872,6 +2007,7 @@ If a field cannot be determined, use "N/A".`
       const results = await db
         .select({
           id: ingestedAssets.id,
+          fingerprint: ingestedAssets.fingerprint,
           assetName: ingestedAssets.assetName,
           target: ingestedAssets.target,
           modality: ingestedAssets.modality,

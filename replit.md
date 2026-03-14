@@ -131,7 +131,7 @@ client/src/
     Admin.tsx             # /admin — admin control panel with password gate and scan tracking
     Reports.tsx           # /reports — mock report cards
     Alerts.tsx            # /alerts — mock alerts + Create Alert drawer
-    AssetDossier.tsx      # /asset/:id — dossier view
+    AssetDossier.tsx      # /asset/:id — dossier view with pipeline intelligence panel
     Report.tsx            # /report — buyer intelligence report
 
 shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets, scanInstitutionCounts
@@ -146,7 +146,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
 - **`/admin`** — Admin control panel (password: "eden") with Data Health, Enrichment, Pipeline Review (review queue + wipe/re-collect), Research Queue tabs
 - **`/reports`** — Mock report cards
-- **`/asset/:id`** — Full dossier with score breakdown
+- **`/asset/:id`** — Full dossier with score breakdown + pipeline intelligence (enriched fields, competing assets, supporting literature)
 - **`/report`** — Buyer intelligence report
 
 ### API Routes
@@ -154,6 +154,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `POST /api/search` — full pipeline search → `ScoredAsset[]`
 - `POST /api/report` — GPT-4o market report
 - `POST /api/dossier` — GPT-4o dossier brief
+- `GET /api/assets/:fingerprint/intelligence` — Pipeline intelligence: enriched fields, competing assets (same target/indication), PubMed+bioRxiv literature
 - `GET/POST /api/saved-assets` — saved asset CRUD
 - `DELETE /api/saved-assets/:id`
 - `GET /api/search-history`
