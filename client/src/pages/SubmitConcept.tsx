@@ -82,7 +82,7 @@ export default function SubmitConcept() {
     const results: { name: string; url: string; size: number }[] = [];
     const failed: string[] = [];
     for (const file of files) {
-      const path = `concept-files/${userId}/${Date.now()}-${file.name}`;
+      const path = `${userId}/${Date.now()}-${file.name}`;
       const { error } = await supabase.storage.from("concept-files").upload(path, file);
       if (error) {
         console.error("File upload error:", error);
@@ -414,15 +414,17 @@ export default function SubmitConcept() {
                   <input
                     type="file"
                     className="hidden"
-                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.xlsx,.csv,.pptx,.txt"
+                    multiple
                     onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      if (file.size > 10 * 1024 * 1024) {
-                        toast({ title: "File too large", description: "Max 10 MB per file.", variant: "destructive" });
-                        return;
+                      const selected = Array.from(e.target.files ?? []);
+                      const remaining = 5 - files.length;
+                      const toAdd = selected.slice(0, remaining);
+                      const oversized = toAdd.filter(f => f.size > 10 * 1024 * 1024);
+                      if (oversized.length > 0) {
+                        toast({ title: "File too large", description: `${oversized.map(f => f.name).join(", ")} exceed 10 MB limit.`, variant: "destructive" });
                       }
-                      setFiles(prev => [...prev, file]);
+                      const valid = toAdd.filter(f => f.size <= 10 * 1024 * 1024);
+                      if (valid.length > 0) setFiles(prev => [...prev, ...valid]);
                       e.target.value = "";
                     }}
                   />

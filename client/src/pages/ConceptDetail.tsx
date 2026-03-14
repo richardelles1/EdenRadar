@@ -286,6 +286,8 @@ export default function ConceptDetail() {
   const totalInterest = (c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0);
   const hasAnyInterest = myActiveTypes.size > 0;
   const isOwner = user?.id === c.userId;
+  type AttachedFile = { name: string; url: string; size: number };
+  const attachments: AttachedFile[] = Array.isArray(c.attachedFiles) ? c.attachedFiles : [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -397,15 +399,15 @@ export default function ConceptDetail() {
           </div>
         )}
 
-        {c.attachedFiles && (c.attachedFiles as { name: string; url: string; size: number }[]).length > 0 && (
+        {attachments.length > 0 && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
             <div className="flex items-center gap-2 mb-3">
               <Paperclip className="w-4 h-4 text-amber-500" />
               <h3 className="font-semibold text-sm text-foreground">Attachments</h3>
-              <span className="text-xs text-muted-foreground">({(c.attachedFiles as any[]).length} file{(c.attachedFiles as any[]).length !== 1 ? "s" : ""})</span>
+              <span className="text-xs text-muted-foreground">({attachments.length} file{attachments.length !== 1 ? "s" : ""})</span>
             </div>
             <div className="space-y-2">
-              {(c.attachedFiles as { name: string; url: string; size: number }[]).map((file, i) => (
+              {attachments.map((file, i) => (
                 <a
                   key={i}
                   href={file.url}

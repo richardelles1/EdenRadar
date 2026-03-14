@@ -128,7 +128,6 @@ export default function MyConcepts() {
         const body = await res.text();
         throw new Error(body || "Delete failed");
       }
-      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });

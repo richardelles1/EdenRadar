@@ -2194,11 +2194,33 @@ If a field cannot be determined, use "N/A".`
       await db.delete(conceptInterests).where(eq(conceptInterests.conceptId, id));
       await db.delete(conceptCards).where(eq(conceptCards.id, id));
 
-      if (concept.attachedFiles && (concept.attachedFiles as any[]).length > 0) {
-        console.log(`[concept DELETE] Concept ${id} had ${(concept.attachedFiles as any[]).length} attached file(s). Storage cleanup skipped (no SUPABASE_SERVICE_ROLE_KEY).`);
+      const files = concept.attachedFiles as { name: string; url: string; size: number }[] | null;
+      if (files && files.length > 0) {
+        const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        const supabaseUrl = process.env.VITE_SUPABASE_URL;
+        if (serviceRoleKey && supabaseUrl) {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const adminClient = createClient(supabaseUrl, serviceRoleKey);
+            const paths = files.map((f) => {
+              const url = new URL(f.url);
+              const match = url.pathname.match(/\/object\/public\/concept-files\/(.+)/);
+              return match ? match[1] : null;
+            }).filter((p): p is string => !!p);
+            if (paths.length > 0) {
+              const { error } = await adminClient.storage.from("concept-files").remove(paths);
+              if (error) console.error(`[concept DELETE] Storage cleanup error:`, error);
+              else console.log(`[concept DELETE] Cleaned up ${paths.length} file(s) from storage`);
+            }
+          } catch (storageErr) {
+            console.error(`[concept DELETE] Storage cleanup failed:`, storageErr);
+          }
+        } else {
+          console.log(`[concept DELETE] Concept ${id} had ${files.length} attached file(s). Storage cleanup skipped (no SUPABASE_SERVICE_ROLE_KEY).`);
+        }
       }
 
-      res.json({ deleted: true });
+      res.status(204).end();
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
