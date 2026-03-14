@@ -33,6 +33,7 @@ export default function DiscoveryJoin() {
   const [affiliation, setAffiliation] = useState("");
   const [researchArea, setResearchArea] = useState("");
   const [goal, setGoal] = useState("");
+  const [seeking, setSeeking] = useState("");
 
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -68,6 +69,7 @@ export default function DiscoveryJoin() {
       if (affiliation) metadata.affiliation = affiliation;
       if (researchArea) metadata.research_area = researchArea;
       if (goal) metadata.goal = goal;
+      if (seeking) metadata.seeking = seeking;
       const { error: err } = await signUp(email, password, "concept", metadata);
       if (err) {
         setError(err);
@@ -166,6 +168,20 @@ export default function DiscoveryJoin() {
                     {GOAL_OPTIONS.map(({ value, label }) => (
                       <SelectItem key={value} value={value}>{label}</SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>What are you seeking?</Label>
+                <Select value={seeking} onValueChange={setSeeking}>
+                  <SelectTrigger data-testid="select-join-seeking">
+                    <SelectValue placeholder="Select what you need" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="collaborating">Research Collaborator</SelectItem>
+                    <SelectItem value="funding">Funding / Investment</SelectItem>
+                    <SelectItem value="advising">Scientific Advisor</SelectItem>
+                    <SelectItem value="industry">Industry Partner</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

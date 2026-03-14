@@ -116,7 +116,7 @@ export default function ConceptDetail() {
     modality: string; developmentStage: string; target: string; sourceUrl: string | null;
   };
   type PubmedPaper = {
-    pmid: string; title: string; authors: string; journal: string; year: string; url: string;
+    pmid: string; title: string; authors: string; journal: string; year: string; url: string; source?: "pubmed" | "biorxiv";
   };
 
   const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[]; literature: PubmedPaper[] }>({
@@ -396,13 +396,18 @@ export default function ConceptDetail() {
             {landscapeData.literature.length > 0 && (
               <>
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  <BookOpen className="w-3 h-3" /> Related Literature (PubMed)
+                  <BookOpen className="w-3 h-3" /> Related Literature (PubMed + bioRxiv)
                 </p>
                 <div className="space-y-2">
                   {landscapeData.literature.map((paper) => (
                     <div key={paper.pmid} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors" data-testid={`landscape-paper-${paper.pmid}`}>
                       <BookOpen className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
                       <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${paper.source === "biorxiv" ? "bg-orange-500/10 text-orange-600 dark:text-orange-400" : "bg-blue-500/10 text-blue-600 dark:text-blue-400"}`}>
+                            {paper.source === "biorxiv" ? "bioRxiv" : "PubMed"}
+                          </span>
+                        </div>
                         <p className="text-sm font-medium text-foreground line-clamp-2">{paper.title}</p>
                         <p className="text-xs text-muted-foreground">
                           {paper.authors}{paper.authors && paper.journal ? " · " : ""}{paper.journal}{paper.year ? ` (${paper.year})` : ""}

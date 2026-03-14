@@ -2203,29 +2203,58 @@ If a field cannot be determined, use "N/A".`
           .limit(6),
 
         (async () => {
-          const searchTerm = encodeURIComponent(`${therapyArea}[MeSH Terms] AND drug therapy`);
-          const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=5&retmode=json&sort=relevance`;
-          const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(4000) });
-          if (!searchRes.ok) return [];
-          const searchJson = await searchRes.json() as { esearchresult?: { idlist?: string[] } };
-          const ids: string[] = searchJson.esearchresult?.idlist ?? [];
-          if (ids.length === 0) return [];
-          const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
-          const summaryRes = await fetch(summaryUrl, { signal: AbortSignal.timeout(4000) });
-          if (!summaryRes.ok) return [];
-          const summaryJson = await summaryRes.json() as { result?: Record<string, any> };
-          const result = summaryJson.result ?? {};
-          return ids.slice(0, 5).map((pmid) => {
-            const doc = result[pmid] ?? {};
-            return {
-              pmid,
-              title: doc.title ?? "Untitled",
-              authors: (doc.authors ?? []).slice(0, 2).map((a: any) => a.name).join(", "),
-              journal: doc.fulljournalname ?? doc.source ?? "",
-              year: doc.pubdate?.substring(0, 4) ?? "",
-              url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
-            };
-          });
+          const [pubmedItems, biorxivItems] = await Promise.allSettled([
+            (async () => {
+              const searchTerm = encodeURIComponent(`${therapyArea}[MeSH Terms] AND drug therapy`);
+              const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=4&retmode=json&sort=relevance`;
+              const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
+              if (!searchRes.ok) return [];
+              const searchJson = await searchRes.json() as { esearchresult?: { idlist?: string[] } };
+              const ids: string[] = searchJson.esearchresult?.idlist ?? [];
+              if (ids.length === 0) return [];
+              const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
+              const summaryRes = await fetch(summaryUrl, { signal: AbortSignal.timeout(5000) });
+              if (!summaryRes.ok) return [];
+              const summaryJson = await summaryRes.json() as { result?: Record<string, any> };
+              const result = summaryJson.result ?? {};
+              return ids.slice(0, 4).map((pmid) => {
+                const doc = result[pmid] ?? {};
+                return {
+                  source: "pubmed" as const,
+                  pmid,
+                  title: doc.title ?? "Untitled",
+                  authors: (doc.authors ?? []).slice(0, 2).map((a: any) => a.name).join(", "),
+                  journal: doc.fulljournalname ?? doc.source ?? "",
+                  year: doc.pubdate?.substring(0, 4) ?? "",
+                  url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+                };
+              });
+            })(),
+            (async () => {
+              const q = encodeURIComponent(therapyArea);
+              const url = `https://api.crossref.org/works?query=${q}&filter=type:posted-content,member:246&rows=3&sort=relevance&mailto=eden@edenradar.io`;
+              const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
+              if (!res.ok) return [];
+              const json = await res.json() as { message?: { items?: any[] } };
+              return (json.message?.items ?? []).slice(0, 3).map((item: any) => {
+                const pmid = item.DOI ?? "";
+                const authors = (item.author ?? []).slice(0, 2).map((a: any) => `${a.given ?? ""} ${a.family ?? ""}`.trim()).join(", ");
+                const year = item.created?.["date-parts"]?.[0]?.[0]?.toString() ?? "";
+                return {
+                  source: "biorxiv" as const,
+                  pmid,
+                  title: item.title?.[0] ?? "Untitled",
+                  authors,
+                  journal: "bioRxiv preprint",
+                  year,
+                  url: `https://doi.org/${pmid}`,
+                };
+              });
+            })(),
+          ]);
+          const pubmed = pubmedItems.status === "fulfilled" ? pubmedItems.value : [];
+          const biorxiv = biorxivItems.status === "fulfilled" ? biorxivItems.value : [];
+          return [...pubmed, ...biorxiv];
         })(),
       ]);
 

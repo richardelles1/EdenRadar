@@ -323,10 +323,10 @@ const DISCOVERY_TILES = [
 ];
 
 function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"industry" | "research" | "discovery">("industry");
+  const [active, setActive] = useState<"discovery" | "industry" | "research">("discovery");
   const ref = useReveal();
 
-  const tiles = active === "industry" ? INDUSTRY_TILES : active === "research" ? RESEARCH_TILES : DISCOVERY_TILES;
+  const tiles = active === "discovery" ? DISCOVERY_TILES : active === "industry" ? INDUSTRY_TILES : RESEARCH_TILES;
 
   return (
     <section ref={ref} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
@@ -342,8 +342,8 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         </p>
 
         <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
-          {(["industry", "research", "discovery"] as const).map((tab) => {
-            const label = tab === "industry" ? "Industry" : tab === "research" ? "Research" : "Discovery";
+          {(["discovery", "industry", "research"] as const).map((tab) => {
+            const label = tab === "discovery" ? "Discovery" : tab === "industry" ? "Industry" : "Research";
             const activeStyle = tab === "discovery"
               ? { background: "hsl(38 92% 50%)", color: "white", boxShadow: "0 2px 12px hsl(38 92% 50% / 0.35)" }
               : { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", boxShadow: "0 2px 12px hsl(142 52% 36% / 0.35)" };
@@ -382,14 +382,26 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
       </div>
 
       <div className="text-center mt-10">
-        <button
-          onClick={onLogin}
-          className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
-          data-testid="button-toggle-cta"
-        >
-          Explore the {active === "industry" ? "Industry" : "Research"} portal
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        {active === "discovery" ? (
+          <a
+            href="/discovery"
+            className="text-sm font-semibold transition-colors duration-150 flex items-center gap-1 mx-auto w-fit"
+            style={{ color: "hsl(38 92% 50%)" }}
+            data-testid="button-discovery-cta"
+          >
+            Browse Eden Discovery — free, no login required
+            <ArrowRight className="w-3.5 h-3.5" />
+          </a>
+        ) : (
+          <button
+            onClick={onLogin}
+            className="text-sm text-primary hover:text-primary/80 font-medium transition-colors duration-150 flex items-center gap-1 mx-auto"
+            data-testid="button-toggle-cta"
+          >
+            Explore the {active === "industry" ? "Industry" : "Research"} portal
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        )}
       </div>
     </section>
   );
