@@ -396,7 +396,7 @@ export default function ResearchLibrary() {
                     return (
                       <div
                         key={ref.id}
-                        className={`border rounded-lg p-3 bg-card transition-colors flex items-start gap-3 cursor-pointer ${
+                        className={`group/item border rounded-lg p-3 bg-card transition-colors flex items-start gap-3 cursor-pointer ${
                           isSelected
                             ? "border-primary/40 bg-primary/5"
                             : "border-border hover:border-violet-500/20"
@@ -404,7 +404,7 @@ export default function ResearchLibrary() {
                         onClick={() => toggleSelect(ref.id)}
                         data-testid={`library-item-${ref.id}`}
                       >
-                        <div className="shrink-0 mt-0.5">
+                        <div className={`shrink-0 mt-0.5 transition-opacity ${isSelected ? "opacity-100" : "opacity-0 group-hover/item:opacity-100"}`}>
                           {isSelected ? (
                             <CheckSquare className="w-4 h-4 text-primary" />
                           ) : (

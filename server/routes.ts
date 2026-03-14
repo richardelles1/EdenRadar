@@ -1634,10 +1634,22 @@ If a field cannot be determined, use "N/A".`
     const projectId = parseInt(req.params.id);
     if (isNaN(projectId)) return res.status(400).json({ error: "Invalid project id" });
 
-    const { rows } = req.body as { rows?: any[] };
-    if (!Array.isArray(rows) || rows.length === 0) {
-      return res.status(400).json({ error: "Evidence table rows are required" });
+    const evidenceRowSchema = z.object({
+      referenceId: z.number(),
+      title: z.string(),
+      studyType: z.string(),
+      sampleSize: z.string(),
+      population: z.string(),
+      interventionTarget: z.string(),
+      outcome: z.string(),
+      keyFindings: z.string(),
+      evidenceStrength: z.string(),
+    });
+    const bodyParsed = z.object({ rows: z.array(evidenceRowSchema).min(1) }).safeParse(req.body);
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: "Invalid evidence table data", details: bodyParsed.error.flatten() });
     }
+    const { rows } = bodyParsed.data;
 
     try {
       const project = await storage.getResearchProject(projectId, researcherId);
