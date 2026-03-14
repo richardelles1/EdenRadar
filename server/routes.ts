@@ -19,6 +19,7 @@ import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDel
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
+import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
@@ -2059,6 +2060,93 @@ If a field cannot be determined, use "N/A".`
         .limit(200);
       res.json({ concepts: results });
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+
+  app.get("/api/admin/users", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
+      if (error) return res.status(500).json({ error: error.message });
+      const users = (data?.users ?? []).map((u) => ({
+        id: u.id,
+        email: u.email ?? "",
+        role: u.user_metadata?.role ?? null,
+        createdAt: u.created_at,
+        lastSignInAt: u.last_sign_in_at ?? null,
+      }));
+      res.json({ users });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/role", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { id } = req.params;
+      const roleSchema = z.object({ role: z.enum(ALL_PORTAL_ROLES as [string, ...string[]]) });
+      const { role } = roleSchema.parse(req.body);
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
+        user_metadata: { role },
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({
+        id: data.user.id,
+        email: data.user.email ?? "",
+        role: data.user.user_metadata?.role ?? null,
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Invalid role" });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/users/invite", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const inviteSchema = z.object({
+        email: z.string().email(),
+        password: z.string().min(8),
+        role: z.enum(ALL_PORTAL_ROLES as [string, ...string[]]),
+      });
+      const { email, password, role } = inviteSchema.parse(req.body);
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data, error } = await adminSupabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: { role },
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({
+        id: data.user.id,
+        email: data.user.email ?? "",
+        role: data.user.user_metadata?.role ?? null,
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Invalid input: " + err.errors?.map((e: any) => e.message).join(", ") });
       res.status(500).json({ error: err.message });
     }
   });

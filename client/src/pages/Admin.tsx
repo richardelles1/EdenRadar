@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check } from "lucide-react";
 import type { ConceptCard } from "@shared/schema";
+import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1782,6 +1783,323 @@ function ResearchQueue({ pw }: { pw: string }) {
   );
 }
 
+interface AdminUser {
+  id: string;
+  email: string;
+  role: PortalRole | null;
+  createdAt: string;
+  lastSignInAt: string | null;
+}
+
+function AccountCenter({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [showInvite, setShowInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [invitePassword, setInvitePassword] = useState("");
+  const [inviteRole, setInviteRole] = useState<PortalRole>("concept");
+  const [copiedRole, setCopiedRole] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
+    queryKey: ["/api/admin/users"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/users", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load users");
+      return res.json();
+    },
+    staleTime: 30000,
+    enabled: !!pw,
+  });
+
+  const updateRole = useMutation({
+    mutationFn: async ({ userId, role }: { userId: string; role: PortalRole }) => {
+      const res = await fetch(`/api/admin/users/${userId}/role`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to update role");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "Role updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const inviteUser = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/users/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ email: inviteEmail, password: invitePassword, role: inviteRole }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to create user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User created", description: `${inviteEmail} added as ${PORTAL_CONFIG[inviteRole].label}` });
+      setShowInvite(false);
+      setInviteEmail("");
+      setInvitePassword("");
+      setInviteRole("concept");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Invite failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const users = data?.users ?? [];
+
+  const portalCounts: Record<string, number> = {};
+  let unassignedCount = 0;
+  for (const u of users) {
+    if (u.role) {
+      portalCounts[u.role] = (portalCounts[u.role] ?? 0) + 1;
+    } else {
+      unassignedCount++;
+    }
+  }
+
+  function copyInviteLink(role: PortalRole) {
+    const origin = window.location.origin;
+    const cfg = PORTAL_CONFIG[role];
+    navigator.clipboard.writeText(`${origin}${cfg.registerPath}`);
+    setCopiedRole(role);
+    setTimeout(() => setCopiedRole(null), 2000);
+    toast({ title: "Link copied", description: `Registration link for ${cfg.label} copied to clipboard` });
+  }
+
+  function formatDate(iso: string) {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function timeAgoShort(iso: string | null) {
+    if (!iso) return "Never";
+    const diff = Date.now() - new Date(iso).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  return (
+    <div className="space-y-6" data-testid="account-center-tab">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-users">{users.length}</div>
+            <span className="text-sm text-muted-foreground">total users</span>
+          </div>
+          {unassignedCount > 0 && (
+            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1" data-testid="text-unassigned-count">
+              {unassignedCount} user{unassignedCount !== 1 ? "s" : ""} without a portal assignment
+            </p>
+          )}
+        </div>
+        <Button
+          size="sm"
+          className="gap-1.5"
+          onClick={() => setShowInvite(true)}
+          data-testid="button-invite-user"
+        >
+          <UserPlus className="w-4 h-4" />
+          Invite User
+        </Button>
+      </div>
+
+      {showInvite && (
+        <div className="border border-border rounded-xl bg-card p-5" data-testid="invite-modal">
+          <h3 className="font-semibold text-sm text-foreground mb-4">Create New User</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Email</label>
+              <Input
+                type="email"
+                placeholder="user@example.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                data-testid="input-invite-email"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Password</label>
+              <Input
+                type="password"
+                placeholder="Min 8 characters"
+                value={invitePassword}
+                onChange={(e) => setInvitePassword(e.target.value)}
+                data-testid="input-invite-password"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Portal</label>
+              <select
+                className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                value={inviteRole}
+                onChange={(e) => setInviteRole(e.target.value as PortalRole)}
+                data-testid="select-invite-role"
+              >
+                {ALL_PORTAL_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {PORTAL_CONFIG[r].label} (Tier {PORTAL_CONFIG[r].tier})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => inviteUser.mutate()}
+              disabled={!inviteEmail || invitePassword.length < 8 || inviteUser.isPending}
+              data-testid="button-confirm-invite"
+            >
+              {inviteUser.isPending ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : null}
+              Create User
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => { setShowInvite(false); setInviteEmail(""); setInvitePassword(""); }}
+              data-testid="button-cancel-invite"
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : (
+        <div className="border border-border rounded-xl overflow-hidden bg-card">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="text-left py-3 px-4 font-semibold text-foreground">Email</th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[160px]">Portal</th>
+                <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
+                <th className="text-center py-3 px-4 font-semibold text-foreground">Last Seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((user) => {
+                const portal = getPortalConfig(user.role);
+                return (
+                  <tr key={user.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors" data-testid={`row-user-${user.id}`}>
+                    <td className="py-2.5 px-4 text-foreground font-medium" data-testid={`text-email-${user.id}`}>
+                      {user.email}
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <select
+                        className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                        value={user.role ?? ""}
+                        onChange={(e) => {
+                          if (e.target.value) {
+                            updateRole.mutate({ userId: user.id, role: e.target.value as PortalRole });
+                          }
+                        }}
+                        data-testid={`select-role-${user.id}`}
+                      >
+                        {!user.role && <option value="">No portal assigned</option>}
+                        {ALL_PORTAL_ROLES.map((r) => (
+                          <option key={r} value={r}>
+                            {PORTAL_CONFIG[r].label} (Tier {PORTAL_CONFIG[r].tier})
+                          </option>
+                        ))}
+                      </select>
+                      {portal && (
+                        <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${portal.badgeClass}`} data-testid={`badge-portal-${user.id}`}>
+                          {portal.label}
+                        </span>
+                      )}
+                      {!portal && user.role === null && (
+                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground" data-testid={`badge-unassigned-${user.id}`}>
+                          Unassigned
+                        </span>
+                      )}
+                    </td>
+                    <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
+                      {formatDate(user.createdAt)}
+                    </td>
+                    <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
+                      {timeAgoShort(user.lastSignInAt)}
+                    </td>
+                  </tr>
+                );
+              })}
+              {users.length === 0 && (
+                <tr>
+                  <td colSpan={4} className="text-center py-8 text-muted-foreground">No users found</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div>
+        <h3 className="font-semibold text-sm text-foreground mb-3">Portal Directory</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {ALL_PORTAL_ROLES.map((role) => {
+            const cfg = PORTAL_CONFIG[role];
+            const count = portalCounts[role] ?? 0;
+            return (
+              <div
+                key={role}
+                className="border border-border rounded-xl bg-card p-4 space-y-3"
+                data-testid={`card-portal-${role}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold ${cfg.badgeClass}`}>
+                      Tier {cfg.tier}
+                    </span>
+                    <h4 className="font-semibold text-foreground mt-1">{cfg.label}</h4>
+                  </div>
+                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid={`stat-portal-count-${role}`}>
+                    {count}
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{cfg.description}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full text-xs gap-1.5"
+                  onClick={() => copyInviteLink(role)}
+                  data-testid={`button-copy-link-${role}`}
+                >
+                  {copiedRole === role ? (
+                    <><Check className="w-3 h-3 text-emerald-500" /> Copied!</>
+                  ) : (
+                    <><Copy className="w-3 h-3" /> Copy invite link</>
+                  )}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("data-health");
@@ -1916,6 +2234,21 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <Lightbulb className="h-4 w-4" />
               Concept Queue
             </button>
+
+            <div className="border-t border-border my-2" />
+
+            <button
+              onClick={() => setActiveTab("account-center")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "account-center"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-account-center"
+            >
+              <Users className="h-4 w-4" />
+              Account Center
+            </button>
           </nav>
         </aside>
 
@@ -1961,6 +2294,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the Eden Discovery portal with AI credibility scores.</p>
               </div>
               <ConceptQueue pw={pw} />
+            </>
+          )}
+
+          {activeTab === "account-center" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Account Center</h2>
+                <p className="text-sm text-muted-foreground mt-1">Manage user accounts, assign portal roles, and invite new users to the platform.</p>
+              </div>
+              <AccountCenter pw={pw} />
             </>
           )}
 
