@@ -2159,6 +2159,12 @@ If a field cannot be determined, use "N/A".`
       }
 
       const conceptEmail = (req.headers["x-concept-user-email"] as string) || (req.body.submitterEmail as string) || null;
+      const attachedFileSchema = z.array(z.object({
+        name: z.string().max(255),
+        url: z.string().url().refine((u) => u.startsWith("https://"), { message: "URL must use HTTPS" }),
+        size: z.number().int().min(0).max(10 * 1024 * 1024),
+      })).max(5).default([]);
+      const attachedFiles = attachedFileSchema.parse(req.body.attachedFiles ?? []);
       const [concept] = await db
         .insert(conceptCards)
         .values({
@@ -2166,12 +2172,35 @@ If a field cannot be determined, use "N/A".`
           submitterEmail: conceptEmail,
           credibilityScore: aiScore,
           credibilityRationale: aiRationale,
+          attachedFiles,
         })
         .returning();
 
       res.json({ concept: stripPrivateFields(concept) });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/discovery/concepts/:id", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const conceptUserId = req.headers["x-concept-user-id"] as string;
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Concept not found" });
+      if (concept.userId !== conceptUserId) return res.status(403).json({ error: "Not your concept" });
+
+      await db.delete(conceptInterests).where(eq(conceptInterests.conceptId, id));
+      await db.delete(conceptCards).where(eq(conceptCards.id, id));
+
+      if (concept.attachedFiles && (concept.attachedFiles as any[]).length > 0) {
+        console.log(`[concept DELETE] Concept ${id} had ${(concept.attachedFiles as any[]).length} attached file(s). Storage cleanup skipped (no SUPABASE_SERVICE_ROLE_KEY).`);
+      }
+
+      res.json({ deleted: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

@@ -31,6 +31,9 @@ import {
   Check,
   Mail,
   X,
+  Paperclip,
+  FileText,
+  Download,
 } from "lucide-react";
 
 function ScoreRing({ score }: { score: number }) {
@@ -391,6 +394,35 @@ export default function ConceptDetail() {
                 {c.requiredExpertise}
               </p>
             )}
+          </div>
+        )}
+
+        {c.attachedFiles && (c.attachedFiles as { name: string; url: string; size: number }[]).length > 0 && (
+          <div className="border border-border rounded-xl bg-card p-5 mb-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Paperclip className="w-4 h-4 text-amber-500" />
+              <h3 className="font-semibold text-sm text-foreground">Attachments</h3>
+              <span className="text-xs text-muted-foreground">({(c.attachedFiles as any[]).length} file{(c.attachedFiles as any[]).length !== 1 ? "s" : ""})</span>
+            </div>
+            <div className="space-y-2">
+              {(c.attachedFiles as { name: string; url: string; size: number }[]).map((file, i) => (
+                <a
+                  key={i}
+                  href={file.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors group"
+                  data-testid={`attachment-file-${i}`}
+                >
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                  </div>
+                  <Download className="w-3.5 h-3.5 text-muted-foreground group-hover:text-foreground shrink-0" />
+                </a>
+              ))}
+            </div>
           </div>
         )}
 

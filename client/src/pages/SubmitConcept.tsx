@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { supabase } from "@/lib/supabase";
-import { Lightbulb, Loader2, Send, ChevronRight, ChevronLeft } from "lucide-react";
+import { Lightbulb, Loader2, Send, ChevronRight, ChevronLeft, Paperclip, X, FileText } from "lucide-react";
 
 const THERAPY_AREAS = [
   "Oncology", "Neurology", "Immunology", "Cardiology", "Rare Disease",
@@ -58,6 +58,8 @@ export default function SubmitConcept() {
   // Step 3 — collaboration needs
   const [requiredExpertise, setRequiredExpertise] = useState("");
   const [seeking, setSeeking] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
 
   function toggleSeeking(id: string) {
     setSeeking((prev) =>
@@ -72,8 +74,38 @@ export default function SubmitConcept() {
     return problem && proposedApproach;
   }
 
+  async function uploadFiles(): Promise<{ name: string; url: string; size: number }[]> {
+    if (files.length === 0) return [];
+    setUploading(true);
+    const session = (await supabase.auth.getSession()).data.session;
+    const userId = session?.user?.id ?? "anon";
+    const results: { name: string; url: string; size: number }[] = [];
+    const failed: string[] = [];
+    for (const file of files) {
+      const path = `concept-files/${userId}/${Date.now()}-${file.name}`;
+      const { error } = await supabase.storage.from("concept-files").upload(path, file);
+      if (error) {
+        console.error("File upload error:", error);
+        failed.push(file.name);
+        continue;
+      }
+      const { data: urlData } = supabase.storage.from("concept-files").getPublicUrl(path);
+      results.push({ name: file.name, url: urlData.publicUrl, size: file.size });
+    }
+    setUploading(false);
+    if (failed.length > 0) {
+      toast({
+        title: `${failed.length} file(s) failed to upload`,
+        description: `Could not upload: ${failed.join(", ")}. The concept will be submitted without those files.`,
+        variant: "destructive",
+      });
+    }
+    return results;
+  }
+
   const mutation = useMutation({
     mutationFn: async () => {
+      const uploadedFiles = await uploadFiles();
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       const res = await fetch("/api/discovery/concepts", {
         method: "POST",
@@ -95,6 +127,7 @@ export default function SubmitConcept() {
           modality,
           stage,
           status: "active",
+          attachedFiles: uploadedFiles,
         }),
       });
       if (!res.ok) {
@@ -352,6 +385,52 @@ export default function SubmitConcept() {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <Label>Attachments</Label>
+            <p className="text-xs text-muted-foreground">Optional: Upload supporting documents (PDF, images, etc.). Max 5 files, 10 MB each.</p>
+            <div className="space-y-2">
+              {files.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/30">
+                  <FileText className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <span className="text-sm text-foreground flex-1 truncate">{f.name}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{(f.size / 1024).toFixed(0)} KB</span>
+                  <button
+                    type="button"
+                    onClick={() => setFiles(prev => prev.filter((_, idx) => idx !== i))}
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid={`button-remove-file-${i}`}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {files.length < 5 && (
+                <label
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-border text-sm text-muted-foreground hover:border-amber-500/50 hover:text-amber-600 dark:hover:text-amber-400 cursor-pointer transition-colors"
+                  data-testid="button-add-file"
+                >
+                  <Paperclip className="w-4 h-4" />
+                  Add file
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif,.xlsx,.csv,.pptx,.txt"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > 10 * 1024 * 1024) {
+                        toast({ title: "File too large", description: "Max 10 MB per file.", variant: "destructive" });
+                        return;
+                      }
+                      setFiles(prev => [...prev, file]);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+          </div>
+
           <div className="pt-2 flex justify-between">
             <Button variant="outline" onClick={() => setStep(2)} data-testid="button-step3-back">
               <ChevronLeft className="w-4 h-4 mr-1" />
@@ -361,13 +440,13 @@ export default function SubmitConcept() {
               type="button"
               className="bg-amber-500 hover:bg-amber-600 text-white"
               onClick={() => mutation.mutate()}
-              disabled={mutation.isPending}
+              disabled={mutation.isPending || uploading}
               data-testid="button-submit-concept"
             >
-              {mutation.isPending ? (
+              {mutation.isPending || uploading ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  AI is scoring...
+                  {uploading ? "Uploading files..." : "AI is scoring..."}
                 </>
               ) : (
                 <>
