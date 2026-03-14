@@ -399,6 +399,7 @@ export const conceptCards = pgTable("concept_cards", {
   interestCollaborating: integer("interest_collaborating").notNull().default(0),
   interestFunding: integer("interest_funding").notNull().default(0),
   interestAdvising: integer("interest_advising").notNull().default(0),
+  attachedFiles: jsonb("attached_files").$type<{ name: string; url: string; size: number }[]>().default([]),
   status: text("status").notNull().default("active"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
@@ -411,6 +412,7 @@ export const insertConceptCardSchema = createInsertSchema(conceptCards).omit({
   interestFunding: true,
   interestAdvising: true,
   createdAt: true,
+  attachedFiles: true,
 }).extend({
   stage: z.number().int().min(1).max(4),
 });
