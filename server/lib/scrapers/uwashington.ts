@@ -10,31 +10,47 @@ export const uwashingtonScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      const techRes = await fetch("https://techtransfer.washington.edu/available-technologies/", {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-        signal: AbortSignal.timeout(15_000),
-        redirect: "follow",
-      }).catch(() => null);
+      const techRes = await fetch(
+        "https://techtransfer.washington.edu/available-technologies/",
+        {
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          },
+          signal: AbortSignal.timeout(15_000),
+          redirect: "follow",
+        }
+      ).catch(() => null);
 
       if (techRes && techRes.ok) {
         const html = await techRes.text();
         const cheerio = await import("cheerio");
         const $ = cheerio.load(html);
-        $("a[href*='/technologies/'], a[href*='/available-technologies/']").each((_, el) => {
+        $(
+          "a[href*='/technologies/'], a[href*='/available-technologies/']"
+        ).each((_, el) => {
           const href = $(el).attr("href") ?? "";
-          if (href.includes("available-technologies") && !href.includes("?")) return;
+          if (
+            href.includes("available-technologies") &&
+            !href.includes("?")
+          )
+            return;
           const title = cleanText($(el).text());
           if (!title || title.length < 8 || seen.has(title)) return;
           seen.add(title);
           results.push({
             title,
             description: "",
-            url: href.startsWith("http") ? href : `https://techtransfer.washington.edu${href}`,
+            url: href.startsWith("http")
+              ? href
+              : `https://techtransfer.washington.edu${href}`,
             institution: INST,
           });
         });
         if (results.length > 0) {
-          console.log(`[scraper] ${INST}: ${results.length} listings via techtransfer.washington.edu`);
+          console.log(
+            `[scraper] ${INST}: ${results.length} listings via techtransfer.washington.edu`
+          );
           return results;
         }
       }
@@ -52,17 +68,26 @@ export const uwashingtonScraper: InstitutionScraper = {
               .join(" ");
             if (title.length > 3 && !seen.has(loc)) {
               seen.add(loc);
-              results.push({ title, description: "", url: loc, institution: INST });
+              results.push({
+                title,
+                description: "",
+                url: loc,
+                institution: INST,
+              });
             }
           }
         });
         if (results.length > 0) {
-          console.log(`[scraper] ${INST}: ${results.length} startups via CoMotion sitemap (TTO listing unavailable)`);
+          console.log(
+            `[scraper] ${INST}: ${results.length} startups via CoMotion sitemap`
+          );
           return results;
         }
       }
 
-      console.log(`[scraper] ${INST}: 0 results (techtransfer.washington.edu down, CoMotion empty)`);
+      console.log(
+        `[scraper] ${INST}: 0 results (techtransfer.washington.edu and CoMotion sitemap both unreachable)`
+      );
       return [];
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);

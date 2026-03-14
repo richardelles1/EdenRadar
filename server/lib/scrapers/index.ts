@@ -27,6 +27,8 @@ import { georgetownScraper } from "./georgetown";
 import { gatechScraper } from "./gatech";
 import { cwruScraper } from "./cwru";
 import { ucoloradoScraper } from "./ucolorado";
+import { emoryScraper } from "./emory";
+import { mayoScraper } from "./mayo";
 import {
   // TechPublisher – verified working
   princetonScraper,
@@ -178,6 +180,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   gatechScraper,
   cwruScraper,
   ucoloradoScraper,
+  emoryScraper,
+  mayoScraper,
   purdueRFScraper,
   umnScraper,
   uillinoisCustomScraper,
