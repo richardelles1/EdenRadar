@@ -2063,6 +2063,21 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Canonical field alias map for conceptCards API responses
+  // Maps DB column names → spec-required field names without altering the production schema
+  const STAGE_NUMBER: Record<string, number> = { idea: 1, literature_review: 2, preliminary_data: 3, proof_of_concept: 4 };
+  function canonicalizeConcept(c: Record<string, any>) {
+    return {
+      ...c,
+      // Canonical aliases expected by spec
+      userId: c.submitterId ?? null,
+      problem: c.problemStatement ?? null,
+      therapeuticArea: c.therapyArea ?? null,
+      stageNumber: STAGE_NUMBER[c.stage ?? ""] ?? null,
+      credibilityScore: c.aiCredibilityScore ?? null,
+    };
+  }
+
   app.get("/api/discovery/concepts", async (req, res) => {
     try {
       const page = Math.max(1, parseInt(String(req.query.page ?? "1")));
@@ -2079,7 +2094,7 @@ If a field cannot be determined, use "N/A".`
         .select({ count: sql<number>`count(*)::int` })
         .from(conceptCards)
         .where(eq(conceptCards.status, "active"));
-      res.json({ concepts: results, page, limit, total: count, totalPages: Math.ceil(count / limit) });
+      res.json({ concepts: results.map(canonicalizeConcept), page, limit, total: count, totalPages: Math.ceil(count / limit) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2094,7 +2109,7 @@ If a field cannot be determined, use "N/A".`
         .from(conceptCards)
         .where(and(eq(conceptCards.id, id), eq(conceptCards.status, "active")));
       if (!concept) return res.status(404).json({ error: "Concept not found" });
-      res.json({ concept });
+      res.json({ concept: canonicalizeConcept(concept) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2143,7 +2158,7 @@ If a field cannot be determined, use "N/A".`
         })
         .returning();
 
-      res.json({ concept });
+      res.json({ concept: canonicalizeConcept(concept) });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -2180,6 +2195,10 @@ If a field cannot be determined, use "N/A".`
       if (!concept) return res.status(404).json({ error: "Not found" });
       const therapyArea = concept.therapyArea?.toLowerCase() ?? "";
       const searchSlug = therapyArea.substring(0, 10);
+      // Build literature search term from concept title + hypothesis + therapy area for maximum relevance
+      const titleTerms = (concept.title ?? "").split(/\s+/).filter(w => w.length > 4).slice(0, 3).join(" ");
+      const hypothesisTerms = (concept.hypothesis ?? "").split(/\s+/).filter(w => w.length > 5).slice(0, 3).join(" ");
+      const litSearchTerms = [titleTerms, hypothesisTerms, therapyArea].filter(Boolean).join(" ");
 
       const [relatedAssets, pubmedResults] = await Promise.allSettled([
         db
@@ -2205,7 +2224,7 @@ If a field cannot be determined, use "N/A".`
         (async () => {
           const [pubmedItems, biorxivItems] = await Promise.allSettled([
             (async () => {
-              const searchTerm = encodeURIComponent(`${therapyArea}[MeSH Terms] AND drug therapy`);
+              const searchTerm = encodeURIComponent(litSearchTerms);
               const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=4&retmode=json&sort=relevance`;
               const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
               if (!searchRes.ok) return [];
@@ -2231,7 +2250,7 @@ If a field cannot be determined, use "N/A".`
               });
             })(),
             (async () => {
-              const q = encodeURIComponent(therapyArea);
+              const q = encodeURIComponent(litSearchTerms);
               const url = `https://api.crossref.org/works?query=${q}&filter=type:posted-content,member:246&rows=3&sort=relevance&mailto=eden@edenradar.io`;
               const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
               if (!res.ok) return [];
