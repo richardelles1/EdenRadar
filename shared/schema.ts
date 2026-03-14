@@ -377,3 +377,31 @@ export const convergenceSignals = pgTable("convergence_signals", {
   lastUpdatedAt: timestamp("last_updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type ConvergenceSignal = typeof convergenceSignals.$inferSelect;
+
+export const conceptCards = pgTable("concept_cards", {
+  id: serial("id").primaryKey(),
+  submitterId: text("submitter_id").notNull(),
+  submitterName: text("submitter_name").notNull(),
+  title: text("title").notNull(),
+  oneLiner: text("one_liner").notNull(),
+  problemStatement: text("problem_statement").notNull(),
+  proposedApproach: text("proposed_approach").notNull(),
+  therapyArea: text("therapy_area").notNull(),
+  modality: text("modality").notNull().default("unknown"),
+  stage: text("stage").notNull().default("idea"),
+  aiCredibilityScore: integer("ai_credibility_score"),
+  aiCredibilityRationale: text("ai_credibility_rationale"),
+  interestCount: integer("interest_count").notNull().default(0),
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertConceptCardSchema = createInsertSchema(conceptCards).omit({
+  id: true,
+  aiCredibilityScore: true,
+  aiCredibilityRationale: true,
+  interestCount: true,
+  createdAt: true,
+});
+export type InsertConceptCard = z.infer<typeof insertConceptCardSchema>;
+export type ConceptCard = typeof conceptCards.$inferSelect;

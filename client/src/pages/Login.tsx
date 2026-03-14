@@ -13,21 +13,21 @@ export default function Login() {
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"industry" | "researcher">("industry");
+  const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">("industry");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!authLoading && session && role) {
-      const dest = role === "industry" ? "/scout" : "/research";
+      const dest = role === "industry" ? "/scout" : role === "researcher" ? "/research" : "/discovery";
       navigate(dest, { replace: true });
     }
   }, [authLoading, session, role, navigate]);
 
   if (!authLoading && session && role) return null;
 
-  function redirectByRole(r: "industry" | "researcher") {
-    navigate(r === "industry" ? "/scout" : "/research", { replace: true });
+  function redirectByRole(r: "industry" | "researcher" | "concept") {
+    navigate(r === "industry" ? "/scout" : r === "researcher" ? "/research" : "/discovery", { replace: true });
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -44,7 +44,7 @@ export default function Login() {
       }
       const { data } = await supabase.auth.getUser();
       const r = data.user?.user_metadata?.role;
-      if (r === "industry" || r === "researcher") redirectByRole(r);
+      if (r === "industry" || r === "researcher" || r === "concept") redirectByRole(r);
       else { setError("Account has no role assigned"); setLoading(false); }
     } else {
       const { error: err } = await signUp(email, password, selectedRole);
@@ -128,7 +128,7 @@ export default function Login() {
           {mode === "signup" && (
             <div className="space-y-2">
               <Label>I am</Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
                   className={`p-3 rounded-lg border text-sm font-medium transition-all ${
@@ -152,6 +152,18 @@ export default function Login() {
                   data-testid="role-researcher"
                 >
                   Researcher
+                </button>
+                <button
+                  type="button"
+                  className={`p-3 rounded-lg border text-sm font-medium transition-all ${
+                    selectedRole === "concept"
+                      ? "border-amber-500 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "border-border text-muted-foreground hover:border-amber-500/50 hover:text-foreground"
+                  }`}
+                  onClick={() => setSelectedRole("concept")}
+                  data-testid="role-concept"
+                >
+                  Concept
                 </button>
               </div>
             </div>

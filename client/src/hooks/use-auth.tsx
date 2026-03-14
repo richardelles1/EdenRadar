@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 
-type UserRole = "industry" | "researcher" | undefined;
+type UserRole = "industry" | "researcher" | "concept" | undefined;
 
 interface AuthContextValue {
   user: User | null;
@@ -10,7 +10,7 @@ interface AuthContextValue {
   loading: boolean;
   role: UserRole;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, role: "industry" | "researcher") => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, role: "industry" | "researcher" | "concept") => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -44,7 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   }
 
-  async function signUp(email: string, password: string, role: "industry" | "researcher") {
+  async function signUp(email: string, password: string, role: "industry" | "researcher" | "concept") {
     const { error } = await supabase.auth.signUp({
       email,
       password,

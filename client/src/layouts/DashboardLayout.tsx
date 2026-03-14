@@ -17,6 +17,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       navigate("/login", { replace: true });
     } else if (role === "researcher") {
       navigate("/research", { replace: true });
+    } else if (role === "concept") {
+      navigate("/discovery", { replace: true });
     } else if (role !== "industry") {
       navigate("/login", { replace: true });
     }

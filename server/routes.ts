@@ -2,9 +2,9 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -18,7 +18,7 @@ import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapin
 import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
-import { verifyResearcherAuth } from "./lib/supabaseAuth";
+import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import type { RawSignal } from "./lib/types";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
@@ -2043,6 +2043,100 @@ If a field cannot be determined, use "N/A".`
         .orderBy(sql`${ingestedAssets.firstSeenAt} desc`);
 
       res.json({ assets: results, hasMore: results.length === limit });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts", async (_req, res) => {
+    try {
+      const results = await db
+        .select()
+        .from(conceptCards)
+        .where(eq(conceptCards.status, "active"))
+        .orderBy(desc(conceptCards.createdAt))
+        .limit(100);
+      res.json({ concepts: results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const [concept] = await db
+        .select()
+        .from(conceptCards)
+        .where(and(eq(conceptCards.id, id), eq(conceptCards.status, "active")));
+      if (!concept) return res.status(404).json({ error: "Concept not found" });
+      res.json({ concept });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/discovery/concepts", verifyConceptAuth, async (req, res) => {
+    try {
+      const parsed = insertConceptCardSchema.parse({
+        ...req.body,
+        submitterId: req.headers["x-concept-user-id"] as string,
+      });
+
+      let aiScore: number | null = null;
+      let aiRationale: string | null = null;
+
+      try {
+        const openai = new (await import("openai")).default({ apiKey: process.env.OPENAI_API_KEY });
+        const aiRes = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          temperature: 0.3,
+          messages: [
+            {
+              role: "system",
+              content: `You are a biotech concept evaluator. Score the scientific credibility of a pre-research concept on a 0-100 scale. Consider: scientific plausibility, clarity of problem statement, feasibility of proposed approach, and relevance to biotech/pharma. Return JSON: {"score": number, "rationale": "one sentence"}.`,
+            },
+            {
+              role: "user",
+              content: `Title: ${parsed.title}\nOne-liner: ${parsed.oneLiner}\nProblem: ${parsed.problemStatement}\nApproach: ${parsed.proposedApproach}\nTherapy Area: ${parsed.therapyArea}\nModality: ${parsed.modality}`,
+            },
+          ],
+          response_format: { type: "json_object" },
+        });
+        const json = JSON.parse(aiRes.choices[0]?.message?.content || "{}");
+        aiScore = typeof json.score === "number" ? Math.min(100, Math.max(0, json.score)) : null;
+        aiRationale = json.rationale || null;
+      } catch (aiErr) {
+        console.error("AI credibility scoring failed:", aiErr);
+      }
+
+      const [concept] = await db
+        .insert(conceptCards)
+        .values({
+          ...parsed,
+          aiCredibilityScore: aiScore,
+          aiCredibilityRationale: aiRationale,
+        })
+        .returning();
+
+      res.json({ concept });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/discovery/concepts/:id/interest", verifyAnyAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const [updated] = await db
+        .update(conceptCards)
+        .set({ interestCount: sql`${conceptCards.interestCount} + 1` })
+        .where(eq(conceptCards.id, id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Concept not found" });
+      res.json({ concept: updated });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

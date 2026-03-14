@@ -21,7 +21,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 ### Authentication (Task #25 — Supabase Auth)
 **Site Gate**: Password "quality" unlocks the site (localStorage `eden-access`). Full-screen prompt before landing page.
 
-**Supabase Auth**: Email/password auth via `@supabase/supabase-js`. User role stored in `user_metadata.role` ("industry" | "researcher").
+**Supabase Auth**: Email/password auth via `@supabase/supabase-js`. User role stored in `user_metadata.role` ("industry" | "researcher" | "concept").
 - Supabase project: `tqaitpaajbogrcoyzsgx`
 - Frontend client: `client/src/lib/supabase.ts`
 - Auth context: `client/src/hooks/use-auth.tsx` — `AuthProvider` wraps entire app, `useAuth()` hook
@@ -42,9 +42,16 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - Routes: /research, /research/create-discovery, /research/my-discoveries, /research/data-sources, /research/profile
 - Industry Bridge: Published discovery cards appear in GET /api/discoveries (public endpoint) — surfaced in industry Scout with "Lab Published" amber badge
 
-**Login Page** (`/login`): Sign In / Sign Up tabs; sign-up includes role selector (Industry / Researcher).
-**Landing Page** (`/`): Single "Log In" CTA; auto-redirects to portal if already authenticated.
-**Sign Out**: Both sidebars have "Sign Out" button → clears Supabase session → redirects to /login.
+**Eden Discovery Portal (Tier 1 — Amber Branding)**:
+- `DiscoveryLayout` checks Supabase session + role='concept'; redirects to /login if unauthenticated, to correct portal if wrong role
+- Routes: /discovery (concept feed), /discovery/submit (submit concept), /discovery/concept/:id (detail page)
+- `conceptCards` table: pre-research concept registry with AI credibility scoring (0-100) via gpt-4o-mini
+- API: GET /api/discovery/concepts (public feed), GET /api/discovery/concepts/:id, POST /api/discovery/concepts (concept auth), PATCH /api/discovery/concepts/:id/interest (any auth)
+- Auth middleware: `verifyConceptAuth` (concept role only), `verifyAnyAuth` (any authenticated user)
+
+**Login Page** (`/login`): Sign In / Sign Up tabs; sign-up includes role selector (Industry / Researcher / Concept).
+**Landing Page** (`/`): Three portal CTAs; auto-redirects to portal if already authenticated. Portal toggle shows Industry / Research / Discovery tabs.
+**Sign Out**: All sidebars have "Sign Out" button → clears Supabase session → redirects to /login.
 **Admin**: unchanged — still uses `eden-admin-pw` localStorage gate (password: "eden").
 
 ### Discovery Cards (Ecosystem Bridge)

@@ -17,6 +17,10 @@ import {
   Award,
   ArrowRight,
   Zap,
+  Lightbulb,
+  Sparkles,
+  Target,
+  Rocket,
 } from "lucide-react";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
@@ -295,11 +299,34 @@ const RESEARCH_TILES = [
   },
 ];
 
+const DISCOVERY_TILES = [
+  {
+    icon: Lightbulb,
+    title: "Pre-Research Concept Registry",
+    desc: "Submit early-stage ideas before formal research begins. Capture the spark that could become the next breakthrough.",
+  },
+  {
+    icon: Sparkles,
+    title: "AI Credibility Scoring",
+    desc: "Every concept is automatically evaluated by AI for scientific plausibility, feasibility, and biotech relevance on a 0-100 scale.",
+  },
+  {
+    icon: Target,
+    title: "Signal to Industry & Labs",
+    desc: "Concepts that score well surface to industry scouts and research labs, creating early connections before the science starts.",
+  },
+  {
+    icon: Rocket,
+    title: "From Idea to Research",
+    desc: "Graduate promising concepts into structured EdenLab research projects with one click when you're ready to build.",
+  },
+];
+
 function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"industry" | "research">("industry");
+  const [active, setActive] = useState<"industry" | "research" | "discovery">("industry");
   const ref = useReveal();
 
-  const tiles = active === "industry" ? INDUSTRY_TILES : RESEARCH_TILES;
+  const tiles = active === "industry" ? INDUSTRY_TILES : active === "research" ? RESEARCH_TILES : DISCOVERY_TILES;
 
   return (
     <section ref={ref} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
@@ -308,32 +335,30 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
           Built for Both Sides
         </p>
         <h2 className="text-3xl sm:text-4xl font-bold text-foreground mb-4 leading-tight">
-          One platform. Two powerful portals.
+          One platform. Three powerful portals.
         </h2>
         <p className="text-muted-foreground max-w-lg mx-auto text-base">
           Whether you're sourcing pipeline or building science, EdenRadar is engineered for you.
         </p>
 
         <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
-          {(["industry", "research"] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActive(tab)}
-              data-testid={`toggle-${tab}`}
-              className="relative px-5 sm:px-8 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
-              style={
-                active === tab
-                  ? {
-                      background: "hsl(var(--primary))",
-                      color: "hsl(var(--primary-foreground))",
-                      boxShadow: "0 2px 12px hsl(142 52% 36% / 0.35)",
-                    }
-                  : { color: "hsl(var(--muted-foreground))" }
-              }
-            >
-              {tab === "industry" ? "Industry Intelligence" : "Research Portal"}
-            </button>
-          ))}
+          {(["industry", "research", "discovery"] as const).map((tab) => {
+            const label = tab === "industry" ? "Industry" : tab === "research" ? "Research" : "Discovery";
+            const activeStyle = tab === "discovery"
+              ? { background: "hsl(38 92% 50%)", color: "white", boxShadow: "0 2px 12px hsl(38 92% 50% / 0.35)" }
+              : { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", boxShadow: "0 2px 12px hsl(142 52% 36% / 0.35)" };
+            return (
+              <button
+                key={tab}
+                onClick={() => setActive(tab)}
+                data-testid={`toggle-${tab}`}
+                className="relative px-4 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
+                style={active === tab ? activeStyle : { color: "hsl(var(--muted-foreground))" }}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -341,12 +366,12 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         {tiles.map((tile, i) => (
           <div
             key={tile.title}
-            className="group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card hover:border-primary/40 transition-all duration-200 hover:shadow-md"
+            className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${active === "discovery" ? "hover:border-amber-500/40" : "hover:border-primary/40"}`}
             style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
             data-testid={`tile-${active}-${i}`}
           >
-            <div className="flex-shrink-0 w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors duration-200">
-              <tile.icon className="w-5 h-5 text-primary" />
+            <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${active === "discovery" ? "bg-amber-500/10 group-hover:bg-amber-500/20" : "bg-primary/10 group-hover:bg-primary/20"}`}>
+              <tile.icon className={`w-5 h-5 ${active === "discovery" ? "text-amber-500" : "text-primary"}`} />
             </div>
             <div>
               <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
@@ -467,10 +492,25 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             <FlaskConical className="w-4 h-4" />
             For Researchers
           </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            onClick={onLogin}
+            data-testid="cta-bottom-discovery"
+            className="w-full sm:w-auto h-12 px-7 font-semibold text-base gap-2"
+            style={{
+              borderColor: "hsl(38 92% 50% / 0.5)",
+              color: "hsl(38 92% 60%)",
+              background: "transparent",
+            }}
+          >
+            <Lightbulb className="w-4 h-4" />
+            For Concepts
+          </Button>
         </div>
 
         <p className="mt-6 text-xs" style={{ color: "hsl(210 15% 45%)" }}>
-          Both portals share the same secure login. Choose your path once you're in.
+          All portals share the same secure login. Choose your path once you're in.
         </p>
       </div>
     </section>
@@ -483,7 +523,7 @@ const STATS = [
   { value: "150+",   label: "Tech Transfer Offices" },
   { value: "10M+",   label: "Papers Indexed" },
   { value: "AI",     label: "Enriched Signals" },
-  { value: "2-Sided", label: "Ecosystem" },
+  { value: "3-Sided", label: "Ecosystem" },
 ];
 
 export default function Landing() {
@@ -493,7 +533,7 @@ export default function Landing() {
 
   useEffect(() => {
     if (!loading && session && role) {
-      const dest = role === "industry" ? "/scout" : "/research";
+      const dest = role === "industry" ? "/scout" : role === "researcher" ? "/research" : "/discovery";
       navigate(dest, { replace: true });
     }
   }, [loading, session, role, navigate]);
@@ -568,10 +608,21 @@ export default function Landing() {
                 For Researchers
                 <ArrowRight className="w-3.5 h-3.5 opacity-70" />
               </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={handleLogin}
+                data-testid="button-cta-discovery"
+                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-amber-500/40 hover:border-amber-500/70 hover:bg-amber-500/5 text-amber-500"
+              >
+                <Lightbulb className="w-4 h-4" />
+                For Concepts
+                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+              </Button>
             </div>
 
             <p className="mt-4 text-xs text-muted-foreground">
-              Both portals share the same secure login. Choose your path once you're in.
+              All portals share the same secure login. Choose your path once you're in.
             </p>
 
             <div

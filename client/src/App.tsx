@@ -25,8 +25,12 @@ import ResearchProjects from "@/pages/ResearchProjects";
 import ResearchAlerts from "@/pages/ResearchAlerts";
 import ResearchGrants from "@/pages/ResearchGrants";
 import ProjectDetail from "@/pages/ProjectDetail";
+import DiscoveryFeed from "@/pages/DiscoveryFeed";
+import SubmitConcept from "@/pages/SubmitConcept";
+import ConceptDetail from "@/pages/ConceptDetail";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
+import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
 import Login from "@/pages/Login";
@@ -154,6 +158,22 @@ function Router() {
         <ResearchLayout>
           <ResearchGrants />
         </ResearchLayout>
+      </Route>
+
+      <Route path="/discovery">
+        <DiscoveryLayout>
+          <DiscoveryFeed />
+        </DiscoveryLayout>
+      </Route>
+      <Route path="/discovery/submit">
+        <DiscoveryLayout>
+          <SubmitConcept />
+        </DiscoveryLayout>
+      </Route>
+      <Route path="/discovery/concept/:id">
+        <DiscoveryLayout>
+          <ConceptDetail />
+        </DiscoveryLayout>
       </Route>
 
       <Route component={NotFound} />
