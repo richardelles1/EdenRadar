@@ -165,7 +165,7 @@ function ContactRevealModal({ conceptId, conceptTitle, onClose }: { conceptId: n
 }
 
 export default function ConceptDetail() {
-  const { session, role } = useAuth();
+  const { session, role, user } = useAuth();
   const hasSidebar = session && role === "concept";
   const [, params] = useRoute("/discovery/concept/:id");
   const id = params?.id;
@@ -278,6 +278,7 @@ export default function ConceptDetail() {
 
   const totalInterest = (c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0);
   const hasAnyInterest = myActiveTypes.size > 0;
+  const isOwner = user?.id === c.userId;
 
   return (
     <div className="min-h-screen bg-background">
@@ -397,7 +398,7 @@ export default function ConceptDetail() {
                 <span data-testid="text-interest-count">{totalInterest}</span> total interest signals
               </span>
             </div>
-            {session && hasAnyInterest && (
+            {session && hasAnyInterest && !isOwner && (
               <Button
                 variant="outline"
                 size="sm"
@@ -420,7 +421,7 @@ export default function ConceptDetail() {
                 <div key={tid} className="text-center">
                   <div className={`text-lg font-bold ${color}`} data-testid={`count-interest-${tid}`}>{count}</div>
                   <div className="text-xs text-muted-foreground mb-2">{label}</div>
-                  {session ? (
+                  {session && !isOwner ? (
                     <Button
                       variant="outline"
                       size="sm"
@@ -443,6 +444,12 @@ export default function ConceptDetail() {
               );
             })}
           </div>
+
+          {isOwner && (
+            <p className="text-xs text-muted-foreground text-center pt-2 border-t border-border italic">
+              This is your concept. You can view interested parties from My Concepts.
+            </p>
+          )}
 
           {!session && (
             <div className="text-center pt-2 border-t border-border">

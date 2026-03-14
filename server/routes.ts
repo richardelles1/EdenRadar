@@ -2184,10 +2184,13 @@ If a field cannot be determined, use "N/A".`
         return res.status(400).json({ error: "Invalid interest type" });
       }
 
-      const [concept] = await db.select({ id: conceptCards.id }).from(conceptCards).where(eq(conceptCards.id, id));
+      const [concept] = await db.select({ id: conceptCards.id, userId: conceptCards.userId }).from(conceptCards).where(eq(conceptCards.id, id));
       if (!concept) return res.status(404).json({ error: "Concept not found" });
 
       const userId = req.headers["x-user-id"] as string;
+      if (concept.userId === userId) {
+        return res.status(400).json({ error: "Cannot express interest in your own concept" });
+      }
       const userEmail = req.headers["x-user-email"] as string || null;
       const userName = (req.body?.userName as string) || null;
 
