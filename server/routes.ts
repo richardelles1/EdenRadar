@@ -2394,7 +2394,7 @@ If a field cannot be determined, use "N/A".`
       if (conceptModality && conceptModality !== "other" && conceptModality !== "unknown") pubmedTermParts.push(conceptModality);
       const pubmedQuery = pubmedTermParts.join(" AND ");
 
-      const biorxivTerms = [titleTerms, hypothesisTerms, therapyArea, conceptModality !== "other" && conceptModality !== "unknown" ? conceptModality : ""].filter(Boolean).join(" ");
+      const biorxivTerms = [titleTerms, therapyArea, conceptModality !== "other" && conceptModality !== "unknown" ? conceptModality : ""].filter(Boolean).join(" ");
 
       const assetWhereConditions = [
         eq(ingestedAssets.relevant, true),

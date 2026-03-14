@@ -23,8 +23,8 @@ import { useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/discovery", label: "Concept Feed", icon: Compass, exact: true },
-  { href: "/discovery/my-concepts", label: "My Concepts", icon: FolderOpen },
   { href: "/discovery/submit", label: "Submit Concept", icon: PlusCircle },
+  { href: "/discovery/my-concepts", label: "My Concepts", icon: FolderOpen },
   { href: "/discovery/profile", label: "Profile", icon: UserCircle },
 ];
 
@@ -135,7 +135,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
             </Button>
           </Link>
           <p className="text-[10px] text-muted-foreground text-center mt-1.5">
-            {role === "researcher" ? "Access your researcher workspace" : "Log in with a researcher account to upgrade"}
+            {role === "researcher" ? "Access your researcher workspace" : "Log in with a researcher account or contact us to upgrade"}
           </p>
         </div>
 
