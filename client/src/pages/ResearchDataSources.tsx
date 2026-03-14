@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search, ExternalLink, Microscope, Loader2, ChevronLeft, ChevronRight,
   Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown, Eraser, Pencil,
+  Sparkles, ChevronUp, RefreshCw, Save, Lightbulb, HelpCircle, Star, ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -192,6 +193,13 @@ const SUGGESTED = [
 ];
 
 const PAGE_SIZE = 50;
+
+type SynthesisResult = {
+  consensus: string;
+  open_questions: string[];
+  strongest_signals: { index: number; title: string; reason: string }[];
+  suggested_next_search: string;
+};
 
 type Filters = {
   field?: string;
@@ -459,6 +467,10 @@ export default function ResearchDataSources() {
     enabled: !!researcherId,
   });
 
+  const [synthesis, setSynthesis] = useState<SynthesisResult | null>(null);
+  const [synthesisCollapsed, setSynthesisCollapsed] = useState(false);
+  const [synthesisSaveProject, setSynthesisSaveProject] = useState<string>("none");
+
   const savedUrls = useMemo(() => new Set((refsData?.references ?? []).map((r) => r.url)), [refsData]);
 
   const allSignals = useMemo(() => {
@@ -475,8 +487,38 @@ export default function ResearchDataSources() {
     if (page > totalPages) setPage(totalPages);
   }, [totalPages, page]);
 
+  const synthesizeMutation = useMutation({
+    mutationFn: async () => {
+      const top = allSignals.slice(0, 10).map((s) => ({
+        title: s.title,
+        text: s.text,
+        url: s.url,
+        date: s.date,
+        source_type: s.source_type,
+      }));
+      const r = await fetch("/api/research/synthesize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...researcherHeaders },
+        body: JSON.stringify({ signals: top, query: activeQuery }),
+      });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || "Synthesis failed");
+      }
+      return r.json() as Promise<SynthesisResult>;
+    },
+    onSuccess: (data) => {
+      setSynthesis(data);
+      setSynthesisCollapsed(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Synthesis failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   function handleSearch() {
     if (query.trim()) {
+      setSynthesis(null);
       setActiveQuery(query.trim());
       setPage(1);
     }
@@ -761,7 +803,208 @@ export default function ResearchDataSources() {
                 {totalResults} result{totalResults !== 1 ? "s" : ""} for "{activeQuery}"
                 {totalPages > 1 && ` — Page ${clampedPage} of ${totalPages}`}
               </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-xs border-violet-500/30 text-violet-600 dark:text-violet-400 hover:bg-violet-500/10"
+                disabled={synthesizeMutation.isPending}
+                onClick={() => synthesizeMutation.mutate()}
+                data-testid="button-synthesize"
+              >
+                {synthesizeMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                {synthesizeMutation.isPending
+                  ? `Analyzing ${Math.min(allSignals.length, 10)} results...`
+                  : synthesis
+                    ? "Regenerate"
+                    : "Synthesize Results"}
+              </Button>
             </div>
+
+            {synthesizeMutation.isPending && !synthesis && (
+              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-5 space-y-3" data-testid="synthesis-loading">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
+                  <span className="text-sm font-medium text-violet-600 dark:text-violet-400">
+                    Analyzing {Math.min(allSignals.length, 10)} results...
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-5/6" />
+                </div>
+              </div>
+            )}
+
+            {synthesis && (
+              <div className="rounded-xl border border-violet-500/20 bg-card overflow-hidden" data-testid="synthesis-panel">
+                <button
+                  className="w-full flex items-center justify-between p-4 hover:bg-accent/30 transition-colors"
+                  onClick={() => setSynthesisCollapsed(!synthesisCollapsed)}
+                  data-testid="button-synthesis-toggle"
+                >
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-violet-500" />
+                    <span className="text-sm font-semibold text-foreground">AI Synthesis</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {Math.min(allSignals.length, 10)} results analyzed
+                    </Badge>
+                  </div>
+                  {synthesisCollapsed ? (
+                    <ChevronDown className="w-4 h-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                  )}
+                </button>
+
+                {!synthesisCollapsed && (
+                  <div className="px-4 pb-4 space-y-4">
+                    <div className="space-y-1.5" data-testid="synthesis-consensus">
+                      <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        <Lightbulb className="w-3.5 h-3.5" />
+                        What the field currently knows
+                      </div>
+                      <p className="text-sm text-foreground leading-relaxed">{synthesis.consensus}</p>
+                    </div>
+
+                    {synthesis.open_questions.length > 0 && (
+                      <div className="space-y-1.5" data-testid="synthesis-questions">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          <HelpCircle className="w-3.5 h-3.5" />
+                          Key open questions
+                        </div>
+                        <ul className="space-y-1">
+                          {synthesis.open_questions.map((q, i) => (
+                            <li key={i} className="text-sm text-foreground flex items-start gap-2">
+                              <span className="text-violet-500 mt-1 shrink-0">&#8226;</span>
+                              {q}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {synthesis.strongest_signals.length > 0 && (
+                      <div className="space-y-1.5" data-testid="synthesis-strongest">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          <Star className="w-3.5 h-3.5" />
+                          Strongest signals
+                        </div>
+                        <div className="space-y-2">
+                          {synthesis.strongest_signals.map((s, i) => {
+                            const matchedSignal = allSignals[s.index - 1];
+                            return (
+                              <div key={i} className="rounded-lg border border-border bg-accent/20 p-3 space-y-1">
+                                <div className="flex items-start gap-2">
+                                  <Badge variant="secondary" className="text-[10px] shrink-0 mt-0.5">#{s.index}</Badge>
+                                  <div className="flex-1 min-w-0">
+                                    {matchedSignal?.url ? (
+                                      <a
+                                        href={matchedSignal.url}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm font-medium text-foreground hover:text-violet-600 dark:hover:text-violet-400 transition-colors line-clamp-1"
+                                        data-testid={`synthesis-signal-link-${i}`}
+                                      >
+                                        {s.title}
+                                        <ExternalLink className="w-3 h-3 inline ml-1 opacity-50" />
+                                      </a>
+                                    ) : (
+                                      <span className="text-sm font-medium text-foreground line-clamp-1">{s.title}</span>
+                                    )}
+                                    <p className="text-xs text-muted-foreground mt-0.5">{s.reason}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {synthesis.suggested_next_search && (
+                      <div className="space-y-1.5" data-testid="synthesis-next-search">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                          <ArrowRight className="w-3.5 h-3.5" />
+                          Suggested next search
+                        </div>
+                        <button
+                          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-violet-500/30 bg-violet-500/5 text-sm text-violet-600 dark:text-violet-400 hover:bg-violet-500/10 transition-colors"
+                          onClick={() => {
+                            setQuery(synthesis.suggested_next_search);
+                            setActiveQuery(synthesis.suggested_next_search);
+                            setSynthesis(null);
+                            setPage(1);
+                          }}
+                          data-testid="button-next-search"
+                        >
+                          <Search className="w-3.5 h-3.5" />
+                          {synthesis.suggested_next_search}
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex items-center gap-2 pt-2 border-t border-border">
+                      <Select value={synthesisSaveProject} onValueChange={setSynthesisSaveProject}>
+                        <SelectTrigger className="h-7 text-xs w-[180px]" data-testid="select-synthesis-project">
+                          <SelectValue placeholder="Save to project..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No project</SelectItem>
+                          {(projectsData?.projects ?? []).map((p) => (
+                            <SelectItem key={p.id} value={String(p.id)}>{p.title}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs gap-1"
+                        disabled={synthesisSaveProject === "none"}
+                        onClick={async () => {
+                          const projectId = parseInt(synthesisSaveProject);
+                          const noteText = [
+                            `## AI Synthesis: "${activeQuery}"`,
+                            "",
+                            `### What the field currently knows`,
+                            synthesis.consensus,
+                            "",
+                            `### Key open questions`,
+                            ...synthesis.open_questions.map((q) => `- ${q}`),
+                            "",
+                            `### Strongest signals`,
+                            ...synthesis.strongest_signals.map((s) => `- **[${s.index}] ${s.title}**: ${s.reason}`),
+                            "",
+                            `### Suggested next search`,
+                            synthesis.suggested_next_search,
+                          ].join("\n");
+                          try {
+                            const r = await fetch(`/api/research/projects/${projectId}/notes`, {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json", ...researcherHeaders },
+                              body: JSON.stringify({ content: noteText }),
+                            });
+                            if (!r.ok) throw new Error("Failed to save");
+                            toast({ title: "Synthesis saved to project" });
+                            setSynthesisSaveProject("none");
+                          } catch {
+                            toast({ title: "Failed to save synthesis", variant: "destructive" });
+                          }
+                        }}
+                        data-testid="button-save-synthesis"
+                      >
+                        <Save className="w-3 h-3" />
+                        Save to Project
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {pagedSignals.map((signal, i) => (
               <SignalCard

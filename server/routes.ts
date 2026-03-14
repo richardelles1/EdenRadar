@@ -1386,6 +1386,25 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/research/projects/:id/notes", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const { content } = z.object({ content: z.string().min(1).max(10000) }).parse(req.body);
+    try {
+      const project = await storage.getResearchProject(id, researcherId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+      const existing = project.description ?? "";
+      const separator = existing ? "\n\n---\n\n" : "";
+      const updated = existing + separator + content;
+      await storage.updateResearchProject(id, researcherId, { description: updated });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.delete("/api/research/projects/:id", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
@@ -1496,6 +1515,74 @@ export async function registerRoutes(
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  const synthesizeBodySchema = z.object({
+    signals: z.array(z.object({
+      title: z.string(),
+      text: z.string(),
+      url: z.string(),
+      date: z.string().optional(),
+      source_type: z.string().optional(),
+    })).min(1).max(10),
+    query: z.string().min(1).max(500),
+  });
+
+  app.post("/api/research/synthesize", async (req, res) => {
+    const parsed = synthesizeBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Invalid request", details: parsed.error.flatten().fieldErrors });
+    }
+    try {
+      const { signals, query } = parsed.data;
+
+      const signalBlock = signals
+        .map((s, i) => `[${i + 1}] "${s.title}" (${s.source_type ?? "unknown"}, ${s.date ?? "n/a"})\n${s.text.slice(0, 600)}`)
+        .join("\n\n");
+
+      const prompt = `You are a biotech research synthesis analyst. A researcher searched for "${query}" and found the results below. Synthesize them into a structured analysis.
+
+Results:
+${signalBlock}
+
+Return ONLY valid JSON with these four fields:
+- "consensus": 2-3 sentences summarizing what the field currently knows based on these results.
+- "open_questions": Array of 3-5 strings, each a key open question or gap in the evidence.
+- "strongest_signals": Array of up to 3 objects, each with "index" (1-based number from the results list), "title" (the paper/result title), and "reason" (1 sentence explaining why this result is most informative).
+- "suggested_next_search": A single string with one follow-up search query the researcher should try next to deepen understanding.
+
+Be specific and evidence-grounded. Do not speculate beyond what the results show.`;
+
+      const { default: OpenAI } = await import("openai");
+      const aiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const response = await aiClient.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        response_format: { type: "json_object" },
+        temperature: 0.2,
+        max_tokens: 1000,
+      });
+
+      const content = response.choices[0]?.message?.content;
+      if (!content) return res.status(500).json({ error: "No response from AI" });
+
+      const raw = JSON.parse(content);
+      const synthesisResponseSchema = z.object({
+        consensus: z.string().default(""),
+        open_questions: z.array(z.string()).default([]),
+        strongest_signals: z.array(z.object({
+          index: z.number(),
+          title: z.string(),
+          reason: z.string(),
+        })).default([]),
+        suggested_next_search: z.string().default(""),
+      });
+      const validated = synthesisResponseSchema.parse(raw);
+      return res.json(validated);
+    } catch (err: any) {
+      console.error("Synthesis error:", err);
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
     }
   });
 
