@@ -1,5 +1,6 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
+import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, cleanText } from "./utils";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
@@ -243,11 +244,7 @@ export const princetonScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
-export const uclaScraper = createTechPublisherScraper(
-  "ucla",
-  "UCLA",
-  { maxPg: 100 }
-);
+export const uclaScraper = createUCTechTransferScraper("LA", "UCLA");
 
 export const brownScraper = createTechPublisherScraper(
   "brown",
@@ -333,11 +330,11 @@ export const sluScraper = createTechPublisherScraper(
   { maxPg: 30 }
 );
 
-export const ucDavisScraper = createTechPublisherScraper(
-  "ucdavis",
-  "UC Davis",
-  { selector: "a[href*='/techcase']", maxPg: 80 }
-);
+export const ucDavisScraper = createUCTechTransferScraper("D", "UC Davis");
+export const ucIrvineScraper = createUCTechTransferScraper("I", "UC Irvine");
+export const ucRiversideScraper = createUCTechTransferScraper("R", "UC Riverside");
+export const ucSantaBarbaraScraper = createUCTechTransferScraper("SB", "UC Santa Barbara");
+export const ucSantaCruzScraper = createUCTechTransferScraper("SC", "UC Santa Cruz");
 
 export const utahScraper = createTechPublisherScraper(
   "utah",

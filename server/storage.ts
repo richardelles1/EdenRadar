@@ -57,8 +57,6 @@ export interface IStorage {
     syncSessions: SyncSession[];
   }>;
 
-  getScraperHealthData(): Promise<Array<{ institution: string; count: number; lastSeenAt: Date | null }>>;
-
   createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession>;
   updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
@@ -404,19 +402,6 @@ export class DatabaseStorage implements IStorage {
     const sessions = await db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
 
     return { institutions: instRows, syncSessions: sessions };
-  }
-
-  async getScraperHealthData(): Promise<Array<{ institution: string; count: number; lastSeenAt: Date | null }>> {
-    const rows = await db
-      .select({
-        institution: ingestedAssets.institution,
-        count: sql<number>`count(*)::int`,
-        lastSeenAt: sql<Date | null>`max(${ingestedAssets.lastSeenAt})`,
-      })
-      .from(ingestedAssets)
-      .where(eq(ingestedAssets.sourceType, "tech_transfer"))
-      .groupBy(ingestedAssets.institution);
-    return rows;
   }
 
   async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {

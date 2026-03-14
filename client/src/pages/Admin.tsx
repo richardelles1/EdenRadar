@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Wifi } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -1548,237 +1548,6 @@ function ResearchQueue({ pw }: { pw: string }) {
   );
 }
 
-type PingRow = { institution: string; count: number; error: string | null; durationMs: number };
-type LastPing = { count: number; error: string | null; durationMs: number; pingedAt: string } | null;
-type ScraperStatus = "live" | "error" | "empty" | "never";
-type ScraperHealthRow = { institution: string; count: number; lastSeenAt: string | null; status: ScraperStatus; lastPing: LastPing };
-
-function StatusBadge({ status, streamPing, pinging }: { status: ScraperStatus; streamPing?: PingRow; pinging: boolean }) {
-  if (pinging && !streamPing) {
-    return <span className="inline-flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> pinging</span>;
-  }
-  if (streamPing) {
-    if (streamPing.error) {
-      return <Badge variant="destructive" className="text-[10px] px-1.5 py-0 font-medium">Error</Badge>;
-    }
-    if (streamPing.count > 0) {
-      return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-emerald-600 hover:bg-emerald-600 text-white">Live</Badge>;
-    }
-    return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-amber-500 hover:bg-amber-500 text-white">Empty</Badge>;
-  }
-  if (status === "live") return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-emerald-600 hover:bg-emerald-600 text-white">Live</Badge>;
-  if (status === "empty") return <Badge className="text-[10px] px-1.5 py-0 font-medium bg-amber-500 hover:bg-amber-500 text-white">Empty</Badge>;
-  if (status === "error") return <Badge variant="destructive" className="text-[10px] px-1.5 py-0 font-medium">Error</Badge>;
-  return <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium text-muted-foreground">Never Run</Badge>;
-}
-
-function ScraperHealth({ pw }: { pw: string }) {
-  const [pingResults, setPingResults] = useState<Record<string, PingRow>>({});
-  const [pinging, setPinging] = useState(false);
-  const abortRef = useRef<AbortController | null>(null);
-
-  const { data, isLoading, refetch } = useQuery<{ rows: ScraperHealthRow[]; total: number }>({
-    queryKey: ["/api/admin/scraper-health"],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/scraper-health", { headers: { "x-admin-password": pw } });
-      if (!res.ok) throw new Error("Failed");
-      return res.json();
-    },
-    staleTime: 60_000,
-    refetchInterval: 60_000,
-    enabled: !!pw,
-  });
-
-  const { data: ingestStatus } = useQuery<{ status: string; ranAt: string | null }>({
-    queryKey: ["/api/ingest/status"],
-    refetchInterval: 30_000,
-    staleTime: 20_000,
-  });
-
-  const prevRanAtRef = useRef<string | null | undefined>(undefined);
-  useEffect(() => {
-    const prev = prevRanAtRef.current;
-    const curr = ingestStatus?.ranAt;
-    if (prev !== undefined && curr !== prev) {
-      refetch();
-    }
-    prevRanAtRef.current = curr;
-  }, [ingestStatus?.ranAt, refetch]);
-
-  async function pingAll() {
-    if (pinging) {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setPinging(false);
-      return;
-    }
-    setPingResults({});
-    setPinging(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const res = await fetch("/api/admin/scraper-health/ping", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-        signal: controller.signal,
-      });
-      if (!res.ok || !res.body) { setPinging(false); return; }
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split("\n\n");
-        buffer = parts.pop() ?? "";
-        for (const part of parts) {
-          const line = part.trim();
-          if (!line.startsWith("data: ")) continue;
-          try {
-            const payload = JSON.parse(line.slice(6));
-            if (payload.done) { refetch(); break; }
-            setPingResults((prev) => ({ ...prev, [payload.institution]: payload as PingRow }));
-          } catch {}
-        }
-      }
-    } catch (err: any) {
-      if (err?.name !== "AbortError") console.warn("[ping]", err);
-    } finally {
-      abortRef.current = null;
-      setPinging(false);
-    }
-  }
-
-  const rows = data?.rows ?? [];
-  const liveCount = rows.filter((r) => r.status === "live").length;
-  const errorCount = rows.filter((r) => r.status === "error").length;
-  const emptyCount = rows.filter((r) => r.status === "empty").length;
-  const neverCount = rows.filter((r) => r.status === "never").length;
-
-  function formatAge(lastSeenAt: string | null) {
-    if (!lastSeenAt) return <span className="text-muted-foreground/40">—</span>;
-    const ms = Date.now() - new Date(lastSeenAt).getTime();
-    const h = Math.floor(ms / 3600000);
-    if (h < 24) return <span className="text-emerald-600 dark:text-emerald-400">{h}h ago</span>;
-    const d = Math.floor(h / 24);
-    if (d < 7) return <span className="text-amber-500">{d}d ago</span>;
-    return <span className="text-red-500">{d}d ago</span>;
-  }
-
-  const pingDone = Object.keys(pingResults).length;
-  const pingTotal = data?.total ?? 0;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Scraper Health</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            {data?.total ?? "…"} registered scrapers — DB presence and live ping status. Auto-refreshes every 60s.
-          </p>
-        </div>
-        <Button onClick={pingAll} size="sm" variant={pinging ? "secondary" : "default"} data-testid="button-ping-all">
-          {pinging ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Stop ({pingDone}/{pingTotal})</> : <><Wifi className="h-4 w-4 mr-2" />Ping All</>}
-        </Button>
-      </div>
-
-      <div className="grid grid-cols-4 gap-3">
-        <div className="border border-emerald-200 dark:border-emerald-800 rounded-lg p-3 bg-emerald-50 dark:bg-emerald-950/30">
-          <div className="text-xs text-emerald-700 dark:text-emerald-400 mb-1 font-medium">Live</div>
-          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums" data-testid="stat-scraper-live">{liveCount}</div>
-        </div>
-        <div className="border border-amber-200 dark:border-amber-800 rounded-lg p-3 bg-amber-50 dark:bg-amber-950/30">
-          <div className="text-xs text-amber-700 dark:text-amber-400 mb-1 font-medium">Empty</div>
-          <div className="text-2xl font-bold text-amber-600 dark:text-amber-400 tabular-nums" data-testid="stat-scraper-empty">{emptyCount}</div>
-        </div>
-        <div className="border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50 dark:bg-red-950/30">
-          <div className="text-xs text-red-700 dark:text-red-400 mb-1 font-medium">Error</div>
-          <div className="text-2xl font-bold text-red-500 tabular-nums" data-testid="stat-scraper-error">{errorCount}</div>
-        </div>
-        <div className="border border-border rounded-lg p-3 bg-card">
-          <div className="text-xs text-muted-foreground mb-1 font-medium">Never Run</div>
-          <div className="text-2xl font-bold text-muted-foreground tabular-nums" data-testid="stat-scraper-never">{neverCount}</div>
-        </div>
-      </div>
-
-      {pinging && (
-        <div className="space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Pinging scrapers…</span>
-            <span className="tabular-nums">{pingDone} / {pingTotal}</span>
-          </div>
-          <Progress value={pingTotal > 0 ? (pingDone / pingTotal) * 100 : 0} className="h-1.5" />
-        </div>
-      )}
-
-      {isLoading ? (
-        <div className="flex items-center gap-2 text-muted-foreground py-8">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading scraper registry…
-        </div>
-      ) : (
-        <div className="border border-border rounded-lg overflow-hidden">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                <th className="text-left py-2 px-3 font-medium text-muted-foreground">Status</th>
-                <th className="text-left py-2 px-3 font-medium text-muted-foreground">Institution</th>
-                <th className="text-right py-2 px-3 font-medium text-muted-foreground">DB Assets</th>
-                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Last Seen</th>
-                <th className="text-right py-2 px-3 font-medium text-muted-foreground">Ping Result</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => {
-                const ping = pingResults[row.institution];
-                const effectiveStatus: ScraperStatus = ping
-                  ? (ping.error ? "error" : ping.count > 0 ? "live" : "empty")
-                  : row.status;
-                const rowBg = effectiveStatus === "live"
-                  ? "bg-emerald-500/5"
-                  : effectiveStatus === "error" || effectiveStatus === "never"
-                  ? "bg-red-500/5"
-                  : effectiveStatus === "empty"
-                  ? "bg-amber-500/5"
-                  : "";
-                return (
-                  <tr key={row.institution} className={`border-b border-border/50 ${rowBg}`} data-testid={`row-scraper-${i}`}>
-                    <td className="py-2 px-3">
-                      <StatusBadge status={row.status} streamPing={ping} pinging={pinging} />
-                    </td>
-                    <td className="py-2 px-3 font-medium text-foreground">{row.institution}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-foreground">
-                      {row.count > 0 ? row.count.toLocaleString() : <span className="text-muted-foreground/40">—</span>}
-                    </td>
-                    <td className="py-2 px-3 text-right tabular-nums">{formatAge(row.lastSeenAt)}</td>
-                    <td className="py-2 px-3 text-right tabular-nums text-xs">
-                      {ping ? (
-                        ping.error ? (
-                          <span className="text-red-500" title={ping.error}>error ({(ping.durationMs / 1000).toFixed(1)}s)</span>
-                        ) : (
-                          <span className="text-emerald-600 dark:text-emerald-400">{ping.count} found ({(ping.durationMs / 1000).toFixed(1)}s)</span>
-                        )
-                      ) : row.lastPing ? (
-                        row.lastPing.error ? (
-                          <span className="text-red-400/70" title={row.lastPing.error}>cached: error</span>
-                        ) : (
-                          <span className="text-muted-foreground">{row.lastPing.count} found (cached)</span>
-                        )
-                      ) : (
-                        <span className="text-muted-foreground/40">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("data-health");
@@ -1889,18 +1658,6 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 </span>
               )}
             </button>
-            <button
-              onClick={() => setActiveTab("scraper-health")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "scraper-health"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-scraper-health"
-            >
-              <Wifi className="h-4 w-4" />
-              Scraper Health
-            </button>
           </nav>
         </aside>
 
@@ -1929,9 +1686,6 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </>
           )}
 
-          {activeTab === "scraper-health" && (
-            <ScraperHealth pw={pw} />
-          )}
         </main>
       </div>
     </div>

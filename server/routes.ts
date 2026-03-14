@@ -15,7 +15,6 @@ import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
 import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
-import { runProbe } from "./lib/scrapers/types";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
 import type { RawSignal } from "./lib/types";
@@ -394,105 +393,6 @@ export async function registerRoutes(
     res.json({ institutions: ALL_SCRAPERS.map((s) => s.institution) });
   });
 
-  const SCRAPER_STALE_MS = 48 * 60 * 60 * 1000;
-  const scraperPingCache = new Map<string, { count: number; error: string | null; durationMs: number; pingedAt: Date }>();
-
-  app.get("/api/admin/scraper-health", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    try {
-      const dbRows = await storage.getScraperHealthData();
-      const dbMap = new Map(dbRows.map((r) => [r.institution, r]));
-      const now = Date.now();
-
-      const rows = ALL_SCRAPERS.map((scraper) => {
-        const db = dbMap.get(scraper.institution);
-        const count = db?.count ?? 0;
-        const lastSeenAt = db?.lastSeenAt ?? null;
-        const ageMs = lastSeenAt ? now - new Date(lastSeenAt).getTime() : null;
-        const ping = scraperPingCache.get(scraper.institution);
-
-        let status: "live" | "error" | "empty" | "never";
-        if (ping?.error) {
-          status = "error";
-        } else if (!db) {
-          status = "never";
-        } else if (count === 0) {
-          status = "empty";
-        } else if (ageMs !== null && ageMs > SCRAPER_STALE_MS) {
-          status = "error";
-        } else {
-          status = "live";
-        }
-
-        return {
-          institution: scraper.institution,
-          count,
-          lastSeenAt,
-          status,
-          lastPing: ping ? { count: ping.count, error: ping.error, durationMs: ping.durationMs, pingedAt: ping.pingedAt.toISOString() } : null,
-        };
-      });
-
-      rows.sort((a, b) => {
-        const order = { never: 0, error: 1, empty: 2, live: 3 };
-        return order[a.status] - order[b.status];
-      });
-
-      res.json({ rows, total: ALL_SCRAPERS.length });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  app.post("/api/admin/scraper-health/ping", (req, res) => {
-    const pw = req.headers["x-admin-password"] ?? req.query.pw;
-    if (pw !== "eden") { res.status(401).json({ error: "Unauthorized" }); return; }
-
-    res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
-    res.setHeader("Connection", "keep-alive");
-    res.flushHeaders();
-
-    const PING_TIMEOUT_MS = 10_000;
-    const PROBE_MAX_RESULTS = 3;
-    const CONCURRENCY = 5;
-
-    let idx = 0;
-
-    async function worker() {
-      while (idx < ALL_SCRAPERS.length) {
-        const scraper = ALL_SCRAPERS[idx++];
-        const start = Date.now();
-        try {
-          const raw = await Promise.race([
-            runProbe(scraper, PROBE_MAX_RESULTS),
-            new Promise<never>((_, reject) =>
-              setTimeout(() => reject(new Error("timeout")), PING_TIMEOUT_MS)
-            ),
-          ]);
-          const count = raw.length;
-          const durationMs = Date.now() - start;
-          scraperPingCache.set(scraper.institution, { count, error: null, durationMs, pingedAt: new Date() });
-          res.write(`data: ${JSON.stringify({ institution: scraper.institution, count, error: null, durationMs })}\n\n`);
-        } catch (err: any) {
-          const durationMs = Date.now() - start;
-          const error = err?.message ?? "error";
-          scraperPingCache.set(scraper.institution, { count: 0, error, durationMs, pingedAt: new Date() });
-          res.write(`data: ${JSON.stringify({ institution: scraper.institution, count: 0, error, durationMs })}\n\n`);
-        }
-      }
-    }
-
-    const workers = Array.from({ length: Math.min(CONCURRENCY, ALL_SCRAPERS.length) }, () => worker());
-    Promise.all(workers).then(() => {
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
-    }).catch(() => {
-      res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-      res.end();
-    });
-  });
 
   app.post("/api/ingest/run", async (_req, res) => {
     if (isIngestionRunning()) {
