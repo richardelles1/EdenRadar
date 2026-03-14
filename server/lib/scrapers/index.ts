@@ -10,6 +10,7 @@ import { upennScraper } from "./upenn";
 import { northwesternScraper } from "./northwestern";
 import { cornellScraper } from "./cornell";
 import { ucBerkeleyScraper } from "./ucberkeley";
+import { ucsdScraper } from "./ucsd";
 import { uwashingtonScraper } from "./uwashington";
 import { cambridgeScraper as cambridgeCustomScraper } from "./cambridge";
 import { uillinoisScraper as uillinoisCustomScraper } from "./uillinois";
@@ -167,6 +168,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   northwesternScraper,
   cornellScraper,
   ucBerkeleyScraper,
+  ucsdScraper,
   uwashingtonScraper,
   wustlScraper,
   umichScraper,

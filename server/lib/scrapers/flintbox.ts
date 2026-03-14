@@ -56,7 +56,7 @@ export function createFlintboxScraper(org: FlintboxOrg, institution: string): In
               const desc = cleanText(
                 attrs.briefDescription ?? attrs.brief_description ?? attrs.keyPoint1 ?? ""
               );
-              const techId = item.id ?? attrs.slug ?? "";
+              const techId = attrs.uuid ?? attrs.slug ?? item.id ?? "";
               const techUrl = techId
                 ? `${base}/technologies/${techId}`
                 : `${base}/technologies`;

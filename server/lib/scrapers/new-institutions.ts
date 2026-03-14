@@ -417,10 +417,9 @@ export const arizonaScraper = createTechPublisherScraper(
   { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
 );
 
-export const pennStateScraper = createTechPublisherScraper(
-  "pennstate",
-  "Penn State University",
-  { maxPg: 80 }
+export const pennStateScraper = createFlintboxScraper(
+  { slug: "psu", orgId: 196, accessKey: "4aaaa84c-fa95-4181-bd42-b907e00a73f7" },
+  "Penn State University"
 );
 
 export const rutgersScraper = createTechPublisherScraper(
@@ -574,7 +573,10 @@ export const usaskScraper = createTechPublisherScraper("usask", "University of S
 // ── New US: no TechPublisher portal (stubs) ──────────────────────────────
 export { fsuScraper } from "./fsu";
 export const ucfScraper = createStubScraper("University of Central Florida", "Flintbox API deprecated, no public alternative found");
-export const fiuScraper = createStubScraper("Florida International University", "Flintbox API deprecated, no public alternative found");
+export const fiuScraper = createFlintboxScraper(
+  { slug: "fiu", orgId: 21, accessKey: "283480d5-1f72-4bb5-bb3e-c46d7ce23ea3" },
+  "Florida International University"
+);
 export const tamuScraper = createStubScraper("Texas A&M University");
 export const riceScraper = createInPartScraper("rice", "Rice University");
 export const uhoustonScraper: InstitutionScraper = {
@@ -655,7 +657,10 @@ export const undScraper: InstitutionScraper = {
   },
 };
 export const ndsuScraper = createTechPublisherScraper("ndsurf", "North Dakota State University", { maxPg: 30 });
-export const indianaScraper = createInPartScraper("iu", "Indiana University");
+export const indianaScraper = createFlintboxScraper(
+  { slug: "iu", orgId: 66, accessKey: "3548b15d-a08c-49ca-b3a3-6a4eb981205b" },
+  "Indiana University"
+);
 export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
 // WARF HTML crawl: /wp-json/warf/v1/technologies returns 404 — no REST API exists.
 // This approach scrapes category options from /commercialize/technologies/ then
@@ -732,7 +737,7 @@ export const uconnScraper = createFlintboxScraper(
   { slug: "uconn", orgId: 106, accessKey: "c9a1cb21-6c5e-437c-9662-9492efa1205a" },
   "University of Connecticut"
 );
-export const dartmouthScraper = createStubScraper("Dartmouth College", "Flintbox API deprecated, no public alternative found");
+export { dartmouthScraper } from "./dartmouth";
 export const brandeisScraper = createStubScraper("Brandeis University", "Flintbox API deprecated, no public alternative found");
 export const unhScraper = createStubScraper("University of New Hampshire");
 export const uriScraper = createStubScraper("University of Rhode Island", "Flintbox API deprecated, no public alternative found");
@@ -857,7 +862,10 @@ export const sfuScraper: InstitutionScraper = {
 
 // ── International: Asia-Pacific ──────────────────────────────────────────
 export const umelbourneScraper = createStubScraper("University of Melbourne");
-export const monashScraper = createStubScraper("Monash University", "Flintbox API deprecated, no public alternative found");
+export const monashScraper = createFlintboxScraper(
+  { slug: "monash", orgId: 38, accessKey: "57961255-e861-4776-80d1-33fc26ed5786" },
+  "Monash University"
+);
 export const usydneyScraper = createStubScraper("University of Sydney");
 export const uniquestScraper = createStubScraper("University of Queensland");
 export const nusScraper = createStubScraper("National University of Singapore", "Flintbox API deprecated, no public alternative found");
