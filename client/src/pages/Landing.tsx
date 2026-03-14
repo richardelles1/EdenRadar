@@ -323,10 +323,24 @@ const DISCOVERY_TILES = [
 ];
 
 function PortalToggle({ onLogin }: { onLogin: () => void }) {
-  const [active, setActive] = useState<"discovery" | "industry" | "research">("discovery");
+  const [active, setActive] = useState<"discovery" | "research" | "industry">("discovery");
   const ref = useReveal();
 
-  const tiles = active === "discovery" ? DISCOVERY_TILES : active === "industry" ? INDUSTRY_TILES : RESEARCH_TILES;
+  const tiles = active === "discovery" ? DISCOVERY_TILES : active === "research" ? RESEARCH_TILES : INDUSTRY_TILES;
+
+  const TAB_STYLE: Record<string, { bg: string; shadow: string }> = {
+    discovery: { bg: "hsl(38 92% 50%)", shadow: "0 2px 12px hsl(38 92% 50% / 0.35)" },
+    research: { bg: "hsl(265 60% 55%)", shadow: "0 2px 12px hsl(265 60% 55% / 0.35)" },
+    industry: { bg: "hsl(142 52% 36%)", shadow: "0 2px 12px hsl(142 52% 36% / 0.35)" },
+  };
+
+  const TILE_ACCENT: Record<string, { hover: string; iconBg: string; iconBgHover: string; iconColor: string }> = {
+    discovery: { hover: "hover:border-amber-500/40", iconBg: "bg-amber-500/10", iconBgHover: "group-hover:bg-amber-500/20", iconColor: "text-amber-500" },
+    research: { hover: "hover:border-violet-500/40", iconBg: "bg-violet-500/10", iconBgHover: "group-hover:bg-violet-500/20", iconColor: "text-violet-500" },
+    industry: { hover: "hover:border-primary/40", iconBg: "bg-primary/10", iconBgHover: "group-hover:bg-primary/20", iconColor: "text-primary" },
+  };
+
+  const accent = TILE_ACCENT[active];
 
   return (
     <section ref={ref} className="reveal-section max-w-screen-xl mx-auto px-4 sm:px-6 py-20 sm:py-28">
@@ -342,18 +356,16 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         </p>
 
         <div className="inline-flex items-center mt-8 p-1 rounded-full border border-border bg-card shadow-sm">
-          {(["discovery", "industry", "research"] as const).map((tab) => {
-            const label = tab === "discovery" ? "Discovery" : tab === "industry" ? "Industry" : "Research";
-            const activeStyle = tab === "discovery"
-              ? { background: "hsl(38 92% 50%)", color: "white", boxShadow: "0 2px 12px hsl(38 92% 50% / 0.35)" }
-              : { background: "hsl(var(--primary))", color: "hsl(var(--primary-foreground))", boxShadow: "0 2px 12px hsl(142 52% 36% / 0.35)" };
+          {(["discovery", "research", "industry"] as const).map((tab) => {
+            const label = tab === "discovery" ? "Pre-Research" : tab === "research" ? "Research" : "Industry";
+            const style = TAB_STYLE[tab];
             return (
               <button
                 key={tab}
                 onClick={() => setActive(tab)}
                 data-testid={`toggle-${tab}`}
                 className="relative px-4 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 min-h-[44px]"
-                style={active === tab ? activeStyle : { color: "hsl(var(--muted-foreground))" }}
+                style={active === tab ? { background: style.bg, color: "white", boxShadow: style.shadow } : { color: "hsl(var(--muted-foreground))" }}
               >
                 {label}
               </button>
@@ -366,12 +378,12 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
         {tiles.map((tile, i) => (
           <div
             key={tile.title}
-            className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${active === "discovery" ? "hover:border-amber-500/40" : "hover:border-primary/40"}`}
+            className={`group flex gap-4 p-5 sm:p-6 rounded-xl border border-border bg-card transition-all duration-200 hover:shadow-md ${accent.hover}`}
             style={{ animationDelay: `${i * 80}ms`, animation: "fade-up 0.5s ease-out forwards" }}
             data-testid={`tile-${active}-${i}`}
           >
-            <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${active === "discovery" ? "bg-amber-500/10 group-hover:bg-amber-500/20" : "bg-primary/10 group-hover:bg-primary/20"}`}>
-              <tile.icon className={`w-5 h-5 ${active === "discovery" ? "text-amber-500" : "text-primary"}`} />
+            <div className={`flex-shrink-0 w-11 h-11 rounded-lg flex items-center justify-center transition-colors duration-200 ${accent.iconBg} ${accent.iconBgHover}`}>
+              <tile.icon className={`w-5 h-5 ${accent.iconColor}`} />
             </div>
             <div>
               <h3 className="font-semibold text-foreground mb-1.5 text-sm sm:text-base">{tile.title}</h3>
@@ -517,7 +529,7 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
             }}
           >
             <Lightbulb className="w-4 h-4" />
-            For Concepts
+            For Pre-Research
           </Button>
         </div>
 
@@ -602,11 +614,16 @@ export default function Landing() {
               <Button
                 size="lg"
                 onClick={handleLogin}
-                data-testid="button-cta-industry"
+                data-testid="button-cta-discovery"
                 className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 shadow-lg"
+                style={{
+                  background: "hsl(38 92% 50%)",
+                  color: "white",
+                  border: "none",
+                }}
               >
-                <Building2 className="w-4 h-4" />
-                For Industry
+                <Lightbulb className="w-4 h-4" />
+                For Pre-Research
                 <ArrowRight className="w-3.5 h-3.5 opacity-70" />
               </Button>
               <Button
@@ -624,11 +641,11 @@ export default function Landing() {
                 size="lg"
                 variant="outline"
                 onClick={handleLogin}
-                data-testid="button-cta-discovery"
-                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-amber-500/40 hover:border-amber-500/70 hover:bg-amber-500/5 text-amber-500"
+                data-testid="button-cta-industry"
+                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-primary/40 hover:border-primary/70 hover:bg-primary/5 text-primary"
               >
-                <Lightbulb className="w-4 h-4" />
-                For Concepts
+                <Building2 className="w-4 h-4" />
+                For Industry
                 <ArrowRight className="w-3.5 h-3.5 opacity-70" />
               </Button>
             </div>

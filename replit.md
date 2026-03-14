@@ -28,6 +28,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - Env vars: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`
 
 **Test Accounts**:
+- `concept@test.com` / `Quality2025!` → role: concept
 - `industry@test.com` / `Quality2025!` → role: industry
 - `research@test.com` / `Quality2025!` → role: researcher
 
