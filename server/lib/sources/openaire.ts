@@ -12,7 +12,7 @@ export async function searchOpenaire(query: string, maxResults = 12): Promise<Ra
     });
 
     const res = await fetch(`${BASE}?${params}`, {
-      signal: AbortSignal.timeout(12000),
+      signal: AbortSignal.timeout(5000),
     });
 
     if (!res.ok) throw new Error(`OpenAIRE API error: ${res.status}`);
@@ -57,7 +57,10 @@ export async function searchOpenaire(query: string, maxResults = 12): Promise<Ra
       };
     });
   } catch (err) {
-    console.error("OpenAIRE search error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("abort") && !msg.includes("timeout") && !msg.includes("TimeoutError")) {
+      console.warn(`[search] OpenAIRE error: ${msg}`);
+    }
     return [];
   }
 }

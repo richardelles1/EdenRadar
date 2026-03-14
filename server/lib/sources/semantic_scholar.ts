@@ -10,9 +10,16 @@ export async function searchSemanticScholar(query: string, maxResults = 12): Pro
       fields: "paperId,title,abstract,authors,year,publicationDate,venue,externalIds,url,openAccessPdf",
     });
 
-    const res = await fetch(`${BASE}?${params}`, {
-      signal: AbortSignal.timeout(12000),
+    let res = await fetch(`${BASE}?${params}`, {
+      signal: AbortSignal.timeout(6000),
     });
+
+    if (res.status === 429) {
+      await new Promise((r) => setTimeout(r, 1000));
+      res = await fetch(`${BASE}?${params}`, {
+        signal: AbortSignal.timeout(6000),
+      });
+    }
 
     if (!res.ok) throw new Error(`Semantic Scholar API error: ${res.status}`);
     const data = await res.json();
@@ -45,7 +52,10 @@ export async function searchSemanticScholar(query: string, maxResults = 12): Pro
       };
     });
   } catch (err) {
-    console.error("Semantic Scholar search error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("abort") && !msg.includes("timeout") && !msg.includes("TimeoutError")) {
+      console.warn(`[search] Semantic Scholar error: ${msg}`);
+    }
     return [];
   }
 }

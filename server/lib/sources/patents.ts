@@ -46,7 +46,9 @@ export async function searchPatents(query: string, maxResults = 8): Promise<RawS
     });
 
     if (!res.ok) {
-      console.error("PatentsView API error:", res.status, await res.text().catch(() => ""));
+      if (res.status !== 403) {
+        console.warn(`[search] PatentsView API error: ${res.status}`);
+      }
       return [];
     }
 
@@ -82,7 +84,10 @@ export async function searchPatents(query: string, maxResults = 8): Promise<RawS
       };
     });
   } catch (err) {
-    console.error("Patents search error:", err);
+    const msg = err instanceof Error ? err.message : String(err);
+    if (!msg.includes("abort") && !msg.includes("timeout")) {
+      console.warn(`[search] Patents error: ${msg}`);
+    }
     return [];
   }
 }

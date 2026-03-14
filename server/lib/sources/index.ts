@@ -357,6 +357,8 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+const CONCURRENCY_LIMIT = 8;
+
 export async function collectAllSignals(
   query: string,
   sourceKeys: SourceKey[],
@@ -366,25 +368,33 @@ export async function collectAllSignals(
     .filter((k) => k in dataSources)
     .map((k) => dataSources[k]);
 
-  const results = await Promise.allSettled(
-    selectedSources.map((s) =>
-      withTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
-    )
-  );
-
   const signals: RawSignal[] = [];
-  results.forEach((r, i) => {
-    if (r.status === "fulfilled") {
-      signals.push(...r.value);
-    } else {
-      const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
-      if (msg.includes("timed out")) {
-        console.warn(`[search] ${msg}`);
+
+  for (let i = 0; i < selectedSources.length; i += CONCURRENCY_LIMIT) {
+    const batch = selectedSources.slice(i, i + CONCURRENCY_LIMIT);
+    const results = await Promise.allSettled(
+      batch.map((s) =>
+        withTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
+      )
+    );
+
+    results.forEach((r, j) => {
+      if (r.status === "fulfilled") {
+        signals.push(...r.value);
       } else {
-        console.error(`[search] Source ${selectedSources[i].id} failed:`, r.reason);
+        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        if (msg.includes("timed out")) {
+          console.warn(`[search] ${msg}`);
+        } else {
+          console.error(`[search] Source ${batch[j].id} failed:`, r.reason);
+        }
       }
+    });
+
+    if (i + CONCURRENCY_LIMIT < selectedSources.length) {
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
-  });
+  }
 
   return signals;
 }
