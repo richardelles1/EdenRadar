@@ -235,7 +235,7 @@ export default function DiscoveryFeed() {
                         {c.modality}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
-                        {STAGE_LABEL[c.stage ?? ""] ?? c.stage?.replace(/_/g, " ")}
+                        {STAGE_LABEL[c.stage] ?? `Stage ${c.stage}`}
                       </span>
                       {c.submitterAffiliation && (
                         <span className="inline-flex items-center gap-1 text-muted-foreground">

@@ -2088,6 +2088,20 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.get("/api/discovery/my-concepts", verifyConceptAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-concept-user-id"] as string;
+      const results = await db
+        .select()
+        .from(conceptCards)
+        .where(eq(conceptCards.userId, userId))
+        .orderBy(desc(conceptCards.createdAt));
+      res.json({ concepts: results.map(canonicalizeConcept) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/discovery/concepts/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);

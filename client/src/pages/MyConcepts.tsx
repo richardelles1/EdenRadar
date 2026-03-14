@@ -1,20 +1,27 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import type { ConceptCard } from "@shared/schema";
-import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/lib/supabase";
 import { Lightbulb, TrendingUp, Clock, Sparkles, PlusCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function MyConcepts() {
-  const { user } = useAuth();
-
   const { data, isLoading } = useQuery<{ concepts: ConceptCard[] }>({
-    queryKey: ["/api/discovery/concepts"],
+    queryKey: ["/api/discovery/my-concepts"],
+    queryFn: async () => {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch("/api/discovery/my-concepts", {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      if (!res.ok) throw new Error("Failed to load concepts");
+      return res.json();
+    },
+    staleTime: Infinity,
   });
 
-  const myConcepts = (data?.concepts ?? []).filter(
-    (c) => c.userId === user?.id
-  );
+  const myConcepts = data?.concepts ?? [];
 
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto">

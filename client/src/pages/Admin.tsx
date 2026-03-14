@@ -1803,7 +1803,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
   pw: string;
   setAuthed: (v: boolean) => void;
   theme: string;
-  setTheme: (v: string) => void;
+  setTheme: (v: "light" | "dark") => void;
   activeTab: string;
   setActiveTab: (v: string) => void;
 }) {
