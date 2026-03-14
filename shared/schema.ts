@@ -253,6 +253,21 @@ export const researchProjects = pgTable("research_projects", {
   developmentStage: text("development_stage"),
   projectSeeking: jsonb("project_seeking").$type<string[]>(),
   publishToIndustry: boolean("publish_to_industry"),
+  evidenceTables: jsonb("evidence_tables").$type<Array<{
+    id: string;
+    createdAt: string;
+    rows: Array<{
+      referenceId: number;
+      title: string;
+      studyType: string;
+      sampleSize: string;
+      population: string;
+      interventionTarget: string;
+      outcome: string;
+      keyFindings: string;
+      evidenceStrength: string;
+    }>;
+  }>>(),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({

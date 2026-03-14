@@ -1499,6 +1499,165 @@ export async function registerRoutes(
     }
   });
 
+  // Evidence extraction from saved references
+  app.post("/api/research/library/extract-evidence", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+
+    const { referenceIds } = req.body as { referenceIds?: number[] };
+    if (!Array.isArray(referenceIds) || referenceIds.length < 2) {
+      return res.status(400).json({ error: "Select at least 2 references" });
+    }
+    if (referenceIds.length > 20) {
+      return res.status(400).json({ error: "Maximum 20 references at a time" });
+    }
+
+    try {
+      const allRefs = await storage.getSavedReferences(researcherId);
+      const selected = allRefs.filter((r) => referenceIds.includes(r.id));
+      if (selected.length === 0) return res.status(404).json({ error: "No matching references found" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      const rows: Array<{
+        referenceId: number;
+        title: string;
+        studyType: string;
+        sampleSize: string;
+        population: string;
+        interventionTarget: string;
+        outcome: string;
+        keyFindings: string;
+        evidenceStrength: string;
+      }> = [];
+
+      const CONCURRENCY = 5;
+      let idx = 0;
+      const queue = [...selected];
+
+      async function worker() {
+        while (idx < queue.length) {
+          const ref = queue[idx++];
+          if (!ref) continue;
+          const textContent = [ref.title, ref.notes].filter(Boolean).join("\n\n");
+          if (!textContent.trim()) {
+            rows.push({
+              referenceId: ref.id,
+              title: ref.title,
+              studyType: "N/A",
+              sampleSize: "N/A",
+              population: "N/A",
+              interventionTarget: "N/A",
+              outcome: "N/A",
+              keyFindings: "N/A",
+              evidenceStrength: "N/A",
+            });
+            continue;
+          }
+
+          try {
+            const response = await openai.chat.completions.create({
+              model: "gpt-4o-mini",
+              messages: [{
+                role: "user",
+                content: `You are a biomedical evidence extraction assistant. Extract structured evidence fields from the following reference.
+
+Title: ${ref.title}
+Source type: ${ref.sourceType}
+Date: ${ref.date || "unknown"}
+Institution: ${ref.institution || "unknown"}
+Notes/Abstract: ${ref.notes || "none provided"}
+
+Return ONLY valid JSON with these fields:
+- studyType: the type of study (e.g., "RCT", "cohort study", "case report", "review", "in vitro", "animal model", "clinical trial", "computational", "N/A")
+- sampleSize: number of subjects/samples or "N/A"
+- population: the study population or subject group (e.g., "NSCLC patients", "healthy volunteers", "mouse model", "N/A")
+- interventionTarget: the drug/compound/therapy/target being studied (string)
+- outcome: primary outcome or endpoint measured (string or "N/A")
+- keyFindings: 1-2 sentence summary of main results (string)
+- evidenceStrength: one of "High", "Moderate", "Low", "Insufficient" based on study design and data quality
+
+If a field cannot be determined, use "N/A".`
+              }],
+              response_format: { type: "json_object" },
+              temperature: 0.1,
+            });
+
+            const content = response.choices[0]?.message?.content;
+            if (content) {
+              const parsed = JSON.parse(content);
+              rows.push({
+                referenceId: ref.id,
+                title: ref.title,
+                studyType: parsed.studyType ?? "N/A",
+                sampleSize: parsed.sampleSize ?? "N/A",
+                population: parsed.population ?? "N/A",
+                interventionTarget: parsed.interventionTarget ?? "N/A",
+                outcome: parsed.outcome ?? "N/A",
+                keyFindings: parsed.keyFindings ?? "N/A",
+                evidenceStrength: parsed.evidenceStrength ?? "N/A",
+              });
+            } else {
+              rows.push({
+                referenceId: ref.id, title: ref.title,
+                studyType: "N/A", sampleSize: "N/A", population: "N/A",
+                interventionTarget: "N/A", outcome: "N/A", keyFindings: "N/A", evidenceStrength: "N/A",
+              });
+            }
+          } catch (err) {
+            console.error(`[evidence] Failed to extract for ref ${ref.id}:`, err);
+            rows.push({
+              referenceId: ref.id, title: ref.title,
+              studyType: "Error", sampleSize: "N/A", population: "N/A",
+              interventionTarget: "N/A", outcome: "N/A", keyFindings: "Extraction failed", evidenceStrength: "N/A",
+            });
+          }
+        }
+      }
+
+      await Promise.all(Array.from({ length: Math.min(CONCURRENCY, queue.length) }, worker));
+
+      const sorted = referenceIds.map((id) => rows.find((r) => r.referenceId === id)).filter(Boolean);
+
+      res.json({ rows: sorted });
+    } catch (err: any) {
+      console.error("[evidence] extraction error:", err);
+      res.status(500).json({ error: err.message ?? "Evidence extraction failed" });
+    }
+  });
+
+  // Save evidence table to project
+  app.post("/api/research/projects/:id/evidence-table", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const projectId = parseInt(req.params.id);
+    if (isNaN(projectId)) return res.status(400).json({ error: "Invalid project id" });
+
+    const { rows } = req.body as { rows?: any[] };
+    if (!Array.isArray(rows) || rows.length === 0) {
+      return res.status(400).json({ error: "Evidence table rows are required" });
+    }
+
+    try {
+      const project = await storage.getResearchProject(projectId, researcherId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const existing = (project.evidenceTables ?? []) as Array<any>;
+      const newTable = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        rows,
+      };
+      existing.push(newTable);
+
+      await storage.updateResearchProject(projectId, researcherId, { evidenceTables: existing } as any);
+      res.json({ ok: true, tableId: newTable.id });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to save evidence table" });
+    }
+  });
+
   // Saved grants
   app.get("/api/research/grants", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
