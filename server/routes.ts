@@ -2380,11 +2380,29 @@ If a field cannot be determined, use "N/A".`
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!concept) return res.status(404).json({ error: "Not found" });
       const therapyArea = concept.therapeuticArea?.toLowerCase() ?? "";
-      const searchSlug = therapyArea.substring(0, 10);
-      // Build literature search term from concept title + hypothesis + therapeuticArea for maximum relevance
-      const titleTerms = (concept.title ?? "").split(/\s+/).filter(w => w.length > 4).slice(0, 3).join(" ");
+      const conceptModality = concept.modality?.toLowerCase() ?? "";
+      const titleTerms = (concept.title ?? "").split(/\s+/).filter(w => w.length > 5).slice(0, 4).join(" ");
       const hypothesisTerms = (concept.hypothesis ?? "").split(/\s+/).filter(w => w.length > 5).slice(0, 3).join(" ");
-      const litSearchTerms = [titleTerms, hypothesisTerms, therapyArea].filter(Boolean).join(" ");
+
+      if (!therapyArea) {
+        return res.json({ assets: [], literature: [], noResults: true });
+      }
+
+      const pubmedTermParts: string[] = [];
+      if (titleTerms) pubmedTermParts.push(`(${titleTerms})[Title/Abstract]`);
+      pubmedTermParts.push(`"${therapyArea}"[MeSH Terms]`);
+      if (conceptModality && conceptModality !== "other" && conceptModality !== "unknown") pubmedTermParts.push(conceptModality);
+      const pubmedQuery = pubmedTermParts.join(" AND ");
+
+      const biorxivTerms = [titleTerms, hypothesisTerms, therapyArea, conceptModality !== "other" && conceptModality !== "unknown" ? conceptModality : ""].filter(Boolean).join(" ");
+
+      const assetWhereConditions = [
+        eq(ingestedAssets.relevant, true),
+        sql`lower(${ingestedAssets.indication}) like ${"%" + therapyArea + "%"}`,
+      ];
+      if (conceptModality && conceptModality !== "other" && conceptModality !== "unknown") {
+        assetWhereConditions.push(sql`lower(${ingestedAssets.modality}) like ${"%" + conceptModality + "%"}`);
+      }
 
       const [relatedAssets, pubmedResults] = await Promise.allSettled([
         db
@@ -2398,20 +2416,16 @@ If a field cannot be determined, use "N/A".`
             sourceUrl: ingestedAssets.sourceUrl,
           })
           .from(ingestedAssets)
-          .where(
-            and(
-              eq(ingestedAssets.relevant, true),
-              sql`lower(${ingestedAssets.indication}) like ${"%" + searchSlug + "%"}`
-            )
-          )
+          .where(and(...assetWhereConditions))
           .orderBy(desc(ingestedAssets.firstSeenAt))
           .limit(6),
 
         (async () => {
           const [pubmedItems, biorxivItems] = await Promise.allSettled([
             (async () => {
-              const searchTerm = encodeURIComponent(litSearchTerms);
-              const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=4&retmode=json&sort=relevance`;
+              if (!pubmedQuery) return [];
+              const searchTerm = encodeURIComponent(pubmedQuery);
+              const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=3&retmode=json&sort=relevance`;
               const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(5000) });
               if (!searchRes.ok) return [];
               const searchJson = await searchRes.json() as { esearchresult?: { idlist?: string[] } };
@@ -2420,39 +2434,44 @@ If a field cannot be determined, use "N/A".`
               const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
               const summaryRes = await fetch(summaryUrl, { signal: AbortSignal.timeout(5000) });
               if (!summaryRes.ok) return [];
-              const summaryJson = await summaryRes.json() as { result?: Record<string, any> };
+              const summaryJson = await summaryRes.json() as { result?: Record<string, unknown> };
               const result = summaryJson.result ?? {};
-              return ids.slice(0, 4).map((pmid) => {
-                const doc = result[pmid] ?? {};
+              return ids.slice(0, 3).map((pmid) => {
+                const doc = (result[pmid] ?? {}) as Record<string, unknown>;
                 return {
                   source: "pubmed" as const,
                   pmid,
-                  title: doc.title ?? "Untitled",
-                  authors: (doc.authors ?? []).slice(0, 2).map((a: any) => a.name).join(", "),
-                  journal: doc.fulljournalname ?? doc.source ?? "",
-                  year: doc.pubdate?.substring(0, 4) ?? "",
+                  title: (doc.title as string) ?? "Untitled",
+                  authors: (Array.isArray(doc.authors) ? doc.authors : []).slice(0, 2).map((a: Record<string, string>) => a.name).join(", "),
+                  journal: (doc.fulljournalname as string) ?? (doc.source as string) ?? "",
+                  year: typeof doc.pubdate === "string" ? doc.pubdate.substring(0, 4) : "",
                   url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
                 };
               });
             })(),
             (async () => {
-              const q = encodeURIComponent(litSearchTerms);
+              if (!biorxivTerms.trim()) return [];
+              const q = encodeURIComponent(biorxivTerms);
               const url = `https://api.crossref.org/works?query=${q}&filter=type:posted-content,member:246&rows=3&sort=relevance&mailto=eden@edenradar.io`;
-              const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
-              if (!res.ok) return [];
-              const json = await res.json() as { message?: { items?: any[] } };
-              return (json.message?.items ?? []).slice(0, 3).map((item: any) => {
-                const pmid = item.DOI ?? "";
-                const authors = (item.author ?? []).slice(0, 2).map((a: any) => `${a.given ?? ""} ${a.family ?? ""}`.trim()).join(", ");
-                const year = item.created?.["date-parts"]?.[0]?.[0]?.toString() ?? "";
+              const biorxivRes = await fetch(url, { signal: AbortSignal.timeout(5000) });
+              if (!biorxivRes.ok) return [];
+              const json = await biorxivRes.json() as { message?: { items?: Record<string, unknown>[] } };
+              return (json.message?.items ?? []).slice(0, 3).map((item) => {
+                const doi = (item.DOI as string) ?? "";
+                const authorArr = Array.isArray(item.author) ? item.author : [];
+                const authors = authorArr.slice(0, 2).map((a: Record<string, string>) => `${a.given ?? ""} ${a.family ?? ""}`.trim()).join(", ");
+                const created = item.created as Record<string, unknown> | undefined;
+                const dateParts = created?.["date-parts"] as number[][] | undefined;
+                const year = dateParts?.[0]?.[0]?.toString() ?? "";
+                const titleArr = item.title as string[] | undefined;
                 return {
                   source: "biorxiv" as const,
-                  pmid,
-                  title: item.title?.[0] ?? "Untitled",
+                  pmid: doi,
+                  title: titleArr?.[0] ?? "Untitled",
                   authors,
                   journal: "bioRxiv preprint",
                   year,
-                  url: `https://doi.org/${pmid}`,
+                  url: `https://doi.org/${doi}`,
                 };
               });
             })(),
@@ -2463,10 +2482,13 @@ If a field cannot be determined, use "N/A".`
         })(),
       ]);
 
-      res.json({
-        assets: relatedAssets.status === "fulfilled" ? relatedAssets.value : [],
-        literature: pubmedResults.status === "fulfilled" ? pubmedResults.value : [],
-      });
+      const assets = relatedAssets.status === "fulfilled" ? relatedAssets.value : [];
+      const literature = pubmedResults.status === "fulfilled" ? pubmedResults.value : [];
+
+      if (assets.length === 0 && literature.length === 0) {
+        return res.json({ assets: [], literature: [], noResults: true });
+      }
+      res.json({ assets, literature });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

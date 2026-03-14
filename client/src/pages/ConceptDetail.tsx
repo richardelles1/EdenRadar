@@ -211,11 +211,11 @@ export default function ConceptDetail() {
     pmid: string; title: string; authors: string; journal: string; year: string; url: string; source?: "pubmed" | "biorxiv";
   };
 
-  const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[]; literature: PubmedPaper[] }>({
+  const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[]; literature: PubmedPaper[]; noResults?: boolean }>({
     queryKey: ["/api/discovery/concepts", id, "landscape"],
     queryFn: async () => {
       const res = await fetch(`/api/discovery/concepts/${id}/landscape`);
-      if (!res.ok) return { assets: [], literature: [] };
+      if (!res.ok) return { assets: [], literature: [], noResults: true };
       return res.json();
     },
     enabled: !!id,
@@ -505,7 +505,7 @@ export default function ConceptDetail() {
           )}
         </div>
 
-        {landscapeData && (landscapeData.assets.length > 0 || landscapeData.literature.length > 0) && (
+        {landscapeData && !landscapeData.noResults && (landscapeData.assets.length > 0 || landscapeData.literature.length > 0) && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
