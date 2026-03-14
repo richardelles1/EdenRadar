@@ -21,12 +21,12 @@ const MODALITIES = [
   "Antibody", "ADC", "PROTAC", "Diagnostic", "Device", "Digital", "Other",
 ];
 
-const STAGES = ["idea", "literature_review", "preliminary_data", "proof_of_concept"];
-const STAGE_LABELS: Record<string, string> = {
-  idea: "Stage 1 — Concept Idea",
-  literature_review: "Stage 2 — Literature Review",
-  preliminary_data: "Stage 3 — Preliminary Data",
-  proof_of_concept: "Stage 4 — Proof of Concept",
+const STAGES = [1, 2, 3, 4];
+const STAGE_LABELS: Record<number, string> = {
+  1: "Stage 1 — Concept Idea",
+  2: "Stage 2 — Literature Review",
+  3: "Stage 3 — Preliminary Data",
+  4: "Stage 4 — Proof of Concept",
 };
 
 const SEEKING_OPTIONS = [
@@ -46,13 +46,13 @@ export default function SubmitConcept() {
   const [submitterName, setSubmitterName] = useState("");
   const [submitterAffiliation, setSubmitterAffiliation] = useState("");
   const [oneLiner, setOneLiner] = useState("");
-  const [therapyArea, setTherapyArea] = useState("");
+  const [therapeuticArea, setTherapeuticArea] = useState("");
   const [modality, setModality] = useState("Other");
-  const [stage, setStage] = useState("idea");
+  const [stage, setStage] = useState(1);
 
   // Step 2 — science
   const [hypothesis, setHypothesis] = useState("");
-  const [problemStatement, setProblemStatement] = useState("");
+  const [problem, setProblem] = useState("");
   const [proposedApproach, setProposedApproach] = useState("");
 
   // Step 3 — collaboration needs
@@ -66,10 +66,10 @@ export default function SubmitConcept() {
   }
 
   function step1Valid() {
-    return title && submitterName && oneLiner && therapyArea;
+    return title && submitterName && oneLiner && therapeuticArea;
   }
   function step2Valid() {
-    return problemStatement && proposedApproach;
+    return problem && proposedApproach;
   }
 
   const mutation = useMutation({
@@ -87,11 +87,11 @@ export default function SubmitConcept() {
           submitterAffiliation: submitterAffiliation || null,
           oneLiner,
           hypothesis: hypothesis || null,
-          problemStatement,
+          problem,
           proposedApproach,
           requiredExpertise: requiredExpertise || null,
           seeking: seeking.length > 0 ? seeking : null,
-          therapyArea,
+          therapeuticArea,
           modality,
           stage,
           status: "active",
@@ -201,7 +201,7 @@ export default function SubmitConcept() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label>Therapy Area <span className="text-red-500">*</span></Label>
-              <Select value={therapyArea} onValueChange={setTherapyArea}>
+              <Select value={therapeuticArea} onValueChange={setTherapeuticArea}>
                 <SelectTrigger data-testid="select-therapy-area">
                   <SelectValue placeholder="Select area" />
                 </SelectTrigger>
@@ -229,13 +229,13 @@ export default function SubmitConcept() {
 
             <div className="space-y-2">
               <Label>Stage</Label>
-              <Select value={stage} onValueChange={setStage}>
+              <Select value={String(stage)} onValueChange={(v) => setStage(parseInt(v))}>
                 <SelectTrigger data-testid="select-stage">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {STAGES.map((s) => (
-                    <SelectItem key={s} value={s}>{STAGE_LABELS[s]}</SelectItem>
+                    <SelectItem key={s} value={String(s)}>{STAGE_LABELS[s]}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -277,8 +277,8 @@ export default function SubmitConcept() {
             <Textarea
               id="problem"
               placeholder="What unmet need or gap does this concept address?"
-              value={problemStatement}
-              onChange={(e) => setProblemStatement(e.target.value)}
+              value={problem}
+              onChange={(e) => setProblem(e.target.value)}
               rows={3}
               data-testid="input-problem-statement"
             />

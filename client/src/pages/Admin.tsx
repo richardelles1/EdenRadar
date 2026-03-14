@@ -1531,30 +1531,30 @@ function ConceptQueue({ pw }: { pw: string }) {
               <h3 className="font-semibold text-foreground text-sm">{c.title}</h3>
               <p className="text-xs text-muted-foreground mt-0.5">{c.oneLiner}</p>
             </div>
-            {c.aiCredibilityScore !== null && (
+            {c.credibilityScore !== null && (
               <span className={`shrink-0 inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                c.aiCredibilityScore >= 70
+                c.credibilityScore >= 70
                   ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                  : c.aiCredibilityScore >= 40
+                  : c.credibilityScore >= 40
                     ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                     : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
               }`}>
                 <Sparkles className="w-3 h-3" />
-                {c.aiCredibilityScore}/100
+                {c.credibilityScore}/100
               </span>
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">{c.therapyArea}</span>
+            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">{c.therapeuticArea}</span>
             <span className="px-2 py-0.5 rounded-full bg-muted font-medium">{c.modality}</span>
-            <span className="px-2 py-0.5 rounded-full bg-muted font-medium capitalize">{c.stage?.replace(/_/g, " ")}</span>
+            <span className="px-2 py-0.5 rounded-full bg-muted font-medium">Stage {c.stage}</span>
             <span>by {c.submitterName}</span>
             <span className="ml-auto">
             {((c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0))} interest · {new Date(c.createdAt).toLocaleDateString()}
           </span>
           </div>
-          {c.aiCredibilityRationale && (
-            <p className="text-xs text-muted-foreground italic mt-2 border-t border-border pt-2">AI: {c.aiCredibilityRationale}</p>
+          {c.credibilityRationale && (
+            <p className="text-xs text-muted-foreground italic mt-2 border-t border-border pt-2">AI: {c.credibilityRationale}</p>
           )}
         </div>
       ))}

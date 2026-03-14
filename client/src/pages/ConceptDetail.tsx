@@ -208,13 +208,13 @@ export default function ConceptDetail() {
             <p className="text-sm text-muted-foreground mt-1">{c.oneLiner}</p>
             <div className="flex flex-wrap items-center gap-2 mt-3">
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                {c.therapyArea}
+                {c.therapeuticArea}
               </span>
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                 {c.modality}
               </span>
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
-                {({ idea: "Stage 1", literature_review: "Stage 2", preliminary_data: "Stage 3", proof_of_concept: "Stage 4" } as Record<string, string>)[c.stage ?? ""] ?? c.stage?.replace(/_/g, " ")}
+                {({ 1: "Stage 1", 2: "Stage 2", 3: "Stage 3", 4: "Stage 4" } as Record<number, string>)[c.stage] ?? `Stage ${c.stage}`}
               </span>
               <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
                 <Clock className="w-3 h-3" />
@@ -226,22 +226,22 @@ export default function ConceptDetail() {
 
         {/* AI Score + core content */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
-          {c.aiCredibilityScore !== null && (
+          {c.credibilityScore !== null && (
             <div className="md:col-span-1 border border-border rounded-xl bg-card p-5 flex flex-col items-center">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                 AI Credibility
               </div>
-              <ScoreRing score={c.aiCredibilityScore} />
-              {c.aiCredibilityRationale && (
+              <ScoreRing score={c.credibilityScore} />
+              {c.credibilityRationale && (
                 <p className="text-xs text-muted-foreground text-center mt-3 italic">
-                  {c.aiCredibilityRationale}
+                  {c.credibilityRationale}
                 </p>
               )}
             </div>
           )}
 
-          <div className={`${c.aiCredibilityScore !== null ? "md:col-span-2" : "md:col-span-3"} space-y-4`}>
+          <div className={`${c.credibilityScore !== null ? "md:col-span-2" : "md:col-span-3"} space-y-4`}>
             {c.hypothesis && (
               <div className="border border-border rounded-xl bg-card p-5">
                 <div className="flex items-center gap-2 mb-2">
@@ -259,7 +259,7 @@ export default function ConceptDetail() {
                 <h3 className="font-semibold text-sm text-foreground">Problem Statement</h3>
               </div>
               <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-problem-statement">
-                {c.problemStatement}
+                {c.problem}
               </p>
             </div>
 

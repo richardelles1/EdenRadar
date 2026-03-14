@@ -2063,20 +2063,8 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // Canonical field alias map for conceptCards API responses
-  // Maps DB column names → spec-required field names without altering the production schema
-  const STAGE_NUMBER: Record<string, number> = { idea: 1, literature_review: 2, preliminary_data: 3, proof_of_concept: 4 };
-  function canonicalizeConcept(c: Record<string, any>) {
-    return {
-      ...c,
-      // Canonical aliases expected by spec
-      userId: c.submitterId ?? null,
-      problem: c.problemStatement ?? null,
-      therapeuticArea: c.therapyArea ?? null,
-      stageNumber: STAGE_NUMBER[c.stage ?? ""] ?? null,
-      credibilityScore: c.aiCredibilityScore ?? null,
-    };
-  }
+  // Pass-through — schema now uses canonical field names directly
+  function canonicalizeConcept(c: Record<string, any>) { return c; }
 
   app.get("/api/discovery/concepts", async (req, res) => {
     try {
@@ -2119,7 +2107,7 @@ If a field cannot be determined, use "N/A".`
     try {
       const parsed = insertConceptCardSchema.parse({
         ...req.body,
-        submitterId: req.headers["x-concept-user-id"] as string,
+        userId: req.headers["x-concept-user-id"] as string,
       });
 
       let aiScore: number | null = null;
@@ -2137,7 +2125,7 @@ If a field cannot be determined, use "N/A".`
             },
             {
               role: "user",
-              content: `Title: ${parsed.title}\nOne-liner: ${parsed.oneLiner}\nHypothesis: ${parsed.hypothesis ?? "N/A"}\nProblem: ${parsed.problemStatement}\nApproach: ${parsed.proposedApproach}\nTherapy Area: ${parsed.therapyArea}\nModality: ${parsed.modality}\nRequired Expertise: ${parsed.requiredExpertise ?? "N/A"}`,
+              content: `Title: ${parsed.title}\nOne-liner: ${parsed.oneLiner}\nHypothesis: ${parsed.hypothesis ?? "N/A"}\nProblem: ${parsed.problem}\nApproach: ${parsed.proposedApproach}\nTherapy Area: ${parsed.therapeuticArea}\nModality: ${parsed.modality}\nRequired Expertise: ${parsed.requiredExpertise ?? "N/A"}`,
             },
           ],
           response_format: { type: "json_object" },
@@ -2153,8 +2141,8 @@ If a field cannot be determined, use "N/A".`
         .insert(conceptCards)
         .values({
           ...parsed,
-          aiCredibilityScore: aiScore,
-          aiCredibilityRationale: aiRationale,
+          credibilityScore: aiScore,
+          credibilityRationale: aiRationale,
         })
         .returning();
 
@@ -2193,9 +2181,9 @@ If a field cannot be determined, use "N/A".`
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!concept) return res.status(404).json({ error: "Not found" });
-      const therapyArea = concept.therapyArea?.toLowerCase() ?? "";
+      const therapyArea = concept.therapeuticArea?.toLowerCase() ?? "";
       const searchSlug = therapyArea.substring(0, 10);
-      // Build literature search term from concept title + hypothesis + therapy area for maximum relevance
+      // Build literature search term from concept title + hypothesis + therapeuticArea for maximum relevance
       const titleTerms = (concept.title ?? "").split(/\s+/).filter(w => w.length > 4).slice(0, 3).join(" ");
       const hypothesisTerms = (concept.hypothesis ?? "").split(/\s+/).filter(w => w.length > 5).slice(0, 3).join(" ");
       const litSearchTerms = [titleTerms, hypothesisTerms, therapyArea].filter(Boolean).join(" ");

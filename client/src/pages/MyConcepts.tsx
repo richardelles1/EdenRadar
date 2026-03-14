@@ -13,7 +13,7 @@ export default function MyConcepts() {
   });
 
   const myConcepts = (data?.concepts ?? []).filter(
-    (c) => c.submitterId === user?.id
+    (c) => c.userId === user?.id
   );
 
   return (
@@ -71,23 +71,23 @@ export default function MyConcepts() {
                     <h3 className="font-semibold text-foreground text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
                       {c.title}
                     </h3>
-                    {c.aiCredibilityScore !== null && (
+                    {c.credibilityScore !== null && (
                       <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
-                        c.aiCredibilityScore >= 70
+                        c.credibilityScore >= 70
                           ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                          : c.aiCredibilityScore >= 40
+                          : c.credibilityScore >= 40
                             ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
                             : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
                       }`}>
                         <Sparkles className="w-3 h-3" />
-                        {c.aiCredibilityScore}/100
+                        {c.credibilityScore}/100
                       </span>
                     )}
                   </div>
                   <p className="text-sm text-muted-foreground line-clamp-1 mb-3">{c.oneLiner}</p>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
-                      {c.therapyArea}
+                      {c.therapeuticArea}
                     </span>
                     {c.seeking && c.seeking.length > 0 && (
                       <span className="text-amber-600 dark:text-amber-400">

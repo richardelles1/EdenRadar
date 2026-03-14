@@ -380,21 +380,21 @@ export type ConvergenceSignal = typeof convergenceSignals.$inferSelect;
 
 export const conceptCards = pgTable("concept_cards", {
   id: serial("id").primaryKey(),
-  submitterId: text("submitter_id").notNull(),
+  userId: text("user_id").notNull(),
   submitterName: text("submitter_name").notNull(),
   submitterAffiliation: text("submitter_affiliation"),
   title: text("title").notNull(),
   oneLiner: text("one_liner").notNull(),
   hypothesis: text("hypothesis"),
-  problemStatement: text("problem_statement").notNull(),
+  problem: text("problem").notNull(),
   proposedApproach: text("proposed_approach").notNull(),
   requiredExpertise: text("required_expertise"),
   seeking: jsonb("seeking").$type<string[]>(),
-  therapyArea: text("therapy_area").notNull(),
+  therapeuticArea: text("therapeutic_area").notNull(),
   modality: text("modality").notNull().default("unknown"),
-  stage: text("stage").notNull().default("idea"),
-  aiCredibilityScore: integer("ai_credibility_score"),
-  aiCredibilityRationale: text("ai_credibility_rationale"),
+  stage: integer("stage").notNull().default(1),
+  credibilityScore: integer("credibility_score"),
+  credibilityRationale: text("credibility_rationale"),
   interestCollaborating: integer("interest_collaborating").notNull().default(0),
   interestFunding: integer("interest_funding").notNull().default(0),
   interestAdvising: integer("interest_advising").notNull().default(0),
@@ -404,12 +404,14 @@ export const conceptCards = pgTable("concept_cards", {
 
 export const insertConceptCardSchema = createInsertSchema(conceptCards).omit({
   id: true,
-  aiCredibilityScore: true,
-  aiCredibilityRationale: true,
+  credibilityScore: true,
+  credibilityRationale: true,
   interestCollaborating: true,
   interestFunding: true,
   interestAdvising: true,
   createdAt: true,
+}).extend({
+  stage: z.number().int().min(1).max(4),
 });
 export type InsertConceptCard = z.infer<typeof insertConceptCardSchema>;
 export type ConceptCard = typeof conceptCards.$inferSelect;

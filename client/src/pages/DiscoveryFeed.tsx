@@ -16,17 +16,17 @@ const THERAPY_AREAS = [
 
 const STAGE_OPTIONS = [
   { value: "all", label: "All Stages" },
-  { value: "idea", label: "Stage 1 — Concept Idea" },
-  { value: "literature_review", label: "Stage 2 — Literature Review" },
-  { value: "preliminary_data", label: "Stage 3 — Preliminary Data" },
-  { value: "proof_of_concept", label: "Stage 4 — Proof of Concept" },
+  { value: "1", label: "Stage 1 — Concept Idea" },
+  { value: "2", label: "Stage 2 — Literature Review" },
+  { value: "3", label: "Stage 3 — Preliminary Data" },
+  { value: "4", label: "Stage 4 — Proof of Concept" },
 ];
 
-const STAGE_LABEL: Record<string, string> = {
-  idea: "Stage 1",
-  literature_review: "Stage 2",
-  preliminary_data: "Stage 3",
-  proof_of_concept: "Stage 4",
+const STAGE_LABEL: Record<number, string> = {
+  1: "Stage 1",
+  2: "Stage 2",
+  3: "Stage 3",
+  4: "Stage 4",
 };
 
 function ScoreBadge({ score }: { score: number | null }) {
@@ -115,8 +115,8 @@ export default function DiscoveryFeed() {
 
   const allConcepts = data?.concepts ?? [];
   const concepts = allConcepts.filter((c) => {
-    const areaMatch = filterArea === "All Areas" || c.therapyArea === filterArea;
-    const stageMatch = filterStage === "all" || c.stage === filterStage;
+    const areaMatch = filterArea === "All Areas" || c.therapeuticArea === filterArea;
+    const stageMatch = filterStage === "all" || String(c.stage) === filterStage;
     return areaMatch && stageMatch;
   });
 
@@ -224,12 +224,12 @@ export default function DiscoveryFeed() {
                           {c.oneLiner}
                         </p>
                       </div>
-                      <ScoreBadge score={c.aiCredibilityScore} />
+                      <ScoreBadge score={c.credibilityScore} />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
-                        {c.therapyArea}
+                        {c.therapeuticArea}
                       </span>
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                         {c.modality}
@@ -263,9 +263,9 @@ export default function DiscoveryFeed() {
                       </div>
                     )}
 
-                    {c.aiCredibilityRationale && (
+                    {c.credibilityRationale && (
                       <p className="mt-3 text-xs text-muted-foreground italic border-t border-border pt-2">
-                        AI: {c.aiCredibilityRationale}
+                        AI: {c.credibilityRationale}
                       </p>
                     )}
                   </div>
