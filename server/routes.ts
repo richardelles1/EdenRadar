@@ -439,6 +439,20 @@ export async function registerRoutes(
       }
 
       return res.json({
+        assetRecord: enrichedRecord
+          ? {
+              id: enrichedRecord.id,
+              fingerprint: enrichedRecord.fingerprint,
+              assetName: enrichedRecord.assetName,
+              target: enrichedRecord.target,
+              modality: enrichedRecord.modality,
+              indication: enrichedRecord.indication,
+              developmentStage: enrichedRecord.developmentStage,
+              institution: enrichedRecord.institution,
+              summary: enrichedRecord.summary,
+              sourceUrl: enrichedRecord.sourceUrl,
+            }
+          : null,
         enriched: enrichedRecord
           ? {
               mechanismOfAction: enrichedRecord.mechanismOfAction,

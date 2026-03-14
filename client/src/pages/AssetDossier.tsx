@@ -32,6 +32,18 @@ const SOURCE_BADGE_COLORS: Record<string, string> = {
 };
 
 type IntelligenceData = {
+  assetRecord: {
+    id: number;
+    fingerprint: string;
+    assetName: string;
+    target: string;
+    modality: string;
+    indication: string;
+    developmentStage: string;
+    institution: string;
+    summary: string;
+    sourceUrl: string | null;
+  } | null;
   enriched: {
     mechanismOfAction: string | null;
     abstract: string | null;
@@ -123,15 +135,6 @@ export default function AssetDossier() {
 
   const fingerprint = sessionStorage.getItem(`asset-fingerprint-${id}`) ?? id;
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem(`asset-${id}`);
-    if (stored) {
-      try {
-        setAsset(JSON.parse(stored));
-      } catch {}
-    }
-  }, [id]);
-
   const { data: intelligence, isLoading: intelLoading, isError: intelError } = useQuery<IntelligenceData>({
     queryKey: ["/api/assets", fingerprint, "intelligence"],
     queryFn: () =>
@@ -142,6 +145,43 @@ export default function AssetDossier() {
     enabled: !!fingerprint,
     staleTime: 5 * 60 * 1000,
   });
+
+  useEffect(() => {
+    const stored = sessionStorage.getItem(`asset-${id}`);
+    if (stored) {
+      try {
+        setAsset(JSON.parse(stored));
+        return;
+      } catch {}
+    }
+    if (intelligence?.enriched && intelligence.assetRecord) {
+      const rec = intelligence.assetRecord;
+      setAsset({
+        id: rec.fingerprint ?? String(rec.id),
+        asset_name: rec.assetName ?? "Unnamed Asset",
+        target: rec.target ?? "unknown",
+        modality: rec.modality ?? "unknown",
+        indication: rec.indication ?? "unknown",
+        development_stage: rec.developmentStage ?? "unknown",
+        owner_name: rec.institution ?? "unknown",
+        owner_type: "university",
+        institution: rec.institution ?? "unknown",
+        patent_status: intelligence.enriched.patentStatus ?? "unknown",
+        licensing_status: intelligence.enriched.licensingStatus ?? "unknown",
+        summary: rec.summary ?? "",
+        why_it_matters: "",
+        evidence_count: 0,
+        source_types: ["tech_transfer"],
+        source_urls: rec.sourceUrl ? [rec.sourceUrl] : [],
+        latest_signal_date: "",
+        score: 0,
+        score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+        matching_tags: [],
+        confidence: "low",
+        signals: [],
+      });
+    }
+  }, [id, intelligence]);
 
   const dossierMutation = useMutation({
     mutationFn: async (a: ScoredAsset) => {
@@ -160,6 +200,19 @@ export default function AssetDossier() {
       toast({ title: "Dossier failed", description: err.message, variant: "destructive" });
     },
   });
+
+  if (!asset && intelLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Nav />
+        <div className="max-w-4xl mx-auto px-4 py-16 space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-48 w-full rounded-xl" />
+          <Skeleton className="h-32 w-full rounded-xl" />
+        </div>
+      </div>
+    );
+  }
 
   if (!asset) {
     return (
@@ -417,6 +470,13 @@ export default function AssetDossier() {
                 </div>
               )}
 
+              {!intelLoading && !intelError && intelligence && (intelligence.competingAssets?.length ?? 0) === 0 && (
+                <div className="rounded-xl border border-card-border bg-card p-5 text-center" data-testid="competing-assets-empty">
+                  <Swords className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
+                  <p className="text-xs text-muted-foreground">No competing assets identified yet.</p>
+                </div>
+              )}
+
               {intelLoading && (
                 <div className="space-y-3" data-testid="intelligence-loading">
                   <Skeleton className="h-32 w-full rounded-xl" />
@@ -471,6 +531,13 @@ export default function AssetDossier() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {!intelLoading && !intelError && intelligence && (intelligence.literature?.length ?? 0) === 0 && (
+                <div className="rounded-xl border border-card-border bg-card p-5 text-center" data-testid="literature-empty">
+                  <GraduationCap className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
+                  <p className="text-xs text-muted-foreground">No supporting literature found yet.</p>
                 </div>
               )}
 
