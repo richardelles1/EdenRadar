@@ -10,4 +10,14 @@ export interface ScrapedListing {
 export interface InstitutionScraper {
   institution: string;
   scrape(): Promise<ScrapedListing[]>;
+  probe?(maxResults?: number): Promise<ScrapedListing[]>;
+}
+
+export async function runProbe(scraper: InstitutionScraper, maxResults = 3): Promise<ScrapedListing[]> {
+  if (scraper.probe) {
+    const results = await scraper.probe(maxResults);
+    return results.slice(0, maxResults);
+  }
+  const results = await scraper.scrape();
+  return results.slice(0, maxResults);
 }

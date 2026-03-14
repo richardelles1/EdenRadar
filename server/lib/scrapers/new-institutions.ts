@@ -19,6 +19,27 @@ const IN_PART_LIMIT = 24;
 function createInPartScraper(subdomain: string, institution: string): InstitutionScraper {
   return {
     institution,
+    async probe(maxResults = 3): Promise<ScrapedListing[]> {
+      const portalBase = `https://${subdomain}.portals.in-part.com`;
+      const url = `${IN_PART_API}?portalSubdomain=${subdomain}&page=1&limit=${maxResults}`;
+      try {
+        const res = await fetch(url, {
+          headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+          signal: AbortSignal.timeout(8_000),
+        });
+        if (!res.ok) throw new Error(`API HTTP ${res.status}`);
+        const data = await res.json();
+        const results: any[] = data?.data?.results ?? data?.results ?? [];
+        return results.slice(0, maxResults).map((r: any) => ({
+          title: (r.title ?? "").trim(),
+          description: "",
+          url: `${portalBase}/${r.idHash ?? r.id ?? ""}`,
+          institution,
+        })).filter((r: ScrapedListing) => r.title.length > 0);
+      } catch {
+        return [];
+      }
+    },
     async scrape(): Promise<ScrapedListing[]> {
       const portalBase = `https://${subdomain}.portals.in-part.com`;
 

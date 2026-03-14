@@ -15,6 +15,7 @@ import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
 import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
+import { runProbe } from "./lib/scrapers/types";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { verifyResearcherAuth } from "./lib/supabaseAuth";
 import type { RawSignal } from "./lib/types";
@@ -454,6 +455,7 @@ export async function registerRoutes(
     res.flushHeaders();
 
     const PING_TIMEOUT_MS = 10_000;
+    const PROBE_MAX_RESULTS = 3;
     const CONCURRENCY = 5;
 
     let idx = 0;
@@ -464,7 +466,7 @@ export async function registerRoutes(
         const start = Date.now();
         try {
           const raw = await Promise.race([
-            scraper.scrape(),
+            runProbe(scraper, PROBE_MAX_RESULTS),
             new Promise<never>((_, reject) =>
               setTimeout(() => reject(new Error("timeout")), PING_TIMEOUT_MS)
             ),
