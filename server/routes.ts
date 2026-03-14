@@ -2114,7 +2114,7 @@ If a field cannot be determined, use "N/A".`
             },
             {
               role: "user",
-              content: `Title: ${parsed.title}\nOne-liner: ${parsed.oneLiner}\nProblem: ${parsed.problemStatement}\nApproach: ${parsed.proposedApproach}\nTherapy Area: ${parsed.therapyArea}\nModality: ${parsed.modality}`,
+              content: `Title: ${parsed.title}\nOne-liner: ${parsed.oneLiner}\nHypothesis: ${parsed.hypothesis ?? "N/A"}\nProblem: ${parsed.problemStatement}\nApproach: ${parsed.proposedApproach}\nTherapy Area: ${parsed.therapyArea}\nModality: ${parsed.modality}\nRequired Expertise: ${parsed.requiredExpertise ?? "N/A"}`,
             },
           ],
           response_format: { type: "json_object" },
@@ -2145,13 +2145,52 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const type = (req.body?.type as string) || "collaborating";
+      const colMap: Record<string, any> = {
+        collaborating: { interestCollaborating: sql`${conceptCards.interestCollaborating} + 1` },
+        funding: { interestFunding: sql`${conceptCards.interestFunding} + 1` },
+        advising: { interestAdvising: sql`${conceptCards.interestAdvising} + 1` },
+      };
+      const updateSet = colMap[type] ?? colMap.collaborating;
       const [updated] = await db
         .update(conceptCards)
-        .set({ interestCount: sql`${conceptCards.interestCount} + 1` })
+        .set(updateSet)
         .where(eq(conceptCards.id, id))
         .returning();
       if (!updated) return res.status(404).json({ error: "Concept not found" });
       res.json({ concept: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts/:id/landscape", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Not found" });
+      const therapyArea = concept.therapyArea?.toLowerCase() ?? "";
+      const related = await db
+        .select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          institution: ingestedAssets.institution,
+          modality: ingestedAssets.modality,
+          developmentStage: ingestedAssets.developmentStage,
+          target: ingestedAssets.target,
+          sourceUrl: ingestedAssets.sourceUrl,
+        })
+        .from(ingestedAssets)
+        .where(
+          and(
+            eq(ingestedAssets.relevant, true),
+            sql`lower(${ingestedAssets.indication}) like ${"%" + therapyArea.substring(0, 8) + "%"}`
+          )
+        )
+        .orderBy(desc(ingestedAssets.firstSeenAt))
+        .limit(8);
+      res.json({ assets: related });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

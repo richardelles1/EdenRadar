@@ -30,6 +30,7 @@ import SubmitConcept from "@/pages/SubmitConcept";
 import ConceptDetail from "@/pages/ConceptDetail";
 import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
+import DiscoveryProfile from "@/pages/DiscoveryProfile";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -173,6 +174,11 @@ function Router() {
       <Route path="/discovery/my-concepts">
         <DiscoveryLayout>
           <MyConcepts />
+        </DiscoveryLayout>
+      </Route>
+      <Route path="/discovery/profile">
+        <DiscoveryLayout>
+          <DiscoveryProfile />
         </DiscoveryLayout>
       </Route>
 

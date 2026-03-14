@@ -13,7 +13,6 @@ import {
   TrendingUp,
   Clock,
   ArrowLeft,
-  ThumbsUp,
   Loader2,
   Target,
   Beaker,
@@ -21,37 +20,27 @@ import {
   Moon,
   Sun,
   ArrowRight,
+  Users,
+  DollarSign,
+  GraduationCap,
+  ExternalLink,
+  Building2,
+  FlaskConical,
 } from "lucide-react";
 
 function ScoreRing({ score }: { score: number }) {
   const radius = 36;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
-  const color =
-    score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
+  const color = score >= 70 ? "#22c55e" : score >= 40 ? "#f59e0b" : "#ef4444";
 
   return (
     <div className="relative w-24 h-24 flex items-center justify-center">
       <svg className="w-24 h-24 -rotate-90" viewBox="0 0 80 80">
+        <circle cx="40" cy="40" r={radius} fill="none" stroke="currentColor" className="text-border" strokeWidth="5" />
         <circle
-          cx="40"
-          cy="40"
-          r={radius}
-          fill="none"
-          stroke="currentColor"
-          className="text-border"
-          strokeWidth="5"
-        />
-        <circle
-          cx="40"
-          cy="40"
-          r={radius}
-          fill="none"
-          stroke={color}
-          strokeWidth="5"
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={offset}
+          cx="40" cy="40" r={radius} fill="none" stroke={color} strokeWidth="5"
+          strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
           style={{ transition: "stroke-dashoffset 0.8s ease" }}
         />
       </svg>
@@ -99,6 +88,12 @@ function DiscoveryDetailNav() {
   );
 }
 
+const INTEREST_TYPES = [
+  { id: "collaborating", label: "Collaborate", icon: Users, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10 border-violet-500/30 hover:border-violet-500/60" },
+  { id: "funding", label: "Fund", icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-500/10 border-green-500/30 hover:border-green-500/60" },
+  { id: "advising", label: "Advise", icon: GraduationCap, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60" },
+] as const;
+
 export default function ConceptDetail() {
   const [, params] = useRoute("/discovery/concept/:id");
   const id = params?.id;
@@ -115,8 +110,24 @@ export default function ConceptDetail() {
     enabled: !!id,
   });
 
+  type LandscapeAsset = {
+    id: number; assetName: string; institution: string;
+    modality: string; developmentStage: string; target: string; sourceUrl: string | null;
+  };
+
+  const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[] }>({
+    queryKey: ["/api/discovery/concepts", id, "landscape"],
+    queryFn: async () => {
+      const res = await fetch(`/api/discovery/concepts/${id}/landscape`);
+      if (!res.ok) return { assets: [] };
+      return res.json();
+    },
+    enabled: !!id,
+    staleTime: Infinity,
+  });
+
   const interestMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (type: string) => {
       const token = (await supabase.auth.getSession()).data.session?.access_token;
       const res = await fetch(`/api/discovery/concepts/${id}/interest`, {
         method: "PATCH",
@@ -124,6 +135,7 @@ export default function ConceptDetail() {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
+        body: JSON.stringify({ type }),
       });
       if (!res.ok) {
         const body = await res.text();
@@ -131,10 +143,11 @@ export default function ConceptDetail() {
       }
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_, type) => {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts", id] });
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts"] });
-      toast({ title: "Interest registered!" });
+      const label = INTEREST_TYPES.find((t) => t.id === type)?.label ?? "Interest";
+      toast({ title: `${label} interest registered!` });
     },
     onError: (err: Error) => {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
@@ -165,6 +178,8 @@ export default function ConceptDetail() {
     );
   }
 
+  const totalInterest = (c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0);
+
   return (
     <div className="min-h-screen bg-background">
       <DiscoveryDetailNav />
@@ -177,6 +192,7 @@ export default function ConceptDetail() {
           </div>
         </Link>
 
+        {/* Header */}
         <div className="flex items-start gap-4 mb-6">
           <div className="w-11 h-11 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-1">
             <Lightbulb className="w-6 h-6 text-amber-500" />
@@ -204,7 +220,8 @@ export default function ConceptDetail() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        {/* AI Score + core content */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
           {c.aiCredibilityScore !== null && (
             <div className="md:col-span-1 border border-border rounded-xl bg-card p-5 flex flex-col items-center">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
@@ -221,6 +238,17 @@ export default function ConceptDetail() {
           )}
 
           <div className={`${c.aiCredibilityScore !== null ? "md:col-span-2" : "md:col-span-3"} space-y-4`}>
+            {c.hypothesis && (
+              <div className="border border-border rounded-xl bg-card p-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <FlaskConical className="w-4 h-4 text-amber-500" />
+                  <h3 className="font-semibold text-sm text-foreground">Hypothesis</h3>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-hypothesis">
+                  {c.hypothesis}
+                </p>
+              </div>
+            )}
             <div className="border border-border rounded-xl bg-card p-5">
               <div className="flex items-center gap-2 mb-2">
                 <Target className="w-4 h-4 text-amber-500" />
@@ -243,46 +271,124 @@ export default function ConceptDetail() {
           </div>
         </div>
 
-        <div className="flex items-center justify-between border border-border rounded-xl bg-card p-4">
-          <div className="flex items-center gap-3">
-            <TrendingUp className="w-4 h-4 text-muted-foreground" />
-            <span className="text-sm text-muted-foreground">
-              <span className="font-semibold text-foreground" data-testid="text-interest-count">{c.interestCount}</span>{" "}
-              people interested
-            </span>
+        {/* Seeking & Expertise */}
+        {(c.seeking?.length || c.requiredExpertise) && (
+          <div className="border border-border rounded-xl bg-card p-5 mb-5">
+            <h3 className="font-semibold text-sm text-foreground mb-3">Collaboration Profile</h3>
+            {c.seeking && c.seeking.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {c.seeking.map((s) => (
+                  <span key={s} className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-medium capitalize">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
+            {c.requiredExpertise && (
+              <p className="text-sm text-muted-foreground leading-relaxed" data-testid="text-required-expertise">
+                <span className="font-medium text-foreground">Required expertise: </span>
+                {c.requiredExpertise}
+              </p>
+            )}
           </div>
-          {session ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-              onClick={() => interestMutation.mutate()}
-              disabled={interestMutation.isPending}
-              data-testid="button-express-interest"
-            >
-              {interestMutation.isPending ? (
-                <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
-              ) : (
-                <ThumbsUp className="w-4 h-4 mr-1.5" />
-              )}
-              I'm Interested
-            </Button>
-          ) : (
-            <Link href="/discovery/join">
-              <Button
-                variant="outline"
-                size="sm"
-                className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
-                data-testid="button-join-to-interest"
-              >
-                Join to Express Interest
-              </Button>
-            </Link>
+        )}
+
+        {/* Collaboration interest buttons */}
+        <div className="border border-border rounded-xl bg-card p-5 mb-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">
+                <span data-testid="text-interest-count">{totalInterest}</span> total interest signals
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mb-3">
+            {INTEREST_TYPES.map(({ id: tid, label, icon: Icon, color, bg }) => {
+              const countKey = `interest${tid.charAt(0).toUpperCase() + tid.slice(1)}` as keyof ConceptCard;
+              const count = (c[countKey] as number) ?? 0;
+              return (
+                <div key={tid} className="text-center">
+                  <div className={`text-lg font-bold ${color}`} data-testid={`count-interest-${tid}`}>{count}</div>
+                  <div className="text-xs text-muted-foreground mb-2">{label}</div>
+                  {session ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className={`w-full text-xs border ${bg} ${color}`}
+                      onClick={() => interestMutation.mutate(tid)}
+                      disabled={interestMutation.isPending}
+                      data-testid={`button-interest-${tid}`}
+                    >
+                      {interestMutation.isPending && interestMutation.variables === tid ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Icon className="w-3 h-3 mr-1" />
+                      )}
+                      {label}
+                    </Button>
+                  ) : null}
+                </div>
+              );
+            })}
+          </div>
+
+          {!session && (
+            <div className="text-center pt-2 border-t border-border">
+              <Link href="/discovery/join">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+                  data-testid="button-join-to-interest"
+                >
+                  Join to Express Interest
+                </Button>
+              </Link>
+            </div>
           )}
         </div>
 
+        {/* AI Landscape Intelligence */}
+        {landscapeData && landscapeData.assets.length > 0 && (
+          <div className="border border-border rounded-xl bg-card p-5 mb-5">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
+                <Sparkles className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-sm text-foreground">AI Landscape Intelligence</h3>
+                <p className="text-xs text-muted-foreground">Related assets from institutional TTO portfolios</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {landscapeData.assets.map((asset) => (
+                <div key={asset.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors" data-testid={`landscape-asset-${asset.id}`}>
+                  <Building2 className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground line-clamp-1">{asset.assetName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {asset.institution} · {asset.modality} · {asset.developmentStage}
+                    </p>
+                  </div>
+                  {asset.sourceUrl && (
+                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" data-testid={`link-landscape-asset-${asset.id}`}>
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  )}
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3 italic">
+              Sourced from EdenRadar's institutional TTO database. These are not affiliated with this concept.
+            </p>
+          </div>
+        )}
+
         <p className="text-xs text-muted-foreground mt-4">
           Submitted by {c.submitterName}
+          {c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}
         </p>
       </div>
     </div>

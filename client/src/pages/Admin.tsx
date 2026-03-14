@@ -1549,7 +1549,9 @@ function ConceptQueue({ pw }: { pw: string }) {
             <span className="px-2 py-0.5 rounded-full bg-muted font-medium">{c.modality}</span>
             <span className="px-2 py-0.5 rounded-full bg-muted font-medium capitalize">{c.stage?.replace(/_/g, " ")}</span>
             <span>by {c.submitterName}</span>
-            <span className="ml-auto">{c.interestCount} interest · {new Date(c.createdAt).toLocaleDateString()}</span>
+            <span className="ml-auto">
+            {((c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0))} interest · {new Date(c.createdAt).toLocaleDateString()}
+          </span>
           </div>
           {c.aiCredibilityRationale && (
             <p className="text-xs text-muted-foreground italic mt-2 border-t border-border pt-2">AI: {c.aiCredibilityRationale}</p>

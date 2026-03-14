@@ -10,6 +10,7 @@ import {
   LogOut,
   Menu,
   X,
+  UserCircle,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: "/discovery", label: "Concept Feed", icon: Compass, exact: true },
   { href: "/discovery/my-concepts", label: "My Concepts", icon: FolderOpen },
   { href: "/discovery/submit", label: "Submit Concept", icon: PlusCircle },
+  { href: "/discovery/profile", label: "Profile", icon: UserCircle },
 ];
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
