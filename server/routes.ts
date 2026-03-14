@@ -1540,11 +1540,11 @@ export async function registerRoutes(
         while (idx < queue.length) {
           const ref = queue[idx++];
           if (!ref) continue;
-          const textContent = [ref.title, ref.notes].filter(Boolean).join("\n\n");
-          if (!textContent.trim()) {
+          const hasAbstract = !!ref.notes?.trim();
+          if (!ref.title?.trim()) {
             rows.push({
               referenceId: ref.id,
-              title: ref.title,
+              title: ref.title || "(untitled)",
               studyType: "N/A",
               sampleSize: "N/A",
               population: "N/A",
@@ -1567,7 +1567,7 @@ Title: ${ref.title}
 Source type: ${ref.sourceType}
 Date: ${ref.date || "unknown"}
 Institution: ${ref.institution || "unknown"}
-Notes/Abstract: ${ref.notes || "none provided"}
+${hasAbstract ? `Abstract/Notes: ${ref.notes}` : "Abstract: Not available — extract what you can from the title and metadata only. Use \"N/A\" for fields that cannot be determined without an abstract."}
 
 Return ONLY valid JSON with these fields:
 - studyType: the type of study (e.g., "RCT", "cohort study", "case report", "review", "in vitro", "animal model", "clinical trial", "computational", "N/A")
@@ -1643,15 +1643,16 @@ If a field cannot be determined, use "N/A".`
       const project = await storage.getResearchProject(projectId, researcherId);
       if (!project) return res.status(404).json({ error: "Project not found" });
 
-      const existing = (project.evidenceTables ?? []) as Array<any>;
-      const newTable = {
+      type EvidenceTable = NonNullable<typeof project.evidenceTables>[number];
+      const existing: EvidenceTable[] = [...(project.evidenceTables ?? [])];
+      const newTable: EvidenceTable = {
         id: crypto.randomUUID(),
         createdAt: new Date().toISOString(),
         rows,
       };
       existing.push(newTable);
 
-      await storage.updateResearchProject(projectId, researcherId, { evidenceTables: existing } as any);
+      await storage.updateResearchProject(projectId, researcherId, { evidenceTables: existing });
       res.json({ ok: true, tableId: newTable.id });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to save evidence table" });

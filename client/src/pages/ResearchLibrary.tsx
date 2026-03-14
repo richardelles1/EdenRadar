@@ -51,6 +51,7 @@ export default function ResearchLibrary() {
   const qc = useQueryClient();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [evidenceRows, setEvidenceRows] = useState<EvidenceRow[] | null>(null);
+  const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [showTable, setShowTable] = useState(false);
   const [saveProjectId, setSaveProjectId] = useState<string>("");
 
@@ -91,6 +92,10 @@ export default function ResearchLibrary() {
 
   const extractEvidence = useMutation({
     mutationFn: async (ids: number[]) => {
+      setPendingIds(new Set(ids));
+      setEvidenceRows([]);
+      setShowTable(true);
+
       const r = await fetch("/api/research/library/extract-evidence", {
         method: "POST",
         headers: { ...researcherHeaders, "Content-Type": "application/json" },
@@ -100,14 +105,17 @@ export default function ResearchLibrary() {
         const err = await r.json();
         throw new Error(err.error ?? "Extraction failed");
       }
-      return r.json() as Promise<{ rows: EvidenceRow[] }>;
+      const data = await r.json() as { rows: EvidenceRow[] };
+
+      setEvidenceRows(data.rows);
+      setPendingIds(new Set());
+      return data;
     },
     onSuccess: (data) => {
-      setEvidenceRows(data.rows);
-      setShowTable(true);
       toast({ title: `Evidence extracted from ${data.rows.length} references` });
     },
     onError: (err: any) => {
+      setPendingIds(new Set());
       toast({ title: "Evidence extraction failed", description: err.message, variant: "destructive" });
     },
   });
@@ -252,7 +260,14 @@ export default function ResearchLibrary() {
             <div className="flex items-center gap-2">
               <Table2 className="w-4 h-4 text-primary" />
               <h2 className="text-sm font-semibold text-foreground">Evidence Comparison Table</h2>
-              <Badge variant="secondary" className="text-[10px]">{evidenceRows.length} papers</Badge>
+              {pendingIds.size > 0 ? (
+                <Badge variant="secondary" className="text-[10px] gap-1">
+                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                  Analyzing {pendingIds.size} papers...
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-[10px]">{evidenceRows.length} papers</Badge>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" className="gap-1.5 text-xs" onClick={exportCsv} data-testid="button-export-csv">
@@ -322,6 +337,28 @@ export default function ResearchLibrary() {
                     </td>
                   </tr>
                 ))}
+                {pendingIds.size > 0 && Array.from(pendingIds)
+                  .filter((id) => !evidenceRows.some((r) => r.referenceId === id))
+                  .map((id) => {
+                    const ref = allRefs.find((r) => r.id === id);
+                    return (
+                      <tr key={`pending-${id}`} className="border-b border-border/50" data-testid={`evidence-row-pending-${id}`}>
+                        <td className="p-2 max-w-[180px] truncate font-medium text-foreground/60">
+                          <div className="flex items-center gap-1.5">
+                            <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
+                            <span className="truncate">{ref?.title ?? `Reference #${id}`}</span>
+                          </div>
+                        </td>
+                        <td className="p-2"><Skeleton className="h-3 w-14" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-10" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-16" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-16" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-14" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-32" /></td>
+                        <td className="p-2"><Skeleton className="h-3 w-14 rounded-full" /></td>
+                      </tr>
+                    );
+                  })}
               </tbody>
             </table>
           </div>
