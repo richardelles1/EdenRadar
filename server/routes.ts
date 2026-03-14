@@ -399,29 +399,24 @@ export async function registerRoutes(
     try {
       const dbRows = await storage.getScraperHealthData();
       const dbMap = new Map(dbRows.map((r) => [r.institution, r]));
-      const now = Date.now();
-      const STALE_MS = 48 * 60 * 60 * 1000;
 
       const rows = ALL_SCRAPERS.map((scraper) => {
         const db = dbMap.get(scraper.institution);
         const count = db?.count ?? 0;
         const lastSeenAt = db?.lastSeenAt ?? null;
-        const ageMs = lastSeenAt ? now - new Date(lastSeenAt).getTime() : null;
-        let status: "live" | "stale" | "empty" | "never";
+        let status: "live" | "empty" | "never";
         if (!db) {
           status = "never";
         } else if (count === 0) {
           status = "empty";
-        } else if (ageMs !== null && ageMs < STALE_MS) {
-          status = "live";
         } else {
-          status = "stale";
+          status = "live";
         }
         return { institution: scraper.institution, count, lastSeenAt, status };
       });
 
       rows.sort((a, b) => {
-        const order = { never: 0, empty: 1, stale: 2, live: 3 };
+        const order = { never: 0, empty: 1, live: 2 };
         return order[a.status] - order[b.status];
       });
 
