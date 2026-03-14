@@ -531,6 +531,7 @@ export default function ResearchDataSources() {
       else delete next[key];
       return next;
     });
+    setSynthesis(null);
     setPage(1);
   }
 
@@ -542,16 +543,19 @@ export default function ResearchDataSources() {
     setSelectedSources((prev) =>
       prev.includes(key) ? prev.filter((s) => s !== key) : [...prev, key]
     );
+    setSynthesis(null);
     setPage(1);
   }
 
   function selectAllSources() {
     setSelectedSources(ALL_SOURCE_KEYS);
+    setSynthesis(null);
     setPage(1);
   }
 
   function resetSources() {
     setSelectedSources(DEFAULT_SOURCE_KEYS);
+    setSynthesis(null);
     setPage(1);
   }
 
@@ -896,7 +900,8 @@ export default function ResearchDataSources() {
                         </div>
                         <div className="space-y-2">
                           {synthesis.strongest_signals.map((s, i) => {
-                            const matchedSignal = allSignals[s.index - 1];
+                            const clampedIdx = Math.max(0, Math.min(s.index - 1, allSignals.length - 1));
+                            const matchedSignal = allSignals.length > 0 ? allSignals[clampedIdx] : undefined;
                             return (
                               <div key={i} className="rounded-lg border border-border bg-accent/20 p-3 space-y-1">
                                 <div className="flex items-start gap-2">
