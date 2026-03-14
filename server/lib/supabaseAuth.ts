@@ -55,6 +55,7 @@ export async function verifyConceptAuth(
   }
 
   req.headers["x-concept-user-id"] = data.user.id;
+  req.headers["x-concept-user-email"] = data.user.email || "";
   return next();
 }
 
@@ -77,5 +78,6 @@ export async function verifyAnyAuth(
 
   req.headers["x-user-id"] = data.user.id;
   req.headers["x-user-role"] = data.user.user_metadata?.role || "";
+  req.headers["x-user-email"] = data.user.email || "";
   return next();
 }

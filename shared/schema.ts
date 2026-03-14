@@ -383,6 +383,7 @@ export const conceptCards = pgTable("concept_cards", {
   userId: text("user_id").notNull(),
   submitterName: text("submitter_name").notNull(),
   submitterAffiliation: text("submitter_affiliation"),
+  submitterEmail: text("submitter_email"),
   title: text("title").notNull(),
   oneLiner: text("one_liner").notNull(),
   hypothesis: text("hypothesis"),
@@ -415,3 +416,14 @@ export const insertConceptCardSchema = createInsertSchema(conceptCards).omit({
 });
 export type InsertConceptCard = z.infer<typeof insertConceptCardSchema>;
 export type ConceptCard = typeof conceptCards.$inferSelect;
+
+export const conceptInterests = pgTable("concept_interests", {
+  id: serial("id").primaryKey(),
+  conceptId: integer("concept_id").notNull(),
+  userId: text("user_id").notNull(),
+  userEmail: text("user_email"),
+  userName: text("user_name"),
+  type: text("type").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type ConceptInterest = typeof conceptInterests.$inferSelect;

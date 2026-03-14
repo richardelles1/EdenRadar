@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
@@ -2063,8 +2063,10 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // Pass-through — schema now uses canonical field names directly
-  function canonicalizeConcept(c: Record<string, any>) { return c; }
+  function stripPrivateFields(c: Record<string, any>) {
+    const { submitterEmail, ...rest } = c;
+    return rest;
+  }
 
   app.get("/api/discovery/concepts", async (req, res) => {
     try {
@@ -2082,7 +2084,7 @@ If a field cannot be determined, use "N/A".`
         .select({ count: sql<number>`count(*)::int` })
         .from(conceptCards)
         .where(eq(conceptCards.status, "active"));
-      res.json({ concepts: results.map(canonicalizeConcept), page, limit, total: count, totalPages: Math.ceil(count / limit) });
+      res.json({ concepts: results.map(stripPrivateFields), page, limit, total: count, totalPages: Math.ceil(count / limit) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2096,7 +2098,7 @@ If a field cannot be determined, use "N/A".`
         .from(conceptCards)
         .where(eq(conceptCards.userId, userId))
         .orderBy(desc(conceptCards.createdAt));
-      res.json({ concepts: results.map(canonicalizeConcept) });
+      res.json({ concepts: results.map(stripPrivateFields) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2111,7 +2113,7 @@ If a field cannot be determined, use "N/A".`
         .from(conceptCards)
         .where(and(eq(conceptCards.id, id), eq(conceptCards.status, "active")));
       if (!concept) return res.status(404).json({ error: "Concept not found" });
-      res.json({ concept: canonicalizeConcept(concept) });
+      res.json({ concept: stripPrivateFields(concept) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2156,16 +2158,18 @@ If a field cannot be determined, use "N/A".`
         console.error("AI credibility scoring failed:", aiErr);
       }
 
+      const conceptEmail = (req.headers["x-concept-user-email"] as string) || (req.body.submitterEmail as string) || null;
       const [concept] = await db
         .insert(conceptCards)
         .values({
           ...parsed,
+          submitterEmail: conceptEmail,
           credibilityScore: aiScore,
           credibilityRationale: aiRationale,
         })
         .returning();
 
-      res.json({ concept: canonicalizeConcept(concept) });
+      res.json({ concept: stripPrivateFields(concept) });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
@@ -2176,19 +2180,119 @@ If a field cannot be determined, use "N/A".`
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const type = (req.body?.type as string) || "collaborating";
-      const colMap: Record<string, any> = {
-        collaborating: { interestCollaborating: sql`${conceptCards.interestCollaborating} + 1` },
-        funding: { interestFunding: sql`${conceptCards.interestFunding} + 1` },
-        advising: { interestAdvising: sql`${conceptCards.interestAdvising} + 1` },
-      };
-      const updateSet = colMap[type] ?? colMap.collaborating;
+      if (!["collaborating", "funding", "advising"].includes(type)) {
+        return res.status(400).json({ error: "Invalid interest type" });
+      }
+
+      const [concept] = await db.select({ id: conceptCards.id }).from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Concept not found" });
+
+      const userId = req.headers["x-user-id"] as string;
+      const userEmail = req.headers["x-user-email"] as string || null;
+      const userName = (req.body?.userName as string) || null;
+
+      const existing = await db
+        .select()
+        .from(conceptInterests)
+        .where(and(
+          eq(conceptInterests.conceptId, id),
+          eq(conceptInterests.userId, userId),
+          eq(conceptInterests.type, type)
+        ))
+        .limit(1);
+
+      let toggled: "on" | "off";
+      if (existing.length > 0) {
+        await db.delete(conceptInterests).where(eq(conceptInterests.id, existing[0].id));
+        toggled = "off";
+      } else {
+        await db.insert(conceptInterests).values({
+          conceptId: id,
+          userId,
+          userEmail,
+          userName,
+          type,
+        }).onConflictDoNothing();
+        toggled = "on";
+      }
+
+      const [collabCount] = await db.select({ count: sql<number>`count(*)::int` }).from(conceptInterests).where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.type, "collaborating")));
+      const [fundCount] = await db.select({ count: sql<number>`count(*)::int` }).from(conceptInterests).where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.type, "funding")));
+      const [adviseCount] = await db.select({ count: sql<number>`count(*)::int` }).from(conceptInterests).where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.type, "advising")));
+
       const [updated] = await db
         .update(conceptCards)
-        .set(updateSet)
+        .set({
+          interestCollaborating: collabCount.count,
+          interestFunding: fundCount.count,
+          interestAdvising: adviseCount.count,
+        })
         .where(eq(conceptCards.id, id))
         .returning();
-      if (!updated) return res.status(404).json({ error: "Concept not found" });
-      res.json({ concept: updated });
+      res.json({ concept: stripPrivateFields(updated), toggled });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts/:id/my-interest", verifyAnyAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = req.headers["x-user-id"] as string;
+      const rows = await db
+        .select({ type: conceptInterests.type })
+        .from(conceptInterests)
+        .where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.userId, userId)));
+      res.json({ types: rows.map(r => r.type) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts/:id/interests", verifyConceptAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const conceptUserId = req.headers["x-concept-user-id"] as string;
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Concept not found" });
+      if (concept.userId !== conceptUserId) return res.status(403).json({ error: "Not your concept" });
+      const rows = await db
+        .select()
+        .from(conceptInterests)
+        .where(eq(conceptInterests.conceptId, id))
+        .orderBy(desc(conceptInterests.createdAt));
+      res.json({ interests: rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/discovery/concepts/:id/contact", verifyAnyAuth, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = req.headers["x-user-id"] as string;
+
+      const activeInterests = await db
+        .select({ id: conceptInterests.id })
+        .from(conceptInterests)
+        .where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.userId, userId)))
+        .limit(1);
+
+      if (activeInterests.length === 0) {
+        return res.status(403).json({ error: "Express interest first to view contact details" });
+      }
+
+      const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
+      if (!concept) return res.status(404).json({ error: "Concept not found" });
+
+      res.json({
+        submitterName: concept.submitterName,
+        submitterAffiliation: concept.submitterAffiliation,
+        submitterEmail: concept.submitterEmail,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

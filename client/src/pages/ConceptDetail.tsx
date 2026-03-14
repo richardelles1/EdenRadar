@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import type { ConceptCard } from "@shared/schema";
@@ -27,6 +28,9 @@ import {
   Building2,
   FlaskConical,
   BookOpen,
+  Check,
+  Mail,
+  X,
 } from "lucide-react";
 
 function ScoreRing({ score }: { score: number }) {
@@ -90,10 +94,75 @@ function DiscoveryDetailNav() {
 }
 
 const INTEREST_TYPES = [
-  { id: "collaborating", label: "Collaborate", icon: Users, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10 border-violet-500/30 hover:border-violet-500/60" },
-  { id: "funding", label: "Fund", icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-500/10 border-green-500/30 hover:border-green-500/60" },
-  { id: "advising", label: "Advise", icon: GraduationCap, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60" },
+  { id: "collaborating", label: "Collaborate", icon: Users, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-500/10 border-violet-500/30 hover:border-violet-500/60", activeBg: "bg-violet-500/20 border-violet-500 shadow-sm" },
+  { id: "funding", label: "Fund", icon: DollarSign, color: "text-green-600 dark:text-green-400", bg: "bg-green-500/10 border-green-500/30 hover:border-green-500/60", activeBg: "bg-green-500/20 border-green-500 shadow-sm" },
+  { id: "advising", label: "Advise", icon: GraduationCap, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-500/10 border-amber-500/30 hover:border-amber-500/60", activeBg: "bg-amber-500/20 border-amber-500 shadow-sm" },
 ] as const;
+
+function ContactRevealModal({ conceptId, conceptTitle, onClose }: { conceptId: number; conceptTitle: string; onClose: () => void }) {
+  const { data, isLoading } = useQuery<{ submitterName: string; submitterAffiliation: string | null; submitterEmail: string | null }>({
+    queryKey: ["/api/discovery/concepts", conceptId, "contact"],
+    queryFn: async () => {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const res = await fetch(`/api/discovery/concepts/${conceptId}/contact`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      });
+      if (!res.ok) throw new Error("Unable to load contact details");
+      return res.json();
+    },
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-card border border-border rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-foreground">Contact Submitter</h3>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground" data-testid="button-close-contact">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="w-5 h-5 animate-spin text-amber-500" />
+          </div>
+        ) : data ? (
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Name</p>
+              <p className="text-sm font-medium text-foreground" data-testid="text-contact-name">{data.submitterName}</p>
+            </div>
+            {data.submitterAffiliation && (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Affiliation</p>
+                <p className="text-sm text-foreground" data-testid="text-contact-affiliation">{data.submitterAffiliation}</p>
+              </div>
+            )}
+            {data.submitterEmail ? (
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-widest mb-1">Email</p>
+                <a
+                  href={`mailto:${data.submitterEmail}?subject=Interest in: ${conceptTitle}`}
+                  className="text-sm text-amber-600 dark:text-amber-400 hover:underline inline-flex items-center gap-1.5"
+                  data-testid="link-contact-email"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  {data.submitterEmail}
+                </a>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground italic">No email provided by submitter.</p>
+            )}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">Unable to load contact details.</p>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function ConceptDetail() {
   const { session, role } = useAuth();
@@ -101,6 +170,7 @@ export default function ConceptDetail() {
   const [, params] = useRoute("/discovery/concept/:id");
   const id = params?.id;
   const { toast } = useToast();
+  const [showContact, setShowContact] = useState(false);
 
   const { data, isLoading } = useQuery<{ concept: ConceptCard }>({
     queryKey: ["/api/discovery/concepts", id],
@@ -111,6 +181,23 @@ export default function ConceptDetail() {
     },
     enabled: !!id,
   });
+
+  const { data: myInterestData } = useQuery<{ types: string[] }>({
+    queryKey: ["/api/discovery/concepts", id, "my-interest"],
+    queryFn: async () => {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      if (!token) return { types: [] };
+      const res = await fetch(`/api/discovery/concepts/${id}/my-interest`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return { types: [] };
+      return res.json();
+    },
+    enabled: !!id && !!session,
+    staleTime: Infinity,
+  });
+
+  const myActiveTypes = new Set(myInterestData?.types ?? []);
 
   type LandscapeAsset = {
     id: number; assetName: string; institution: string;
@@ -148,11 +235,17 @@ export default function ConceptDetail() {
       }
       return res.json();
     },
-    onSuccess: (_, type) => {
+    onSuccess: (result, type) => {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts", id] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts", id, "my-interest"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts", id, "contact"] });
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });
       const label = INTEREST_TYPES.find((t) => t.id === type)?.label ?? "Interest";
-      toast({ title: `${label} interest registered!` });
+      const toggled = result.toggled as "on" | "off";
+      toast({
+        title: toggled === "on" ? `${label} interest registered!` : `${label} interest removed`,
+      });
     },
     onError: (err: Error) => {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
@@ -184,6 +277,7 @@ export default function ConceptDetail() {
   }
 
   const totalInterest = (c.interestCollaborating ?? 0) + (c.interestFunding ?? 0) + (c.interestAdvising ?? 0);
+  const hasAnyInterest = myActiveTypes.size > 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -197,7 +291,6 @@ export default function ConceptDetail() {
           </div>
         </Link>
 
-        {/* Header */}
         <div className="flex items-start gap-4 mb-6">
           <div className="w-11 h-11 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-1">
             <Lightbulb className="w-6 h-6 text-amber-500" />
@@ -225,7 +318,6 @@ export default function ConceptDetail() {
           </div>
         </div>
 
-        {/* AI Score + core content */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-5">
           {c.credibilityScore !== null && (
             <div className="md:col-span-1 border border-border rounded-xl bg-card p-5 flex flex-col items-center">
@@ -276,7 +368,6 @@ export default function ConceptDetail() {
           </div>
         </div>
 
-        {/* Seeking & Expertise */}
         {(c.seeking?.length || c.requiredExpertise) && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
             <h3 className="font-semibold text-sm text-foreground mb-3">Collaboration Profile</h3>
@@ -298,7 +389,6 @@ export default function ConceptDetail() {
           </div>
         )}
 
-        {/* Collaboration interest buttons */}
         <div className="border border-border rounded-xl bg-card p-5 mb-5">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
@@ -307,12 +397,25 @@ export default function ConceptDetail() {
                 <span data-testid="text-interest-count">{totalInterest}</span> total interest signals
               </span>
             </div>
+            {session && hasAnyInterest && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 gap-1.5"
+                onClick={() => setShowContact(true)}
+                data-testid="button-reveal-contact"
+              >
+                <Mail className="w-3 h-3" />
+                View Contact
+              </Button>
+            )}
           </div>
 
           <div className="grid grid-cols-3 gap-3 mb-3">
-            {INTEREST_TYPES.map(({ id: tid, label, icon: Icon, color, bg }) => {
+            {INTEREST_TYPES.map(({ id: tid, label, icon: Icon, color, bg, activeBg }) => {
               const countKey = `interest${tid.charAt(0).toUpperCase() + tid.slice(1)}` as keyof ConceptCard;
               const count = (c[countKey] as number) ?? 0;
+              const isActive = myActiveTypes.has(tid);
               return (
                 <div key={tid} className="text-center">
                   <div className={`text-lg font-bold ${color}`} data-testid={`count-interest-${tid}`}>{count}</div>
@@ -321,17 +424,19 @@ export default function ConceptDetail() {
                     <Button
                       variant="outline"
                       size="sm"
-                      className={`w-full text-xs border ${bg} ${color}`}
+                      className={`w-full text-xs border ${isActive ? activeBg : bg} ${color}`}
                       onClick={() => interestMutation.mutate(tid)}
                       disabled={interestMutation.isPending}
                       data-testid={`button-interest-${tid}`}
                     >
                       {interestMutation.isPending && interestMutation.variables === tid ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : isActive ? (
+                        <Check className="w-3 h-3 mr-1" />
                       ) : (
                         <Icon className="w-3 h-3 mr-1" />
                       )}
-                      {label}
+                      {isActive ? `${label}ing ✓` : label}
                     </Button>
                   ) : null}
                 </div>
@@ -355,7 +460,6 @@ export default function ConceptDetail() {
           )}
         </div>
 
-        {/* AI Landscape Intelligence */}
         {landscapeData && (landscapeData.assets.length > 0 || landscapeData.literature.length > 0) && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
             <div className="flex items-center gap-2 mb-4">
@@ -434,6 +538,8 @@ export default function ConceptDetail() {
           {c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}
         </p>
       </div>
+
+      {showContact && c && <ContactRevealModal conceptId={c.id} conceptTitle={c.title} onClose={() => setShowContact(false)} />}
     </div>
   );
 }
