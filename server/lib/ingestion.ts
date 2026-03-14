@@ -142,13 +142,16 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
         }),
         30,
         async (id, classification) => {
+          const orig = newAssets.find((na) => na.id === id);
+          const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
           try {
-            if (!classification.biotechRelevant) {
+            if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
               await storage.deleteIngestedAsset(id);
               removedCount++;
+            } else if (!classification.biotechRelevant) {
+              await storage.addToReviewQueue(id, orig?.fingerprint || String(id), "low-confidence non-biotech classification");
+              classifiedCount++;
             } else {
-              const orig = newAssets.find((na) => na.id === id);
-              const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
               const score = computeCompletenessScore({
                 target: classification.target,
                 modality: classification.modality,
@@ -170,6 +173,9 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
             }
           } catch (err: any) {
             console.error(`[ingestion] Classification failed for id ${id}: ${err?.message}`);
+            try {
+              await storage.addToReviewQueue(id, orig?.fingerprint || String(id), `classifier error: ${err?.message?.slice(0, 200)}`);
+            } catch {}
           }
           enrichingCount = Math.max(0, enrichingCount - 1);
         }

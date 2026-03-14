@@ -48,6 +48,7 @@ export interface IStorage {
   wipeAllAssets(): Promise<void>;
   getReviewQueue(): Promise<any[]>;
   resolveReviewItem(id: number, note: string): Promise<void>;
+  addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
@@ -318,6 +319,10 @@ export class DatabaseStorage implements IStorage {
 
   async resolveReviewItem(id: number, note: string): Promise<void> {
     await db.update(reviewQueue).set({ status: "resolved", reviewerNote: note, resolvedAt: new Date() }).where(eq(reviewQueue.id, id));
+  }
+
+  async addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void> {
+    await db.insert(reviewQueue).values({ assetId, fingerprint, reason }).onConflictDoNothing();
   }
 
   async deleteIngestedAsset(id: number): Promise<void> {

@@ -47,7 +47,7 @@ export async function refreshTaxonomyCounts(): Promise<void> {
   }
 
   const activeNames = new Set(THERAPY_AREAS);
-  for (const [area, count] of counts) {
+  for (const [area, count] of Array.from(counts.entries())) {
     if (THERAPY_AREAS.includes(area)) continue;
     if (count < 2) continue;
     activeNames.add(area);

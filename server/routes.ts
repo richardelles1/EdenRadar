@@ -1598,7 +1598,7 @@ export async function registerRoutes(
 
       const conditions = [eq(ingestedAssets.relevant, true)];
       if (therapyArea) {
-        conditions.push(sql`${ingestedAssets.categories}::jsonb @> ${JSON.stringify([therapyArea])}::jsonb` as any);
+        conditions.push(sql`${ingestedAssets.categories}::jsonb @> ${JSON.stringify([therapyArea])}::jsonb`);
       }
       if (institution) {
         conditions.push(eq(ingestedAssets.institution, institution));
