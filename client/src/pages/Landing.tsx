@@ -72,143 +72,119 @@ function RadarBackground() {
   );
 }
 
-/* ─────────────────────────── HeroVine (Framer Motion) ────────── */
+/* ─────────────────── Mycelium Root Network (Framer Motion) ──── */
 
-const STEM_DUR = 9;
-const BRANCH_DUR = 2.2;
-const BRANCH_EASE: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
+const P_DUR = 3.5;
+const S_DUR = 2.2;
+const T_DUR = 1.6;
+const EASE_ORGANIC: [number, number, number, number] = [0.25, 0.46, 0.45, 0.94];
 
-const BRANCHES = [
-  { y: 760, dir: 1,  ex: 280, ey: 730, leafR: 8   },
-  { y: 670, dir: -1, ex: 30,  ey: 640, leafR: 7   },
-  { y: 580, dir: 1,  ex: 285, ey: 548, leafR: 9   },
-  { y: 490, dir: -1, ex: 25,  ey: 460, leafR: 7.5 },
-  { y: 400, dir: 1,  ex: 278, ey: 370, leafR: 8.5 },
-  { y: 310, dir: -1, ex: 30,  ey: 280, leafR: 6.5 },
-  { y: 220, dir: 1,  ex: 265, ey: 192, leafR: 7   },
-  { y: 130, dir: -1, ex: 40,  ey: 104, leafR: 6   },
+interface Strand { d: string; sw: number; so: number; delay: number; dur: number; color: string }
+interface NodeDot { cx: number; cy: number; r: number; delay: number }
+
+const STRANDS: Strand[] = [
+  { d: "M 20 395 C 18 365, 22 330, 30 300 C 35 278, 40 252, 42 225",                        sw: 1.8, so: 0.65, delay: 0,    dur: P_DUR, color: "hsl(142 62% 50%)" },
+  { d: "M 20 395 C 28 360, 45 325, 65 295 C 78 275, 85 250, 85 218",                        sw: 1.8, so: 0.65, delay: 1.0,  dur: P_DUR, color: "hsl(142 60% 48%)" },
+  { d: "M 20 395 C 40 370, 70 340, 105 310 C 128 292, 155 268, 175 240",                     sw: 1.8, so: 0.62, delay: 2.0,  dur: P_DUR, color: "hsl(148 58% 46%)" },
+  { d: "M 20 395 C 50 383, 95 368, 140 348 C 170 335, 205 315, 235 288",                     sw: 1.8, so: 0.58, delay: 3.0,  dur: P_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 30 300 C 22 282, 15 262, 12 240",      sw: 1.2, so: 0.55, delay: 2.1,  dur: S_DUR, color: "hsl(142 60% 50%)" },
+  { d: "M 30 300 C 42 285, 55 268, 62 248",      sw: 1.2, so: 0.55, delay: 2.1,  dur: S_DUR, color: "hsl(142 62% 48%)" },
+  { d: "M 65 295 C 55 278, 48 258, 45 238",      sw: 1.2, so: 0.52, delay: 3.1,  dur: S_DUR, color: "hsl(148 58% 48%)" },
+  { d: "M 65 295 C 80 282, 100 265, 112 248",    sw: 1.2, so: 0.52, delay: 3.1,  dur: S_DUR, color: "hsl(148 60% 46%)" },
+  { d: "M 105 310 C 98 295, 88 278, 82 258",     sw: 1.2, so: 0.50, delay: 4.1,  dur: S_DUR, color: "hsl(148 58% 46%)" },
+  { d: "M 105 310 C 120 298, 138 280, 150 262",  sw: 1.2, so: 0.50, delay: 4.1,  dur: S_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 140 348 C 135 332, 128 315, 125 295",  sw: 1.2, so: 0.48, delay: 5.1,  dur: S_DUR, color: "hsl(155 55% 45%)" },
+  { d: "M 140 348 C 160 338, 182 322, 200 305",  sw: 1.2, so: 0.48, delay: 5.1,  dur: S_DUR, color: "hsl(155 52% 44%)" },
+  { d: "M 62 248 C 68 238, 75 228, 78 215",      sw: 0.8, so: 0.42, delay: 3.42, dur: T_DUR, color: "hsl(142 60% 50%)" },
+  { d: "M 112 248 C 118 238, 125 228, 130 215",  sw: 0.8, so: 0.42, delay: 4.42, dur: T_DUR, color: "hsl(148 58% 48%)" },
+  { d: "M 150 262 C 158 252, 165 240, 168 225",  sw: 0.8, so: 0.40, delay: 5.42, dur: T_DUR, color: "hsl(155 55% 45%)" },
 ];
 
-function branchDelay(y: number) {
-  return ((900 - y) / 900) * STEM_DUR;
-}
-function leafDelay(y: number) {
-  return branchDelay(y) + BRANCH_DUR + 0.2;
-}
+const NODES: NodeDot[] = [
+  { cx: 20,  cy: 395, r: 3.5, delay: 0.1 },
+  { cx: 30,  cy: 300, r: 3.0, delay: 2.0 },
+  { cx: 65,  cy: 295, r: 3.0, delay: 3.0 },
+  { cx: 105, cy: 310, r: 3.0, delay: 4.0 },
+  { cx: 140, cy: 348, r: 3.0, delay: 5.0 },
+  { cx: 42,  cy: 225, r: 3.2, delay: 3.65 },
+  { cx: 85,  cy: 218, r: 3.2, delay: 4.65 },
+  { cx: 175, cy: 240, r: 3.2, delay: 5.65 },
+  { cx: 235, cy: 288, r: 3.2, delay: 6.65 },
+  { cx: 12,  cy: 240, r: 2.8, delay: 4.45 },
+  { cx: 62,  cy: 248, r: 2.8, delay: 4.45 },
+  { cx: 45,  cy: 238, r: 2.8, delay: 5.45 },
+  { cx: 112, cy: 248, r: 2.8, delay: 5.45 },
+  { cx: 82,  cy: 258, r: 2.8, delay: 6.45 },
+  { cx: 150, cy: 262, r: 2.8, delay: 6.45 },
+  { cx: 125, cy: 295, r: 2.8, delay: 7.45 },
+  { cx: 200, cy: 305, r: 2.8, delay: 7.45 },
+  { cx: 78,  cy: 215, r: 2.5, delay: 5.17 },
+  { cx: 130, cy: 215, r: 2.5, delay: 6.17 },
+  { cx: 168, cy: 225, r: 2.5, delay: 7.17 },
+];
 
 function HeroVine() {
   return (
     <div
       className="absolute bottom-0 left-0 pointer-events-none select-none hidden sm:block"
-      style={{ width: 320, height: "calc(100% + 40px)", zIndex: 1 }}
+      style={{ width: 280, height: 400, zIndex: 1 }}
       aria-hidden
     >
       <svg
-        viewBox="0 0 320 900"
+        viewBox="0 0 280 420"
         preserveAspectRatio="xMinYMax meet"
         className="w-full h-full"
         style={{ overflow: "visible" }}
       >
         <defs>
-          <linearGradient id="stemGrad2" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%"   stopColor="hsl(142 70% 55%)" stopOpacity="0.08" />
-            <stop offset="15%"  stopColor="hsl(142 65% 52%)" stopOpacity="0.85" />
-            <stop offset="85%"  stopColor="hsl(155 60% 46%)" stopOpacity="0.75" />
-            <stop offset="100%" stopColor="hsl(155 55% 42%)" stopOpacity="0.1" />
-          </linearGradient>
-          <radialGradient id="leafGrad2" cx="50%" cy="50%" r="50%">
+          <radialGradient id="nodeGrad" cx="50%" cy="50%" r="50%">
             <stop offset="0%"   stopColor="hsl(142 80% 72%)" stopOpacity="1" />
-            <stop offset="55%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.95" />
-            <stop offset="100%" stopColor="hsl(142 55% 38%)" stopOpacity="0.5" />
+            <stop offset="55%"  stopColor="hsl(142 68% 52%)" stopOpacity="0.9" />
+            <stop offset="100%" stopColor="hsl(142 55% 38%)" stopOpacity="0.45" />
           </radialGradient>
-          <filter id="leafGlow2">
-            <feGaussianBlur stdDeviation="3" result="blur" />
+          <filter id="strandGlow">
+            <feGaussianBlur stdDeviation="1.2" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
-          <filter id="stemGlow2">
-            <feGaussianBlur stdDeviation="1.2" result="blur" />
+          <filter id="nodeGlow">
+            <feGaussianBlur stdDeviation="2.5" result="blur" />
             <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
           </filter>
         </defs>
 
-        <motion.path
-          d="M 155 900 C 125 820, 185 740, 155 660 C 125 580, 185 500, 155 420 C 125 340, 185 260, 155 180 C 130 120, 165 60, 155 0"
-          fill="none"
-          stroke="url(#stemGrad2)"
-          strokeWidth="2.8"
-          filter="url(#stemGlow2)"
-          initial={{ pathLength: 0 }}
-          animate={{ pathLength: 1 }}
-          transition={{ duration: STEM_DUR, ease: "easeInOut" }}
-        />
-
-        {BRANCHES.map((b, i) => (
+        {STRANDS.map((s, i) => (
           <motion.path
-            key={`br-${i}`}
-            d={`M 155 ${b.y} Q ${b.dir > 0 ? 215 : 95} ${b.y - 15}, ${b.ex} ${b.ey}`}
+            key={`s-${i}`}
+            d={s.d}
             fill="none"
-            stroke="hsl(142 62% 50%)"
-            strokeWidth="1.8"
-            strokeOpacity={0.72}
+            stroke={s.color}
+            strokeWidth={s.sw}
+            strokeOpacity={s.so}
+            strokeLinecap="round"
+            filter="url(#strandGlow)"
             initial={{ pathLength: 0 }}
             animate={{ pathLength: 1 }}
-            transition={{ delay: branchDelay(b.y), duration: BRANCH_DUR, ease: BRANCH_EASE }}
+            transition={{ delay: s.delay, duration: s.dur, ease: EASE_ORGANIC }}
           />
         ))}
 
-        {BRANCHES.map((b, i) => (
+        {NODES.map((n, i) => (
           <motion.circle
-            key={`jn-${i}`}
-            cx={155}
-            cy={b.y}
-            r={2.5}
-            fill="hsl(142 65% 58%)"
-            fillOpacity="0.5"
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ delay: branchDelay(b.y) - 0.15, duration: 0.3, ease: "easeOut" }}
-          />
-        ))}
-
-        {BRANCHES.map((b, i) => (
-          <motion.circle
-            key={`lf-${i}`}
-            cx={b.ex}
-            cy={b.ey}
-            r={b.leafR}
-            fill="url(#leafGrad2)"
-            filter="url(#leafGlow2)"
+            key={`n-${i}`}
+            cx={n.cx}
+            cy={n.cy}
+            r={n.r}
+            fill="url(#nodeGrad)"
+            filter="url(#nodeGlow)"
             style={{ transformBox: "fill-box", transformOrigin: "center" }}
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{
-              delay: leafDelay(b.y),
+              delay: n.delay,
               duration: 0.5,
               type: "spring",
               stiffness: 180,
               damping: 14,
-            }}
-          />
-        ))}
-
-        {BRANCHES.map((b, i) => (
-          <motion.circle
-            key={`sp-${i}`}
-            cx={b.dir > 0 ? b.ex + 18 : b.ex - 18}
-            cy={b.ey - 10}
-            r={b.leafR * 0.45}
-            fill="hsl(142 65% 62%)"
-            fillOpacity="0.38"
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{
-              delay: leafDelay(b.y) + 0.25,
-              duration: 0.4,
-              type: "spring",
-              stiffness: 200,
-              damping: 16,
             }}
           />
         ))}
@@ -539,10 +515,10 @@ export default function Landing() {
             </div>
 
             <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl">
-              <span className="text-foreground">Where Biotech Research Meets</span>
+              <span className="text-foreground">Where Biotech Research</span>
               <br />
               <span className="gradient-text dark:gradient-text gradient-text-light">
-                Industry Intelligence.
+                Meets Industry Intelligence.
               </span>
             </h1>
 
