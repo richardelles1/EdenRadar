@@ -2232,7 +2232,17 @@ If a field cannot be determined, use "N/A".`
         })
         .where(eq(conceptCards.id, id))
         .returning();
-      res.json({ concept: stripPrivateFields(updated), toggled });
+
+      const action = toggled === "on" ? "added" : "removed";
+      const responsePayload: Record<string, any> = {
+        concept: stripPrivateFields(updated),
+        action,
+        toggled,
+      };
+      if (toggled === "on") {
+        responsePayload.submitterEmail = updated.submitterEmail || null;
+      }
+      res.json(responsePayload);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2247,7 +2257,13 @@ If a field cannot be determined, use "N/A".`
         .select({ type: conceptInterests.type })
         .from(conceptInterests)
         .where(and(eq(conceptInterests.conceptId, id), eq(conceptInterests.userId, userId)));
-      res.json({ types: rows.map(r => r.type) });
+      const typeSet = new Set(rows.map(r => r.type));
+      res.json({
+        collaborating: typeSet.has("collaborating"),
+        funding: typeSet.has("funding"),
+        advising: typeSet.has("advising"),
+        types: rows.map(r => r.type),
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2266,7 +2282,12 @@ If a field cannot be determined, use "N/A".`
         .from(conceptInterests)
         .where(eq(conceptInterests.conceptId, id))
         .orderBy(desc(conceptInterests.createdAt));
-      res.json({ interests: rows });
+      const grouped: Record<string, typeof rows> = { collaborating: [], funding: [], advising: [] };
+      for (const row of rows) {
+        if (!grouped[row.type]) grouped[row.type] = [];
+        grouped[row.type].push(row);
+      }
+      res.json({ interests: rows, byType: grouped, total: rows.length });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

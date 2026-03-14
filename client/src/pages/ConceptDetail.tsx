@@ -182,15 +182,16 @@ export default function ConceptDetail() {
     enabled: !!id,
   });
 
-  const { data: myInterestData } = useQuery<{ types: string[] }>({
+  type MyInterestResponse = { collaborating: boolean; funding: boolean; advising: boolean; types: string[] };
+  const { data: myInterestData } = useQuery<MyInterestResponse>({
     queryKey: ["/api/discovery/concepts", id, "my-interest"],
     queryFn: async () => {
       const token = (await supabase.auth.getSession()).data.session?.access_token;
-      if (!token) return { types: [] };
+      if (!token) return { collaborating: false, funding: false, advising: false, types: [] };
       const res = await fetch(`/api/discovery/concepts/${id}/my-interest`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      if (!res.ok) return { types: [] };
+      if (!res.ok) return { collaborating: false, funding: false, advising: false, types: [] };
       return res.json();
     },
     enabled: !!id && !!session,
@@ -242,10 +243,13 @@ export default function ConceptDetail() {
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/concepts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/discovery/my-concepts"] });
       const label = INTEREST_TYPES.find((t) => t.id === type)?.label ?? "Interest";
-      const toggled = result.toggled as "on" | "off";
-      toast({
-        title: toggled === "on" ? `${label} interest registered!` : `${label} interest removed`,
-      });
+      const action = result.action as "added" | "removed";
+      if (action === "added") {
+        toast({ title: `${label} interest registered!`, description: "You can now view the submitter's contact details." });
+        setShowContact(true);
+      } else {
+        toast({ title: `${label} interest removed` });
+      }
     },
     onError: (err: Error) => {
       toast({ title: "Failed", description: err.message, variant: "destructive" });
