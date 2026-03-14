@@ -431,8 +431,8 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/scraper-health/ping-stream", (req, res) => {
-    const pw = req.query.pw;
+  app.post("/api/admin/scraper-health/ping", (req, res) => {
+    const pw = req.headers["x-admin-password"] ?? req.query.pw;
     if (pw !== "eden") { res.status(401).json({ error: "Unauthorized" }); return; }
 
     res.setHeader("Content-Type", "text/event-stream");

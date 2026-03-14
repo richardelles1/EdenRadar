@@ -1574,7 +1574,7 @@ function StatusBadge({ status, pingRow, pinging }: { status: ScraperStatus; ping
 function ScraperHealth({ pw }: { pw: string }) {
   const [pingResults, setPingResults] = useState<Record<string, PingRow>>({});
   const [pinging, setPinging] = useState(false);
-  const esRef = useRef<EventSource | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const { data, isLoading, refetch } = useQuery<{ rows: ScraperHealthRow[]; total: number }>({
     queryKey: ["/api/admin/scraper-health"],
@@ -1588,35 +1588,65 @@ function ScraperHealth({ pw }: { pw: string }) {
     enabled: !!pw,
   });
 
-  function pingAll() {
+  const { data: ingestStatus } = useQuery<{ status: string; ranAt: string | null }>({
+    queryKey: ["/api/ingest/status"],
+    refetchInterval: 30_000,
+    staleTime: 20_000,
+  });
+
+  const prevIngestStatusRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    const prev = prevIngestStatusRef.current;
+    const curr = ingestStatus?.status;
+    if (prev === "running" && curr && curr !== "running") {
+      refetch();
+    }
+    prevIngestStatusRef.current = curr;
+  }, [ingestStatus?.status, refetch]);
+
+  async function pingAll() {
     if (pinging) {
-      esRef.current?.close();
-      esRef.current = null;
+      abortRef.current?.abort();
+      abortRef.current = null;
       setPinging(false);
       return;
     }
     setPingResults({});
     setPinging(true);
-    const es = new EventSource(`/api/admin/scraper-health/ping-stream?pw=${encodeURIComponent(pw)}`);
-    esRef.current = es;
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.done) {
-          es.close();
-          esRef.current = null;
-          setPinging(false);
-          refetch();
-          return;
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const res = await fetch("/api/admin/scraper-health/ping", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) { setPinging(false); return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() ?? "";
+        for (const part of parts) {
+          const line = part.trim();
+          if (!line.startsWith("data: ")) continue;
+          try {
+            const payload = JSON.parse(line.slice(6));
+            if (payload.done) { refetch(); break; }
+            setPingResults((prev) => ({ ...prev, [payload.institution]: payload as PingRow }));
+          } catch {}
         }
-        setPingResults((prev) => ({ ...prev, [data.institution]: data as PingRow }));
-      } catch {}
-    };
-    es.onerror = () => {
-      es.close();
-      esRef.current = null;
+      }
+    } catch (err: any) {
+      if (err?.name !== "AbortError") console.warn("[ping]", err);
+    } finally {
+      abortRef.current = null;
       setPinging(false);
-    };
+    }
   }
 
   const rows = data?.rows ?? [];
@@ -1700,8 +1730,18 @@ function ScraperHealth({ pw }: { pw: string }) {
             <tbody>
               {rows.map((row, i) => {
                 const ping = pingResults[row.institution];
+                const effectiveStatus: ScraperStatus | "error" = ping
+                  ? ping.error ? "error" as const : ping.count > 0 ? "live" : "empty"
+                  : row.status;
+                const rowBg = effectiveStatus === "live"
+                  ? "bg-emerald-500/5"
+                  : effectiveStatus === "error" || effectiveStatus === "never"
+                  ? "bg-red-500/5"
+                  : effectiveStatus === "stale"
+                  ? "bg-amber-500/5"
+                  : "";
                 return (
-                  <tr key={row.institution} className={`border-b border-border/50 ${i % 2 === 0 ? "" : "bg-muted/20"}`} data-testid={`row-scraper-${i}`}>
+                  <tr key={row.institution} className={`border-b border-border/50 ${rowBg}`} data-testid={`row-scraper-${i}`}>
                     <td className="py-2 px-3">
                       <StatusBadge status={row.status} pingRow={ping} pinging={pinging} />
                     </td>
