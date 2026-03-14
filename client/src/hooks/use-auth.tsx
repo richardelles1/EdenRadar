@@ -10,7 +10,7 @@ interface AuthContextValue {
   loading: boolean;
   role: UserRole;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, role: "industry" | "researcher" | "concept") => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -44,11 +44,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   }
 
-  async function signUp(email: string, password: string, role: "industry" | "researcher" | "concept") {
+  async function signUp(email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { role } },
+      options: { data: { role, ...metadata } },
     });
     return { error: error?.message ?? null };
   }

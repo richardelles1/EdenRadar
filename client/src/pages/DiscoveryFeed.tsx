@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useState } from "react";
 import type { ConceptCard } from "@shared/schema";
-import { Lightbulb, TrendingUp, Clock, Sparkles, ArrowRight, Compass, Filter } from "lucide-react";
+import { Lightbulb, TrendingUp, Clock, Sparkles, ArrowRight, Compass, Filter, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
@@ -16,11 +16,18 @@ const THERAPY_AREAS = [
 
 const STAGE_OPTIONS = [
   { value: "all", label: "All Stages" },
-  { value: "idea", label: "Idea / Hypothesis" },
-  { value: "literature_review", label: "Literature Review" },
-  { value: "preliminary_data", label: "Preliminary Data" },
-  { value: "proof_of_concept", label: "Proof of Concept" },
+  { value: "idea", label: "Stage 1 — Concept Idea" },
+  { value: "literature_review", label: "Stage 2 — Literature Review" },
+  { value: "preliminary_data", label: "Stage 3 — Preliminary Data" },
+  { value: "proof_of_concept", label: "Stage 4 — Proof of Concept" },
 ];
+
+const STAGE_LABEL: Record<string, string> = {
+  idea: "Stage 1",
+  literature_review: "Stage 2",
+  preliminary_data: "Stage 3",
+  proof_of_concept: "Stage 4",
+};
 
 function ScoreBadge({ score }: { score: number | null }) {
   if (score === null) return null;
@@ -99,7 +106,7 @@ function DiscoveryNav() {
 }
 
 export default function DiscoveryFeed() {
-  const { data, isLoading } = useQuery<{ concepts: ConceptCard[] }>({
+  const { data, isLoading } = useQuery<{ concepts: ConceptCard[]; total?: number; page?: number; totalPages?: number }>({
     queryKey: ["/api/discovery/concepts"],
   });
 
@@ -227,9 +234,15 @@ export default function DiscoveryFeed() {
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                         {c.modality}
                       </span>
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium capitalize">
-                        {c.stage?.replace(/_/g, " ")}
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                        {STAGE_LABEL[c.stage ?? ""] ?? c.stage?.replace(/_/g, " ")}
                       </span>
+                      {c.submitterAffiliation && (
+                        <span className="inline-flex items-center gap-1 text-muted-foreground">
+                          <Building2 className="w-3 h-3 shrink-0" />
+                          {c.submitterAffiliation}
+                        </span>
+                      )}
                       <span className="ml-auto inline-flex items-center gap-1">
                         <TrendingUp className="w-3 h-3" />
                         {totalInterest} interested

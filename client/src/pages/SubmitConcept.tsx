@@ -23,10 +23,10 @@ const MODALITIES = [
 
 const STAGES = ["idea", "literature_review", "preliminary_data", "proof_of_concept"];
 const STAGE_LABELS: Record<string, string> = {
-  idea: "Idea / Hypothesis",
-  literature_review: "Literature Review",
-  preliminary_data: "Preliminary Data",
-  proof_of_concept: "Proof of Concept",
+  idea: "Stage 1 — Concept Idea",
+  literature_review: "Stage 2 — Literature Review",
+  preliminary_data: "Stage 3 — Preliminary Data",
+  proof_of_concept: "Stage 4 — Proof of Concept",
 };
 
 const SEEKING_OPTIONS = [

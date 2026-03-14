@@ -26,6 +26,7 @@ import {
   ExternalLink,
   Building2,
   FlaskConical,
+  BookOpen,
 } from "lucide-react";
 
 function ScoreRing({ score }: { score: number }) {
@@ -114,12 +115,15 @@ export default function ConceptDetail() {
     id: number; assetName: string; institution: string;
     modality: string; developmentStage: string; target: string; sourceUrl: string | null;
   };
+  type PubmedPaper = {
+    pmid: string; title: string; authors: string; journal: string; year: string; url: string;
+  };
 
-  const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[] }>({
+  const { data: landscapeData } = useQuery<{ assets: LandscapeAsset[]; literature: PubmedPaper[] }>({
     queryKey: ["/api/discovery/concepts", id, "landscape"],
     queryFn: async () => {
       const res = await fetch(`/api/discovery/concepts/${id}/landscape`);
-      if (!res.ok) return { assets: [] };
+      if (!res.ok) return { assets: [], literature: [] };
       return res.json();
     },
     enabled: !!id,
@@ -209,8 +213,8 @@ export default function ConceptDetail() {
               <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
                 {c.modality}
               </span>
-              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground capitalize">
-                {c.stage?.replace(/_/g, " ")}
+              <span className="inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground">
+                {({ idea: "Stage 1", literature_review: "Stage 2", preliminary_data: "Stage 3", proof_of_concept: "Stage 4" } as Record<string, string>)[c.stage ?? ""] ?? c.stage?.replace(/_/g, " ")}
               </span>
               <span className="text-xs text-muted-foreground flex items-center gap-1 ml-auto">
                 <Clock className="w-3 h-3" />
@@ -351,7 +355,7 @@ export default function ConceptDetail() {
         </div>
 
         {/* AI Landscape Intelligence */}
-        {landscapeData && landscapeData.assets.length > 0 && (
+        {landscapeData && (landscapeData.assets.length > 0 || landscapeData.literature.length > 0) && (
           <div className="border border-border rounded-xl bg-card p-5 mb-5">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-7 h-7 rounded-md bg-primary/10 flex items-center justify-center">
@@ -359,29 +363,62 @@ export default function ConceptDetail() {
               </div>
               <div>
                 <h3 className="font-semibold text-sm text-foreground">AI Landscape Intelligence</h3>
-                <p className="text-xs text-muted-foreground">Related assets from institutional TTO portfolios</p>
+                <p className="text-xs text-muted-foreground">Related TTO assets and published literature in this therapy area</p>
               </div>
             </div>
-            <div className="space-y-2">
-              {landscapeData.assets.map((asset) => (
-                <div key={asset.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors" data-testid={`landscape-asset-${asset.id}`}>
-                  <Building2 className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground line-clamp-1">{asset.assetName}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {asset.institution} · {asset.modality} · {asset.developmentStage}
-                    </p>
-                  </div>
-                  {asset.sourceUrl && (
-                    <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" data-testid={`link-landscape-asset-${asset.id}`}>
-                      <ExternalLink className="w-3.5 h-3.5" />
-                    </a>
-                  )}
+
+            {landscapeData.assets.length > 0 && (
+              <>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <Building2 className="w-3 h-3" /> TTO Portfolio Assets
+                </p>
+                <div className="space-y-2 mb-4">
+                  {landscapeData.assets.map((asset) => (
+                    <div key={asset.id} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors" data-testid={`landscape-asset-${asset.id}`}>
+                      <Building2 className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground line-clamp-1">{asset.assetName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {asset.institution} · {asset.modality} · {asset.developmentStage}
+                        </p>
+                      </div>
+                      {asset.sourceUrl && (
+                        <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" data-testid={`link-landscape-asset-${asset.id}`}>
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
+
+            {landscapeData.literature.length > 0 && (
+              <>
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                  <BookOpen className="w-3 h-3" /> Related Literature (PubMed)
+                </p>
+                <div className="space-y-2">
+                  {landscapeData.literature.map((paper) => (
+                    <div key={paper.pmid} className="flex items-start gap-3 p-3 rounded-lg bg-muted/40 hover:bg-muted/60 transition-colors" data-testid={`landscape-paper-${paper.pmid}`}>
+                      <BookOpen className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground line-clamp-2">{paper.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {paper.authors}{paper.authors && paper.journal ? " · " : ""}{paper.journal}{paper.year ? ` (${paper.year})` : ""}
+                        </p>
+                      </div>
+                      <a href={paper.url} target="_blank" rel="noopener noreferrer" className="shrink-0 text-muted-foreground hover:text-foreground" data-testid={`link-landscape-paper-${paper.pmid}`}>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
             <p className="text-xs text-muted-foreground mt-3 italic">
-              Sourced from EdenRadar's institutional TTO database. These are not affiliated with this concept.
+              AI-curated from institutional TTO databases and PubMed. Not affiliated with this concept.
             </p>
           </div>
         )}

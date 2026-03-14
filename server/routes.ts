@@ -2063,15 +2063,23 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  app.get("/api/discovery/concepts", async (_req, res) => {
+  app.get("/api/discovery/concepts", async (req, res) => {
     try {
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1")));
+      const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit ?? "20"))));
+      const offset = (page - 1) * limit;
       const results = await db
         .select()
         .from(conceptCards)
         .where(eq(conceptCards.status, "active"))
         .orderBy(desc(conceptCards.createdAt))
-        .limit(100);
-      res.json({ concepts: results });
+        .limit(limit)
+        .offset(offset);
+      const [{ count }] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(conceptCards)
+        .where(eq(conceptCards.status, "active"));
+      res.json({ concepts: results, page, limit, total: count, totalPages: Math.ceil(count / limit) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -2171,26 +2179,60 @@ If a field cannot be determined, use "N/A".`
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!concept) return res.status(404).json({ error: "Not found" });
       const therapyArea = concept.therapyArea?.toLowerCase() ?? "";
-      const related = await db
-        .select({
-          id: ingestedAssets.id,
-          assetName: ingestedAssets.assetName,
-          institution: ingestedAssets.institution,
-          modality: ingestedAssets.modality,
-          developmentStage: ingestedAssets.developmentStage,
-          target: ingestedAssets.target,
-          sourceUrl: ingestedAssets.sourceUrl,
-        })
-        .from(ingestedAssets)
-        .where(
-          and(
-            eq(ingestedAssets.relevant, true),
-            sql`lower(${ingestedAssets.indication}) like ${"%" + therapyArea.substring(0, 8) + "%"}`
+      const searchSlug = therapyArea.substring(0, 10);
+
+      const [relatedAssets, pubmedResults] = await Promise.allSettled([
+        db
+          .select({
+            id: ingestedAssets.id,
+            assetName: ingestedAssets.assetName,
+            institution: ingestedAssets.institution,
+            modality: ingestedAssets.modality,
+            developmentStage: ingestedAssets.developmentStage,
+            target: ingestedAssets.target,
+            sourceUrl: ingestedAssets.sourceUrl,
+          })
+          .from(ingestedAssets)
+          .where(
+            and(
+              eq(ingestedAssets.relevant, true),
+              sql`lower(${ingestedAssets.indication}) like ${"%" + searchSlug + "%"}`
+            )
           )
-        )
-        .orderBy(desc(ingestedAssets.firstSeenAt))
-        .limit(8);
-      res.json({ assets: related });
+          .orderBy(desc(ingestedAssets.firstSeenAt))
+          .limit(6),
+
+        (async () => {
+          const searchTerm = encodeURIComponent(`${therapyArea}[MeSH Terms] AND drug therapy`);
+          const searchUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=${searchTerm}&retmax=5&retmode=json&sort=relevance`;
+          const searchRes = await fetch(searchUrl, { signal: AbortSignal.timeout(4000) });
+          if (!searchRes.ok) return [];
+          const searchJson = await searchRes.json() as { esearchresult?: { idlist?: string[] } };
+          const ids: string[] = searchJson.esearchresult?.idlist ?? [];
+          if (ids.length === 0) return [];
+          const summaryUrl = `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=${ids.join(",")}&retmode=json`;
+          const summaryRes = await fetch(summaryUrl, { signal: AbortSignal.timeout(4000) });
+          if (!summaryRes.ok) return [];
+          const summaryJson = await summaryRes.json() as { result?: Record<string, any> };
+          const result = summaryJson.result ?? {};
+          return ids.slice(0, 5).map((pmid) => {
+            const doc = result[pmid] ?? {};
+            return {
+              pmid,
+              title: doc.title ?? "Untitled",
+              authors: (doc.authors ?? []).slice(0, 2).map((a: any) => a.name).join(", "),
+              journal: doc.fulljournalname ?? doc.source ?? "",
+              year: doc.pubdate?.substring(0, 4) ?? "",
+              url: `https://pubmed.ncbi.nlm.nih.gov/${pmid}/`,
+            };
+          });
+        })(),
+      ]);
+
+      res.json({
+        assets: relatedAssets.status === "fulfilled" ? relatedAssets.value : [],
+        literature: pubmedResults.status === "fulfilled" ? pubmedResults.value : [],
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

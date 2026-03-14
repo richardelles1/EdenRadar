@@ -63,7 +63,12 @@ export default function DiscoveryJoin() {
       }
       navigate("/discovery", { replace: true });
     } else {
-      const { error: err } = await signUp(email, password, "concept");
+      const metadata: Record<string, string> = {};
+      if (fullName) metadata.full_name = fullName;
+      if (affiliation) metadata.affiliation = affiliation;
+      if (researchArea) metadata.research_area = researchArea;
+      if (goal) metadata.goal = goal;
+      const { error: err } = await signUp(email, password, "concept", metadata);
       if (err) {
         setError(err);
         setLoading(false);
