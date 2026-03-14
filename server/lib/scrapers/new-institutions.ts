@@ -570,7 +570,7 @@ export const usaskScraper = createTechPublisherScraper("usask", "University of S
 // ── New US: no TechPublisher portal (stubs) ──────────────────────────────
 export { fsuScraper } from "./fsu";
 export const ucfScraper = createFlintboxScraper(
-  { slug: "ucf", orgId: 0, accessKey: "" },
+  { slug: "ucf", orgId: 82, accessKey: "735da6c7-5d27-4015-bb46-60b45f80225d" },
   "University of Central Florida"
 );
 export const fiuScraper = createFlintboxScraper(
@@ -578,7 +578,7 @@ export const fiuScraper = createFlintboxScraper(
   "Florida International University"
 );
 export const tamuScraper = createFlintboxScraper(
-  { slug: "tamus", orgId: 0, accessKey: "" },
+  { slug: "tamus", orgId: 100, accessKey: "1ebc3006-5557-499d-94b3-72f24dbbf5e8" },
   "Texas A&M University"
 );
 export const riceScraper = createInPartScraper("rice", "Rice University");
@@ -619,7 +619,7 @@ export const nmsuScraper = createStubScraper("New Mexico State University");
 export const unrScraper = createStubScraper("University of Nevada, Reno");
 export const unlvScraper = createTechPublisherScraper("unlvecondev", "University of Nevada, Las Vegas");
 export const usuScraper = createFlintboxScraper(
-  { slug: "usu", orgId: 0, accessKey: "" },
+  { slug: "usu", orgId: 198, accessKey: "6af4c512-15e2-4213-bb3f-3b7e904a0e43" },
   "Utah State University"
 );
 export const byuScraper = createStubScraper("Brigham Young University");
@@ -883,112 +883,112 @@ export const ntuScraper = createInPartScraper("ntu", "Nottingham Trent Universit
 // ── Additional US (in-part) ─────────────────────────────────────────────
 export const uhawScraper = createInPartScraper("hawaii", "University of Hawaii");
 
-// ── Flintbox HTML fallback batch (March 2026) ────────────────────────────
+// ── Flintbox batch (March 2026) — credentials extracted from page source ─
 export const uiowaScraper = createFlintboxScraper(
-  { slug: "uiowa", orgId: 0, accessKey: "" },
+  { slug: "uiowa", orgId: 42, accessKey: "3fc3085f-bc68-4c36-b0d2-03136e9f46bc" },
   "University of Iowa"
 );
 export const bidmcScraper = createFlintboxScraper(
-  { slug: "bidmc", orgId: 0, accessKey: "" },
+  { slug: "bidmc", orgId: 64, accessKey: "b4d0c328-acae-4410-bdae-052fe53b61dc" },
   "Beth Israel Deaconess Medical Center"
 );
 export const northumbriaScraper = createFlintboxScraper(
-  { slug: "northumbriaknowledgebank", orgId: 0, accessKey: "" },
+  { slug: "northumbriaknowledgebank", orgId: 165, accessKey: "05cd9241-6f72-40c0-87ad-4ef62029d860" },
   "Northumbria University"
 );
 export const cmuScraper = createFlintboxScraper(
-  { slug: "cmu", orgId: 0, accessKey: "" },
+  { slug: "cmu", orgId: 18, accessKey: "c6a38f07-02cb-4ecb-88b2-a4cbb1b10702" },
   "Carnegie Mellon University"
 );
 export const kyotoIcemsScraper = createFlintboxScraper(
-  { slug: "icems", orgId: 0, accessKey: "" },
+  { slug: "icems", orgId: 120, accessKey: "c168ecd8-5d85-42e0-bcd3-8c43b0b2b981" },
   "Kyoto University (ICEMS)"
 );
 export const smuFlintboxScraper = createFlintboxScraper(
-  { slug: "smutechnologies", orgId: 0, accessKey: "" },
+  { slug: "smutechnologies", orgId: 135, accessKey: "b0c95f72-9597-45b8-a90a-b4add399abcf" },
   "Southern Methodist University"
 );
 export const clevelandClinicScraper = createFlintboxScraper(
-  { slug: "ccf", orgId: 0, accessKey: "" },
+  { slug: "ccf", orgId: 94, accessKey: "67eed3d0-b1c0-4d4c-be96-6fdc228cbf39" },
   "Cleveland Clinic"
 );
 export const uabScraper = createFlintboxScraper(
-  { slug: "uab", orgId: 0, accessKey: "" },
+  { slug: "uab", orgId: 74, accessKey: "a693da4f-984d-4a23-b5de-ba78951a9c93" },
   "University of Alabama at Birmingham"
 );
 export const cercaScraper = createFlintboxScraper(
-  { slug: "cerca", orgId: 0, accessKey: "" },
+  { slug: "cerca", orgId: 117, accessKey: "531ecc7e-7810-4b64-b325-b2704444f2bc" },
   "CERCA"
 );
 export const kstateScraper = createFlintboxScraper(
-  { slug: "k-state", orgId: 0, accessKey: "" },
+  { slug: "k-state", orgId: 57, accessKey: "5cb342e4-893d-4386-98c5-165545060dfc" },
   "Kansas State University"
 );
 export const cedarsScraper = createFlintboxScraper(
-  { slug: "cedars", orgId: 0, accessKey: "" },
+  { slug: "cedars", orgId: 60, accessKey: "d18c195c-b0d6-4767-8dae-9e29351f5d49" },
   "Cedars-Sinai"
 );
 export const fauScraper = createFlintboxScraper(
-  { slug: "fau", orgId: 0, accessKey: "" },
+  { slug: "fau", orgId: 127, accessKey: "c4d62df3-6f8d-40c1-b4ca-89cde3e5c455" },
   "Florida Atlantic University"
 );
 export const tulaneScraper = createFlintboxScraper(
-  { slug: "tulane", orgId: 0, accessKey: "" },
+  { slug: "tulane", orgId: 187, accessKey: "6ee6d4d8-f0fb-445e-8419-93669edc8425" },
   "Tulane University"
 );
 export const louisvilleScraper = createFlintboxScraper(
-  { slug: "louisville", orgId: 0, accessKey: "" },
+  { slug: "louisville", orgId: 28, accessKey: "a4d8f8a8-6e05-4f69-aeb3-a41213e75405" },
   "University of Louisville"
 );
 export const lsuItcScraper = createFlintboxScraper(
-  { slug: "lsuitc", orgId: 0, accessKey: "" },
+  { slug: "lsuitc", orgId: 149, accessKey: "6167ce86-a76a-4476-9c4b-7fde90ac9ecc" },
   "LSU Innovation and Technology Commercialization"
 );
 export const uhnScraper = createFlintboxScraper(
-  { slug: "uhn", orgId: 0, accessKey: "" },
+  { slug: "uhn", orgId: 26, accessKey: "bd089dc4-8be1-4a62-9757-54bb408fbeab" },
   "University Health Network (Toronto)"
 );
 export const lsuScraper = createFlintboxScraper(
-  { slug: "lsu", orgId: 0, accessKey: "" },
+  { slug: "lsu", orgId: 84, accessKey: "08ae8058-8a2b-4b39-8c24-6efdf059ae32" },
   "Louisiana State University"
 );
 export const uahScraper = createFlintboxScraper(
-  { slug: "uah", orgId: 0, accessKey: "" },
+  { slug: "uah", orgId: 159, accessKey: "43df7c48-86b9-4b10-ba07-1ea36bd9fd38" },
   "University of Alabama in Huntsville"
 );
 export const wvuScraper = createFlintboxScraper(
-  { slug: "wvu", orgId: 0, accessKey: "" },
+  { slug: "wvu", orgId: 112, accessKey: "8f83dfaf-5248-4b45-8c37-ad8a3ebbb9af" },
   "West Virginia University"
 );
 export const cmhScraper = createFlintboxScraper(
-  { slug: "cmh", orgId: 0, accessKey: "" },
+  { slug: "cmh", orgId: 36, accessKey: "3702b6e9-3617-4381-8401-e48d2e0c9603" },
   "Children's Mercy Hospital"
 );
 export const kcvScraper = createFlintboxScraper(
-  { slug: "kcv", orgId: 0, accessKey: "" },
+  { slug: "kcv", orgId: 200, accessKey: "e88f24ea-041a-457f-b23c-163400eb3915" },
   "KCV"
 );
 export const strathclydeScraper = createFlintboxScraper(
-  { slug: "strathclyde", orgId: 0, accessKey: "" },
+  { slug: "strathclyde", orgId: 206, accessKey: "b2dc8d43-c279-408b-9f38-f3dbf8d840de" },
   "University of Strathclyde"
 );
 export const syracuseScraper = createFlintboxScraper(
-  { slug: "syr", orgId: 0, accessKey: "" },
+  { slug: "syr", orgId: 86, accessKey: "d4754059-b9b5-4854-93a7-6b343d284d5e" },
   "Syracuse University"
 );
 export const swanseaScraper = createFlintboxScraper(
-  { slug: "swansea", orgId: 0, accessKey: "" },
+  { slug: "swansea", orgId: 188, accessKey: "6b0780a6-9a4d-40f8-8cc9-8085809becf2" },
   "Swansea University"
 );
 export const utsaScraper = createFlintboxScraper(
-  { slug: "utsa", orgId: 0, accessKey: "" },
+  { slug: "utsa", orgId: 72, accessKey: "71c1e3dd-f026-47a9-b73c-be980bdadb1e" },
   "UT San Antonio"
 );
 export const ncsuScraper = createFlintboxScraper(
-  { slug: "ncsu", orgId: 0, accessKey: "" },
+  { slug: "ncsu", orgId: 119, accessKey: "335a4b56-8570-417f-aae1-02b10c577049" },
   "NC State University"
 );
 export const dalhousieScraper = createFlintboxScraper(
-  { slug: "dal", orgId: 0, accessKey: "" },
+  { slug: "dal", orgId: 189, accessKey: "19307b7f-c176-48c7-ad34-7ea5fcf40e4a" },
   "Dalhousie University"
 );
