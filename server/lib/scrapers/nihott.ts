@@ -90,11 +90,14 @@ function hitToListing(hit: AlgoliaHit, institution: string): ScrapedListing | nu
 
 async function fetchPartition(
   filters: string,
+  label: string,
   institution: string,
   seen: Set<string>,
   results: ScrapedListing[]
 ): Promise<number> {
   const first = await queryAlgolia(0, filters);
+  if (first.nbHits === 0) return 0;
+
   const maxPages = Math.min(first.nbPages, 5);
   let count = 0;
 
@@ -118,13 +121,25 @@ async function fetchPartition(
       if (page.hits.length === 0) break;
       processHits(page.hits);
     } catch (err: any) {
-      console.warn(`[scraper] ${institution}: Algolia partition page ${pg} failed: ${err?.message}`);
+      console.warn(`[scraper] ${institution}: partition "${label}" page ${pg} failed: ${err?.message}`);
       break;
     }
   }
 
   return count;
 }
+
+const NIHTT_APPLICATION_PARTITIONS = [
+  "Therapeutics",
+  "Research Materials",
+  "Diagnostics",
+  "Vaccines\u00ad\u00ad\u00ad",
+  "Consumer Products",
+  "Occupational Safety and Health",
+  "Medical Devices",
+  "Non-Medical Devices",
+  "Software / Apps",
+];
 
 export const nihOttScraper: InstitutionScraper = {
   institution: INST,
@@ -133,22 +148,50 @@ export const nihOttScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      const partitions = [
-        'type:tech AND field_data_source:"NIHTT"',
-        'type:tech AND field_data_source:"NCI"',
-        'type:tech AND NOT field_data_source:"NIHTT" AND NOT field_data_source:"NCI"',
-      ];
-
-      for (const filter of partitions) {
+      for (const app of NIHTT_APPLICATION_PARTITIONS) {
         try {
-          const count = await fetchPartition(filter, INST, seen, results);
-          console.log(`[scraper] ${INST}: partition "${filter}" → ${count} listings`);
+          const filter = `type:tech AND field_data_source:"NIHTT" AND field_applications:"${app}"`;
+          const count = await fetchPartition(filter, `NIHTT/${app}`, INST, seen, results);
+          if (count > 0) {
+            console.log(`[scraper] ${INST}: NIHTT/${app} → ${count} new listings`);
+          }
         } catch (err: any) {
-          console.warn(`[scraper] ${INST}: partition failed: ${err?.message}`);
+          console.warn(`[scraper] ${INST}: NIHTT/${app} partition failed: ${err?.message}`);
         }
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} total listings (Algolia, ${partitions.length} partitions)`);
+      try {
+        const noAppFilter = NIHTT_APPLICATION_PARTITIONS
+          .map(a => `NOT field_applications:"${a}"`)
+          .join(" AND ");
+        const filter = `type:tech AND field_data_source:"NIHTT" AND ${noAppFilter}`;
+        const count = await fetchPartition(filter, "NIHTT/other", INST, seen, results);
+        if (count > 0) {
+          console.log(`[scraper] ${INST}: NIHTT/other → ${count} new listings`);
+        }
+      } catch {}
+
+      try {
+        const count = await fetchPartition('type:tech AND field_data_source:"NCI"', "NCI", INST, seen, results);
+        console.log(`[scraper] ${INST}: NCI → ${count} new listings`);
+      } catch (err: any) {
+        console.warn(`[scraper] ${INST}: NCI partition failed: ${err?.message}`);
+      }
+
+      try {
+        const count = await fetchPartition(
+          'type:tech AND NOT field_data_source:"NIHTT" AND NOT field_data_source:"NCI"',
+          "other",
+          INST,
+          seen,
+          results
+        );
+        if (count > 0) {
+          console.log(`[scraper] ${INST}: other → ${count} new listings`);
+        }
+      } catch {}
+
+      console.log(`[scraper] ${INST}: ${results.length} total listings (Algolia, partitioned)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
