@@ -5,6 +5,7 @@ import { enrichWithDetailPages } from "./detailFetcher";
 const BASE = "https://tlo.mit.edu";
 const INST = "MIT";
 const LIST_PATH = "/industry-entrepreneurs/available-technologies";
+const LIST_FILTER = "search_api_fulltext=&license_status%5BU%5D=U";
 const MAX_PAGES = 200;
 
 export const mitScraper: InstitutionScraper = {
@@ -15,7 +16,9 @@ export const mitScraper: InstitutionScraper = {
       const seen = new Set<string>();
 
       for (let page = 0; page < MAX_PAGES; page++) {
-        const url = page === 0 ? `${BASE}${LIST_PATH}` : `${BASE}${LIST_PATH}?page=${page}`;
+        const url = page === 0
+          ? `${BASE}${LIST_PATH}?${LIST_FILTER}`
+          : `${BASE}${LIST_PATH}?${LIST_FILTER}&page=${page}`;
         const $ = await fetchHtml(url, 15_000);
         if (!$) break;
 
@@ -44,21 +47,22 @@ export const mitScraper: InstitutionScraper = {
 
       await enrichWithDetailPages(results, {
         description: [
-          ".tech-brief__body",
+          ".tech-brief-body__inner",
+          ".paragraphs-body",
           ".field--name-body .field__item",
           ".node__content p",
-          "article .content p",
         ],
         abstract: [
-          ".tech-brief__abstract",
+          ".tech-brief-header__details",
           ".field--name-field-abstract",
         ],
         inventors: [
-          ".tech-brief__inventors li",
+          ".tech-brief-details__researchers-list a",
+          ".tech-brief-details__researchers-list span",
           ".field--name-field-inventors li",
         ],
         patentStatus: [
-          ".tech-brief__patent-status",
+          ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
       });

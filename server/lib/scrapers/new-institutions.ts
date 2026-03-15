@@ -992,3 +992,11 @@ export const dalhousieScraper = createFlintboxScraper(
   { slug: "dal", orgId: 189, accessKey: "19307b7f-c176-48c7-ad34-7ea5fcf40e4a" },
   "Dalhousie University"
 );
+
+export const ufScraper = createTechPublisherScraper(
+  "ufinnovate",
+  "University of Florida",
+  { selector: "a[href*='/tech/']", maxPg: 80 }
+);
+
+export const utepScraper = createStubScraper("University of Texas El Paso", "tradespacemarket.com — React SPA, no public API found");

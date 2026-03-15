@@ -22,6 +22,8 @@ import { scrippsScraper } from "./scripps";
 import { mdandersonScraper } from "./mdanderson";
 import { upittScraper } from "./upitt";
 import { uchicagoScraper } from "./uchicago";
+import { utexasScraper } from "./utexas";
+import { nyuScraper } from "./nyu";
 import { yaleScraper } from "./yale";
 import { buScraper } from "./bu";
 import { georgetownScraper } from "./georgetown";
@@ -184,6 +186,9 @@ import {
   ncsuScraper,
   dalhousieScraper,
   tamuScraper,
+  ufScraper,
+  utepScraper,
+  byuScraper,
 } from "./new-institutions";
 
 export { ScrapedListing, InstitutionScraper };
@@ -209,6 +214,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   mdandersonScraper,
   upittScraper,
   uchicagoScraper,
+  utexasScraper,
+  nyuScraper,
   yaleScraper,
   buScraper,
   georgetownScraper,
@@ -373,6 +380,9 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   utsaScraper,
   ncsuScraper,
   dalhousieScraper,
+  ufScraper,
+  utepScraper,
+  byuScraper,
 ];
 
 async function runWithConcurrency<T>(
