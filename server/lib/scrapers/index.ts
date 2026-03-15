@@ -116,24 +116,15 @@ import {
   ucfScraper,
   fiuScraper,
   riceScraper,
-  texasTechScraper,
   baylorScraper,
-  unmScraper,
   usuScraper,
   auburnScraper,
   ugaScraper,
-  uarkansasScraper,
-  udelScraper,
   uconnScraper,
   dartmouthScraper,
-  brandeisScraper,
-  uriScraper,
-  mcgillScraper,
   ubcScraper,
-  ucalgaryScraper,
   uvicScraper,
   monashScraper,
-  nusScraper,
   // in-part Playwright scrapers
   portlandStateScraper,
   notredameScraper,
@@ -187,8 +178,6 @@ import {
   dalhousieScraper,
   tamuScraper,
   ufScraper,
-  utepScraper,
-  byuScraper,
 } from "./new-institutions";
 
 export { ScrapedListing, InstitutionScraper };
@@ -306,28 +295,19 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   undScraper,
   sfuScraper,
   warfScraper,
-  // ── Flintbox / in-part / stubs (migrated from deprecated Flintbox API) ──
+  // ── Flintbox / in-part (verified working) ─────────────────────────────────
   ucfScraper,
   fiuScraper,
   riceScraper,
-  texasTechScraper,
   baylorScraper,
-  unmScraper,
   usuScraper,
   auburnScraper,
   ugaScraper,
-  uarkansasScraper,
-  udelScraper,
   uconnScraper,
   dartmouthScraper,
-  brandeisScraper,
-  uriScraper,
-  mcgillScraper,
   ubcScraper,
-  ucalgaryScraper,
   uvicScraper,
   monashScraper,
-  nusScraper,
   // ── in-part Playwright scrapers ───────────────────────────────────────────
   portlandStateScraper,
   notredameScraper,
@@ -381,8 +361,6 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ncsuScraper,
   dalhousieScraper,
   ufScraper,
-  utepScraper,
-  byuScraper,
 ];
 
 async function runWithConcurrency<T>(
