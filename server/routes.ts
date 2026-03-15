@@ -1088,6 +1088,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/ingest/sync/:institution/history", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const institution = decodeURIComponent(req.params.institution);
+      const sessions = await storage.getInstitutionSyncHistory(institution, 5);
+      res.json({ sessions });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch sync history" });
+    }
+  });
+
   app.post("/api/ingest/sync/:institution/push", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

@@ -197,6 +197,18 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
     refetchInterval: polling ? 2000 : false,
   });
 
+  const { data: historyData } = useQuery<{ sessions: SyncSessionData[] }>({
+    queryKey: ["/api/ingest/sync/history", institution, pw],
+    queryFn: async () => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/history`, {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) return { sessions: [] };
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+
   useEffect(() => {
     if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
       setPolling(false);
@@ -265,6 +277,10 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
     : session?.phase === "enriching" ? "Enriching with AI..."
     : session?.phase === "done" ? "Done"
     : "";
+
+  const recentHistory = (historyData?.sessions ?? []).filter(
+    (s) => s.status === "pushed" || s.status === "failed" || s.status === "enriched"
+  ).slice(0, 4);
 
   if (!session) {
     return (
@@ -428,7 +444,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                     </Button>
                   </div>
                   {newEntries.length > 0 && (
-                    <div className="border border-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                    <div className="border border-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto" data-testid="sync-new-entries">
                       <table className="w-full text-sm">
                         <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
                           <tr className="border-b border-border">
@@ -442,7 +458,15 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                         </thead>
                         <tbody>
                           {newEntries.map((entry, i) => (
-                            <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
+                            <tr
+                              key={i}
+                              className="border-b border-border/50 hover:bg-muted/20 opacity-0"
+                              style={{
+                                animation: `syncEntryIn 0.25s ease forwards`,
+                                animationDelay: `${i * 60}ms`,
+                              }}
+                              data-testid={`sync-entry-${i}`}
+                            >
                               <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
                                 {entry.assetName}
                               </td>
@@ -482,6 +506,40 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                   <p className="text-sm">{session.newCount} new entries found, but none passed the biotech relevance filter.</p>
                 </div>
               )}
+            </div>
+          )}
+
+          {recentHistory.length > 0 && (
+            <div className="px-5 pb-4 pt-2 border-t border-border/40" data-testid="sync-session-history">
+              <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Recent Sessions</h4>
+              <div className="space-y-1">
+                {recentHistory.map((s, i) => (
+                  <div
+                    key={s.sessionId}
+                    className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/30 text-xs"
+                    style={{ animation: `syncEntryIn 0.2s ease forwards`, animationDelay: `${i * 40}ms`, opacity: 0 }}
+                    data-testid={`history-row-${i}`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      {s.status === "pushed" ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                      ) : s.status === "failed" ? (
+                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                      ) : (
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                      )}
+                      <span className="text-muted-foreground truncate">
+                        {s.completedAt ? formatDate(s.completedAt) : "In progress"}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 text-muted-foreground/70 shrink-0 ml-3">
+                      <span>{s.rawCount} scraped</span>
+                      <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
+                      {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
@@ -784,31 +842,44 @@ function DataHealth({ pw }: { pw: string }) {
             </div>
           </div>
 
-          {schedulerOpen && (schedRunning || schedPaused) && sched && (
+          {schedulerOpen && sched && (
             <div className="mt-2 space-y-2" data-testid="scheduler-status">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div className="flex items-center gap-3">
-                  <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
-                  <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
-                  {sched.failedThisCycle > 0 && (
-                    <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
-                  )}
+              {sched.state === "idle" ? (
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3">
+                    <span className="tabular-nums">{sched.cycleCount > 0 ? `${sched.cycleCount} cycle${sched.cycleCount !== 1 ? "s" : ""} completed` : "No cycles run yet"}</span>
+                    {sched.completedThisCycle > 0 && <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok last cycle</span>}
+                    {sched.failedThisCycle > 0 && <span className="text-red-500 font-medium">{sched.failedThisCycle} failed last cycle</span>}
+                  </div>
+                  <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s between syncs</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  {sched.estimatedRemainingMs != null && (
-                    <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
-                  )}
-                  {sched.priorityQueue.length > 0 && (
-                    <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
-                  )}
-                  <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
-                </div>
-              </div>
-              <Progress
-                value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
-                className="h-1.5 bg-blue-500/10"
-                data-testid="scheduler-cycle-progress"
-              />
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3">
+                      <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
+                      <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
+                      {sched.failedThisCycle > 0 && (
+                        <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {sched.estimatedRemainingMs != null && (
+                        <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
+                      )}
+                      {sched.priorityQueue.length > 0 && (
+                        <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
+                      )}
+                      <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
+                    </div>
+                  </div>
+                  <Progress
+                    value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
+                    className="h-1.5 bg-blue-500/10"
+                    data-testid="scheduler-cycle-progress"
+                  />
+                </>
+              )}
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
                 {sched.cycleStartedAt && (
                   <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>

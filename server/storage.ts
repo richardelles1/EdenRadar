@@ -70,6 +70,7 @@ export interface IStorage {
   updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
   getLatestSyncSessions(): Promise<SyncSession[]>;
+  getInstitutionSyncHistory(institution: string, limit?: number): Promise<SyncSession[]>;
   clearSyncStaging(institution: string): Promise<void>;
   insertSyncStagingBatch(rows: Array<Omit<SyncStagingRow, "id" | "createdAt">>): Promise<void>;
   getSyncStagingRows(sessionId: string): Promise<SyncStagingRow[]>;
@@ -517,6 +518,15 @@ export class DatabaseStorage implements IStorage {
 
   async getLatestSyncSessions(): Promise<SyncSession[]> {
     return db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
+  }
+
+  async getInstitutionSyncHistory(institution: string, limit = 5): Promise<SyncSession[]> {
+    return db
+      .select()
+      .from(syncSessions)
+      .where(eq(syncSessions.institution, institution))
+      .orderBy(desc(syncSessions.createdAt))
+      .limit(limit);
   }
 
   async clearSyncStaging(institution: string): Promise<void> {
