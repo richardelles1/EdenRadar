@@ -88,7 +88,7 @@ function hitToListing(hit: AlgoliaHit, institution: string): ScrapedListing | nu
   };
 }
 
-async function fetchPartition(
+async function fetchAllPages(
   filters: string,
   label: string,
   institution: string,
@@ -98,7 +98,10 @@ async function fetchPartition(
   const first = await queryAlgolia(0, filters);
   if (first.nbHits === 0) return 0;
 
-  const maxPages = Math.min(first.nbPages, 5);
+  if (first.nbHits > 1000) {
+    console.warn(`[scraper] ${institution}: partition "${label}" has ${first.nbHits} hits (Algolia caps at 1000 retrievable)`);
+  }
+
   let count = 0;
 
   const processHits = (hits: AlgoliaHit[]) => {
@@ -115,7 +118,7 @@ async function fetchPartition(
 
   processHits(first.hits);
 
-  for (let pg = 1; pg < maxPages; pg++) {
+  for (let pg = 1; pg < first.nbPages; pg++) {
     try {
       const page = await queryAlgolia(pg, filters);
       if (page.hits.length === 0) break;
@@ -129,7 +132,7 @@ async function fetchPartition(
   return count;
 }
 
-const NIHTT_APPLICATION_PARTITIONS = [
+const NIHTT_APPLICATION_FACETS = [
   "Therapeutics",
   "Research Materials",
   "Diagnostics",
@@ -148,50 +151,38 @@ export const nihOttScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      for (const app of NIHTT_APPLICATION_PARTITIONS) {
+      for (const app of NIHTT_APPLICATION_FACETS) {
         try {
           const filter = `type:tech AND field_data_source:"NIHTT" AND field_applications:"${app}"`;
-          const count = await fetchPartition(filter, `NIHTT/${app}`, INST, seen, results);
+          const count = await fetchAllPages(filter, `NIHTT/${app}`, INST, seen, results);
           if (count > 0) {
-            console.log(`[scraper] ${INST}: NIHTT/${app} → ${count} new listings`);
+            console.log(`[scraper] ${INST}: NIHTT/${app} → ${count} new`);
           }
         } catch (err: any) {
-          console.warn(`[scraper] ${INST}: NIHTT/${app} partition failed: ${err?.message}`);
+          console.warn(`[scraper] ${INST}: NIHTT/${app} failed: ${err?.message}`);
         }
       }
 
       try {
-        const noAppFilter = NIHTT_APPLICATION_PARTITIONS
+        const noAppFilter = NIHTT_APPLICATION_FACETS
           .map(a => `NOT field_applications:"${a}"`)
           .join(" AND ");
         const filter = `type:tech AND field_data_source:"NIHTT" AND ${noAppFilter}`;
-        const count = await fetchPartition(filter, "NIHTT/other", INST, seen, results);
+        const count = await fetchAllPages(filter, "NIHTT/uncategorized", INST, seen, results);
         if (count > 0) {
-          console.log(`[scraper] ${INST}: NIHTT/other → ${count} new listings`);
+          console.log(`[scraper] ${INST}: NIHTT/uncategorized → ${count} new`);
         }
       } catch {}
 
       try {
-        const count = await fetchPartition('type:tech AND field_data_source:"NCI"', "NCI", INST, seen, results);
-        console.log(`[scraper] ${INST}: NCI → ${count} new listings`);
-      } catch (err: any) {
-        console.warn(`[scraper] ${INST}: NCI partition failed: ${err?.message}`);
-      }
-
-      try {
-        const count = await fetchPartition(
-          'type:tech AND NOT field_data_source:"NIHTT" AND NOT field_data_source:"NCI"',
-          "other",
-          INST,
-          seen,
-          results
-        );
+        const filter = 'type:tech AND NOT field_data_source:"NIHTT" AND NOT field_data_source:"NCI"';
+        const count = await fetchAllPages(filter, "untagged", INST, seen, results);
         if (count > 0) {
-          console.log(`[scraper] ${INST}: other → ${count} new listings`);
+          console.log(`[scraper] ${INST}: untagged → ${count} new`);
         }
       } catch {}
 
-      console.log(`[scraper] ${INST}: ${results.length} total listings (Algolia, partitioned)`);
+      console.log(`[scraper] ${INST}: ${results.length} total listings (Algolia, NIHTT + untagged partitions)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
