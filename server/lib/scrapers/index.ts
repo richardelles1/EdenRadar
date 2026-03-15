@@ -185,6 +185,55 @@ import {
   ufScraper,
 } from "./new-institutions";
 
+// ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
+// Institutions investigated but EXCLUDED — no public enumerable tech listing:
+//
+// Fred Hutchinson Cancer Center
+//   Probed: fredhutch.org/en/research/innovation (404), /about/business-development (404),
+//           /about/technology-transfer (404), research.fredhutch.org/tech-transfer (302→404)
+//   Platform: None found (no TechPublisher, Flintbox, Wellspring, Elucid, or in-part)
+//   Status: No public tech listing exists. Innovation page removed/relocated.
+//   Listing estimate: 0 (no enumerable source)
+//   Last verified: 2026-03-15
+//
+// Cold Spring Harbor Laboratory (CSHL)
+//   Probed: cshl.edu/partner-with-us/technology-transfer/ (200, informational only),
+//           WP REST API /wp-json/wp/v2/types (no tech-related custom post types)
+//   Platform: WordPress; CPTs are press_news, library_news, archives_blog, harborscope
+//   Status: Tech transfer page describes processes/contacts, no enumerable tech database
+//   Listing estimate: 0
+//   Last verified: 2026-03-15
+//
+// Dana-Farber Cancer Institute
+//   Probed: innovation.dfci.harvard.edu (empty response, 0 bytes),
+//           dana-farber.org/research/innovations (informational: mission/vision/contact),
+//           dana-farber.org/transfer (patient transfer page, not tech transfer)
+//   Platform: None found (no TechPublisher, Flintbox, Wellspring, Elucid)
+//   Status: Innovation office exists but no public tech enumeration
+//   Listing estimate: 0
+//   Last verified: 2026-03-15
+//
+// Allen Institute
+//   Probed: alleninstitute.org/partnerships/technology-transfer/ (404),
+//           alleninstitute.org/partnerships/ (404),
+//           WP REST API /wp-json/wp/v2/types (standard post types only, no tech CPTs)
+//   Platform: WordPress; no tech-related custom post types
+//   Status: Tech transfer page removed/relocated, no public listing
+//   Listing estimate: 0
+//   Last verified: 2026-03-15
+//
+// Sanford Burnham Prebys
+//   Probed: sbpdiscovery.org/industry-partnerships (404),
+//           sbpdiscovery.org/industry-partnerships/available-technologies (301→404),
+//           sbpdiscovery.org/techniques-technologies-sitemap.xml (69 entries)
+//   Platform: WordPress; techniques-technologies CPT exists but contains research
+//             capability descriptions (3D bioprinting, biochemistry, assay development)
+//             — not licensable IP/technologies available for out-licensing
+//   Status: No licensable tech listing; capabilities pages are not TTO assets
+//   Listing estimate: 0 (69 capability pages, 0 licensable tech)
+//   Last verified: 2026-03-15
+// ───────────────────────────────────────────────────────────────────────────────
+
 export { ScrapedListing, InstitutionScraper };
 
 export const ALL_SCRAPERS: InstitutionScraper[] = [
