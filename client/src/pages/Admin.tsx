@@ -742,30 +742,6 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
-  const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
-  useEffect(() => {
-    if (firstSyncingInstitution && !expandedInstitution) {
-      setExpandedInstitution(firstSyncingInstitution);
-    }
-  }, [firstSyncingInstitution]);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20" data-testid="health-loading">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="text-center py-20 text-muted-foreground" data-testid="health-error">
-        Failed to load collector health data.
-      </div>
-    );
-  }
-
   const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, degraded: 2, syncing: 3, never: 4, ok: 5 };
 
   const sortedRowsForFreeze = React.useMemo(() => {
@@ -811,6 +787,30 @@ function DataHealth({ pw }: { pw: string }) {
     }
     return sortedRowsForFreeze;
   }, [sortedRowsForFreeze, data?.syncingCount]);
+
+  const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
+  const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
+  useEffect(() => {
+    if (firstSyncingInstitution && !expandedInstitution) {
+      setExpandedInstitution(firstSyncingInstitution);
+    }
+  }, [firstSyncingInstitution]);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20" data-testid="health-loading">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="text-center py-20 text-muted-foreground" data-testid="health-error">
+        Failed to load collector health data.
+      </div>
+    );
+  }
 
   const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never") : sortedRows;
 
