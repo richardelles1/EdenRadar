@@ -24,6 +24,9 @@ import { upittScraper } from "./upitt";
 import { uchicagoScraper } from "./uchicago";
 import { utexasScraper } from "./utexas";
 import { nyuScraper } from "./nyu";
+import { nihOttScraper, nciTtcScraper } from "./nihott";
+import { maxPlanckScraper } from "./maxplanck";
+import { mskScraper } from "./msk";
 import { yaleScraper } from "./yale";
 import { buScraper } from "./bu";
 import { georgetownScraper } from "./georgetown";
@@ -205,6 +208,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   uchicagoScraper,
   utexasScraper,
   nyuScraper,
+  nihOttScraper,
+  nciTtcScraper,
+  maxPlanckScraper,
+  mskScraper,
   yaleScraper,
   buScraper,
   georgetownScraper,
