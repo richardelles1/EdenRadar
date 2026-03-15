@@ -576,6 +576,13 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
+  useEffect(() => {
+    if (syncingRows.length > 0 && !expandedInstitution) {
+      setExpandedInstitution(syncingRows[0].institution);
+    }
+  }, [syncingRows.length]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20" data-testid="health-loading">
@@ -624,13 +631,6 @@ function DataHealth({ pw }: { pw: string }) {
 
   const sched = data.scheduler;
   const syncedToday = data.syncedToday ?? 0;
-
-  const syncingRows = data.rows.filter((r) => r.health === "syncing");
-  useEffect(() => {
-    if (syncingRows.length > 0 && !expandedInstitution) {
-      setExpandedInstitution(syncingRows[0].institution);
-    }
-  }, [syncingRows.length]);
 
   const schedulerStartMutation = useMutation({
     mutationFn: async () => {
