@@ -282,13 +282,64 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
     (s) => s.status === "pushed" || s.status === "failed" || s.status === "enriched"
   ).slice(0, 4);
 
-  if (!session) {
+  if (!statusData) {
     return (
       <tr>
         <td colSpan={7} className="p-4 bg-muted/10 border-b border-border">
-          <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
+          <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground" data-testid="sync-panel-loading">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Loading sync status for {institution}...</span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  if (!statusData.found || !session) {
+    return (
+      <tr>
+        <td colSpan={7} className="p-0 border-b border-border">
+          <div className="bg-muted/10 border-t border-border px-5 py-5" data-testid={`sync-panel-empty-${institution.replace(/\s+/g, "-").toLowerCase()}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3 text-muted-foreground">
+                <Database className="h-5 w-5 opacity-40" />
+                <div>
+                  <p className="text-sm font-medium text-foreground">{institution}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">No sync session found — this institution has not been synced yet.</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onCollapse} data-testid="button-collapse-sync-empty">
+                  <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+                </Button>
+              </div>
+            </div>
+            {recentHistory.length > 0 && (
+              <div className="mt-4 border-t border-border/40 pt-3" data-testid="sync-history-only">
+                <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Past Sessions</h4>
+                <div className="space-y-1">
+                  {recentHistory.map((s, i) => (
+                    <div key={s.sessionId} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/30 text-xs" data-testid={`history-row-empty-${i}`}>
+                      <div className="flex items-center gap-2">
+                        {s.status === "pushed" ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                        ) : s.status === "failed" ? (
+                          <XCircle className="h-3.5 w-3.5 text-red-500" />
+                        ) : (
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                        )}
+                        <span className="text-muted-foreground">{s.completedAt ? formatDate(s.completedAt) : "In progress"}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-muted-foreground/70">
+                        <span>{s.rawCount} scraped</span>
+                        <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
+                        {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </td>
       </tr>
@@ -635,11 +686,12 @@ function DataHealth({ pw }: { pw: string }) {
   });
 
   const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
+  const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
   useEffect(() => {
-    if (syncingRows.length > 0 && !expandedInstitution) {
-      setExpandedInstitution(syncingRows[0].institution);
+    if (firstSyncingInstitution && !expandedInstitution) {
+      setExpandedInstitution(firstSyncingInstitution);
     }
-  }, [syncingRows.length]);
+  }, [firstSyncingInstitution]);
 
   if (isLoading) {
     return (
