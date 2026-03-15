@@ -16,6 +16,7 @@ export interface SchedulerStatus {
   delayMs: number;
   avgSyncMs: number | null;
   estimatedRemainingMs: number | null;
+  lastCycleCompletedAt: string | null;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -30,6 +31,7 @@ let cycleCount = 0;
 let priorityQueue: string[] = [];
 let syncDurations: number[] = [];
 let syncStartedAt: number | null = null;
+let lastCycleCompletedAt: Date | null = null;
 
 let delayBetweenSyncsMs = 5_000;
 
@@ -69,6 +71,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     delayMs: delayBetweenSyncsMs,
     avgSyncMs: avgMs,
     estimatedRemainingMs,
+    lastCycleCompletedAt: lastCycleCompletedAt?.toISOString() ?? null,
   };
 }
 
@@ -158,6 +161,7 @@ function scheduleNext(): void {
   const queue = getInstitutionQueue();
   if (queueIndex >= queue.length) {
     console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} succeeded, ${failedThisCycle} failed. Starting next cycle...`);
+    lastCycleCompletedAt = new Date();
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;

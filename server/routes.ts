@@ -911,6 +911,8 @@ export async function registerRoutes(
       const totalBiotechRelevant = rows.reduce((s, r) => s + r.biotechRelevant, 0);
       const issueCount = rows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never").length;
       const syncingCount = rows.filter((r) => r.health === "syncing").length;
+      const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+      const syncedToday = rows.filter((r) => r.lastSyncAt && new Date(r.lastSyncAt).getTime() > twentyFourHoursAgo).length;
 
       const scheduler = getSchedulerStatus();
 
@@ -921,6 +923,7 @@ export async function registerRoutes(
         totalInstitutions: allInstitutionNames.length,
         issueCount,
         syncingCount,
+        syncedToday,
         scheduler,
       });
     } catch (err: any) {

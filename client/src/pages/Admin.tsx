@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check } from "lucide-react";
 import type { ConceptCard } from "@shared/schema";
@@ -104,6 +104,7 @@ interface SchedulerStatus {
   delayMs: number;
   avgSyncMs: number | null;
   estimatedRemainingMs: number | null;
+  lastCycleCompletedAt: string | null;
 }
 
 interface CollectorHealthData {
@@ -113,6 +114,7 @@ interface CollectorHealthData {
   totalInstitutions: number;
   issueCount: number;
   syncingCount: number;
+  syncedToday: number;
   scheduler: SchedulerStatus;
 }
 
@@ -147,8 +149,351 @@ function relativeTime(iso: string | null): string {
   return `${Math.floor(days / 30)}mo ago`;
 }
 
-function CollectorHealth({ pw }: { pw: string }) {
+interface SyncSessionData {
+  id: number;
+  sessionId: string;
+  institution: string;
+  status: string;
+  phase: string;
+  rawCount: number;
+  newCount: number;
+  relevantCount: number;
+  pushedCount: number;
+  currentIndexed: number;
+  createdAt: string;
+  completedAt: string | null;
+  lastRefreshedAt: string | null;
+}
+
+interface SyncStatusResponse {
+  found: boolean;
+  session?: SyncSessionData;
+  newEntries?: Array<{
+    assetName: string;
+    sourceUrl: string | null;
+    target: string;
+    modality: string;
+    indication: string;
+    developmentStage: string;
+    firstSeenAt: string;
+  }>;
+  syncRunning: boolean;
+  syncRunningFor: string | null;
+}
+
+function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: string; pw: string; onCollapse: () => void }) {
+  const [polling, setPolling] = useState(true);
+  const { toast } = useToast();
+
+  const { data: statusData, refetch: refetchStatus } = useQuery<SyncStatusResponse>({
+    queryKey: ["/api/ingest/sync/status", institution, pw],
+    queryFn: async () => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/status`, {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load sync status");
+      return res.json();
+    },
+    refetchInterval: polling ? 2000 : false,
+  });
+
+  useEffect(() => {
+    if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
+      setPolling(false);
+    }
+  }, [statusData?.session?.status]);
+
+  const cancelStaleMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json();
+        throw new Error(d.error || "Cancel failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Session cleared", description: `Stale session for ${institution} reset` });
+      refetchStatus();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Cancel failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const pushMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/push`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Push failed");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Pushed to index", description: data.message });
+      refetchStatus();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Push failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const session = statusData?.session;
+  const newEntries = statusData?.newEntries ?? [];
+  const isRunning = session?.status === "running";
+  const isEnriched = session?.status === "enriched";
+  const isPushed = session?.status === "pushed";
+  const isFailed = session?.status === "failed";
+  const syncIsActive = statusData?.syncRunning ?? false;
+
+  const rawCount = session?.rawCount ?? 0;
+  const currentIndexed = session?.currentIndexed ?? 0;
+  const zeroGuard = isEnriched && rawCount === 0;
+  const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
+
+  const phaseLabel = session?.phase === "scraping" ? "Scraping..."
+    : session?.phase === "comparing" ? "Comparing fingerprints..."
+    : session?.phase === "enriching" ? "Enriching with AI..."
+    : session?.phase === "done" ? "Done"
+    : "";
+
+  if (!session) {
+    return (
+      <tr>
+        <td colSpan={7} className="p-4 bg-muted/10 border-b border-border">
+          <div className="flex items-center justify-center gap-2 py-4 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Loading sync status for {institution}...</span>
+          </div>
+        </td>
+      </tr>
+    );
+  }
+
+  return (
+    <tr>
+      <td colSpan={7} className="p-0 border-b border-border">
+        <div className="bg-muted/10 border-t border-border" data-testid={`sync-panel-${institution.replace(/\s+/g, "-").toLowerCase()}`}>
+          <div className="px-5 py-3 border-b border-border/50 bg-muted/20 flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-foreground text-sm" data-testid="sync-institution-name">{institution}</h3>
+              {(session.lastRefreshedAt || session.completedAt) && (
+                <p className="text-[11px] text-muted-foreground mt-0.5" data-testid="sync-last-refreshed">
+                  Last refreshed: {formatDate(session.lastRefreshedAt ?? session.completedAt!)}
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge
+                variant={isPushed ? "default" : isFailed ? "destructive" : isEnriched ? "secondary" : "outline"}
+                data-testid="sync-status-badge"
+              >
+                {session.status}
+              </Badge>
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onCollapse} data-testid="button-collapse-sync">
+                <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </div>
+          </div>
+
+          {isRunning && (
+            <div className="px-5 py-5" data-testid="sync-progress">
+              <div className="flex items-center gap-3 mb-3">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span className="text-sm font-medium text-foreground">{phaseLabel}</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="bg-primary h-2 rounded-full transition-all duration-500 animate-pulse"
+                  style={{ width: session.phase === "scraping" ? "33%" : session.phase === "comparing" ? "50%" : session.phase === "enriching" ? "75%" : "100%" }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                {rawCount > 0 ? `${rawCount} raw listings scraped` : "Fetching listings from institution..."}
+              </p>
+              {!syncIsActive && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={() => cancelStaleMutation.mutate()}
+                  disabled={cancelStaleMutation.isPending}
+                  data-testid="button-clear-stale"
+                >
+                  {cancelStaleMutation.isPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  ) : (
+                    <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                  )}
+                  Clear stale session
+                </Button>
+              )}
+            </div>
+          )}
+
+          {(isEnriched || isPushed || isFailed) && (
+            <div className="px-5 py-4 space-y-4" data-testid="sync-result-details">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentIndexed}</div>
+                  <div className="text-xs text-muted-foreground">Currently Indexed</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-raw-scraped">{session.rawCount}</div>
+                  <div className="text-xs text-muted-foreground">Raw Scraped</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-new-found">{session.newCount}</div>
+                  <div className="text-xs text-muted-foreground">New (Not in Index)</div>
+                </div>
+                <div className="rounded-lg border border-border bg-background p-3 text-center">
+                  <div className={`text-xl font-bold tabular-nums ${session.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`} data-testid="stat-relevant">
+                    {session.relevantCount}
+                  </div>
+                  <div className="text-xs text-muted-foreground">New + Relevant (Biotech)</div>
+                </div>
+              </div>
+
+              {zeroGuard && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
+                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Connection may be broken — 0 results returned</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper returned no results. This could indicate a broken connection, website change, or temporary outage. Push is blocked.</p>
+                  </div>
+                </div>
+              )}
+
+              {softWarning && !zeroGuard && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="sync-soft-warning">
+                  <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
+                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count — the scraper may only be returning partial results.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isPushed && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="sync-pushed-success">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                      {session.pushedCount > 0 ? `${session.pushedCount} new assets pushed to index` : "No new relevant assets to push"}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {isFailed && (
+                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-failed">
+                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Sync failed</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper encountered an error. Check server logs for details.</p>
+                  </div>
+                </div>
+              )}
+
+              {isEnriched && !zeroGuard && (
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-semibold text-foreground">
+                      {session.relevantCount > 0 ? `New Relevant Entries (${newEntries.length})` : "Push to Index"}
+                    </h4>
+                    <Button
+                      onClick={() => pushMutation.mutate()}
+                      disabled={pushMutation.isPending || zeroGuard || session.relevantCount === 0}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      size="sm"
+                      data-testid="button-push-to-index"
+                    >
+                      {pushMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <ArrowUpCircle className="h-4 w-4 mr-2" />
+                      )}
+                      {session.relevantCount > 0 ? "Push to Index" : "Nothing to Push"}
+                    </Button>
+                  </div>
+                  {newEntries.length > 0 && (
+                    <div className="border border-border rounded-lg overflow-hidden max-h-[300px] overflow-y-auto">
+                      <table className="w-full text-sm">
+                        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                          <tr className="border-b border-border">
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Asset Name</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
+                            <th className="text-left py-2 px-3 font-medium text-foreground">First Seen</th>
+                            <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {newEntries.map((entry, i) => (
+                            <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
+                              <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
+                                {entry.assetName}
+                              </td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
+                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
+                              <td className="py-2 px-3 text-muted-foreground text-xs" data-testid={`sync-entry-firstseen-${i}`}>
+                                {entry.firstSeenAt ? formatDate(entry.firstSeenAt) : "—"}
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                {entry.sourceUrl ? (
+                                  <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                    <ExternalLink className="h-3.5 w-3.5 inline" />
+                                  </a>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {isEnriched && session.relevantCount === 0 && session.newCount === 0 && !isFailed && (
+                <div className="text-center py-4 text-muted-foreground" data-testid="sync-no-new">
+                  <CheckCircle2 className="h-6 w-6 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">No new entries found — index is up to date.</p>
+                </div>
+              )}
+
+              {isEnriched && session.relevantCount === 0 && session.newCount > 0 && (
+                <div className="text-center py-4 text-muted-foreground" data-testid="sync-no-relevant">
+                  <p className="text-sm">{session.newCount} new entries found, but none passed the biotech relevance filter.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function DataHealth({ pw }: { pw: string }) {
   const [issuesOnly, setIssuesOnly] = useState(false);
+  const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
+  const [schedulerOpen, setSchedulerOpen] = useState(true);
   const { toast } = useToast();
 
   const { data, isLoading, error } = useQuery<CollectorHealthData>({
@@ -278,631 +623,372 @@ function CollectorHealth({ pw }: { pw: string }) {
   }
 
   const sched = data.scheduler;
+  const syncedToday = data.syncedToday ?? 0;
+
+  const syncingRows = data.rows.filter((r) => r.health === "syncing");
+  useEffect(() => {
+    if (syncingRows.length > 0 && !expandedInstitution) {
+      setExpandedInstitution(syncingRows[0].institution);
+    }
+  }, [syncingRows.length]);
+
+  const schedulerStartMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/start", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      if (d.ok) {
+        toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
+      } else {
+        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Start failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const schedulerPauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/pause", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      if (d.ok) {
+        toast({ title: "Scheduler paused" });
+      } else {
+        toast({ title: "Cannot pause", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Pause failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleSyncClick = (institution: string) => {
+    setExpandedInstitution(institution);
+    syncMutation.mutate(institution);
+  };
+
+  const handleRowClick = (institution: string) => {
+    setExpandedInstitution((prev) => prev === institution ? null : institution);
+  };
+
+  const schedRunning = sched.state === "running";
+  const schedPaused = sched.state === "paused";
 
   return (
-    <div data-testid="collector-health">
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
-        <div className="text-center">
-          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-in-db">{data.totalInDb.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground">Total in DB</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-primary tabular-nums" data-testid="stat-biotech-relevant">{data.totalBiotechRelevant.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground">Biotech Relevant</div>
-        </div>
-        <div className="text-center">
-          <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-institutions">{data.totalInstitutions}</div>
-          <div className="text-xs text-muted-foreground">Institutions</div>
-        </div>
-        <div className="text-center">
-          <div className={`text-2xl font-bold tabular-nums ${data.issueCount > 0 ? "text-amber-500" : "text-emerald-500"}`} data-testid="stat-issues">{data.issueCount}</div>
-          <div className="text-xs text-muted-foreground">Need Attention</div>
-        </div>
-        <div className="text-center">
-          <div className={`text-2xl font-bold tabular-nums ${data.syncingCount > 0 ? "text-blue-500" : "text-muted-foreground/40"}`} data-testid="stat-syncing">{data.syncingCount}</div>
-          <div className="text-xs text-muted-foreground">Currently Syncing</div>
-        </div>
+    <>
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Health</h2>
+        <p className="text-sm text-muted-foreground mt-1">Monitor collector status, run institution syncs, and manage the sync scheduler</p>
       </div>
 
-      {sched.state !== "idle" && (
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 px-4 py-4 border-b border-border" data-testid="health-summary">
+          <div className="text-center">
+            <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-in-db">{data.totalInDb.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Total in DB</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-primary tabular-nums" data-testid="stat-biotech-relevant">{data.totalBiotechRelevant.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">Biotech Relevant</div>
+          </div>
+          <div className="text-center">
+            <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-synced-today">{syncedToday}</div>
+            <div className="text-xs text-muted-foreground">Synced Today</div>
+            <div className="text-[10px] text-muted-foreground/60">of {data.totalInstitutions} institutions</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-2xl font-bold tabular-nums ${data.issueCount > 0 ? "text-amber-500" : "text-emerald-500"}`} data-testid="stat-issues">{data.issueCount}</div>
+            <div className="text-xs text-muted-foreground">Need Attention</div>
+          </div>
+          <div className="text-center">
+            <div className={`text-2xl font-bold tabular-nums ${data.syncingCount > 0 ? "text-blue-500" : "text-muted-foreground/40"}`} data-testid="stat-syncing">{data.syncingCount}</div>
+            <div className="text-xs text-muted-foreground">Currently Syncing</div>
+          </div>
+        </div>
+
         <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="scheduler-strip">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-sm">
-              {sched.state === "running" ? (
-                <Loader2 className="h-4 w-4 text-blue-500 animate-spin" />
-              ) : (
-                <AlertCircle className="h-4 w-4 text-amber-500" />
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <button onClick={() => setSchedulerOpen((v) => !v)} className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity">
+                <Activity className="w-4 h-4 text-primary" />
+                <span className="font-semibold text-foreground text-sm">Sequential Sync</span>
+              </button>
+              {sched.state === "idle" && sched.lastCycleCompletedAt && (
+                <span className="text-[11px] text-muted-foreground/60">Last full cycle: {relativeTime(sched.lastCycleCompletedAt)}</span>
               )}
-              <span className="font-medium text-foreground">
-                Scheduler {sched.state === "running" ? "Running" : "Paused"}
-              </span>
-              <span className="text-muted-foreground">
-                {sched.queuePosition}/{sched.queueTotal} institutions
-                {sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}
-              </span>
-              {sched.currentInstitution && (
+              {sched.state === "idle" && !sched.lastCycleCompletedAt && (
+                <span className="text-[11px] text-muted-foreground/60">No cycles completed yet</span>
+              )}
+              {schedRunning && sched.currentInstitution && (
                 <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
                   <Loader2 className="w-3 h-3 animate-spin" />
                   {sched.currentInstitution}
                 </Badge>
               )}
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
-              {sched.failedThisCycle > 0 && (
-                <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
+              {schedRunning && !sched.currentInstitution && (
+                <span className="text-xs text-blue-600 font-medium">Waiting for next...</span>
+              )}
+              {schedPaused && (
+                <span className="text-xs text-amber-600 font-medium">Paused at {sched.queuePosition}/{sched.queueTotal}</span>
               )}
             </div>
-          </div>
-          <Progress value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0} className="h-1.5 mt-2 bg-blue-500/10" data-testid="scheduler-progress" />
-        </div>
-      )}
-
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          {data.issueCount > 0 && (
-            <Button
-              variant={issuesOnly ? "default" : "outline"}
-              size="sm"
-              className="h-7 text-xs"
-              onClick={() => setIssuesOnly((v) => !v)}
-              data-testid="button-issues-filter"
-            >
-              <AlertTriangle className="h-3 w-3 mr-1" />
-              {issuesOnly ? "Show All" : `${data.issueCount} Issues`}
-            </Button>
-          )}
-        </div>
-        <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
-          <Download className="h-3.5 w-3.5 mr-1.5" />
-          Export CSV
-        </Button>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm border-collapse">
-          <thead>
-            <tr className="border-b border-border">
-              <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[90px]">Health</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Total assets in database for this institution">Total</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]">Last Sync</th>
-              <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
-              <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayRows.map((row) => (
-              <tr key={row.institution} className={`border-b border-border/50 hover:bg-muted/20 ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""}`} data-testid={`health-row-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate">{row.institution}</span>
-                    {row.consecutiveFailures >= 3 && (
-                      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                        Broken Connection
-                      </Badge>
-                    )}
-                    {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
-                      <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
-                        {row.consecutiveFailures}x failed
-                      </Badge>
-                    )}
-                  </div>
-                </td>
-                <td className="text-center py-2 px-3">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <HealthDot health={row.health} />
-                    <HealthLabel health={row.health} />
-                  </div>
-                </td>
-                <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
-                  {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
-                </td>
-                <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
-                  {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
-                </td>
-                <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
-                  {row.health === "syncing" ? (
-                    <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
-                  ) : (
-                    relativeTime(row.lastSyncAt)
-                  )}
-                </td>
-                <td className="text-left py-2 px-3" data-testid={`error-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}>
-                  {row.lastSyncError ? (
-                    <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
-                      {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
-                    </span>
-                  ) : (
-                    <span className="text-xs text-muted-foreground/40">&mdash;</span>
-                  )}
-                </td>
-                <td className="text-center py-2 px-3">
-                  <div className="flex items-center justify-center gap-1">
-                    {row.health === "stale" ? (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
-                        onClick={() => cancelMutation.mutate(row.institution)}
-                        disabled={cancelMutation.isPending}
-                        title={`Cancel stale session for ${row.institution}`}
-                        data-testid={`button-cancel-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                      >
-                        <XCircle className="h-3.5 w-3.5 mr-1" />
-                        Cancel
-                      </Button>
-                    ) : row.health === "syncing" ? (
-                      <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />
-                    ) : (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0"
-                          onClick={() => syncMutation.mutate(row.institution)}
-                          disabled={syncMutation.isPending}
-                          title={`Sync ${row.institution}`}
-                          data-testid={`button-sync-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                        >
-                          <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
-                        </Button>
-                        {sched.state === "running" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600"
-                            onClick={() => bumpMutation.mutate(row.institution)}
-                            disabled={bumpMutation.isPending}
-                            title={`Bump ${row.institution} to front of scheduler queue`}
-                            data-testid={`button-bump-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-                          >
-                            <ArrowUpCircle className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-interface SyncSessionData {
-  id: number;
-  sessionId: string;
-  institution: string;
-  status: string;
-  phase: string;
-  rawCount: number;
-  newCount: number;
-  relevantCount: number;
-  pushedCount: number;
-  currentIndexed: number;
-  createdAt: string;
-  completedAt: string | null;
-  lastRefreshedAt: string | null;
-}
-
-interface SyncStatusResponse {
-  found: boolean;
-  session?: SyncSessionData;
-  newEntries?: Array<{
-    assetName: string;
-    sourceUrl: string | null;
-    target: string;
-    modality: string;
-    indication: string;
-    developmentStage: string;
-    firstSeenAt: string;
-  }>;
-  syncRunning: boolean;
-  syncRunningFor: string | null;
-}
-
-function InstitutionSync({ pw }: { pw: string }) {
-  const [selectedInstitution, setSelectedInstitution] = useState("");
-  const [polling, setPolling] = useState(false);
-  const { toast } = useToast();
-
-  const { data: institutionsData } = useQuery<{ institutions: string[] }>({
-    queryKey: ["/api/scrapers/active"],
-  });
-
-  const { data: indexedCountsData } = useQuery<{ indexedCounts: Record<string, number> }>({
-    queryKey: ["/api/admin/scan-matrix-counts", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/scan-matrix", {
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) return { indexedCounts: {} };
-      const data = await res.json();
-      return { indexedCounts: data.indexedCounts ?? {} };
-    },
-  });
-
-  const indexedCounts = indexedCountsData?.indexedCounts ?? {};
-
-  const { data: sessionsData, refetch: refetchSessions } = useQuery<{ sessions: SyncSessionData[] }>({
-    queryKey: ["/api/ingest/sync/sessions", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/ingest/sync/sessions", {
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) throw new Error("Failed to load sessions");
-      return res.json();
-    },
-  });
-
-  const { data: statusData, refetch: refetchStatus } = useQuery<SyncStatusResponse>({
-    queryKey: ["/api/ingest/sync/status", selectedInstitution, pw],
-    queryFn: async () => {
-      if (!selectedInstitution) return { found: false, syncRunning: false, syncRunningFor: null };
-      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(selectedInstitution)}/status`, {
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) throw new Error("Failed to load sync status");
-      return res.json();
-    },
-    enabled: !!selectedInstitution,
-    refetchInterval: polling ? 2000 : false,
-  });
-
-  useEffect(() => {
-    if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
-      setPolling(false);
-    }
-  }, [statusData?.session?.status]);
-
-  const syncMutation = useMutation({
-    mutationFn: async (institution: string) => {
-      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Sync failed");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      setPolling(true);
-      toast({ title: "Sync started", description: `Syncing ${selectedInstitution}...` });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Sync failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const cancelStaleMutation = useMutation({
-    mutationFn: async (institution: string) => {
-      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const d = await res.json();
-        throw new Error(d.error || "Cancel failed");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast({ title: "Session cleared", description: `Stale session for ${selectedInstitution} reset` });
-      refetchStatus();
-      refetchSessions();
-    },
-    onError: (err: Error) => {
-      toast({ title: "Cancel failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const pushMutation = useMutation({
-    mutationFn: async (institution: string) => {
-      const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/push`, {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Push failed");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      toast({ title: "Pushed to index", description: data.message });
-      refetchStatus();
-      refetchSessions();
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/scan-matrix-counts"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Push failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const institutions = institutionsData?.institutions ?? [];
-  const sessionMap = new Map<string, SyncSessionData>();
-  for (const s of sessionsData?.sessions ?? []) {
-    sessionMap.set(s.institution, s);
-  }
-
-  const session = statusData?.session;
-  const newEntries = statusData?.newEntries ?? [];
-  const isRunning = session?.status === "running";
-  const isEnriched = session?.status === "enriched";
-  const isPushed = session?.status === "pushed";
-  const isFailed = session?.status === "failed";
-  const syncIsActive = statusData?.syncRunning ?? false;
-
-  const rawCount = session?.rawCount ?? 0;
-  const currentIndexed = session?.currentIndexed ?? 0;
-  const zeroGuard = isEnriched && rawCount === 0;
-  const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
-
-  const phaseLabel = session?.phase === "scraping" ? "Scraping..."
-    : session?.phase === "comparing" ? "Comparing fingerprints..."
-    : session?.phase === "enriching" ? "Enriching with AI..."
-    : session?.phase === "done" ? "Done"
-    : "";
-
-  return (
-    <div className="space-y-6" data-testid="sync-tab">
-      <div className="flex items-center gap-4">
-        <select
-          className="flex-1 h-10 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
-          value={selectedInstitution}
-          onChange={(e) => { setSelectedInstitution(e.target.value); setPolling(false); }}
-          data-testid="select-institution"
-        >
-          <option value="">Select an institution...</option>
-          {institutions.sort().map((inst) => {
-            const s = sessionMap.get(inst);
-            const idxCount = indexedCounts[inst] ?? 0;
-            const parts: string[] = [];
-            parts.push(`${idxCount} indexed`);
-            const refreshTs = s?.lastRefreshedAt ?? s?.completedAt;
-            if (refreshTs) parts.push(`synced ${timeAgo(refreshTs)}`);
-            const suffix = parts.length > 0 ? ` — ${parts.join(", ")}` : "";
-            return (
-              <option key={inst} value={inst}>
-                {inst}{suffix}
-              </option>
-            );
-          })}
-        </select>
-        <Button
-          onClick={() => syncMutation.mutate(selectedInstitution)}
-          disabled={!selectedInstitution || syncMutation.isPending || isRunning || syncIsActive}
-          data-testid="button-sync"
-        >
-          {syncMutation.isPending || isRunning ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          Sync
-        </Button>
-      </div>
-
-      {selectedInstitution && session && (
-        <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="sync-results">
-          <div className="px-5 py-4 border-b border-border bg-muted/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="font-semibold text-foreground text-base" data-testid="sync-institution-name">{session.institution}</h3>
-                {(session.lastRefreshedAt || session.completedAt) && (
-                  <p className="text-xs text-muted-foreground mt-0.5" data-testid="sync-last-refreshed">
-                    Last refreshed: {formatDate(session.lastRefreshedAt ?? session.completedAt!)}
-                  </p>
-                )}
-              </div>
-              <Badge
-                variant={isPushed ? "default" : isFailed ? "destructive" : isEnriched ? "secondary" : "outline"}
-                data-testid="sync-status-badge"
-              >
-                {session.status}
-              </Badge>
-            </div>
-          </div>
-
-          {isRunning && (
-            <div className="px-5 py-6" data-testid="sync-progress">
-              <div className="flex items-center gap-3 mb-3">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                <span className="text-sm font-medium text-foreground">{phaseLabel}</span>
-              </div>
-              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-primary h-2 rounded-full transition-all duration-500 animate-pulse"
-                  style={{ width: session.phase === "scraping" ? "33%" : session.phase === "comparing" ? "50%" : session.phase === "enriching" ? "75%" : "100%" }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                {rawCount > 0 ? `${rawCount} raw listings scraped` : "Fetching listings from institution..."}
-              </p>
-              {!syncIsActive && (
+            <div className="flex items-center gap-2">
+              {schedRunning ? (
                 <Button
-                  variant="outline"
                   size="sm"
-                  className="mt-3"
-                  onClick={() => cancelStaleMutation.mutate(selectedInstitution)}
-                  disabled={cancelStaleMutation.isPending}
-                  data-testid="button-clear-stale"
+                  variant="outline"
+                  className="h-7 text-xs border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                  onClick={() => schedulerPauseMutation.mutate()}
+                  disabled={schedulerPauseMutation.isPending}
+                  data-testid="button-pause-scheduler"
                 >
-                  {cancelStaleMutation.isPending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                  <AlertCircle className="w-3 h-3 mr-1" />
+                  Pause
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                  onClick={() => schedulerStartMutation.mutate()}
+                  disabled={schedulerStartMutation.isPending}
+                  data-testid="button-start-scheduler"
+                >
+                  {schedulerStartMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                   ) : (
-                    <XCircle className="h-3.5 w-3.5 mr-1.5" />
+                    <Zap className="w-3 h-3 mr-1" />
                   )}
-                  Clear stale session
+                  {schedPaused ? "Resume" : "Start Cycle"}
                 </Button>
               )}
             </div>
-          )}
+          </div>
 
-          {(isEnriched || isPushed || isFailed) && (
-            <div className="px-5 py-4 space-y-4" data-testid="sync-result-details">
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="rounded-lg border border-border bg-background p-3 text-center">
-                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentIndexed}</div>
-                  <div className="text-xs text-muted-foreground">Currently Indexed</div>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-3 text-center">
-                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-raw-scraped">{session.rawCount}</div>
-                  <div className="text-xs text-muted-foreground">Raw Scraped</div>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-3 text-center">
-                  <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-new-found">{session.newCount}</div>
-                  <div className="text-xs text-muted-foreground">New (Not in Index)</div>
-                </div>
-                <div className="rounded-lg border border-border bg-background p-3 text-center">
-                  <div className={`text-2xl font-bold tabular-nums ${session.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-foreground"}`} data-testid="stat-relevant">
-                    {session.relevantCount}
-                  </div>
-                  <div className="text-xs text-muted-foreground">New + Relevant (Biotech)</div>
-                </div>
-              </div>
-
-              {zeroGuard && (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
-                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Connection may be broken — 0 results returned</p>
-                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper returned no results. This could indicate a broken connection, website change, or temporary outage. Push is blocked.</p>
-                  </div>
-                </div>
-              )}
-
-              {softWarning && !zeroGuard && (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="sync-soft-warning">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
-                    <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count — the scraper may only be returning partial results.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {isPushed && (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="sync-pushed-success">
-                  <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-                      {session.pushedCount > 0 ? `${session.pushedCount} new assets pushed to index` : "No new relevant assets to push"}
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {isFailed && (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-failed">
-                  <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Sync failed</p>
-                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper encountered an error. Check server logs for details.</p>
-                  </div>
-                </div>
-              )}
-
-              {isEnriched && !zeroGuard && (
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-sm font-semibold text-foreground">
-                      {session.relevantCount > 0 ? `New Relevant Entries (${newEntries.length})` : "Push to Index"}
-                    </h4>
-                    <Button
-                      onClick={() => pushMutation.mutate(selectedInstitution)}
-                      disabled={pushMutation.isPending || zeroGuard || session.relevantCount === 0}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      data-testid="button-push-to-index"
-                    >
-                      {pushMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      ) : (
-                        <ArrowUpCircle className="h-4 w-4 mr-2" />
-                      )}
-                      {session.relevantCount > 0 ? "Push New Additions to Index" : "Nothing to Push"}
-                    </Button>
-                  </div>
-                  {newEntries.length > 0 && (
-                    <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
-                      <table className="w-full text-sm">
-                        <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                          <tr className="border-b border-border">
-                            <th className="text-left py-2 px-3 font-medium text-foreground">Asset Name</th>
-                            <th className="text-left py-2 px-3 font-medium text-foreground">Target</th>
-                            <th className="text-left py-2 px-3 font-medium text-foreground">Modality</th>
-                            <th className="text-left py-2 px-3 font-medium text-foreground">Indication</th>
-                            <th className="text-left py-2 px-3 font-medium text-foreground">First Seen</th>
-                            <th className="text-center py-2 px-3 font-medium text-foreground">Link</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {newEntries.map((entry, i) => (
-                            <tr key={i} className="border-b border-border/50 hover:bg-muted/20" data-testid={`sync-entry-${i}`}>
-                              <td className="py-2 px-3 font-medium text-foreground max-w-[300px] truncate" title={entry.assetName}>
-                                {entry.assetName}
-                              </td>
-                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.target}</td>
-                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.modality}</td>
-                              <td className="py-2 px-3 text-muted-foreground capitalize">{entry.indication}</td>
-                              <td className="py-2 px-3 text-muted-foreground text-xs" data-testid={`sync-entry-firstseen-${i}`}>
-                                {entry.firstSeenAt ? formatDate(entry.firstSeenAt) : "—"}
-                              </td>
-                              <td className="py-2 px-3 text-center">
-                                {entry.sourceUrl ? (
-                                  <a href={entry.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                    <ExternalLink className="h-3.5 w-3.5 inline" />
-                                  </a>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+          {schedulerOpen && (schedRunning || schedPaused) && sched && (
+            <div className="mt-2 space-y-2" data-testid="scheduler-status">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <div className="flex items-center gap-3">
+                  <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
+                  <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
+                  {sched.failedThisCycle > 0 && (
+                    <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
                   )}
                 </div>
-              )}
-
-              {isEnriched && session.relevantCount === 0 && session.newCount === 0 && !isFailed && (
-                <div className="text-center py-6 text-muted-foreground" data-testid="sync-no-new">
-                  <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No new entries found — index is up to date.</p>
+                <div className="flex items-center gap-3">
+                  {sched.estimatedRemainingMs != null && (
+                    <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
+                  )}
+                  {sched.priorityQueue.length > 0 && (
+                    <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
+                  )}
+                  <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
                 </div>
-              )}
-
-              {isEnriched && session.relevantCount === 0 && session.newCount > 0 && (
-                <div className="text-center py-6 text-muted-foreground" data-testid="sync-no-relevant">
-                  <p className="text-sm">{session.newCount} new entries found, but none passed the biotech relevance filter.</p>
-                </div>
-              )}
+              </div>
+              <Progress
+                value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
+                className="h-1.5 bg-blue-500/10"
+                data-testid="scheduler-cycle-progress"
+              />
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
+                {sched.cycleStartedAt && (
+                  <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
+                )}
+                {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
+                {sched.nextInstitution && (
+                  <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
+                )}
+                {sched.lastCycleCompletedAt && (
+                  <span>Last cycle completed {relativeTime(sched.lastCycleCompletedAt)}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
-      )}
 
-      {!selectedInstitution && (
-        <div className="text-center py-16 text-muted-foreground" data-testid="sync-empty-state">
-          <Zap className="h-10 w-10 mx-auto mb-3 opacity-30" />
-          <p className="text-base font-medium">Select an institution to sync</p>
-          <p className="text-sm mt-1">Test scraper connections and refresh individual sources</p>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+          <div className="flex items-center gap-3">
+            {data.issueCount > 0 && (
+              <Button
+                variant={issuesOnly ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs"
+                onClick={() => setIssuesOnly((v) => !v)}
+                data-testid="button-issues-filter"
+              >
+                <AlertTriangle className="h-3 w-3 mr-1" />
+                {issuesOnly ? "Show All" : `${data.issueCount} Issues`}
+              </Button>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
+            <Download className="h-3.5 w-3.5 mr-1.5" />
+            Export CSV
+          </Button>
         </div>
-      )}
-    </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
+                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[90px]">Health</th>
+                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Total assets in database for this institution">Total</th>
+                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
+                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]">Last Sync</th>
+                <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
+                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayRows.map((row) => {
+                const isExpanded = expandedInstitution === row.institution;
+                const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
+                return (
+                  <React.Fragment key={row.institution}>
+                    <tr
+                      className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""} ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
+                      data-testid={`health-row-${instSlug}`}
+                      onClick={() => handleRowClick(row.institution)}
+                    >
+                      <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{row.institution}</span>
+                          {row.consecutiveFailures >= 3 && (
+                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
+                              Broken Connection
+                            </Badge>
+                          )}
+                          {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
+                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
+                              {row.consecutiveFailures}x failed
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="text-center py-2 px-3">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <HealthDot health={row.health} />
+                          <HealthLabel health={row.health} />
+                        </div>
+                      </td>
+                      <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
+                        {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
+                      </td>
+                      <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
+                        {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
+                      </td>
+                      <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                        {row.health === "syncing" ? (
+                          <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
+                        ) : (
+                          relativeTime(row.lastSyncAt)
+                        )}
+                      </td>
+                      <td className="text-left py-2 px-3" data-testid={`error-${instSlug}`}>
+                        {row.lastSyncError ? (
+                          <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
+                            {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground/40">&mdash;</span>
+                        )}
+                      </td>
+                      <td className="text-center py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          {row.health === "stale" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
+                              onClick={() => cancelMutation.mutate(row.institution)}
+                              disabled={cancelMutation.isPending}
+                              title={`Cancel stale session for ${row.institution}`}
+                              data-testid={`button-cancel-${instSlug}`}
+                            >
+                              <XCircle className="h-3.5 w-3.5 mr-1" />
+                              Cancel
+                            </Button>
+                          ) : row.health === "syncing" ? (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-blue-600"
+                              onClick={() => handleRowClick(row.institution)}
+                              data-testid={`button-view-sync-${instSlug}`}
+                            >
+                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                              View
+                            </Button>
+                          ) : (
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-7 w-7 p-0"
+                                onClick={() => handleSyncClick(row.institution)}
+                                disabled={syncMutation.isPending}
+                                title={`Sync ${row.institution}`}
+                                data-testid={`button-sync-${instSlug}`}
+                              >
+                                <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                              </Button>
+                              {sched.state === "running" && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600"
+                                  onClick={() => bumpMutation.mutate(row.institution)}
+                                  disabled={bumpMutation.isPending}
+                                  title={`Bump ${row.institution} to front of scheduler queue`}
+                                  data-testid={`button-bump-${instSlug}`}
+                                >
+                                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <ExpandedSyncPanel
+                        key={`panel-${row.institution}`}
+                        institution={row.institution}
+                        pw={pw}
+                        onCollapse={() => setExpandedInstitution(null)}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
   );
 }
+
 
 interface EnrichmentStats {
   total: number;
@@ -1147,225 +1233,6 @@ function Enrichment({ pw }: { pw: string }) {
         </div>
       )}
     </div>
-  );
-}
-
-function SchedulerPanel({ pw }: { pw: string }) {
-  const { toast } = useToast();
-
-  const { data: schedulerData, refetch: refetchScheduler } = useQuery<SchedulerStatus>({
-    queryKey: ["/api/ingest/scheduler/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/ingest/scheduler/status", {
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) throw new Error("Failed to fetch scheduler status");
-      return res.json();
-    },
-    refetchInterval: (query) => {
-      const d = query.state.data as SchedulerStatus | undefined;
-      if (d?.state === "running") return 5_000;
-      return 30_000;
-    },
-  });
-
-  const schedulerStartMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ingest/scheduler/start", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: (d: { ok: boolean; message?: string }) => {
-      if (d.ok) {
-        toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
-      } else {
-        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
-      }
-      refetchScheduler();
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Start failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const schedulerPauseMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ingest/scheduler/pause", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: (d: { ok: boolean; message?: string }) => {
-      if (d.ok) {
-        toast({ title: "Scheduler paused" });
-      } else {
-        toast({ title: "Cannot pause", description: d.message, variant: "destructive" });
-      }
-      refetchScheduler();
-    },
-    onError: (err: Error) => {
-      toast({ title: "Pause failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const sched = schedulerData;
-  const schedRunning = sched?.state === "running";
-  const schedPaused = sched?.state === "paused";
-
-  return (
-    <div className="border border-border rounded-xl bg-card p-5 space-y-4" data-testid="scheduler-panel">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Activity className="w-4 h-4 text-primary" />
-            Sequential Sync Scheduler
-          </h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            Syncs all institutions one-by-one. Press Start Cycle to begin.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {schedRunning ? (
-            <Button
-              size="sm"
-              variant="outline"
-              className="border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
-              onClick={() => schedulerPauseMutation.mutate()}
-              disabled={schedulerPauseMutation.isPending}
-              data-testid="button-pause-scheduler"
-            >
-              <AlertCircle className="w-3.5 h-3.5 mr-1.5" />
-              Pause
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-              onClick={() => schedulerStartMutation.mutate()}
-              disabled={schedulerStartMutation.isPending}
-              data-testid="button-start-scheduler"
-            >
-              {schedulerStartMutation.isPending ? (
-                <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-              ) : (
-                <Zap className="w-3.5 h-3.5 mr-1.5" />
-              )}
-              {schedPaused ? "Resume" : "Start Cycle"}
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {(schedRunning || schedPaused) && sched && (
-        <div className="space-y-2" data-testid="scheduler-status">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-2">
-              {schedRunning && sched.currentInstitution ? (
-                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  {sched.currentInstitution}
-                </Badge>
-              ) : schedRunning ? (
-                <span className="text-blue-600 font-medium">Waiting for next...</span>
-              ) : (
-                <span className="text-amber-600 font-medium">Paused</span>
-              )}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
-              <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
-              {sched.failedThisCycle > 0 && (
-                <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
-              )}
-            </div>
-          </div>
-          <Progress
-            value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
-            className="h-2 bg-blue-500/10"
-            data-testid="scheduler-cycle-progress"
-          />
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
-            {sched.cycleStartedAt && (
-              <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
-            )}
-            {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
-            {sched.nextInstitution && (
-              <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
-            )}
-            {sched.estimatedRemainingMs != null && (
-              <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
-            )}
-            {sched.priorityQueue.length > 0 && (
-              <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
-            )}
-            <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function DataHealth({ pw }: { pw: string }) {
-  const [subView, setSubView] = useState<"collector" | "sync">("collector");
-
-  return (
-    <>
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Health</h2>
-        <p className="text-sm text-muted-foreground mt-1">Monitor collector status, run institution syncs, and manage the sync scheduler</p>
-      </div>
-
-      <div className="flex items-center gap-1 mb-6 p-1 bg-muted/50 rounded-lg w-fit" data-testid="data-health-toggle">
-        <button
-          onClick={() => setSubView("collector")}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            subView === "collector"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="toggle-collector-health"
-        >
-          Collector Health
-        </button>
-        <button
-          onClick={() => setSubView("sync")}
-          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
-            subView === "sync"
-              ? "bg-background text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="toggle-institution-sync"
-        >
-          Institution Sync
-        </button>
-      </div>
-
-      {subView === "collector" && (
-        <div className="border border-border rounded-xl bg-card overflow-hidden">
-          <CollectorHealth pw={pw} />
-        </div>
-      )}
-
-      {subView === "sync" && (
-        <div className="space-y-6">
-          <SchedulerPanel pw={pw} />
-          <InstitutionSync pw={pw} />
-        </div>
-      )}
-    </>
   );
 }
 
