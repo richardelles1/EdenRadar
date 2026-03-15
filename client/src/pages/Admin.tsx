@@ -209,13 +209,19 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
     staleTime: 30000,
   });
 
+  const syncForThisInst = !!(statusData?.syncRunning && statusData?.syncRunningFor === institution);
+
   useEffect(() => {
-    if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
+    const status = statusData?.session?.status;
+    const isTerminal = status === "enriched" || status === "pushed" || status === "failed";
+    if (isTerminal && !syncForThisInst) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ingest/sync/history", institution, pw] });
+    } else if (syncForThisInst && !polling) {
+      setPolling(true);
     }
-  }, [statusData?.session?.status]);
+  }, [statusData?.session?.status, syncForThisInst]);
 
   const cancelStaleMutation = useMutation({
     mutationFn: async () => {
@@ -263,10 +269,10 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
 
   const session = statusData?.session;
   const newEntries = statusData?.newEntries ?? [];
-  const isRunning = session?.status === "running";
-  const isEnriched = session?.status === "enriched";
-  const isPushed = session?.status === "pushed";
-  const isFailed = session?.status === "failed";
+  const isRunning = session?.status === "running" || syncForThisInst;
+  const isEnriched = session?.status === "enriched" && !syncForThisInst;
+  const isPushed = session?.status === "pushed" && !syncForThisInst;
+  const isFailed = session?.status === "failed" && !syncForThisInst;
   const syncIsActive = statusData?.syncRunning ?? false;
 
   const rawCount = session?.rawCount ?? 0;
@@ -274,7 +280,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   const zeroGuard = isEnriched && rawCount === 0;
   const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
 
-  const phaseLabel = session?.phase === "scraping" ? "Scraping..."
+  const phaseLabel = syncForThisInst && session?.status !== "running" ? "Starting sync..."
+    : session?.phase === "scraping" ? "Scraping..."
     : session?.phase === "comparing" ? "Comparing fingerprints..."
     : session?.phase === "enriching" ? "Enriching with AI..."
     : session?.phase === "done" ? "Done"
@@ -364,9 +371,10 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
             <div className="flex items-center gap-2">
               <Badge
                 variant={isPushed ? "default" : isFailed ? "destructive" : isEnriched ? "secondary" : "outline"}
+                className={isRunning ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800" : ""}
                 data-testid="sync-status-badge"
               >
-                {session.status}
+                {syncForThisInst && session?.status !== "running" ? "starting…" : session.status}
               </Badge>
               <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={onCollapse} data-testid="button-collapse-sync">
                 <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
@@ -609,7 +617,7 @@ function DataHealth({ pw }: { pw: string }) {
   const [schedulerOpen, setSchedulerOpen] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("health");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const frozenOrder = useRef<string[] | null>(null);
+  const lastStableOrder = useRef<string[]>([]);
   const { toast } = useToast();
 
   const { data, isLoading, error } = useQuery<CollectorHealthData>({
@@ -768,25 +776,17 @@ function DataHealth({ pw }: { pw: string }) {
     return rows;
   }, [data?.rows, sortKey, sortDir]);
 
-  useEffect(() => {
-    if (data?.syncingCount && data.syncingCount > 0) {
-      if (!frozenOrder.current) {
-        frozenOrder.current = sortedRowsForFreeze.map((r) => r.institution);
-      }
-    } else {
-      frozenOrder.current = null;
-    }
-  }, [data?.syncingCount]);
-
   const sortedRows = React.useMemo(() => {
-    if (frozenOrder.current && data?.syncingCount && data.syncingCount > 0) {
-      const order = frozenOrder.current;
-      return [...(data?.rows ?? [])].sort(
-        (a, b) => order.indexOf(a.institution) - order.indexOf(b.institution)
-      );
+    if (!data?.syncingCount || data.syncingCount === 0) {
+      lastStableOrder.current = sortedRowsForFreeze.map((r) => r.institution);
+      return sortedRowsForFreeze;
     }
-    return sortedRowsForFreeze;
-  }, [sortedRowsForFreeze, data?.syncingCount]);
+    const order = lastStableOrder.current;
+    if (!order.length) return sortedRowsForFreeze;
+    return [...data.rows].sort(
+      (a, b) => order.indexOf(a.institution) - order.indexOf(b.institution)
+    );
+  }, [sortedRowsForFreeze, data?.syncingCount, data?.rows]);
 
   const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
   const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
