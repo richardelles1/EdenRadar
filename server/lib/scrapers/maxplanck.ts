@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { fetchHtml, cleanText } from "./utils";
 
 const INST = "Max Planck Innovation";
 const BASE = "https://www.max-planck-innovation.de/en";
@@ -28,6 +29,13 @@ function decodeHtmlEntities(str: string): string {
     .trim();
 }
 
+function formatCategory(slug: string): string {
+  return slug
+    .replace(/-/g, " ")
+    .replace(/\bincl\b/g, "including")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 export const maxPlanckScraper: InstitutionScraper = {
   institution: INST,
   async scrape(): Promise<ScrapedListing[]> {
@@ -55,16 +63,42 @@ export const maxPlanckScraper: InstitutionScraper = {
           if (!title || title.length < 5 || seen.has(slug)) continue;
           seen.add(slug);
 
+          const categoryLabel = formatCategory(category);
+
           results.push({
             title,
-            description: title,
-            url: `${BASE}/technology-offers/technology-offer/${slug}`,
+            description: `${title}. Max Planck Innovation technology offer in the ${categoryLabel} category.`,
+            url: `${BASE}/technology-offers/${category}.html`,
             institution: INST,
-            categories: [category.replace(/-/g, " ")],
+            categories: [categoryLabel],
           });
         }
       } catch (err: any) {
         console.warn(`[scraper] ${INST}: category ${category} failed: ${err?.message}`);
+      }
+    }
+
+    if (results.length > 0) {
+      console.log(`[scraper] ${INST}: attempting detail page enrichment for ${results.length} offers...`);
+      for (const item of results) {
+        const slug = seen.size > 0 ? [...seen].find(s => item.title.toLowerCase().includes(s.split("-")[0])) : undefined;
+        if (!slug) continue;
+        try {
+          const detailUrl = `${BASE}/technology-offers/technology-offer/${slug}`;
+          const $ = await fetchHtml(detailUrl, 12_000);
+          if (!$) continue;
+          const pageTitle = cleanText($("h1").first().text());
+          if (pageTitle && pageTitle !== "Technology Transfer for the Max Planck Society" && pageTitle.length > 10) {
+            const bodyText = cleanText(
+              $(".ce-bodytext p").first().text() ||
+              $(".frame-default p").first().text() ||
+              $("main p").first().text()
+            );
+            if (bodyText && bodyText.length > 20) {
+              item.description = bodyText.slice(0, 2000);
+            }
+          }
+        } catch {}
       }
     }
 
