@@ -212,6 +212,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   useEffect(() => {
     if (statusData?.session?.status === "enriched" || statusData?.session?.status === "pushed" || statusData?.session?.status === "failed") {
       setPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/ingest/sync/history", institution, pw] });
     }
   }, [statusData?.session?.status]);
 
@@ -599,10 +601,15 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   );
 }
 
+type SortKey = "institution" | "health" | "totalInDb" | "biotechRelevant" | "lastSyncAt";
+
 function DataHealth({ pw }: { pw: string }) {
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const [schedulerOpen, setSchedulerOpen] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("health");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const frozenOrder = useRef<string[] | null>(null);
   const { toast } = useToast();
 
   const { data, isLoading, error } = useQuery<CollectorHealthData>({
@@ -760,13 +767,61 @@ function DataHealth({ pw }: { pw: string }) {
   }
 
   const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, degraded: 2, syncing: 3, never: 4, ok: 5 };
-  const sortedRows = [...data.rows].sort((a, b) => {
-    const hDiff = healthOrder[a.health] - healthOrder[b.health];
-    if (hDiff !== 0) return hDiff;
-    return b.biotechRelevant - a.biotechRelevant;
-  });
+
+  const sortedRowsForFreeze = React.useMemo(() => {
+    if (!data) return [];
+    const rows = [...data.rows];
+    const dir = sortDir === "asc" ? 1 : -1;
+    rows.sort((a, b) => {
+      switch (sortKey) {
+        case "institution": return dir * a.institution.localeCompare(b.institution);
+        case "health": {
+          const hDiff = healthOrder[a.health] - healthOrder[b.health];
+          return dir * (hDiff !== 0 ? hDiff : b.biotechRelevant - a.biotechRelevant);
+        }
+        case "totalInDb": return dir * (a.totalInDb - b.totalInDb);
+        case "biotechRelevant": return dir * (a.biotechRelevant - b.biotechRelevant);
+        case "lastSyncAt": {
+          const aT = a.lastSyncAt ? new Date(a.lastSyncAt).getTime() : 0;
+          const bT = b.lastSyncAt ? new Date(b.lastSyncAt).getTime() : 0;
+          return dir * (aT - bT);
+        }
+        default: return 0;
+      }
+    });
+    return rows;
+  }, [data?.rows, sortKey, sortDir]);
+
+  useEffect(() => {
+    if (data?.syncingCount && data.syncingCount > 0) {
+      if (!frozenOrder.current) {
+        frozenOrder.current = sortedRowsForFreeze.map((r) => r.institution);
+      }
+    } else {
+      frozenOrder.current = null;
+    }
+  }, [data?.syncingCount]);
+
+  const sortedRows = React.useMemo(() => {
+    if (frozenOrder.current && data?.syncingCount && data.syncingCount > 0) {
+      const order = frozenOrder.current;
+      return [...(data?.rows ?? [])].sort(
+        (a, b) => order.indexOf(a.institution) - order.indexOf(b.institution)
+      );
+    }
+    return sortedRowsForFreeze;
+  }, [sortedRowsForFreeze, data?.syncingCount]);
 
   const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never") : sortedRows;
+
+  function handleSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => d === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
+    }
+  }
 
   function exportCsv() {
     const escape = (v: string) => `"${v.replace(/"/g, '""')}"`;
@@ -878,7 +933,7 @@ function DataHealth({ pw }: { pw: string }) {
               ) : (
                 <Button
                   size="sm"
-                  className="h-7 text-xs bg-primary text-primary-foreground hover:bg-primary/90"
+                  className="h-8 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-transform"
                   onClick={() => schedulerStartMutation.mutate()}
                   disabled={schedulerStartMutation.isPending}
                   data-testid="button-start-scheduler"
@@ -973,11 +1028,27 @@ function DataHealth({ pw }: { pw: string }) {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
-                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[90px]">Health</th>
-                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Total assets in database for this institution">Total</th>
-                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
-                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[80px]">Last Sync</th>
+                {(["institution", "health", "totalInDb", "biotechRelevant", "lastSyncAt"] as SortKey[]).map((col) => {
+                  const label = col === "institution" ? "Institution" : col === "health" ? "Health" : col === "totalInDb" ? "Total" : col === "biotechRelevant" ? "Relevant" : "Last Sync";
+                  const align = col === "institution" ? "text-left" : "text-center";
+                  const minW = col === "institution" ? "min-w-[200px]" : col === "health" ? "min-w-[90px]" : col === "lastSyncAt" ? "min-w-[80px]" : "min-w-[70px]";
+                  const title = col === "totalInDb" ? "Total assets in database" : col === "biotechRelevant" ? "Biotech-relevant subset" : undefined;
+                  const active = sortKey === col;
+                  return (
+                    <th key={col} className={`${align} py-3 px-4 font-semibold text-foreground ${minW}`} title={title}>
+                      <button
+                        onClick={() => handleSort(col)}
+                        className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${active ? "text-primary" : ""}`}
+                        data-testid={`sort-${col}`}
+                      >
+                        {label}
+                        <span className="text-[10px] opacity-60 w-3">
+                          {active ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                        </span>
+                      </button>
+                    </th>
+                  );
+                })}
                 <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
                 <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
               </tr>
