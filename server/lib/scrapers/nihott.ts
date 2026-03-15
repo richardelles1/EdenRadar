@@ -65,7 +65,7 @@ function hitToListing(hit: AlgoliaHit, institution: string): ScrapedListing | nu
   if (!title || title.length < 5) return null;
 
   const rawUrl = hit.url ?? "";
-  const url = rawUrl.startsWith("/") ? `${BASE_URL}${rawUrl}` : rawUrl;
+  const url = rawUrl.startsWith("http") ? rawUrl : rawUrl.startsWith("/") ? `${BASE_URL}${rawUrl}` : "";
   if (!url) return null;
 
   const description = stripHtml(hit.body ?? "").slice(0, 2000);
@@ -88,54 +88,71 @@ function hitToListing(hit: AlgoliaHit, institution: string): ScrapedListing | nu
   };
 }
 
-function createNihAlgoliaScraper(
+async function fetchPartition(
+  filters: string,
   institution: string,
-  filters: string
-): InstitutionScraper {
-  return {
-    institution,
-    async scrape(): Promise<ScrapedListing[]> {
-      try {
-        const first = await queryAlgolia(0, filters);
-        console.log(`[scraper] ${institution}: Algolia reports ${first.nbHits} hits, ${first.nbPages} pages`);
+  seen: Set<string>,
+  results: ScrapedListing[]
+): Promise<number> {
+  const first = await queryAlgolia(0, filters);
+  const maxPages = Math.min(first.nbPages, 5);
+  let count = 0;
 
-        const results: ScrapedListing[] = [];
-        const seen = new Set<string>();
-
-        const processHits = (hits: AlgoliaHit[]) => {
-          for (const hit of hits) {
-            const listing = hitToListing(hit, institution);
-            if (!listing) continue;
-            const dedupKey = hit.objectID || listing.url || listing.title;
-            if (seen.has(dedupKey)) continue;
-            seen.add(dedupKey);
-            results.push(listing);
-          }
-        };
-
-        processHits(first.hits);
-
-        for (let pg = 1; pg < first.nbPages && pg < 50; pg++) {
-          try {
-            const page = await queryAlgolia(pg, filters);
-            processHits(page.hits);
-          } catch (err: any) {
-            console.warn(`[scraper] ${institution}: Algolia page ${pg} failed: ${err?.message}`);
-            break;
-          }
-        }
-
-        console.log(`[scraper] ${institution}: ${results.length} listings (Algolia)`);
-        return results;
-      } catch (err: any) {
-        console.error(`[scraper] ${institution} failed: ${err?.message}`);
-        return [];
-      }
-    },
+  const processHits = (hits: AlgoliaHit[]) => {
+    for (const hit of hits) {
+      const listing = hitToListing(hit, institution);
+      if (!listing) continue;
+      const dedupKey = hit.objectID || listing.url || listing.title;
+      if (seen.has(dedupKey)) continue;
+      seen.add(dedupKey);
+      results.push(listing);
+      count++;
+    }
   };
+
+  processHits(first.hits);
+
+  for (let pg = 1; pg < maxPages; pg++) {
+    try {
+      const page = await queryAlgolia(pg, filters);
+      if (page.hits.length === 0) break;
+      processHits(page.hits);
+    } catch (err: any) {
+      console.warn(`[scraper] ${institution}: Algolia partition page ${pg} failed: ${err?.message}`);
+      break;
+    }
+  }
+
+  return count;
 }
 
-export const nihOttScraper = createNihAlgoliaScraper(
-  INST,
-  "type:tech"
-);
+export const nihOttScraper: InstitutionScraper = {
+  institution: INST,
+  async scrape(): Promise<ScrapedListing[]> {
+    try {
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      const partitions = [
+        'type:tech AND field_data_source:"NIHTT"',
+        'type:tech AND field_data_source:"NCI"',
+        'type:tech AND NOT field_data_source:"NIHTT" AND NOT field_data_source:"NCI"',
+      ];
+
+      for (const filter of partitions) {
+        try {
+          const count = await fetchPartition(filter, INST, seen, results);
+          console.log(`[scraper] ${INST}: partition "${filter}" → ${count} listings`);
+        } catch (err: any) {
+          console.warn(`[scraper] ${INST}: partition failed: ${err?.message}`);
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} total listings (Algolia, ${partitions.length} partitions)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
