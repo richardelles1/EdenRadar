@@ -28,6 +28,7 @@ import { nihOttScraper } from "./nihott";
 import { nciTtcScraper } from "./ncittc";
 import { maxPlanckScraper } from "./maxplanck";
 import { mskScraper } from "./msk";
+import { lifeArcScraper } from "./lifearc";
 import { yaleScraper } from "./yale";
 import { buScraper } from "./bu";
 import { georgetownScraper } from "./georgetown";
@@ -213,6 +214,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nciTtcScraper,
   maxPlanckScraper,
   mskScraper,
+  lifeArcScraper,
   yaleScraper,
   buScraper,
   georgetownScraper,
