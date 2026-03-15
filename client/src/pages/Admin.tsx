@@ -685,6 +685,56 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const schedulerStartMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/start", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      if (d.ok) {
+        toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
+      } else {
+        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Start failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const schedulerPauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/pause", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      if (d.ok) {
+        toast({ title: "Scheduler paused" });
+      } else {
+        toast({ title: "Cannot pause", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Pause failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const syncingRows = (data?.rows ?? []).filter((r) => r.health === "syncing");
   const firstSyncingInstitution = syncingRows[0]?.institution ?? null;
   useEffect(() => {
@@ -741,56 +791,6 @@ function DataHealth({ pw }: { pw: string }) {
 
   const sched = data.scheduler;
   const syncedToday = data.syncedToday ?? 0;
-
-  const schedulerStartMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ingest/scheduler/start", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: (d: { ok: boolean; message?: string }) => {
-      if (d.ok) {
-        toast({ title: "Scheduler started", description: "Sequential sync cycle is running" });
-      } else {
-        toast({ title: "Cannot start", description: d.message, variant: "destructive" });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Start failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const schedulerPauseMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/ingest/scheduler/pause", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: (d: { ok: boolean; message?: string }) => {
-      if (d.ok) {
-        toast({ title: "Scheduler paused" });
-      } else {
-        toast({ title: "Cannot pause", description: d.message, variant: "destructive" });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Pause failed", description: err.message, variant: "destructive" });
-    },
-  });
 
   const handleSyncClick = (institution: string) => {
     setExpandedInstitution(institution);
