@@ -47,7 +47,7 @@ async function getTotalPages(html: string): Promise<number> {
   return maxPage;
 }
 
-async function resolveNodeUrl(nodeId: number): Promise<{ url: string; title: string } | null> {
+async function resolveNodeUrl(nodeId: number): Promise<{ url: string; title: string; description: string } | null> {
   try {
     const nodeUrl = `${BASE_URL}/node/${nodeId}`;
     const res = await fetch(nodeUrl, {
@@ -69,7 +69,13 @@ async function resolveNodeUrl(nodeId: number): Promise<{ url: string; title: str
     }
     if (!title) return null;
 
-    return { url: finalUrl || nodeUrl, title };
+    const description = $(".field--body p")
+      .map((_, el) => $(el).text().trim())
+      .get()
+      .filter(Boolean)
+      .join(" ");
+
+    return { url: finalUrl || nodeUrl, title, description };
   } catch {
     return null;
   }
@@ -121,10 +127,10 @@ export const yaleScraper: InstitutionScraper = {
       const resolvedResults = await runWithConcurrency(resolvedTasks, 3);
 
       const listings: ScrapedListing[] = resolvedResults
-        .filter((r): r is { url: string; title: string } => r !== null)
-        .map(({ url, title }) => ({
+        .filter((r): r is { url: string; title: string; description: string } => r !== null)
+        .map(({ url, title, description }) => ({
           title,
-          description: "",
+          description,
           url,
           institution: INST,
         }));
