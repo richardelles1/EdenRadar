@@ -32,16 +32,32 @@ function decodeHtmlEntities(str: string): string {
 function extractOffersFromHtml(
   html: string
 ): { title: string; slug: string }[] {
-  const pattern = /<h3>([^<]+)<\/h3>\s*<p><a href="technology-offers\/technology-offer\/([^"]+)">[^<]*<\/a><\/p>/gi;
   const offers: { title: string; slug: string }[] = [];
+  const seen = new Set<string>();
+
+  const catPattern = /<a[^>]+href="technology-offers\/technology-offer\/([^"]+)"[^>]*>([^<]+)<\/a>/gi;
   let match: RegExpExecArray | null;
-  while ((match = pattern.exec(html)) !== null) {
-    const title = decodeHtmlEntities(match[1]);
-    const slug = match[2];
-    if (title && title.length >= 5) {
+  while ((match = catPattern.exec(html)) !== null) {
+    const slug = match[1];
+    const title = decodeHtmlEntities(match[2]);
+    if (title && title.length >= 5 && !seen.has(slug)) {
+      seen.add(slug);
       offers.push({ title, slug });
     }
   }
+
+  if (offers.length === 0) {
+    const homePattern = /<h3>([^<]+)<\/h3>\s*<p><a href="technology-offers\/technology-offer\/([^"]+)">[^<]*<\/a><\/p>/gi;
+    while ((match = homePattern.exec(html)) !== null) {
+      const title = decodeHtmlEntities(match[1]);
+      const slug = match[2];
+      if (title && title.length >= 5 && !seen.has(slug)) {
+        seen.add(slug);
+        offers.push({ title, slug });
+      }
+    }
+  }
+
   return offers;
 }
 
@@ -73,8 +89,8 @@ export const maxPlanckScraper: InstitutionScraper = {
     for (const base of DOMAINS) {
       for (const category of BIOTECH_CATEGORIES) {
         const paths = [
-          `${base}/en/technology-offers/${category}.html`,
           `${base}/technology-offers/${category}.html`,
+          `${base}/en/technology-offers/${category}.html`,
         ];
         for (const catUrl of paths) {
           try {

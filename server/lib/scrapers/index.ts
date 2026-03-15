@@ -29,6 +29,7 @@ import { nciTtcScraper } from "./ncittc";
 import { maxPlanckScraper } from "./maxplanck";
 import { mskScraper } from "./msk";
 import { lifeArcScraper } from "./lifearc";
+import { kyotoTloScraper } from "./kyototlo";
 import { yaleScraper } from "./yale";
 import { buScraper } from "./bu";
 import { georgetownScraper } from "./georgetown";
@@ -158,7 +159,6 @@ import {
   bidmcScraper,
   northumbriaScraper,
   cmuScraper,
-  kyotoIcemsScraper,
   smuFlintboxScraper,
   clevelandClinicScraper,
   uabScraper,
@@ -396,7 +396,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   bidmcScraper,
   northumbriaScraper,
   cmuScraper,
-  kyotoIcemsScraper,
+  kyotoTloScraper,
   smuFlintboxScraper,
   clevelandClinicScraper,
   uabScraper,

@@ -178,7 +178,14 @@ export function createTechPublisherScraper(
 
     let sitemapPageCount = 0;
     if (sitemapTechUrls.length > 0) {
-      let uncovered = sitemapTechUrls.filter((u) => !seenUrls.has(u));
+      const seenPaths = new Set<string>();
+      for (const u of seenUrls) {
+        try { seenPaths.add(new URL(u).pathname); } catch {}
+      }
+      let uncovered = sitemapTechUrls.filter((u) => {
+        if (seenUrls.has(u)) return false;
+        try { return !seenPaths.has(new URL(u).pathname); } catch { return true; }
+      });
       if (opts.maxTech != null) uncovered = uncovered.slice(0, opts.maxTech);
       if (uncovered.length > 0) {
         await runConcurrent(uncovered, async (url) => {
