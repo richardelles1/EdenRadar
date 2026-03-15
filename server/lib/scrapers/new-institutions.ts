@@ -411,7 +411,7 @@ export const wsuScraper = createTechPublisherScraper(
 export const arizonaScraper = createTechPublisherScraper(
   "arizona",
   "University of Arizona",
-  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80 }
+  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80, maxCats: 30, institutionTimeoutMs: 270_000 }
 );
 
 export const pennStateScraper = createFlintboxScraper(
@@ -610,7 +610,7 @@ export const uhoustonScraper: InstitutionScraper = {
 };
 export const texasTechScraper = createStubScraper("Texas Tech University", "Flintbox API deprecated, no public alternative found");
 export const untScraper = createStubScraper("University of North Texas");
-export const baylorScraper = createStubScraper("Baylor University", "Flintbox API deprecated, no public alternative found");
+export const baylorScraper = createInPartScraper("bcm", "Baylor College of Medicine");
 export const portlandStateScraper = createInPartScraper("pdx", "Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createMontanaStateScraper();
