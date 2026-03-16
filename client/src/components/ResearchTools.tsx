@@ -84,13 +84,13 @@ export default function ResearchTools({ project, onSave, saving }: ResearchTools
             </TabsTrigger>
           </TabsList>
           <TabsContent value="hypotheses">
-            <HypothesesTab project={project} onSave={onSave} saving={saving} />
+            <HypothesisBuilder project={project} onSave={onSave} saving={saving} />
           </TabsContent>
           <TabsContent value="fishbone">
-            <FishboneTab project={project} onSave={onSave} saving={saving} />
+            <FishboneDiagram project={project} onSave={onSave} saving={saving} />
           </TabsContent>
           <TabsContent value="timeline">
-            <TimelineTab project={project} onSave={onSave} saving={saving} />
+            <VisualTimeline project={project} onSave={onSave} saving={saving} />
           </TabsContent>
         </Tabs>
       </div>
@@ -116,7 +116,7 @@ function ToolSaveButton({ label, saving, onClick }: { label: string; saving: str
   );
 }
 
-function HypothesesTab({ project, onSave, saving }: ResearchToolsProps) {
+export function HypothesisBuilder({ project, onSave, saving }: ResearchToolsProps) {
   const [hypotheses, setHypotheses] = useState<Hypothesis[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -318,7 +318,7 @@ function HypothesesTab({ project, onSave, saving }: ResearchToolsProps) {
   );
 }
 
-function FishboneTab({ project, onSave, saving }: ResearchToolsProps) {
+export function FishboneDiagram({ project, onSave, saving }: ResearchToolsProps) {
   const { toast } = useToast();
   const [fishbone, setFishbone] = useState<FishboneData>({
     effect: "",
@@ -520,7 +520,7 @@ function FishboneTab({ project, onSave, saving }: ResearchToolsProps) {
   );
 }
 
-function TimelineTab({ project, onSave, saving }: ResearchToolsProps) {
+export function VisualTimeline({ project, onSave, saving }: ResearchToolsProps) {
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -699,6 +699,111 @@ function TimelineTab({ project, onSave, saving }: ResearchToolsProps) {
       )}
 
       <ToolSaveButton label="Timeline" saving={saving} onClick={() => onSave("Timeline", { milestones })} />
+    </div>
+  );
+}
+
+const PROTOCOL_ITEMS = [
+  { key: "blinding", label: "Blinding / Masking" },
+  { key: "randomization", label: "Randomization" },
+  { key: "controls", label: "Appropriate Controls" },
+  { key: "sampleSizeCalc", label: "Sample Size Calculation" },
+  { key: "irb", label: "IRB / Ethics Approval" },
+  { key: "preRegistration", label: "Pre-Registration" },
+  { key: "dataSharingPlan", label: "Data Sharing Plan" },
+  { key: "conflictOfInterest", label: "Conflict of Interest Disclosure" },
+  { key: "inclusionCriteria", label: "Inclusion / Exclusion Criteria" },
+  { key: "reproducibility", label: "Reproducibility Plan" },
+];
+
+type PicoData = { population: string; intervention: string; comparison: string; outcome: string };
+
+export function PicoHelper({ project, onSave, saving }: ResearchToolsProps) {
+  const [pico, setPico] = useState<PicoData>({ population: "", intervention: "", comparison: "", outcome: "" });
+
+  useEffect(() => {
+    const saved = project.pico as PicoData | null;
+    if (saved) setPico(saved);
+  }, [project.pico]);
+
+  const fields: Array<{ key: keyof PicoData; label: string; placeholder: string }> = [
+    { key: "population", label: "P — Population", placeholder: "Who is being studied? (e.g., adults with type 2 diabetes)" },
+    { key: "intervention", label: "I — Intervention", placeholder: "What is the treatment or exposure? (e.g., GLP-1 agonist)" },
+    { key: "comparison", label: "C — Comparison", placeholder: "What is the alternative? (e.g., placebo or standard care)" },
+    { key: "outcome", label: "O — Outcome", placeholder: "What is measured? (e.g., HbA1c reduction at 12 weeks)" },
+  ];
+
+  return (
+    <div className="space-y-3" data-testid="pico-helper">
+      <p className="text-xs text-muted-foreground">
+        Structure your research question using the PICO framework.
+      </p>
+      {fields.map((f) => (
+        <div key={f.key} className="space-y-1.5">
+          <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">{f.label}</label>
+          <Textarea
+            value={pico[f.key]}
+            onChange={(e) => setPico((prev) => ({ ...prev, [f.key]: e.target.value }))}
+            rows={2}
+            className="resize-none text-xs"
+            placeholder={f.placeholder}
+            data-testid={`input-pico-${f.key}`}
+          />
+        </div>
+      ))}
+      <ToolSaveButton label="PICO" saving={saving} onClick={() => onSave("PICO", { pico } as any)} />
+    </div>
+  );
+}
+
+export function ProtocolChecklist({ project, onSave, saving }: ResearchToolsProps) {
+  const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const saved = project.protocolChecklist as Record<string, boolean> | null;
+    if (saved) setChecklist(saved);
+  }, [project.protocolChecklist]);
+
+  function toggle(key: string) {
+    setChecklist((prev) => ({ ...prev, [key]: !prev[key] }));
+  }
+
+  const completedCount = PROTOCOL_ITEMS.filter((item) => checklist[item.key]).length;
+
+  return (
+    <div className="space-y-3" data-testid="protocol-checklist">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground">
+          Research quality checklist — track protocol completeness.
+        </p>
+        <Badge variant="secondary" className="text-[10px]" data-testid="text-protocol-progress">
+          {completedCount} / {PROTOCOL_ITEMS.length}
+        </Badge>
+      </div>
+      <div className="space-y-1">
+        {PROTOCOL_ITEMS.map((item) => (
+          <button
+            key={item.key}
+            onClick={() => toggle(item.key)}
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left text-xs transition-colors ${
+              checklist[item.key]
+                ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
+                : "bg-background hover:bg-accent/40 text-foreground"
+            }`}
+            data-testid={`toggle-protocol-${item.key}`}
+          >
+            <div className={`w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${
+              checklist[item.key]
+                ? "bg-emerald-500 border-emerald-500"
+                : "border-border"
+            }`}>
+              {checklist[item.key] && <Check className="w-3 h-3 text-white" />}
+            </div>
+            <span className={checklist[item.key] ? "line-through" : ""}>{item.label}</span>
+          </button>
+        ))}
+      </div>
+      <ToolSaveButton label="Protocol" saving={saving} onClick={() => onSave("Protocol", { protocolChecklist: checklist } as any)} />
     </div>
   );
 }

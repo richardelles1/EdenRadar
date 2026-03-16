@@ -1543,6 +1543,13 @@ export async function registerRoutes(
         targetDate: z.string(),
         completed: z.boolean(),
       })).nullable().optional(),
+      pico: z.object({
+        population: z.string(),
+        intervention: z.string(),
+        comparison: z.string(),
+        outcome: z.string(),
+      }).nullable().optional(),
+      protocolChecklist: z.record(z.boolean()).nullable().optional(),
     });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -1564,7 +1571,7 @@ export async function registerRoutes(
       "keywords","keyPapers","keyTechnologies","datasetsUsed","supportingEvidenceLinks",
       "projectContributors","collaborationType","fundingSources","nextExperiments","projectSeeking",
       "potentialPartners","section4Files","section5Files","section8Files","generalFiles",
-      "hypotheses","fishbone","milestones",
+      "hypotheses","fishbone","milestones","pico","protocolChecklist",
     ] as const;
     for (const f of jsonFields) {
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];

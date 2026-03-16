@@ -19,7 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject } from "@shared/schema";
 import { ResearchBriefPDF } from "@/components/ResearchBriefPDF";
 import { computeReadinessScore } from "@/lib/readiness";
-import ResearchTools from "@/components/ResearchTools";
+import { HypothesisBuilder, FishboneDiagram, VisualTimeline, PicoHelper, ProtocolChecklist } from "@/components/ResearchTools";
 
 type Paper = { paper_title: string; authors: string; journal: string; year: string; paper_link: string; notes: string };
 type Dataset = { dataset_name: string; dataset_source: string; dataset_link: string; notes: string };
@@ -366,6 +366,12 @@ export default function ProjectDetail() {
               hypothesis: local.hypothesis,
               scientificRationale: local.scientificRationale,
             })} />
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Hypothesis Builder</span>
+              </div>
+              <HypothesisBuilder project={local} onSave={saveSection} saving={saving} />
+            </div>
           </SectionCard>
 
           {/* §3 — Literature Context */}
@@ -458,6 +464,12 @@ export default function ProjectDetail() {
               preliminaryData: local.preliminaryData, supportingEvidenceLinks: local.supportingEvidenceLinks,
               confidenceLevel: local.confidenceLevel, section5Files: local.section5Files,
             })} />
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Fishbone Analysis</span>
+              </div>
+              <FishboneDiagram project={local} onSave={saveSection} saving={saving} />
+            </div>
           </SectionCard>
 
           {/* §6 — Commercialization */}
@@ -568,21 +580,21 @@ export default function ProjectDetail() {
             })} />
           </SectionCard>
 
-          {/* §10 — Milestones */}
-          <SectionCard id="milestones" num={10} title="Next Milestones" collapsed={collapsed["milestones"]} onToggle={() => toggleCollapse("milestones")} sectionRef={(el) => { sectionRefs.current["milestones"] = el; }}>
-            <FieldGroup label="Next Experiments">
-              <ExperimentChecklist items={local.nextExperiments ?? []} onChange={(e) => setField("nextExperiments", e)} />
-            </FieldGroup>
-            <FieldGroup label="Expected Timeline">
-              <SelectField value={local.expectedTimeline ?? ""} onChange={(v) => setField("expectedTimeline", v)} options={TIMELINE_OPTIONS} placeholder="Select timeline" testId="select-timeline" />
-            </FieldGroup>
-            <FieldGroup label="Success Criteria">
-              <Textarea value={local.successCriteria ?? ""} onChange={(e) => setField("successCriteria", e.target.value)} rows={3} className="resize-none" data-testid="input-success-criteria" />
-            </FieldGroup>
-            <SaveButton label="Milestones" saving={saving} onClick={() => saveSection("Milestones", {
-              nextExperiments: local.nextExperiments, expectedTimeline: local.expectedTimeline,
-              successCriteria: local.successCriteria,
-            })} />
+          {/* §10 — Milestones & Timeline */}
+          <SectionCard id="milestones" num={10} title="Milestones & Timeline" collapsed={collapsed["milestones"]} onToggle={() => toggleCollapse("milestones")} sectionRef={(el) => { sectionRefs.current["milestones"] = el; }}>
+            <VisualTimeline project={local} onSave={saveSection} saving={saving} />
+            <div className="mt-4 pt-4 border-t border-border/50">
+              <FieldGroup label="Next Experiments">
+                <ExperimentChecklist items={local.nextExperiments ?? []} onChange={(e) => setField("nextExperiments", e)} />
+              </FieldGroup>
+              <FieldGroup label="Success Criteria">
+                <Textarea value={local.successCriteria ?? ""} onChange={(e) => setField("successCriteria", e.target.value)} rows={3} className="resize-none" data-testid="input-success-criteria" />
+              </FieldGroup>
+              <SaveButton label="Milestones" saving={saving} onClick={() => saveSection("Milestones", {
+                nextExperiments: local.nextExperiments, expectedTimeline: local.expectedTimeline,
+                successCriteria: local.successCriteria,
+              })} />
+            </div>
           </SectionCard>
 
           {/* §11 — Discovery Card */}
@@ -631,9 +643,22 @@ export default function ProjectDetail() {
           </SectionCard>
 
           {/* §12 — Research Tools */}
-          <div ref={(el) => { sectionRefs.current["tools"] = el; }} id="section-tools">
-            <ResearchTools project={local} onSave={saveSection} saving={saving} />
-          </div>
+          <SectionCard id="tools" num={12} title="Research Tools" collapsed={collapsed["tools"]} onToggle={() => toggleCollapse("tools")} sectionRef={(el) => { sectionRefs.current["tools"] = el; }}>
+            <div className="space-y-6">
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">PICO Helper</span>
+                </div>
+                <PicoHelper project={local} onSave={saveSection} saving={saving} />
+              </div>
+              <div className="border-t border-border/50 pt-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wide">Protocol Checklist</span>
+                </div>
+                <ProtocolChecklist project={local} onSave={saveSection} saving={saving} />
+              </div>
+            </div>
+          </SectionCard>
 
           {/* General Attachments — unlabeled trailing panel */}
           <div className="border border-border rounded-lg bg-card overflow-hidden">

@@ -300,6 +300,13 @@ export const researchProjects = pgTable("research_projects", {
     targetDate: string;
     completed: boolean;
   }>>().default([]),
+  pico: jsonb("pico").$type<{
+    population: string;
+    intervention: string;
+    comparison: string;
+    outcome: string;
+  }>(),
+  protocolChecklist: jsonb("protocol_checklist").$type<Record<string, boolean>>(),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({
