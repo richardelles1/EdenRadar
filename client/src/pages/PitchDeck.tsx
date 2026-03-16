@@ -453,7 +453,7 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   const problems = [
     { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no pathway to industry attention." },
     { icon: Search, title: "Industry Starts Too Late", desc: "Commercial discovery tools begin at the patent stage. The best assets are already locked, gone, or unfunded." },
-    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, Technology Transfer Offices, and Business Development teams use disconnected systems. The pipeline has no connective tissue." },
+    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, Technology Transfer Offices (TTOs), and Business Development teams use disconnected systems. The pipeline has no connective tissue." },
   ];
 
   return (
@@ -507,7 +507,7 @@ function SolutionSlide({ colors }: { colors: Colors }) {
   const stages = [
     { label: "Concept Community", sublabel: "EdenDiscovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
     { label: "Project-Based Research", sublabel: "EdenLab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility." },
-    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored Technology Transfer Offices with real-time convergence signals." },
+    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored Technology Transfer Offices (TTOs) with real-time convergence signals." },
   ];
   return (
     <Slide index={3} section="Our Solution" accent={colors.green} colors={colors}>
@@ -825,7 +825,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
                 <span className="text-sm sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
                 <span className="text-[9px] sm:text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
               </div>
-              <p className="text-[9px] sm:text-xs leading-relaxed line-clamp-2 sm:line-clamp-none" style={{ color: colors.textMuted }}>{t.desc}</p>
+              <p className="text-[9px] sm:text-xs leading-relaxed" style={{ color: colors.textMuted }}>{t.desc}</p>
             </div>
           </div>
         ))}
