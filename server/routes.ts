@@ -1803,6 +1803,57 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/research/profile/photo", uploadMiddleware.single("photo"), async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file provided" });
+
+    const allowedMimes = new Set(["image/png", "image/jpeg", "image/jpg", "image/webp"]);
+    if (!allowedMimes.has(file.mimetype)) {
+      return res.status(400).json({ error: "Only PNG, JPG, and WebP images are allowed" });
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ error: "Photo must be under 5 MB" });
+    }
+
+    try {
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      if (!serviceKey || !sbUrl) return res.status(500).json({ error: "Storage not configured" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminClient = createClient(sbUrl, serviceKey);
+
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `profiles/${researcherId}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await adminClient.storage
+        .from("researcher-profiles")
+        .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+      if (uploadError) {
+        if (uploadError.message?.includes("Bucket not found")) {
+          await adminClient.storage.createBucket("researcher-profiles", { public: false });
+          const { error: retryError } = await adminClient.storage
+            .from("researcher-profiles")
+            .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+          if (retryError) return res.status(500).json({ error: retryError.message });
+        } else {
+          return res.status(500).json({ error: uploadError.message });
+        }
+      }
+
+      const { data: signedData } = await adminClient.storage
+        .from("researcher-profiles")
+        .createSignedUrl(filePath, 315360000);
+
+      res.json({ url: signedData?.signedUrl ?? "" });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Saved references
   app.get("/api/research/references", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;

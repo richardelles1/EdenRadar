@@ -9,6 +9,7 @@ export type ResearcherProfile = {
   institutionType: string;
   alertTopics: string[];
   secondaryInterests: string[];
+  photoUrl: string;
 };
 
 const DEFAULT_PROFILE: ResearcherProfile = {
@@ -20,6 +21,7 @@ const DEFAULT_PROFILE: ResearcherProfile = {
   institutionType: "",
   alertTopics: [],
   secondaryInterests: [],
+  photoUrl: "",
 };
 
 export function useResearcherId(): string {

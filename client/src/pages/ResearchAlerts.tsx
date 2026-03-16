@@ -12,6 +12,12 @@ import {
   Activity,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
+  Clock,
+  Send,
+  ShieldCheck,
+  ShieldX,
+  Archive,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -219,45 +225,7 @@ export default function ResearchAlerts() {
         {discoveryCards.length === 0 ? (
           <EmptyState text="No discovery cards yet. Create one to track its status here." />
         ) : (
-          discoveryCards.map((card) => (
-            <div
-              key={card.id}
-              className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors"
-              data-testid={`discovery-update-${card.id}`}
-            >
-              <div className="flex items-start justify-between gap-3 mb-1.5">
-                <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-1">{card.title}</h3>
-                <div className="flex gap-1.5 shrink-0">
-                  {card.archived && <Badge variant="secondary" className="text-[10px]">Archived</Badge>}
-                  {card.published ? (
-                    <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">Live</Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-[10px]">Draft</Badge>
-                  )}
-                  <Badge variant="secondary" className={`text-[10px] ${
-                    card.adminStatus === "approved"
-                      ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
-                      : card.adminStatus === "rejected"
-                      ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
-                      : "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
-                  }`}>
-                    {card.adminStatus}
-                  </Badge>
-                </div>
-              </div>
-              <p className="text-xs text-muted-foreground line-clamp-1 mb-2">{card.researchArea} · {card.technologyType}</p>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                <span className="flex items-center gap-1">
-                  <Calendar className="w-3 h-3" />
-                  Created {new Date(card.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Building2 className="w-3 h-3" />
-                  {card.institution}
-                </span>
-              </div>
-            </div>
-          ))
+          discoveryCards.map((card) => <DiscoveryTimelineCard key={card.id} card={card} />)
         )}
       </AlertSection>
     </div>
@@ -356,6 +324,109 @@ function AlertCard({ signal, index, colorClass }: { signal: SearchResult; index:
         {signal.source_key && (
           <Badge variant="secondary" className="text-[9px]">{signal.source_key}</Badge>
         )}
+      </div>
+    </div>
+  );
+}
+
+function DiscoveryTimelineCard({ card }: { card: DiscoveryCard }) {
+  const fmtDate = (d: string | Date) =>
+    new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  type TimelineStep = { icon: React.ReactNode; label: string; date?: string; active: boolean; color: string };
+
+  const steps: TimelineStep[] = [
+    {
+      icon: <Clock className="w-3.5 h-3.5" />,
+      label: "Created",
+      date: fmtDate(card.createdAt),
+      active: true,
+      color: "text-muted-foreground",
+    },
+  ];
+
+  if (card.published) {
+    steps.push({
+      icon: <Send className="w-3.5 h-3.5" />,
+      label: "Published to Industry",
+      active: true,
+      color: "text-blue-500",
+    });
+  }
+
+  if (card.adminStatus === "approved") {
+    steps.push({
+      icon: <ShieldCheck className="w-3.5 h-3.5" />,
+      label: "Approved — Now Live to Industry",
+      active: true,
+      color: "text-emerald-500",
+    });
+  } else if (card.adminStatus === "rejected") {
+    steps.push({
+      icon: <ShieldX className="w-3.5 h-3.5" />,
+      label: "Rejected by Admin",
+      active: true,
+      color: "text-red-500",
+    });
+  } else if (card.published) {
+    steps.push({
+      icon: <ShieldCheck className="w-3.5 h-3.5" />,
+      label: "Awaiting Review",
+      active: false,
+      color: "text-amber-500",
+    });
+  }
+
+  if (card.archived) {
+    steps.push({
+      icon: <Archive className="w-3.5 h-3.5" />,
+      label: "Archived",
+      active: true,
+      color: "text-muted-foreground",
+    });
+  }
+
+  return (
+    <div
+      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/30 transition-colors"
+      data-testid={`discovery-update-${card.id}`}
+    >
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-1">{card.title}</h3>
+          <p className="text-[11px] text-muted-foreground mt-0.5">{card.researchArea} · {card.technologyType} · {card.institution}</p>
+        </div>
+        <div className="flex gap-1.5 shrink-0">
+          {card.published && card.adminStatus === "approved" ? (
+            <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+              <CheckCircle2 className="w-2.5 h-2.5 mr-1" />
+              Live
+            </Badge>
+          ) : card.published ? (
+            <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30">
+              Awaiting Review
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px]">Draft</Badge>
+          )}
+        </div>
+      </div>
+
+      <div className="relative pl-5 space-y-2">
+        {steps.map((step, i) => (
+          <div key={i} className="relative flex items-center gap-2">
+            <div className={`absolute left-[-14px] ${step.color}`}>{step.icon}</div>
+            <span className={`text-xs ${step.active ? "text-foreground" : "text-muted-foreground"}`}>
+              {step.label}
+            </span>
+            {step.date && (
+              <span className="text-[10px] text-muted-foreground">{step.date}</span>
+            )}
+            {i < steps.length - 1 && (
+              <div className="absolute left-[-10px] top-5 w-px h-3 bg-border" />
+            )}
+          </div>
+        ))}
       </div>
     </div>
   );

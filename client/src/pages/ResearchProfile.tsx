@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -20,8 +20,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Plus, X } from "lucide-react";
+import { User, Plus, X, Camera, Loader2 } from "lucide-react";
 import { getResearcherProfile, saveResearcherProfile } from "@/hooks/use-researcher";
+import { useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 
 const formSchema = z.object({
@@ -137,10 +138,14 @@ function TagInput({
 
 export default function ResearchProfile() {
   const { toast } = useToast();
+  const researcherHeaders = useResearcherHeaders();
   const profile = getResearcherProfile();
   const [areas, setAreas] = useState<string[]>(profile.researchAreas);
   const [alertTopics, setAlertTopics] = useState<string[]>(profile.alertTopics ?? []);
   const [secondaryInterests, setSecondaryInterests] = useState<string[]>(profile.secondaryInterests ?? []);
+  const [photoUrl, setPhotoUrl] = useState(profile.photoUrl || "");
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const photoInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -153,6 +158,35 @@ export default function ResearchProfile() {
     },
   });
 
+  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingPhoto(true);
+    try {
+      const formData = new FormData();
+      formData.append("photo", file);
+      const res = await fetch("/api/research/profile/photo", {
+        method: "POST",
+        headers: researcherHeaders,
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Upload failed" }));
+        toast({ title: "Photo upload failed", description: body.error, variant: "destructive" });
+        return;
+      }
+      const { url } = await res.json();
+      setPhotoUrl(url);
+      saveResearcherProfile({ photoUrl: url });
+      toast({ title: "Photo updated" });
+    } catch (err: any) {
+      toast({ title: "Photo upload failed", description: err?.message, variant: "destructive" });
+    } finally {
+      setUploadingPhoto(false);
+      if (photoInputRef.current) photoInputRef.current.value = "";
+    }
+  }
+
   function onSubmit(values: FormValues) {
     saveResearcherProfile({
       name: values.name,
@@ -163,6 +197,7 @@ export default function ResearchProfile() {
       researchAreas: areas,
       alertTopics,
       secondaryInterests,
+      photoUrl,
     });
     toast({ title: "Profile saved" });
   }
@@ -176,8 +211,41 @@ export default function ResearchProfile() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Researcher Profile</h1>
           <p className="text-sm text-muted-foreground">
-            Stored locally — used to personalize your dashboard and alerts.
+            Personalize your dashboard, alerts, and discovery cards.
           </p>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4 mb-6">
+        <div
+          className="relative w-20 h-20 rounded-full bg-muted border-2 border-border flex items-center justify-center overflow-hidden cursor-pointer group"
+          onClick={() => photoInputRef.current?.click()}
+          data-testid="photo-upload-zone"
+        >
+          {photoUrl ? (
+            <img src={photoUrl} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            <User className="w-8 h-8 text-muted-foreground" />
+          )}
+          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+            {uploadingPhoto ? (
+              <Loader2 className="w-5 h-5 text-white animate-spin" />
+            ) : (
+              <Camera className="w-5 h-5 text-white" />
+            )}
+          </div>
+          <input
+            ref={photoInputRef}
+            type="file"
+            className="hidden"
+            accept="image/png,image/jpeg,image/jpg,image/webp"
+            onChange={handlePhotoUpload}
+            data-testid="input-profile-photo"
+          />
+        </div>
+        <div>
+          <p className="text-sm font-medium text-foreground">{profile.name || "Your Name"}</p>
+          <p className="text-xs text-muted-foreground">Click photo to upload (PNG, JPG, WebP, max 5 MB)</p>
         </div>
       </div>
 

@@ -105,9 +105,9 @@ export default function ResearchDashboard() {
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-welcome">
             {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}!` : "Research Dashboard"}
           </h1>
-          {profile.institution && (
-            <p className="text-sm text-muted-foreground mt-0.5">
-              {profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}{profile.careerStage ? ` — ${profile.careerStage}` : ""}
+          {(profile.institution || profile.careerStage) && (
+            <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-profile-subtitle">
+              {profile.careerStage ? `${profile.careerStage} · ` : ""}{profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}{profile.researchAreas?.length > 0 ? ` — ${profile.researchAreas.slice(0, 2).join(", ")}` : ""}
             </p>
           )}
         </div>
