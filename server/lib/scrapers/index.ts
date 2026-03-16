@@ -38,6 +38,7 @@ import { cwruScraper } from "./cwru";
 import { ucoloradoScraper } from "./ucolorado";
 import { emoryScraper } from "./emory";
 import { mayoScraper } from "./mayo";
+import { osuScraper } from "./osu";
 import {
   // TechPublisher – verified working
   princetonScraper,
@@ -272,6 +273,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ucoloradoScraper,
   emoryScraper,
   mayoScraper,
+  osuScraper,
   purdueRFScraper,
   umnScraper,
   uillinoisCustomScraper,
