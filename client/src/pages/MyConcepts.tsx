@@ -154,7 +154,7 @@ export default function MyConcepts() {
             </h1>
           </div>
           <p className="text-sm text-muted-foreground ml-12">
-            Concepts you've submitted to Eden Discovery.
+            Concepts you've submitted to EdenDiscovery.
           </p>
         </div>
         <Link href="/discovery/submit">

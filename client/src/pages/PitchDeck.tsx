@@ -489,7 +489,7 @@ function PortalsSlide() {
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto_1fr_auto_1fr] gap-3 items-stretch">
         <PortalCard
-          title="Eden Discovery"
+          title="EdenDiscovery"
           tagline="Tier 1 — Pre-research concept registry"
           color={COLORS.amber}
           colorDim={COLORS.amberDim}
@@ -546,7 +546,7 @@ function PortalsSlide() {
 
 function DiscoverySlide() {
   return (
-    <Slide index={5} section="Eden Discovery" accent={COLORS.amber}>
+    <Slide index={5} section="EdenDiscovery" accent={COLORS.amber}>
       <div
         className="absolute inset-0 pointer-events-none"
         style={{

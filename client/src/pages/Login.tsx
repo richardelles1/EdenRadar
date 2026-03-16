@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2 } from "lucide-react";
+import { Sprout, Loader2, Lightbulb, FlaskConical } from "lucide-react";
 
 export default function Login() {
   const { signIn, signUp, session, role, loading: authLoading } = useAuth();
@@ -61,13 +61,31 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <Sprout className="w-5 h-5 text-primary-foreground" />
+          <div className="flex flex-col items-center gap-2 mb-4">
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center">
+                <Lightbulb className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="font-bold text-sm text-foreground">
+                Eden<span className="text-amber-500">Discovery</span>
+              </span>
             </div>
-            <span className="font-bold text-xl text-foreground">
-              Eden<span className="text-primary">Radar</span>
-            </span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded bg-violet-500 flex items-center justify-center">
+                <FlaskConical className="w-3.5 h-3.5 text-white" />
+              </div>
+              <span className="font-bold text-sm text-foreground">
+                Eden<span className="text-violet-500">Lab</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
+                <Sprout className="w-3.5 h-3.5 text-primary-foreground" />
+              </div>
+              <span className="font-bold text-sm text-foreground">
+                Eden<span className="text-primary">Radar</span>
+              </span>
+            </div>
           </div>
           <h1 className="text-2xl font-bold text-foreground">
             {mode === "signin" ? "Sign in" : "Create account"}

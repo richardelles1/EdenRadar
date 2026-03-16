@@ -401,7 +401,7 @@ function PortalToggle({ onLogin }: { onLogin: () => void }) {
             style={{ color: "hsl(38 92% 50%)" }}
             data-testid="button-discovery-cta"
           >
-            Browse Eden Discovery
+            Browse EdenDiscovery
             <ArrowRight className="w-3.5 h-3.5" />
           </a>
         ) : (

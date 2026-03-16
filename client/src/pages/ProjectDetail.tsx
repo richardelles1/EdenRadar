@@ -543,14 +543,8 @@ export default function ProjectDetail() {
                 testId="multiselect-seeking"
               />
             </FieldGroup>
-            <FieldGroup label="Publish to Industry Feed">
-              <div className="flex items-center gap-2">
-                <Switch checked={local.publishToIndustry ?? false} onCheckedChange={(v) => setField("publishToIndustry", v)} data-testid="switch-publish-industry" />
-                <span className="text-sm text-muted-foreground">{local.publishToIndustry ? "Enabled — will appear in industry Scout portal after admin review" : "Disabled"}</span>
-              </div>
-            </FieldGroup>
             <div className="flex items-center gap-2 mt-4">
-              <SaveButton label="Discovery Card" saving={saving} onClick={() => saveSection("Discovery Card", {
+              <SaveButton label="My Project" saving={saving} onClick={() => saveSection("My Project", {
                 discoveryTitle: local.discoveryTitle, discoverySummary: local.discoverySummary,
                 technologyType: local.technologyType, developmentStage: local.developmentStage,
                 projectSeeking: local.projectSeeking, publishToIndustry: local.publishToIndustry,

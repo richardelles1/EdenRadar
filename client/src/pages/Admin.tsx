@@ -281,7 +281,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
 
   const phaseLabel = syncForThisInst && session?.status !== "running" ? "Starting sync..."
-    : session?.phase === "scraping" ? "Scraping..."
+    : session?.phase === "scraping" ? "Collecting..."
     : session?.phase === "comparing" ? "Comparing fingerprints..."
     : session?.phase === "enriching" ? "Enriching with AI..."
     : session?.phase === "done" ? "Done"
@@ -2362,7 +2362,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Concept Queue</h2>
-                <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the Eden Discovery portal with AI credibility scores.</p>
+                <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the EdenDiscovery portal with AI credibility scores.</p>
               </div>
               <ConceptQueue pw={pw} />
             </>

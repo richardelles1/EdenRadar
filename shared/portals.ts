@@ -13,7 +13,7 @@ export interface PortalConfig {
 export const PORTAL_CONFIG: Record<PortalRole, PortalConfig> = {
   concept: {
     role: "concept",
-    label: "Eden Discovery",
+    label: "EdenDiscovery",
     tier: 1,
     color: "amber",
     badgeClass: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",

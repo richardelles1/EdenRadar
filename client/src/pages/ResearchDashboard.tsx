@@ -3,13 +3,10 @@ import { useLocation } from "wouter";
 import {
   Bell,
   FolderOpen,
-  Plus,
   ExternalLink,
   FlaskConical,
   BadgeDollarSign,
   ArrowRight,
-  Database,
-  Library,
   Calendar,
   Building2,
 } from "lucide-react";
@@ -104,20 +101,12 @@ export default function ResearchDashboard() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-welcome">
-            {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}` : "Research Dashboard"}
+            {profile.name ? `Welcome back, ${profile.name.split(" ")[0]}!` : "Research Dashboard"}
           </h1>
           {profile.institution && (
             <p className="text-sm text-muted-foreground mt-0.5">{profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}</p>
           )}
         </div>
-        <Button
-          onClick={() => navigate("/research/create-discovery")}
-          className="gap-2 bg-violet-600 hover:bg-violet-700 text-white shrink-0"
-          data-testid="button-create-discovery"
-        >
-          <Plus className="w-4 h-4" />
-          New Discovery
-        </Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -377,36 +366,6 @@ export default function ResearchDashboard() {
         )}
       </section>
 
-      <section>
-        <div className="flex items-center gap-2 mb-3">
-          <button onClick={() => navigate("/research/data-sources")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-            <Database className="w-4 h-4 text-blue-500" />
-            <h2 className="text-base font-semibold text-foreground">Quick Actions</h2>
-          </button>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => navigate("/research/data-sources")}
-            data-testid="button-open-database-search"
-          >
-            <Database className="w-3.5 h-3.5" />
-            Database Search
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-2"
-            onClick={() => navigate("/research/library")}
-            data-testid="button-open-library"
-          >
-            <Library className="w-3.5 h-3.5" />
-            My Library
-          </Button>
-        </div>
-      </section>
     </div>
   );
 }

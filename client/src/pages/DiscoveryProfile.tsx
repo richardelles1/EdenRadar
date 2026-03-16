@@ -23,7 +23,7 @@ export default function DiscoveryProfile() {
           </h1>
         </div>
         <p className="text-sm text-muted-foreground ml-12">
-          Your Eden Discovery account details.
+          Your EdenDiscovery account details.
         </p>
       </div>
 
@@ -34,7 +34,7 @@ export default function DiscoveryProfile() {
           </div>
           <div>
             <p className="font-semibold text-foreground" data-testid="text-profile-role">Concept Discoverer</p>
-            <p className="text-xs text-muted-foreground">Eden Discovery Member</p>
+            <p className="text-xs text-muted-foreground">EdenDiscovery Member</p>
           </div>
         </div>
 

@@ -1,8 +1,8 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Search, ExternalLink, Microscope, Loader2, ChevronLeft, ChevronRight,
-  Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown, Eraser, Pencil,
+  Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown,
   Sparkles, ChevronUp, RefreshCw, Save, Lightbulb, HelpCircle, Star, ArrowRight,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -167,7 +167,7 @@ const SOURCE_GROUPS: { label: string; keys: { key: string; label: string }[] }[]
 
 const ALL_SOURCE_KEYS = SOURCE_GROUPS.flatMap((g) => g.keys.map((k) => k.key));
 
-const DEFAULT_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "arxiv", "clinicaltrials", "patents"];
+const DEFAULT_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "arxiv", "clinicaltrials"];
 
 const SOURCE_LABELS: Record<string, string> = {};
 SOURCE_GROUPS.forEach((g) => g.keys.forEach((k) => { SOURCE_LABELS[k.key] = k.label; }));
@@ -220,170 +220,65 @@ function getFilterLabel(key: keyof Filters, value: string): string {
   return maps[key]?.find((o) => o.value === value)?.label ?? value;
 }
 
-const SKETCH_COLORS = [
-  { color: "#1a1a1a", label: "Black" },
-  { color: "#7c3aed", label: "Violet" },
-  { color: "#dc2626", label: "Red" },
-  { color: "#2563eb", label: "Blue" },
-  { color: "#16a34a", label: "Green" },
+const RESEARCH_TIPS = [
+  "Use Boolean operators (AND, OR) in your search to combine or broaden terms.",
+  "Narrow results by date range to focus on the most recent breakthroughs.",
+  "Save promising results to your Library for easy reference later.",
+  "Try searching by target name, mechanism, or disease area for best results.",
+  "Use the AI Synthesis feature to get a consensus view across all your results.",
+  "Combine multiple data sources to cross-reference findings across databases.",
+  "Check grants databases alongside literature to spot funded research trends.",
+  "Export your synthesis results to share with collaborators.",
 ];
 
-const SKETCH_SIZES = [
-  { size: 2, label: "S" },
-  { size: 5, label: "M" },
-  { size: 10, label: "L" },
-];
-
-function SketchPad() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const isDrawing = useRef(false);
-  const lastPos = useRef<{ x: number; y: number } | null>(null);
-  const [strokeColor, setStrokeColor] = useState("#7c3aed");
-  const [strokeSize, setStrokeSize] = useState(5);
-
-  const setupCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
-    const rect = container.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
-    canvas.width = rect.width * dpr;
-    canvas.height = 220 * dpr;
-    canvas.style.width = `${rect.width}px`;
-    canvas.style.height = "220px";
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.scale(dpr, dpr);
-      ctx.lineCap = "round";
-      ctx.lineJoin = "round";
-    }
-  }, []);
+function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
+  const [tipIndex, setTipIndex] = useState(0);
+  const [fadeIn, setFadeIn] = useState(true);
 
   useEffect(() => {
-    setupCanvas();
-    const handleResize = () => setupCanvas();
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, [setupCanvas]);
-
-  const getPos = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return { x: 0, y: 0 };
-    const rect = canvas.getBoundingClientRect();
-    return {
-      x: e.clientX - rect.left,
-      y: e.clientY - rect.top,
-    };
-  }, []);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    isDrawing.current = true;
-    const pos = getPos(e);
-    lastPos.current = pos;
-    canvasRef.current?.setPointerCapture(e.pointerId);
-    const ctx = canvasRef.current?.getContext("2d");
-    if (ctx) {
-      ctx.fillStyle = strokeColor;
-      ctx.beginPath();
-      ctx.arc(pos.x, pos.y, strokeSize / 2, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }, [getPos, strokeColor, strokeSize]);
-
-  const handlePointerMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
-    if (!isDrawing.current || !lastPos.current) return;
-    const ctx = canvasRef.current?.getContext("2d");
-    if (!ctx) return;
-    const pos = getPos(e);
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = strokeSize;
-    ctx.beginPath();
-    ctx.moveTo(lastPos.current.x, lastPos.current.y);
-    ctx.lineTo(pos.x, pos.y);
-    ctx.stroke();
-    lastPos.current = pos;
-  }, [getPos, strokeColor, strokeSize]);
-
-  const handlePointerUp = useCallback(() => {
-    isDrawing.current = false;
-    lastPos.current = null;
-  }, []);
-
-  const clearCanvas = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const interval = setInterval(() => {
+      setFadeIn(false);
+      setTimeout(() => {
+        setTipIndex((prev) => (prev + 1) % RESEARCH_TIPS.length);
+        setFadeIn(true);
+      }, 400);
+    }, 5000);
+    return () => clearInterval(interval);
   }, []);
 
   return (
-    <div className="rounded-xl border bg-card p-4 space-y-3" data-testid="sketch-pad">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
-          <Pencil className="w-3.5 h-3.5" />
-          Sketch while you wait
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1">
-            {SKETCH_COLORS.map((c) => (
-              <button
-                key={c.color}
-                type="button"
-                className="w-5 h-5 rounded-full border-2 transition-transform hover:scale-110"
-                style={{
-                  backgroundColor: c.color,
-                  borderColor: strokeColor === c.color ? "hsl(263 70% 50%)" : "transparent",
-                  transform: strokeColor === c.color ? "scale(1.2)" : "scale(1)",
-                }}
-                onClick={() => setStrokeColor(c.color)}
-                title={c.label}
-                data-testid={`sketch-color-${c.label.toLowerCase()}`}
-              />
-            ))}
-          </div>
-          <div className="w-px h-4 bg-border" />
-          <div className="flex items-center gap-0.5">
-            {SKETCH_SIZES.map((s) => (
-              <button
-                key={s.label}
-                type="button"
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                  strokeSize === s.size
-                    ? "bg-violet-500 text-white"
-                    : "text-muted-foreground hover:bg-muted"
-                }`}
-                onClick={() => setStrokeSize(s.size)}
-                data-testid={`sketch-size-${s.label.toLowerCase()}`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-          <div className="w-px h-4 bg-border" />
-          <button
-            type="button"
-            className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium text-muted-foreground hover:bg-muted transition-colors"
-            onClick={clearCanvas}
-            data-testid="sketch-clear"
-          >
-            <Eraser className="w-3 h-3" />
-            Clear
-          </button>
-        </div>
+    <div className="rounded-xl border bg-card p-5 space-y-4" data-testid="search-insights-panel">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground font-medium">
+        <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+        Querying {activeSources.length} source{activeSources.length !== 1 ? "s" : ""}
       </div>
-      <div ref={containerRef} className="w-full">
-        <canvas
-          ref={canvasRef}
-          className="w-full rounded-lg border bg-white dark:bg-zinc-900 cursor-crosshair touch-none"
-          style={{ height: "220px" }}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
-          data-testid="sketch-canvas"
-        />
+
+      <div className="flex flex-wrap gap-1.5">
+        {activeSources.map((key, i) => (
+          <span
+            key={key}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-muted/50"
+            style={{ animationDelay: `${i * 0.2}s` }}
+            data-testid={`source-pill-${key}`}
+          >
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-violet-500"
+              style={{ animation: `source-dot 2.5s ease-in-out ${i * 0.2}s infinite` }}
+            />
+            {SOURCE_LABELS[key] ?? key}
+          </span>
+        ))}
+      </div>
+
+      <div className="border-t border-border pt-3">
+        <p
+          className="text-sm text-muted-foreground leading-relaxed transition-opacity duration-400"
+          style={{ opacity: fadeIn ? 1 : 0 }}
+          data-testid="research-tip"
+        >
+          <span className="text-violet-500 font-medium mr-1.5">Tip:</span>
+          {RESEARCH_TIPS[tipIndex]}
+        </p>
       </div>
     </div>
   );
@@ -771,7 +666,7 @@ export default function ResearchDataSources() {
               </div>
             </div>
 
-            <SketchPad />
+            <SearchInsightsPanel activeSources={selectedSources} />
 
             <style>{`
               @keyframes source-pulse {

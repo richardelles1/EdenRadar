@@ -93,7 +93,7 @@ export default function DiscoveryJoin() {
             </span>
           </div>
           <h1 className="text-2xl font-bold text-foreground" data-testid="text-join-title">
-            {mode === "signup" ? "Join Eden Discovery" : "Sign in to Discovery"}
+            {mode === "signup" ? "Join EdenDiscovery" : "Sign in to Discovery"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {mode === "signup"

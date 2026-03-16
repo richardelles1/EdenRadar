@@ -94,7 +94,7 @@ function DiscoveryNav() {
           ) : (
             <Link href="/discovery/join">
               <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white gap-1.5" data-testid="link-join-discovery">
-                Join Eden Discovery
+                Join EdenDiscovery
                 <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </Link>
