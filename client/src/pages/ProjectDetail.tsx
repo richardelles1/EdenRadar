@@ -41,7 +41,6 @@ const SECTION_META = [
   { id: "risk",        num: 9,  label: "Risk",              short: "Risk" },
   { id: "milestones",  num: 10, label: "Milestones",        short: "Milestones" },
   { id: "discovery",   num: 11, label: "Discovery Card",    short: "Discovery Card" },
-  { id: "attachments", num: 12, label: "Attachments",       short: "Attachments" },
 ];
 
 const STATUS_OPTIONS = [
@@ -629,30 +628,34 @@ export default function ProjectDetail() {
             </div>
           </SectionCard>
 
-          {/* §12 — General Attachments */}
-          <SectionCard id="attachments" num={12} title="General Attachments" collapsed={collapsed["attachments"]} onToggle={() => toggleCollapse("attachments")} sectionRef={(el) => { sectionRefs.current["attachments"] = el; }}>
-            <div className="mb-3 p-3 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground flex items-center gap-2">
-              <Paperclip className="w-3.5 h-3.5 shrink-0" />
-              Upload general project files (protocols, datasets, reports). Max 5 files.
+          {/* General Attachments — unlabeled trailing panel */}
+          <div className="border border-border rounded-lg bg-card overflow-hidden">
+            <div className="px-4 py-3 flex items-center gap-2.5 border-b border-border/50">
+              <Paperclip className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">General Attachments</span>
+              <span className="text-xs text-muted-foreground ml-auto">Max 5 files</span>
             </div>
-            <SectionFileUpload
-              projectId={projectId}
-              section="general"
-              files={local.generalFiles ?? []}
-              maxFiles={5}
-              onUploaded={(url) => {
-                const next = [...(local.generalFiles ?? []), url];
-                setField("generalFiles", next);
-                saveSection("My Project", { generalFiles: next });
-              }}
-              onRemove={(url) => {
-                const next = (local.generalFiles ?? []).filter((f) => f !== url);
-                setField("generalFiles", next);
-                saveSection("My Project", { generalFiles: next });
-              }}
-              headers={researcherHeaders}
-            />
-          </SectionCard>
+            <div className="px-4 pb-4 pt-3 space-y-3">
+              <SectionFileUpload
+                projectId={projectId}
+                section="general"
+                files={local.generalFiles ?? []}
+                maxFiles={5}
+                onUploaded={(url) => {
+                  const next = [...(local.generalFiles ?? []), url];
+                  setField("generalFiles", next);
+                  saveSection("My Project", { generalFiles: next });
+                }}
+                onRemove={(url) => {
+                  const next = (local.generalFiles ?? []).filter((f) => f !== url);
+                  setField("generalFiles", next);
+                  saveSection("My Project", { generalFiles: next });
+                }}
+                headers={researcherHeaders}
+                enableDragDrop
+              />
+            </div>
+          </div>
 
           <div className="h-16" />
         </div>
@@ -706,8 +709,9 @@ function FieldGroup({ label, children }: { label: string; children: React.ReactN
   );
 }
 
-function SaveButton({ label, saving, onClick }: { label: string; saving: string | null; onClick: () => void }) {
+function SaveButton({ label, saving, onClick, displayLabel }: { label: string; saving: string | null; onClick: () => void; displayLabel?: string }) {
   const isSaving = saving === label;
+  const buttonText = displayLabel ?? "Save My Project";
   return (
     <div className="flex justify-end pt-2">
       <Button
@@ -718,7 +722,7 @@ function SaveButton({ label, saving, onClick }: { label: string; saving: string 
         data-testid={`button-save-${label.toLowerCase().replace(/\s+/g, "-")}`}
       >
         {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-        Save {label}
+        {buttonText}
       </Button>
     </div>
   );
@@ -1021,7 +1025,7 @@ function PotentialPartnersList({ partners, onChange }: { partners: Partner[]; on
 }
 
 function SectionFileUpload({
-  projectId, section, files, maxFiles, onUploaded, onRemove, headers,
+  projectId, section, files, maxFiles, onUploaded, onRemove, headers, enableDragDrop,
 }: {
   projectId: number;
   section: string;
@@ -1030,13 +1034,13 @@ function SectionFileUpload({
   onUploaded: (url: string) => void;
   onRemove: (url: string) => void;
   headers: Record<string, string>;
+  enableDragDrop?: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
   const { toast } = useToast();
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadFile(file: File) {
     if (files.length >= maxFiles) {
       toast({ title: `Max ${maxFiles} files allowed`, variant: "destructive" });
       return;
@@ -1066,14 +1070,37 @@ function SectionFileUpload({
       toast({ title: err.message || "Upload failed", variant: "destructive" });
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
+  }
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) uploadFile(file);
+    e.target.value = "";
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadFile(file);
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+
+  function handleDragLeave() {
+    setDragOver(false);
   }
 
   function fileName(url: string) {
     try {
       const parts = url.split("/");
-      return decodeURIComponent(parts[parts.length - 1]);
+      const raw = parts[parts.length - 1];
+      const withoutTimestamp = raw.replace(/^\d+-/, "");
+      return decodeURIComponent(withoutTimestamp);
     } catch {
       return url;
     }
@@ -1094,12 +1121,25 @@ function SectionFileUpload({
       ))}
       {files.length < maxFiles && (
         <label
-          className={`flex items-center justify-center gap-2 p-3 rounded-md border border-dashed border-border hover:border-violet-500/40 hover:bg-violet-500/5 cursor-pointer transition-colors ${uploading ? "pointer-events-none opacity-60" : ""}`}
+          className={`flex flex-col items-center justify-center gap-1.5 rounded-md border border-dashed cursor-pointer transition-colors ${
+            enableDragDrop ? "p-6" : "p-3"
+          } ${
+            dragOver
+              ? "border-violet-500 bg-violet-500/10"
+              : "border-border hover:border-violet-500/40 hover:bg-violet-500/5"
+          } ${uploading ? "pointer-events-none opacity-60" : ""}`}
           data-testid={`upload-${section}`}
+          onDrop={enableDragDrop ? handleDrop : undefined}
+          onDragOver={enableDragDrop ? handleDragOver : undefined}
+          onDragLeave={enableDragDrop ? handleDragLeave : undefined}
         >
           {uploading ? <Loader2 className="w-4 h-4 animate-spin text-violet-600" /> : <Upload className="w-4 h-4 text-muted-foreground" />}
-          <span className="text-xs text-muted-foreground">{uploading ? "Uploading..." : `Upload file (${files.length}/${maxFiles})`}</span>
-          <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+          <span className="text-xs text-muted-foreground">
+            {uploading ? "Uploading..." : enableDragDrop
+              ? `Drag & drop or click to upload (${files.length}/${maxFiles})`
+              : `Upload file (${files.length}/${maxFiles})`}
+          </span>
+          <input type="file" className="hidden" onChange={handleInputChange} disabled={uploading} />
         </label>
       )}
     </div>
