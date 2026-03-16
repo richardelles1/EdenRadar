@@ -61,7 +61,7 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="flex flex-col items-center gap-2 mb-4">
+          <div className="flex flex-col items-start gap-4 mb-4 w-fit mx-auto">
             <div className="flex items-center gap-1.5">
               <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center">
                 <Lightbulb className="w-3.5 h-3.5 text-white" />
