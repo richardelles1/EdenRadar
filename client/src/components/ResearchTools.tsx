@@ -404,64 +404,79 @@ function FishboneTab({ project, onSave, saving }: ResearchToolsProps) {
         />
       </div>
 
-      <div className="relative">
-        {fishbone.effect && (
-          <div className="mb-3 p-2.5 rounded-lg bg-violet-500/5 border border-violet-500/20 text-center">
-            <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">{fishbone.effect}</span>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {FISHBONE_BRANCHES.map((branch) => {
-            const causes = fishbone.branches[branch] ?? [];
-            return (
-              <div
-                key={branch}
-                className="border border-border rounded-md p-3 bg-background space-y-2"
-                data-testid={`fishbone-branch-${branch.toLowerCase()}`}
-              >
-                <div className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-violet-500" />
-                  <span className="text-xs font-semibold text-foreground">{branch}</span>
-                  <span className="text-[10px] text-muted-foreground ml-auto">{causes.length}</span>
-                </div>
-                {causes.map((cause, ci) => (
-                  <div key={ci} className="flex items-center gap-1.5 pl-3.5">
-                    <div className="w-1 h-1 rounded-full bg-muted-foreground/40" />
-                    <span className="flex-1 text-xs text-muted-foreground">{cause}</span>
-                    <button
-                      onClick={() => removeCause(branch, ci)}
-                      className="text-muted-foreground hover:text-destructive shrink-0"
-                      data-testid={`remove-cause-${branch.toLowerCase()}-${ci}`}
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
+      <div className="relative overflow-x-auto" data-testid="fishbone-diagram">
+        <div className="min-w-[600px]">
+          <div className="grid grid-cols-3 gap-x-4 gap-y-1 mb-2">
+            {FISHBONE_BRANCHES.slice(0, 3).map((branch) => {
+              const causes = fishbone.branches[branch] ?? [];
+              return (
+                <div key={branch} className="text-center" data-testid={`fishbone-branch-${branch.toLowerCase()}`}>
+                  <div className="inline-block px-2.5 py-1 rounded-md bg-violet-600/10 border border-violet-500/30 mb-1.5">
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">{branch}</span>
                   </div>
-                ))}
-                <div className="flex gap-1.5 pt-1">
-                  <Input
-                    value={causeInputs[branch] ?? ""}
-                    onChange={(e) => setCauseInputs((p) => ({ ...p, [branch]: e.target.value }))}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCause(branch); } }}
-                    placeholder="Add cause..."
-                    className="text-xs flex-1"
-                    data-testid={`input-cause-${branch.toLowerCase()}`}
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addCause(branch)}
-                    disabled={!(causeInputs[branch] ?? "").trim()}
-                    className="px-2"
-                    data-testid={`button-add-cause-${branch.toLowerCase()}`}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </Button>
+                  <div className="space-y-0.5 mb-1.5">
+                    {causes.map((cause, ci) => (
+                      <div key={ci} className="flex items-center justify-center gap-1 group">
+                        <span className="text-[10px] text-muted-foreground">{cause}</span>
+                        <button
+                          onClick={() => removeCause(branch, ci)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                          data-testid={`remove-cause-${branch.toLowerCase()}-${ci}`}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="h-4 border-l-2 border-violet-500/40 mx-auto w-0" />
+                  <div className="h-0 border-t-[6px] border-l-[4px] border-r-[4px] border-t-violet-500/40 border-l-transparent border-r-transparent mx-auto w-0" />
                 </div>
+              );
+            })}
+          </div>
+
+          <div className="relative flex items-center mx-4">
+            <div className="flex-1 h-[3px] bg-violet-500/40 rounded-l-full" />
+            {fishbone.effect ? (
+              <div className="shrink-0 px-4 py-1.5 rounded-md bg-violet-600 text-white text-xs font-semibold mx-1 shadow-sm">
+                {fishbone.effect}
               </div>
-            );
-          })}
+            ) : (
+              <div className="shrink-0 px-4 py-1.5 rounded-md border-2 border-dashed border-violet-500/30 text-muted-foreground text-xs mx-1">
+                Effect
+              </div>
+            )}
+            <div className="w-0 h-0 border-t-[8px] border-b-[8px] border-l-[10px] border-l-violet-500/40 border-t-transparent border-b-transparent" />
+          </div>
+
+          <div className="grid grid-cols-3 gap-x-4 gap-y-1 mt-2">
+            {FISHBONE_BRANCHES.slice(3).map((branch) => {
+              const causes = fishbone.branches[branch] ?? [];
+              return (
+                <div key={branch} className="text-center" data-testid={`fishbone-branch-${branch.toLowerCase()}`}>
+                  <div className="h-0 border-b-[6px] border-l-[4px] border-r-[4px] border-b-violet-500/40 border-l-transparent border-r-transparent mx-auto w-0" />
+                  <div className="h-4 border-l-2 border-violet-500/40 mx-auto w-0" />
+                  <div className="inline-block px-2.5 py-1 rounded-md bg-violet-600/10 border border-violet-500/30 mb-1.5">
+                    <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400 uppercase tracking-wider">{branch}</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    {causes.map((cause, ci) => (
+                      <div key={ci} className="flex items-center justify-center gap-1 group">
+                        <span className="text-[10px] text-muted-foreground">{cause}</span>
+                        <button
+                          onClick={() => removeCause(branch, ci)}
+                          className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity"
+                          data-testid={`remove-cause-${branch.toLowerCase()}-${ci}`}
+                        >
+                          <X className="w-2.5 h-2.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
 
         {totalCauses > 0 && (
@@ -469,6 +484,36 @@ function FishboneTab({ project, onSave, saving }: ResearchToolsProps) {
             {totalCauses} cause{totalCauses !== 1 ? "s" : ""} across {FISHBONE_BRANCHES.filter((b) => (fishbone.branches[b]?.length ?? 0) > 0).length} categories
           </div>
         )}
+      </div>
+
+      <div className="border-t border-border/50 pt-3 mt-3">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Add Causes</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {FISHBONE_BRANCHES.map((branch) => (
+            <div key={branch} className="flex gap-1.5 items-center">
+              <span className="text-[10px] font-medium text-muted-foreground w-20 shrink-0 truncate">{branch}</span>
+              <Input
+                value={causeInputs[branch] ?? ""}
+                onChange={(e) => setCauseInputs((p) => ({ ...p, [branch]: e.target.value }))}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addCause(branch); } }}
+                placeholder="Add cause..."
+                className="text-xs flex-1"
+                data-testid={`input-cause-${branch.toLowerCase()}`}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addCause(branch)}
+                disabled={!(causeInputs[branch] ?? "").trim()}
+                className="px-2 shrink-0"
+                data-testid={`button-add-cause-${branch.toLowerCase()}`}
+              >
+                <Plus className="w-3 h-3" />
+              </Button>
+            </div>
+          ))}
+        </div>
       </div>
 
       <ToolSaveButton label="Fishbone" saving={saving} onClick={() => onSave("Fishbone", { fishbone })} />

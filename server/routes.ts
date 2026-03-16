@@ -1522,6 +1522,27 @@ export async function registerRoutes(
       section5Files: z.array(z.string()).nullable().optional(),
       section8Files: z.array(z.string()).nullable().optional(),
       generalFiles: z.array(z.string()).nullable().optional(),
+      hypotheses: z.array(z.object({
+        id: z.string(),
+        statement: z.string(),
+        independentVars: z.string(),
+        dependentVars: z.string(),
+        expectedOutcome: z.string(),
+        nullHypothesis: z.string(),
+        evidenceNotes: z.string(),
+        status: z.string(),
+        confidence: z.string(),
+      })).nullable().optional(),
+      fishbone: z.object({
+        effect: z.string(),
+        branches: z.record(z.array(z.string())),
+      }).nullable().optional(),
+      milestones: z.array(z.object({
+        id: z.string(),
+        label: z.string(),
+        targetDate: z.string(),
+        completed: z.boolean(),
+      })).nullable().optional(),
     });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -1543,6 +1564,7 @@ export async function registerRoutes(
       "keywords","keyPapers","keyTechnologies","datasetsUsed","supportingEvidenceLinks",
       "projectContributors","collaborationType","fundingSources","nextExperiments","projectSeeking",
       "potentialPartners","section4Files","section5Files","section8Files","generalFiles",
+      "hypotheses","fishbone","milestones",
     ] as const;
     for (const f of jsonFields) {
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
