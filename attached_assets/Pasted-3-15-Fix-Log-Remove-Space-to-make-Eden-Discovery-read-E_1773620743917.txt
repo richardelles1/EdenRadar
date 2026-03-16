@@ -1,0 +1,27 @@
+3/15 Fix Log
+
+Remove Space to make Eden Discovery read ‘EdenDiscovery’
+Change the word ‘scraping’ to ‘collecting’ on the admin dashboard.
+Add EdenDiscovery and EdenLab to log in page, stacked above the current edenradar in the order of Discovery, Research, and EdenRadar
+Research Portal:
+Explain how Grants Spotlight & Breaking Research alert are populated and cost if any, and if theres room for expansion
+Wire up alerts: how are they setup, how frequent, allow them to be customized by topic under profile, limit cost where we can, but make this useful. Alerts tab currently useless
+Remove quick actions, its worthless unless you can find additional value here
+Grants spotlight should be linked to researcher interest and also be found stored in Grants tab as its own tab. Maybe one per login or per dayor every new one populates until a certain number is reached (10 cards?)
+We need to expand grant sources where APIs or easy scrapes are available to pull in as many opportunities as possible. Suggest additional sources that we could use. 
+Remove the new discovery button at the top, as its redundant.
+Add an exclamation mark at the end of the welcome back message header
+Add the ability to attach three files (optional to the discovery card, probably stored in supabase storage)
+My Discoveries probably needs an archive feature and a filter between draft, published, and archived and then maybe a special section in my alerts when their status has been changed via admin approval, so “awaiting approval” and then "visible to industry”.
+Grants search for generic word like ‘therapy’ only returned one result’, needs to be addressed to ensure max value. The word ‘health’ only returned 2 results.
+In the Research Project, we need the ability to attach files to necessary sections that could be used in an output. It feels like section 4, section 5, section 8 (proof of funding optional, just as a help for documentation) could all benefit from this.
+Optional attachments at end of my project section for general attachments, not listed as extra step.
+I wonder if we have a low leverage opportunity to introduce research tools here that are commonly used, like a Obsidian style linking graph, hypothesis builder, research map, fishbone/ishikawa, timeline builder (feeds milestones which could be moved earlier and renamed timeline
+Add a “Potential Partners” to step 6 to help organize targets, add an editable field for each one that says ‘No Contact’, ‘outreach completed’ yes or no logic and if yes, date of outreach and who the contact is (optional), In Discussion, In negotiation (evaluate stages and add what makes sense). Maybe a chance here to introduce suggested targets based on the data we’ve collected or active pharma pipeline search like a “here’s who may be working on this’ as a value add
+This is still project focused and the button at the bottom is Save Discovery Card and it should be Save My Project. Remove the publish to industry feed switch as its covered by push to discovery card.
+Co-founder wants sketch removed, replaced with something else like the scanner. Can we elegantly rotate a slow fade in of what sources are being searched or rotating and helpful research tips or platform features or even general facts about research being done? It needs to be elegant, professional, and also to make the user not think about the search time.
+Search for ‘health’ across the default sources returned only 17 results. This is alarming.  
+Synthesize results says ‘ten results’ of those 17, but doesnt say which are synthesized and does not allow the user to select those 10 or know which ones are synthesized.
+USPTO patents should noy be default selected.
+Profile should allow for a photo and that photo to be changed. It should also be used to collect information about the user that will help tailor the experience, so collect the right info and then weave that in (all optional)
+We also need to figure out the user collaboration - three day free trial for collaborators, maybe. And then next sign on after expiration, they are prompted to join. Maybe collaboration discount for first month if they are invited?
