@@ -589,7 +589,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
       {/* "One Pipeline of Innovation" gradient arrow */}
       <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: `1px solid transparent` }}>
         <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: colors.text, letterSpacing: "0.15em" }}>
+        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
           One Pipeline of Innovation
         </span>
         {/* arrowhead */}
