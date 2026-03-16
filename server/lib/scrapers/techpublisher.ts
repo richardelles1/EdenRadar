@@ -150,8 +150,26 @@ export function createTechPublisherScraper(
     }
 
     let catCount = 0;
+    let pgCount = 1;
     if ($home) {
       harvestLinks($home, techSelector, seenUrls, seenTitles, results);
+
+      if (opts.maxPg != null && opts.maxPg > 1) {
+        for (let pg = 2; pg <= opts.maxPg; pg++) {
+          if (signal.aborted) break;
+          const countBefore = results.length;
+          const $pg = await fetchHtml(
+            `${base}/SearchResults.aspx?type=Tech&q=&page=${pg}`,
+            FETCH_TIMEOUT_MS,
+            signal
+          );
+          if (!$pg) break;
+          harvestLinks($pg, techSelector, seenUrls, seenTitles, results);
+          if (results.length === countBefore) break;
+          pgCount = pg;
+        }
+      }
+
       const homePageCats = new Set<string>();
       $home("a[href]").each((_, el) => {
         const href = $home(el).attr("href") ?? "";
@@ -198,7 +216,7 @@ export function createTechPublisherScraper(
 
     console.log(
       `[scraper] ${institution}: ${results.length} listings ` +
-      `(RSS: ${rssCount}, cats: ${catCount}, sitemap-pages: ${sitemapPageCount})`
+      `(RSS: ${rssCount}, pages: ${pgCount}, cats: ${catCount}, sitemap-pages: ${sitemapPageCount})`
     );
 
     return results;
