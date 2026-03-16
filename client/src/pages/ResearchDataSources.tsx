@@ -432,6 +432,16 @@ export default function ResearchDataSources() {
     enabled: !!researcherId,
   });
 
+  useEffect(() => {
+    if (isError && searchError) {
+      toast({
+        title: "Search failed",
+        description: searchError instanceof Error ? searchError.message : "An unexpected error occurred",
+        variant: "destructive",
+      });
+    }
+  }, [isError, searchError, toast]);
+
   const [synthesis, setSynthesis] = useState<SynthesisResult | null>(null);
   const [synthesisCollapsed, setSynthesisCollapsed] = useState(false);
   const [synthesisSaveProject, setSynthesisSaveProject] = useState<string>("none");
