@@ -258,6 +258,8 @@ export default function ResearchAlerts() {
   );
 }
 
+const ALERTS_CAP = 5;
+
 function TopicSection({
   topic,
   filter,
@@ -273,6 +275,8 @@ function TopicSection({
   expanded: boolean;
   onToggle: () => void;
 }) {
+  const [showAllResearch, setShowAllResearch] = useState(false);
+  const [showAllGrants, setShowAllGrants] = useState(false);
   const { data: researchData, isLoading: researchLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", topic, "research-alerts-topic"],
     queryFn: async () => {
@@ -374,9 +378,11 @@ function TopicSection({
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 text-xs text-blue-500 font-medium">
                     <FlaskConical className="w-3.5 h-3.5" />
-                    Research ({filteredResearch.length})
+                    Research ({filteredResearch.length > ALERTS_CAP && !showAllResearch
+                      ? `${ALERTS_CAP} of ${filteredResearch.length}`
+                      : filteredResearch.length})
                   </div>
-                  {filteredResearch.map((signal, i) => (
+                  {(showAllResearch ? filteredResearch : filteredResearch.slice(0, ALERTS_CAP)).map((signal, i) => (
                     <AlertCard
                       key={signal.dismissKey}
                       signal={signal}
@@ -385,15 +391,35 @@ function TopicSection({
                       onDismiss={() => onDismiss(signal.dismissKey)}
                     />
                   ))}
+                  {filteredResearch.length > ALERTS_CAP && !showAllResearch && (
+                    <button
+                      onClick={() => setShowAllResearch(true)}
+                      className="w-full text-xs text-blue-500 hover:text-blue-400 font-medium py-1.5 transition-colors"
+                      data-testid={`show-more-research-${topic}`}
+                    >
+                      Show {filteredResearch.length - ALERTS_CAP} more research alerts
+                    </button>
+                  )}
+                  {showAllResearch && filteredResearch.length > ALERTS_CAP && (
+                    <button
+                      onClick={() => setShowAllResearch(false)}
+                      className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
+                      data-testid={`show-less-research-${topic}`}
+                    >
+                      Show less
+                    </button>
+                  )}
                 </div>
               )}
               {filteredGrants.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
                     <DollarSign className="w-3.5 h-3.5" />
-                    Grants ({filteredGrants.length})
+                    Grants ({filteredGrants.length > ALERTS_CAP && !showAllGrants
+                      ? `${ALERTS_CAP} of ${filteredGrants.length}`
+                      : filteredGrants.length})
                   </div>
-                  {filteredGrants.map((signal, i) => (
+                  {(showAllGrants ? filteredGrants : filteredGrants.slice(0, ALERTS_CAP)).map((signal, i) => (
                     <AlertCard
                       key={signal.dismissKey}
                       signal={signal}
@@ -402,6 +428,24 @@ function TopicSection({
                       onDismiss={() => onDismiss(signal.dismissKey)}
                     />
                   ))}
+                  {filteredGrants.length > ALERTS_CAP && !showAllGrants && (
+                    <button
+                      onClick={() => setShowAllGrants(true)}
+                      className="w-full text-xs text-emerald-500 hover:text-emerald-400 font-medium py-1.5 transition-colors"
+                      data-testid={`show-more-grants-${topic}`}
+                    >
+                      Show {filteredGrants.length - ALERTS_CAP} more grant alerts
+                    </button>
+                  )}
+                  {showAllGrants && filteredGrants.length > ALERTS_CAP && (
+                    <button
+                      onClick={() => setShowAllGrants(false)}
+                      className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
+                      data-testid={`show-less-grants-${topic}`}
+                    >
+                      Show less
+                    </button>
+                  )}
                 </div>
               )}
               {filteredResearch.length === 0 && filteredGrants.length === 0 && (

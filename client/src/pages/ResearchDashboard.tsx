@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
 import {
   Bell,
   FolderOpen,
@@ -36,6 +37,12 @@ export default function ResearchDashboard() {
   const profile = getResearcherProfile();
   const [, navigate] = useLocation();
 
+  const [deferredReady, setDeferredReady] = useState(false);
+  useEffect(() => {
+    const timer = setTimeout(() => setDeferredReady(true), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
   const allAreas = profile.researchAreas.length > 0 ? profile.researchAreas : ["CRISPR gene editing"];
   const spotlightQuery = allAreas.join(" OR ");
 
@@ -70,7 +77,7 @@ export default function ResearchDashboard() {
       if (!r.ok) throw new Error("Failed to fetch grants");
       return r.json();
     },
-    enabled: !!spotlightQuery,
+    enabled: !!spotlightQuery && deferredReady,
   });
 
   const primaryArea = allAreas[0];
@@ -86,7 +93,7 @@ export default function ResearchDashboard() {
       if (!r.ok) throw new Error("Failed to fetch alerts");
       return r.json();
     },
-    enabled: !!primaryArea,
+    enabled: !!primaryArea && deferredReady,
   });
 
   const projects = projectsData?.projects ?? [];
