@@ -99,52 +99,54 @@ async function fetchDetail(url: string): Promise<ScrapedListing | null> {
   let categories: string[] = [];
   let contactEmail = '';
 
-  $('.techSummaryMetadata h3, .techSummaryMetadata strong').each((_, heading) => {
+  $('.techSummaryMetadata h3').each((_, heading) => {
     const label = cleanText($(heading).text());
-    const sibling = $(heading).next();
 
     if (label.includes('Tech ID')) {
-      const text = cleanText(sibling.text());
-      if (text) techId = text;
-      else {
-        let nextEl = $(heading).next();
-        while (nextEl.length && !nextEl.is('h3, strong')) {
-          const t = cleanText(nextEl.text());
-          if (t) { techId = t; break; }
-          nextEl = nextEl.next();
-        }
+      const nextP = $(heading).next('p');
+      if (nextP.length) {
+        techId = cleanText(nextP.text());
       }
     }
 
     if (label.includes('Inventor')) {
-      let nextEl = $(heading).next();
-      while (nextEl.length && !nextEl.is('h3, strong')) {
-        const t = cleanText(nextEl.text());
+      $(heading).nextAll('div').first().find('li a').each((_, a) => {
+        const t = cleanText($(a).text());
         if (t && t.length > 1) inventors.push(t);
-        nextEl = nextEl.next();
+      });
+      if (inventors.length === 0) {
+        $(heading).nextAll('div').first().find('a').each((_, a) => {
+          const t = cleanText($(a).text());
+          if (t && t.length > 1) inventors.push(t);
+        });
       }
     }
 
     if (label.includes('Categor')) {
-      let nextEl = $(heading).next();
-      while (nextEl.length && !nextEl.is('h3, strong')) {
-        const t = cleanText(nextEl.text());
-        if (t && t.length > 1) categories.push(t);
-        nextEl = nextEl.next();
+      const catSet = new Set<string>();
+      $(heading).nextAll('div').first().find('li a').each((_, a) => {
+        const t = cleanText($(a).text());
+        if (t && t.length > 1 && !catSet.has(t)) {
+          catSet.add(t);
+          categories.push(t);
+        }
+      });
+      if (categories.length === 0) {
+        $(heading).nextAll('div').first().find('a').each((_, a) => {
+          const t = cleanText($(a).text());
+          if (t && t.length > 1 && !catSet.has(t)) {
+            catSet.add(t);
+            categories.push(t);
+          }
+        });
       }
     }
 
     if (label.includes('Licensing Manager')) {
-      const emailMatch = sibling.html()?.match(/[\w.-]+@[\w.-]+\.\w+/);
+      const block = $(heading).nextAll('div, p').first();
+      const blockHtml = block.html() ?? '';
+      const emailMatch = blockHtml.match(/[\w.-]+@[\w.-]+\.\w+/);
       if (emailMatch) contactEmail = emailMatch[0];
-      if (!contactEmail) {
-        let nextEl = $(heading).next();
-        while (nextEl.length && !nextEl.is('h3, strong')) {
-          const em = nextEl.html()?.match(/[\w.-]+@[\w.-]+\.\w+/);
-          if (em) { contactEmail = em[0]; break; }
-          nextEl = nextEl.next();
-        }
-      }
     }
   });
 
