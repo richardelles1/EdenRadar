@@ -248,11 +248,11 @@
   100% { transform: scale(4);   opacity: 0; }
 }
 
-/* Portal particle drift (subtler than homepage) */
+/* Portal particle drift */
 @keyframes portal-particle-drift {
-  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.15; }
-  33%       { transform: translateY(-18px) translateX(8px); opacity: 0.45; }
-  66%       { transform: translateY(-9px) translateX(-10px); opacity: 0.25; }
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.22; }
+  33%       { transform: translateY(-18px) translateX(8px); opacity: 0.60; }
+  66%       { transform: translateY(-9px) translateX(-10px); opacity: 0.38; }
 }
 
 /* Large background radar (slow) */
