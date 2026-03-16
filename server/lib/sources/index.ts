@@ -26,6 +26,10 @@ import { createOsfSearchFn } from "./osf_preprints";
 import { searchDoaj } from "./doaj";
 import { searchOpenaire } from "./openaire";
 import { searchHal } from "./hal";
+import { searchHarvardDataverse } from "./harvard_dataverse";
+import { searchFigshare } from "./figshare";
+import { searchDryad } from "./dryad";
+import { searchBioStudies } from "./biostudies";
 import type { RawSignal } from "../types";
 import { db } from "../../db";
 import { discoveryCards } from "@shared/schema";
@@ -67,7 +71,11 @@ export type SourceKey =
   | "engrxiv"
   | "doaj"
   | "openaire"
-  | "hal";
+  | "hal"
+  | "harvard_dataverse"
+  | "figshare"
+  | "dryad"
+  | "biostudies";
 
 export const ALL_SOURCE_KEYS: SourceKey[] = [
   "pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer",
@@ -77,6 +85,7 @@ export const ALL_SOURCE_KEYS: SourceKey[] = [
   "base", "core", "ieee", "eric",
   "chemrxiv", "socarxiv", "psyarxiv", "eartharxiv", "engrxiv",
   "doaj", "openaire", "hal",
+  "harvard_dataverse", "figshare", "dryad", "biostudies",
 ];
 
 export interface DataSource {
@@ -338,6 +347,30 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "HAL",
     description: "French national open archive — multidisciplinary research",
     search: searchHal,
+  },
+  harvard_dataverse: {
+    id: "harvard_dataverse",
+    label: "Harvard Dataverse",
+    description: "Harvard's open research data repository — datasets from institutions worldwide",
+    search: searchHarvardDataverse,
+  },
+  figshare: {
+    id: "figshare",
+    label: "Figshare",
+    description: "10M+ research outputs including datasets, posters, code, and preprints",
+    search: searchFigshare,
+  },
+  dryad: {
+    id: "dryad",
+    label: "Dryad",
+    description: "Curated, editorially reviewed research data — heavy life sciences focus",
+    search: searchDryad,
+  },
+  biostudies: {
+    id: "biostudies",
+    label: "EMBL-EBI BioStudies",
+    description: "European Bioinformatics Institute — functional genomics, proteomics, and drug target studies",
+    search: searchBioStudies,
   },
 };
 

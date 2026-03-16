@@ -126,9 +126,10 @@ server/
       cwru.ts             # CWRU TTO scraper
       ucolorado.ts        # CU Innovations scraper
     sources/
-      index.ts            # collectAllSignals() fan-out + DataSource registry (32 sources)
+      index.ts            # collectAllSignals() fan-out + DataSource registry (37 sources)
       pubmed.ts, biorxiv.ts, medrxiv.ts, clinicaltrials.ts, patents.ts, techtransfer/
       base_search.ts, core.ts, ieee.ts, eric.ts, osf_preprints.ts, doaj.ts, openaire.ts, hal.ts
+      harvard_dataverse.ts, figshare.ts, dryad.ts, biostudies.ts
     pipeline/
       normalizeSignals.ts, clusterAssets.ts, scoreAssets.ts, generateReport.ts, generateDossier.ts
       relevancePreFilter.ts  # keyword-based biotech relevance pre-filter
