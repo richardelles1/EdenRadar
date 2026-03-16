@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import {
   Printer,
   ChevronUp,
@@ -31,7 +31,7 @@ import {
   Lock,
   Workflow,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, useInView, useReducedMotion } from "framer-motion";
 import imgIdeation from "@assets/pexels-edmond-dantes-4347481_1773638670423.jpg";
 import imgLabComp from "@assets/pexels-edward-jenner-4033150_1773638670422.jpg";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
@@ -345,14 +345,38 @@ function SlideNav({ current, onJump, colors }: { current: number; onJump: (i: nu
   );
 }
 
+function useCountUp(target: number, active: boolean, skip = false, duration = 1200): number {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    if (!active) { setValue(0); return; }
+    if (skip) { setValue(target); return; }
+    const start = performance.now();
+    let rafId: number;
+    const step = (now: number) => {
+      const progress = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setValue(Math.round(eased * target));
+      if (progress < 1) rafId = requestAnimationFrame(step);
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [active, target, skip, duration]);
+  return value;
+}
+
 function Slide({
   index, section, accent, children, className = "", noPadding = false, colors,
 }: {
   index: number; section: string; accent?: string; children: React.ReactNode; className?: string; noPadding?: boolean; colors: Colors;
 }) {
   const accentColor = accent || colors.green;
+  const sectionRef = useRef<HTMLElement>(null);
+  const inView = useInView(sectionRef, { once: true, amount: 0.3 });
+  const reducedMotion = useReducedMotion();
+  const skip = !!reducedMotion;
   return (
     <section
+      ref={sectionRef}
       className={`pitch-slide relative w-full flex flex-col justify-center overflow-hidden ${className}`}
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid={`pitch-slide-${index}`}
@@ -361,9 +385,15 @@ function Slide({
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: accentColor }}>{String(index).padStart(2, "0")}</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
-      <div className={`relative z-10 w-full max-w-6xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <motion.div
+        className={`relative z-10 w-full max-w-6xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`}
+        style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
+        initial={skip ? false : { opacity: 0, y: 20 }}
+        animate={skip || inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
+        transition={skip ? { duration: 0 } : { duration: 0.6, ease: "easeOut" }}
+      >
         {children}
-      </div>
+      </motion.div>
       <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
@@ -529,6 +559,10 @@ function SolutionSlide({ colors }: { colors: Colors }) {
 
 /* ═══════════════════════ SLIDE 4 — THREE PORTALS ═══════════════════════ */
 function PortalsSlide({ colors }: { colors: Colors }) {
+  const gridRef = useRef<HTMLDivElement>(null);
+  const gridInView = useInView(gridRef, { once: true, amount: 0.2 });
+  const reducedMotion = useReducedMotion();
+  const skip = !!reducedMotion;
   const portals = [
     {
       title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
@@ -548,9 +582,16 @@ function PortalsSlide({ colors }: { colors: Colors }) {
       <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-7" style={{ color: colors.text }}>
         Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-        {portals.map((p) => (
-          <div key={p.title} className="rounded-xl p-3 sm:p-6 flex flex-col" style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}>
+      <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
+        {portals.map((p, i) => (
+          <motion.div
+            key={p.title}
+            className="rounded-xl p-3 sm:p-6 flex flex-col"
+            style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}
+            initial={skip ? false : { x: -16 }}
+            animate={skip || gridInView ? { x: 0 } : {}}
+            transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
+          >
             <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: p.color }}>
                 <p.icon className="w-4 h-4" style={{ color: "#fff" }} />
@@ -569,21 +610,41 @@ function PortalsSlide({ colors }: { colors: Colors }) {
                 </li>
               ))}
             </ul>
-          </div>
+          </motion.div>
         ))}
       </div>
 
-      {/* "One Pipeline of Innovation" gradient arrow */}
-      <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: `1px solid transparent` }}>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
-          One Pipeline of Innovation
-        </span>
-        {/* arrowhead */}
-        <div className="relative z-10 flex items-center justify-center w-9 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.green}44, ${colors.green}88)` }}>
-          <ChevronRight className="w-5 h-5" style={{ color: colors.green }} />
-        </div>
+      <style>{`
+        @media (prefers-reduced-motion: no-preference) {
+          .pipeline-dash { animation: dash-flow 1.8s linear infinite; }
+        }
+        @keyframes dash-flow {
+          0% { stroke-dashoffset: 20; }
+          100% { stroke-dashoffset: 0; }
+        }
+      `}</style>
+      <div className="hidden sm:flex items-center justify-center mt-5 gap-0">
+        {portals.map((p, i) => (
+          <Fragment key={p.title}>
+            <div className="flex flex-col items-center gap-1.5">
+              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: `${p.color}22`, border: `2px solid ${p.color}` }}>
+                <p.icon className="w-3.5 h-3.5" style={{ color: p.color }} />
+              </div>
+              <span className="text-[9px] font-bold tracking-wider uppercase" style={{ color: p.color }}>{p.title.replace("Eden", "")}</span>
+            </div>
+            {i < 2 && (
+              <svg width="80" height="12" viewBox="0 0 80 12" className="mx-2 mb-4" aria-hidden>
+                <line x1="0" y1="6" x2="65" y2="6" stroke={`${portals[i + 1].color}33`} strokeWidth="2" strokeLinecap="round" />
+                <line x1="0" y1="6" x2="65" y2="6" stroke={portals[i + 1].color} strokeWidth="2" strokeLinecap="round" strokeDasharray="12 8" strokeOpacity="0.6" className="pipeline-dash" />
+                <polygon points="68,1.5 78,6 68,10.5" fill={portals[i + 1].color} fillOpacity="0.45" />
+              </svg>
+            )}
+          </Fragment>
+        ))}
       </div>
+      <p className="sm:hidden mt-3 text-center text-[9px] font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>
+        Discovery → Lab → Radar
+      </p>
     </Slide>
   );
 }
@@ -770,12 +831,37 @@ function RadarSlide({ colors }: { colors: Colors }) {
 }
 
 /* ═══════════════════════ SLIDE 8 — TRACTION / PRICING ═══════════════════════ */
+function StatCard({ num, suffix, text, label, icon: Icon, color, active, bgLight, border, textMuted }: {
+  num?: number; suffix?: string; text?: string; label: string; icon: React.ElementType; color: string; active: boolean; bgLight: string; border: string; textMuted: string;
+}) {
+  const reducedMotion = useReducedMotion();
+  const skip = !!reducedMotion;
+  const count = useCountUp(num ?? 0, active && num !== undefined, skip);
+  return (
+    <div className="rounded-xl p-2 sm:p-4 flex flex-col items-center text-center" style={{ background: bgLight, border: `1px solid ${border}` }}>
+      <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-1" style={{ color }} />
+      <motion.span
+        className="text-sm sm:text-xl font-bold mb-0.5 leading-tight"
+        style={{ color }}
+        initial={skip ? false : { opacity: 0 }}
+        animate={skip || active ? { opacity: 1 } : {}}
+        transition={skip ? { duration: 0 } : { duration: 0.4, delay: 0.15 }}
+      >
+        {text ?? `${count}${suffix ?? ""}`}
+      </motion.span>
+      <span className="text-[8px] sm:text-[10px]" style={{ color: textMuted }}>{label}</span>
+    </div>
+  );
+}
+
 function TractionSlide({ colors }: { colors: Colors }) {
-  const stats = [
-    { value: "200+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
-    { value: "40+", label: "Research Data Sources", icon: Database, color: colors.violet },
-    { value: "Custom GPT-5", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
-    { value: "11-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
+  const statsRef = useRef<HTMLDivElement>(null);
+  const statsInView = useInView(statsRef, { once: true, amount: 0.3 });
+  const stats: { num?: number; suffix?: string; text?: string; label: string; icon: React.ElementType; color: string }[] = [
+    { num: 200, suffix: "+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
+    { num: 40, suffix: "+", label: "Research Data Sources", icon: Database, color: colors.violet },
+    { text: "Custom GPT-5", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
+    { num: 11, suffix: "-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
   ];
   const tiers = [
     { name: "EdenDiscovery", price: "$9.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, AI scoring, landscape intelligence" },
@@ -790,13 +876,9 @@ function TractionSlide({ colors }: { colors: Colors }) {
       <p className="text-[10px] sm:text-sm mb-3 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
         This is not a roadmap. Every component below is processing real biotech data in production.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-7">
+      <div ref={statsRef} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-7">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl p-2 sm:p-4 flex flex-col items-center text-center" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
-            <s.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-1" style={{ color: s.color }} />
-            <span className="text-sm sm:text-xl font-bold mb-0.5 leading-tight" style={{ color: s.color }}>{s.value}</span>
-            <span className="text-[8px] sm:text-[10px]" style={{ color: colors.textMuted }}>{s.label}</span>
-          </div>
+          <StatCard key={s.label} {...s} active={statsInView} bgLight={colors.bgLight} border={colors.border} textMuted={colors.textMuted} />
         ))}
       </div>
       <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 sm:mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
