@@ -392,10 +392,10 @@ export default function ResearchDataSources() {
     window.history.replaceState(null, "", url);
   }, [activeQuery, filters, selectedSources, page]);
 
-  const { data, isLoading } = useQuery<SearchResponse>({
+  const { data, isLoading, isError, error: searchError } = useQuery<SearchResponse>({
     queryKey: ["/api/search", activeQuery, selectedSources, filters],
-    queryFn: () =>
-      fetch("/api/search", {
+    queryFn: async () => {
+      const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -404,8 +404,15 @@ export default function ResearchDataSources() {
           maxPerSource: 25,
           ...filters,
         }),
-      }).then((r) => r.json()),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Search failed (${res.status})`);
+      }
+      return res.json();
+    },
     enabled: !!activeQuery,
+    retry: 1,
   });
 
   const { data: refsData } = useQuery<{ references: SavedReference[] }>({
@@ -691,7 +698,14 @@ export default function ResearchDataSources() {
           </div>
         )}
 
-        {activeQuery && !isLoading && totalResults === 0 && (
+        {isError && (
+          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center" data-testid="search-error">
+            <p className="text-sm font-medium text-red-600 dark:text-red-400 mb-1">Search failed</p>
+            <p className="text-xs text-muted-foreground">{searchError instanceof Error ? searchError.message : "An unexpected error occurred. Please try again."}</p>
+          </div>
+        )}
+
+        {activeQuery && !isLoading && !isError && totalResults === 0 && (
           <div className="text-center py-12 text-sm text-muted-foreground" data-testid="no-results">
             No results found for "{activeQuery}". Try adjusting your filters or query.
           </div>

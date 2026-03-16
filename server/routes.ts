@@ -275,10 +275,68 @@ export async function registerRoutes(
         return res.json({ assets: [], query, sources: effectiveSources, signalsFound: 0 });
       }
 
-      const normalized = await normalizeSignals(signals);
+      let normalized: Partial<import("./lib/types").ScoredAsset>[];
+      try {
+        normalized = await normalizeSignals(signals);
+      } catch (normErr) {
+        console.error("normalizeSignals failed, falling back to raw signals:", normErr);
+        normalized = signals.map((s) => ({
+          id: crypto.randomUUID().slice(0, 8),
+          asset_name: s.title?.slice(0, 80) || "unknown",
+          target: "unknown",
+          modality: "unknown",
+          indication: "unknown",
+          development_stage: s.stage_hint || "unknown",
+          owner_name: s.institution_or_sponsor || s.authors_or_owner || "unknown",
+          owner_type: "unknown" as const,
+          institution: s.institution_or_sponsor || "unknown",
+          licensing_status: "unknown",
+          patent_status: "unknown",
+          summary: s.text?.slice(0, 200) || "",
+          why_it_matters: "",
+          source_types: [s.source_type],
+          source_urls: [s.url],
+          latest_signal_date: s.date,
+          matching_tags: [],
+          evidence_count: 1,
+          confidence: "low" as const,
+          signals: [s],
+        }));
+      }
+
       const clustered = clusterAssets(normalized);
       const profile = buyerProfile ?? DEFAULT_BUYER_PROFILE;
-      const scored = await scoreAssets(clustered, profile);
+
+      let scored: import("./lib/types").ScoredAsset[];
+      try {
+        scored = await scoreAssets(clustered, profile);
+      } catch (scoreErr) {
+        console.error("scoreAssets failed, returning clustered results without scores:", scoreErr);
+        scored = clustered.map((a) => ({
+          id: a.id ?? crypto.randomUUID().slice(0, 8),
+          asset_name: a.asset_name ?? "unknown",
+          target: a.target ?? "unknown",
+          modality: a.modality ?? "unknown",
+          indication: a.indication ?? "unknown",
+          development_stage: a.development_stage ?? "unknown",
+          owner_name: a.owner_name ?? "unknown",
+          owner_type: a.owner_type ?? "unknown",
+          institution: a.institution ?? "unknown",
+          patent_status: a.patent_status ?? "unknown",
+          licensing_status: a.licensing_status ?? "unknown",
+          summary: a.summary ?? "",
+          why_it_matters: "",
+          evidence_count: a.evidence_count ?? 1,
+          source_types: a.source_types ?? [],
+          source_urls: a.source_urls ?? [],
+          latest_signal_date: a.latest_signal_date ?? "",
+          score: 0,
+          score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+          matching_tags: a.matching_tags ?? [],
+          confidence: a.confidence ?? "low",
+          signals: a.signals ?? [],
+        }));
+      }
 
       await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: scored.length });
 
