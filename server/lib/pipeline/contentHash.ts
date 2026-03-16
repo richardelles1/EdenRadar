@@ -7,10 +7,10 @@ export function computeContentHash(title: string, description: string, abstract?
     (abstract || "").toLowerCase().trim(),
   ].join("|");
 
-  return createHash("sha256").update(normalized).digest("hex").slice(0, 16);
+  return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
 }
 
-export function computeCompletenessScore(asset: {
+type CompletenessAsset = {
   target?: string | null;
   modality?: string | null;
   indication?: string | null;
@@ -22,9 +22,11 @@ export function computeCompletenessScore(asset: {
   mechanismOfAction?: string | null;
   inventors?: string[] | null;
   patentStatus?: string | null;
-}): number {
+};
+
+export function computeCompletenessScore(asset: CompletenessAsset): number {
   let score = 0;
-  const weights: [string, number][] = [
+  const checks: [keyof CompletenessAsset, number][] = [
     ["target", 15],
     ["modality", 15],
     ["indication", 15],
@@ -38,8 +40,8 @@ export function computeCompletenessScore(asset: {
     ["patentStatus", 5],
   ];
 
-  for (const [field, weight] of weights) {
-    const val = (asset as any)[field];
+  for (const [field, weight] of checks) {
+    const val = asset[field];
     if (val && val !== "unknown" && val !== "") {
       if (Array.isArray(val) && val.length === 0) continue;
       if (typeof val === "string" && val.length < 3) continue;
@@ -54,8 +56,8 @@ export function normalizeLicensingStatus(raw: string | undefined): string {
   if (!raw) return "unknown";
   const lower = raw.toLowerCase().trim();
   if (lower.includes("available") || lower.includes("for license")) return "available";
-  if (lower.includes("exclusive")) return "exclusively licensed";
   if (lower.includes("non-exclusive")) return "non-exclusively licensed";
+  if (lower.includes("exclusive")) return "exclusively licensed";
   if (lower.includes("option")) return "optioned";
   if (lower.includes("startup") || lower.includes("spin")) return "startup formed";
   return "unknown";

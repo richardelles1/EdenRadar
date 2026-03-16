@@ -262,18 +262,18 @@ function BrokenPipelineSVG({ color }: { color: string }) {
           `}</style>
         </defs>
 
-        {/* nodes: Concept, Research, TTO, Industry — evenly spaced */}
+        {/* nodes: Concept, Research, Tech Transfer, Industry — evenly spaced */}
         {[
           { cx: 90, label: "Concept", steady: true },
           { cx: 300, label: "Research", steady: true },
-          { cx: 510, label: "TTO", dim: true },
+          { cx: 510, label: "Tech Transfer", dim: true, fontSize: 10 },
           { cx: 720, label: "Industry", dim: true },
         ].map((n) => (
           <g key={n.label}>
             <circle cx={n.cx} cy={100} r={24} fill="none" stroke={color} strokeWidth="2"
               style={{ animation: n.dim ? "node-dim 4s ease-in-out infinite" : "node-steady 4s ease-in-out infinite" }} />
             <circle cx={n.cx} cy={100} r={5} fill={color} style={{ opacity: n.dim ? 0.3 : 0.65 }} />
-            <text x={n.cx} y={146} textAnchor="middle" fill={color} fontSize="12" fontWeight="600"
+            <text x={n.cx} y={146} textAnchor="middle" fill={color} fontSize={('fontSize' in n && n.fontSize) || 12} fontWeight="600"
               style={{ opacity: n.dim ? 0.35 : 0.72 }}>{n.label}</text>
           </g>
         ))}
@@ -300,7 +300,7 @@ function BrokenPipelineSVG({ color }: { color: string }) {
           style={{ animation: "x-flash-b 4.5s ease-in-out 0.8s infinite" }} />
 
         <text x="410" y="180" textAnchor="middle" fill={color} fontSize="11" fontStyle="italic" opacity="0.45">
-          Two breaks in the pipeline — industry never sees what research produces
+          Two breaks in the pipeline. Industry never sees what research produces.
         </text>
       </svg>
     </div>
@@ -361,7 +361,7 @@ function Slide({
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: accentColor }}>{String(index).padStart(2, "0")}</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
-      <div className={`relative z-10 w-full max-w-6xl mx-auto ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div className={`relative z-10 w-full max-w-6xl mx-auto pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {children}
       </div>
       <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
@@ -394,7 +394,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
 
       <div className="flex flex-1 items-stretch">
         {/* text panel — z-10 so it's above vine/dots */}
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-16 sm:py-20 relative z-10">
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
           <div className="flex flex-col items-start gap-2.5 mb-6 w-fit">
             {[
               { Icon: Lightbulb, label: "EdenDiscovery", color: colors.amber, accent: "Discovery" },
@@ -453,7 +453,7 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   const problems = [
     { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no pathway to industry attention." },
     { icon: Search, title: "Industry Starts Too Late", desc: "Commercial discovery tools begin at the patent stage. The best assets are already locked, gone, or unfunded." },
-    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, TTOs, and BD teams use disconnected systems. The pipeline has no connective tissue." },
+    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, Technology Transfer Offices, and Business Development teams use disconnected systems. The pipeline has no connective tissue." },
   ];
 
   return (
@@ -469,19 +469,19 @@ function ProblemSlide({ colors }: { colors: Colors }) {
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>The Problem</span>
       </div>
 
-      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-16 relative z-10">
-        <div className="mb-3 inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest w-fit" style={{ background: colors.redDim, color: colors.red }}>
+      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
+        <div className="mb-2 sm:mb-3 inline-block px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest w-fit" style={{ background: colors.redDim, color: colors.red }}>
           $2.6B average cost to bring a drug to market
         </div>
-        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-5" style={{ color: colors.text }}>
+        <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-5" style={{ color: colors.text }}>
           The pipeline is <span style={{ color: colors.red }}>broken</span> before it begins.
         </h2>
 
-        <div className="mb-6 sm:mb-8">
+        <div className="mb-4 sm:mb-8">
           <BrokenPipelineSVG color={colors.red} />
         </div>
 
-        <div className="space-y-2 sm:space-y-3">
+        <div className="space-y-1.5 sm:space-y-3">
           {problems.map((p) => (
             <div key={p.title} className="flex items-start gap-3 sm:gap-4 rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
               <p.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" style={{ color: colors.red }} />
@@ -507,14 +507,14 @@ function SolutionSlide({ colors }: { colors: Colors }) {
   const stages = [
     { label: "Concept Community", sublabel: "EdenDiscovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
     { label: "Project-Based Research", sublabel: "EdenLab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility." },
-    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored TTO institutions with real-time convergence signals." },
+    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored Technology Transfer Offices with real-time convergence signals." },
   ];
   return (
     <Slide index={3} section="Our Solution" accent={colors.green} colors={colors}>
       <PitchDots color={colors.green} count={6} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 30% 60%, ${colors.green}0a 0%, transparent 60%)` }} />
-      <p className="text-xs sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-6 sm:mb-8" style={{ color: colors.text }}>
+      <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-8" style={{ color: colors.text }}>
         EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
       <div className="relative">
@@ -552,7 +552,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
     },
     {
       title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
-      items: ["200+ TTO institutions monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target", "Convergence signals and taxonomy tracking"],
+      items: ["200+ Tech Transfer Offices monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target", "Convergence signals and taxonomy tracking"],
     },
   ];
   return (
@@ -624,34 +624,34 @@ function DiscoverySlide({ colors }: { colors: Colors }) {
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-16 relative z-10">
-          <div className="flex items-center gap-3 mb-4 sm:mb-5">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.amberDim }}>
-              <Lightbulb className="w-5 h-5" style={{ color: colors.amber }} />
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
+          <div className="flex items-center gap-3 mb-3 sm:mb-5">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.amberDim }}>
+              <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.amber }} />
             </div>
             <div>
-              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
+              <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
                 Eden<span style={{ color: colors.amber }}>Discovery</span>
               </h2>
-              <p className="text-xs" style={{ color: colors.textMuted }}>Tier 1 — Creative concept community</p>
+              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Tier 1 — Creative concept community</p>
             </div>
           </div>
-          <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-md" style={{ color: colors.textMuted }}>
+          <p className="text-xs sm:text-base mb-4 sm:mb-7 max-w-md" style={{ color: colors.textMuted }}>
             Where biotech concepts are born. Submit a hypothesis, get scored, and get discovered by collaborators and funders before anyone else sees it.
           </p>
           {/* 2-col grid for 4 boxes */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3">
             {features.map((f) => (
-              <div key={f.label} className="flex items-start gap-3 rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.amber}33` }}>
+              <div key={f.label} className="flex items-start gap-2 sm:gap-3 rounded-xl p-2.5 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.amber}33` }}>
                 <f.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" style={{ color: colors.amber }} />
                 <div>
                   <p className="text-xs sm:text-sm font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
-                  <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
+                  <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
                 </div>
               </div>
             ))}
           </div>
-          <div className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold w-fit" style={{ background: colors.amberDim, color: colors.amber, border: `1px solid ${colors.amber}44` }}>
+          <div className="mt-3 sm:mt-5 inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-[10px] sm:text-xs font-semibold w-fit" style={{ background: colors.amberDim, color: colors.amber, border: `1px solid ${colors.amber}44` }}>
             <Globe className="w-3.5 h-3.5" />
             Public feed: no login required to browse
           </div>
@@ -696,28 +696,28 @@ function LabSlide({ colors }: { colors: Colors }) {
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-16 relative z-10">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.violetDim }}>
-              <FlaskConical className="w-5 h-5" style={{ color: colors.violet }} />
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
+          <div className="flex items-center gap-3 mb-3 sm:mb-4">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.violetDim }}>
+              <FlaskConical className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.violet }} />
             </div>
             <div>
-              <h2 className="text-2xl sm:text-3xl font-bold" style={{ color: colors.text }}>
+              <h2 className="text-xl sm:text-3xl font-bold" style={{ color: colors.text }}>
                 Eden<span style={{ color: colors.violet }}>Lab</span>
               </h2>
-              <p className="text-xs" style={{ color: colors.textMuted }}>Tier 2 — Project-based research workspace</p>
+              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Tier 2 — Project-based research workspace</p>
             </div>
           </div>
-          <p className="text-sm mb-4 max-w-lg" style={{ color: colors.textMuted }}>
+          <p className="text-xs sm:text-sm mb-3 sm:mb-4 max-w-lg" style={{ color: colors.textMuted }}>
             A research workspace built for biotech. Literature, grants, and industry visibility in one AI-powered canvas, same ecosystem as EdenRadar, with seamless movement through the pipeline.
           </p>
-          <div className="space-y-2">
+          <div className="space-y-1.5 sm:space-y-2">
             {features.map((f) => (
-              <div key={f.label} className="flex items-start gap-3 rounded-lg p-3" style={{ background: colors.bgLight, border: `1px solid ${colors.violet}33` }}>
-                <f.icon className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colors.violet }} />
+              <div key={f.label} className="flex items-start gap-2 sm:gap-3 rounded-lg p-2.5 sm:p-3" style={{ background: colors.bgLight, border: `1px solid ${colors.violet}33` }}>
+                <f.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 mt-0.5" style={{ color: colors.violet }} />
                 <div>
-                  <p className="text-xs font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
-                  <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{f.desc}</p>
+                  <p className="text-[10px] sm:text-xs font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
+                  <p className="text-[10px] sm:text-xs leading-relaxed" style={{ color: colors.textMuted }}>{f.desc}</p>
                 </div>
               </div>
             ))}
@@ -742,7 +742,7 @@ function LabSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 7 — EDEN RADAR ═══════════════════════ */
 function RadarSlide({ colors }: { colors: Colors }) {
   const features = [
-    { icon: Building2, label: "200+ TTO Institutions", desc: "Continuously scraped with bespoke and automated ingestion pipelines across major research universities" },
+    { icon: Building2, label: "200+ Tech Transfer Offices", desc: "Continuously scraped with bespoke and automated ingestion pipelines across major research universities" },
     { icon: FileBarChart2, label: "AI-Enriched Dossiers", desc: "Every asset classified by target, modality, indication, and development stage with supporting literature" },
     { icon: Zap, label: "First to Know", desc: "Real-time alerts on new listings, convergence signals, and rising activity clusters by therapy area" },
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
@@ -763,7 +763,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
       <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
-        The industry-facing layer. EdenRadar monitors 200+ technology transfer offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
+        The industry-facing layer. EdenRadar monitors 200+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {features.map((f) => (
@@ -785,7 +785,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 8 — TRACTION / PRICING ═══════════════════════ */
 function TractionSlide({ colors }: { colors: Colors }) {
   const stats = [
-    { value: "200+", label: "TTO Institutions", icon: Building2, color: colors.green },
+    { value: "200+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
     { value: "40+", label: "Research Data Sources", icon: Database, color: colors.violet },
     { value: "Custom GPT-5", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
     { value: "11-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
@@ -793,38 +793,38 @@ function TractionSlide({ colors }: { colors: Colors }) {
   const tiers = [
     { name: "EdenDiscovery", price: "$9.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, AI scoring, landscape intelligence" },
     { name: "EdenLab", price: "$24.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
-    { name: "EdenRadar", price: "$44.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 200+ TTOs, AI dossiers, convergence signals, full ecosystem access" },
+    { name: "EdenRadar", price: "$44.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 200+ Tech Transfer Offices, AI dossiers, convergence signals, full ecosystem access" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
-      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Built, deployed, <span style={{ color: colors.green }}>running today</span>.
       </h2>
-      <p className="text-xs sm:text-sm mb-4 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
+      <p className="text-[10px] sm:text-sm mb-3 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
         This is not a roadmap. Every component below is processing real biotech data in production.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6 sm:mb-7">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-7">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl p-3 sm:p-4 flex flex-col items-center text-center" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
-            <s.icon className="w-4 h-4 mb-1.5" style={{ color: s.color }} />
-            <span className="text-base sm:text-xl font-bold mb-0.5 leading-tight" style={{ color: s.color }}>{s.value}</span>
-            <span className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{s.label}</span>
+          <div key={s.label} className="rounded-xl p-2 sm:p-4 flex flex-col items-center text-center" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+            <s.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 mb-1" style={{ color: s.color }} />
+            <span className="text-sm sm:text-xl font-bold mb-0.5 leading-tight" style={{ color: s.color }}>{s.value}</span>
+            <span className="text-[8px] sm:text-[10px]" style={{ color: colors.textMuted }}>{s.label}</span>
           </div>
         ))}
       </div>
-      <p className="text-xs font-bold uppercase tracking-widest mb-3 sm:mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+      <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 sm:mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
+      <div className="grid grid-cols-3 sm:grid-cols-3 gap-1.5 sm:gap-4">
         {tiers.map((t) => (
-          <div key={t.name} className="rounded-xl p-4 sm:p-5 flex flex-col items-center text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-2 sm:mb-3" style={{ background: `${t.color}22` }}>
-              <t.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: t.color }} />
+          <div key={t.name} className="rounded-xl p-2.5 sm:p-5 flex flex-col items-center text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-1.5 sm:mb-3" style={{ background: `${t.color}22` }}>
+              <t.icon className="w-3.5 h-3.5 sm:w-5 sm:h-5" style={{ color: t.color }} />
             </div>
-            <h3 className="text-xs sm:text-sm font-bold mb-1" style={{ color: colors.text }}>{t.name}</h3>
-            <div className="mb-2">
-              <span className="text-xl sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
-              <span className="text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
+            <h3 className="text-[10px] sm:text-sm font-bold mb-0.5 sm:mb-1" style={{ color: colors.text }}>{t.name}</h3>
+            <div className="mb-1 sm:mb-2">
+              <span className="text-base sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
+              <span className="text-[9px] sm:text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
             </div>
-            <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{t.desc}</p>
+            <p className="text-[9px] sm:text-xs leading-relaxed hidden sm:block" style={{ color: colors.textMuted }}>{t.desc}</p>
           </div>
         ))}
       </div>
@@ -839,11 +839,11 @@ function VisionSlide({ colors }: { colors: Colors }) {
       <PitchDots color={colors.green} count={8} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 50%, ${colors.green}0a 0%, transparent 60%)` }} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
-        <p className="text-xs font-bold uppercase tracking-widest mb-5 sm:mb-6" style={{ color: colors.green }}>Why this matters</p>
-        <blockquote className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold leading-snug max-w-4xl mb-8 sm:mb-10" style={{ color: colors.text }}>
+        <p className="text-xs font-bold uppercase tracking-widest mb-3 sm:mb-6" style={{ color: colors.green }}>Why this matters</p>
+        <blockquote className="text-base sm:text-2xl lg:text-3xl xl:text-4xl font-bold leading-snug max-w-4xl mb-5 sm:mb-10" style={{ color: colors.text }}>
           "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments in creating direct connections between scientists and the industry partners who can advance it."
         </blockquote>
-        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6 mb-8 sm:mb-10">
+        <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-6 mb-5 sm:mb-10">
           {[
             { label: "Concept", sublabel: "Early ideas matter", color: colors.amber },
             { label: "Research", sublabel: "Science needs reach", color: colors.violet },
