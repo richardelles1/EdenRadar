@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { ResearchSidebar } from "@/components/ResearchSidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { PortalBackground } from "@/components/PortalBackground";
 
 type ResearchLayoutProps = {
   children: React.ReactNode;
@@ -27,9 +28,10 @@ export function ResearchLayout({ children }: ResearchLayoutProps) {
   if (loading || !session || role !== "researcher") return null;
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background relative">
+      <PortalBackground variant="lab" />
       <ResearchSidebar />
-      <main className="flex-1 min-w-0 overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         {children}
       </main>
     </div>

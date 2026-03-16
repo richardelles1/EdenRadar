@@ -242,6 +242,19 @@
   66%       { transform: translateY(-7px) translateX(-8px); opacity: 0.4; }
 }
 
+/* Portal lab ring expand */
+@keyframes lab-ring-expand {
+  0%   { transform: scale(0.1); opacity: 0.12; }
+  100% { transform: scale(4);   opacity: 0; }
+}
+
+/* Portal particle drift (subtler than homepage) */
+@keyframes portal-particle-drift {
+  0%, 100% { transform: translateY(0px) translateX(0px); opacity: 0.15; }
+  33%       { transform: translateY(-18px) translateX(8px); opacity: 0.45; }
+  66%       { transform: translateY(-9px) translateX(-10px); opacity: 0.25; }
+}
+
 /* Large background radar (slow) */
 @keyframes radar-bg-slow {
   from { transform: rotate(0deg); }
@@ -271,7 +284,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .reveal-section, .reveal-section.is-visible,
-  .radar-sweep, .garden-scroll, .eden-node, .glow-pulse {
+  .radar-sweep, .garden-scroll, .eden-node, .glow-pulse,
+  .portal-bg-anim {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

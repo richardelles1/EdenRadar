@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { DiscoverySidebar } from "@/components/DiscoverySidebar";
 import { useAuth } from "@/hooks/use-auth";
+import { PortalBackground } from "@/components/PortalBackground";
 
 type DiscoveryLayoutProps = {
   children: React.ReactNode;
@@ -32,13 +33,19 @@ export function DiscoveryLayout({ children, requireAuth = true }: DiscoveryLayou
   if (requireAuth && (!session || role !== "concept")) return null;
 
   if (!showSidebar) {
-    return <>{children}</>;
+    return (
+      <div className="relative min-h-screen bg-background">
+        <PortalBackground variant="discovery" />
+        <div className="relative z-10">{children}</div>
+      </div>
+    );
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen bg-background relative">
+      <PortalBackground variant="discovery" />
       <DiscoverySidebar />
-      <main className="flex-1 min-w-0 overflow-y-auto">
+      <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         {children}
       </main>
     </div>
