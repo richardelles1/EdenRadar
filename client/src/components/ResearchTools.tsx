@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -37,16 +38,16 @@ type Milestone = {
   completed: boolean;
 };
 
-const HYPOTHESIS_STATUSES = ["Draft", "Testing", "Supported", "Refuted", "Revised"];
+const HYPOTHESIS_STATUSES = ["Untested", "In Testing", "Supported", "Refuted", "Inconclusive"];
 const CONFIDENCE_LEVELS = ["Low", "Medium", "High"];
 const FISHBONE_BRANCHES = ["Methods", "Materials", "Machines", "Measurement", "People", "Environment"];
 
 const STATUS_COLORS: Record<string, string> = {
-  Draft: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30",
-  Testing: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+  Untested: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30",
+  "In Testing": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
   Supported: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
   Refuted: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30",
-  Revised: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  Inconclusive: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
 };
 
 interface ResearchToolsProps {
@@ -56,51 +57,42 @@ interface ResearchToolsProps {
 }
 
 export default function ResearchTools({ project, onSave, saving }: ResearchToolsProps) {
-  const [activeTab, setActiveTab] = useState<"hypotheses" | "fishbone" | "timeline">("hypotheses");
-
-  const tabs = [
-    { key: "hypotheses" as const, label: "Hypotheses", icon: Lightbulb },
-    { key: "fishbone" as const, label: "Fishbone", icon: GitBranch },
-    { key: "timeline" as const, label: "Timeline", icon: Calendar },
-  ];
-
   return (
     <div className="border border-border rounded-lg bg-card overflow-hidden" data-testid="section-research-tools">
       <div className="px-4 py-3 border-b border-border/50">
-        <div className="flex items-center gap-2.5 mb-3">
+        <div className="flex items-center gap-2.5">
           <span className="w-5 h-5 rounded-full bg-violet-600/10 text-violet-600 dark:text-violet-400 text-[10px] font-bold flex items-center justify-center shrink-0">
             T
           </span>
           <span className="text-sm font-semibold text-foreground">Research Tools</span>
         </div>
-        <div className="flex gap-1">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              onClick={() => setActiveTab(t.key)}
-              data-testid={`tab-${t.key}`}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                activeTab === t.key
-                  ? "bg-violet-600/10 text-violet-600 dark:text-violet-400 border border-violet-500/30"
-                  : "text-muted-foreground hover:text-foreground hover:bg-accent/40 border border-transparent"
-              }`}
-            >
-              <t.icon className="w-3.5 h-3.5" />
-              {t.label}
-            </button>
-          ))}
-        </div>
       </div>
       <div className="px-4 pb-4 pt-3">
-        {activeTab === "hypotheses" && (
-          <HypothesesTab project={project} onSave={onSave} saving={saving} />
-        )}
-        {activeTab === "fishbone" && (
-          <FishboneTab project={project} onSave={onSave} saving={saving} />
-        )}
-        {activeTab === "timeline" && (
-          <TimelineTab project={project} onSave={onSave} saving={saving} />
-        )}
+        <Tabs defaultValue="hypotheses">
+          <TabsList className="mb-3">
+            <TabsTrigger value="hypotheses" className="gap-1.5 text-xs" data-testid="tab-hypotheses">
+              <Lightbulb className="w-3.5 h-3.5" />
+              Hypotheses
+            </TabsTrigger>
+            <TabsTrigger value="fishbone" className="gap-1.5 text-xs" data-testid="tab-fishbone">
+              <GitBranch className="w-3.5 h-3.5" />
+              Fishbone
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="gap-1.5 text-xs" data-testid="tab-timeline">
+              <Calendar className="w-3.5 h-3.5" />
+              Timeline
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="hypotheses">
+            <HypothesesTab project={project} onSave={onSave} saving={saving} />
+          </TabsContent>
+          <TabsContent value="fishbone">
+            <FishboneTab project={project} onSave={onSave} saving={saving} />
+          </TabsContent>
+          <TabsContent value="timeline">
+            <TimelineTab project={project} onSave={onSave} saving={saving} />
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
@@ -141,7 +133,7 @@ function HypothesesTab({ project, onSave, saving }: ResearchToolsProps) {
       expectedOutcome: "",
       nullHypothesis: "",
       evidenceNotes: "",
-      status: "Draft",
+      status: "Untested",
       confidence: "Low",
     };
     setHypotheses((prev) => [...prev, h]);
@@ -285,16 +277,23 @@ function HypothesesTab({ project, onSave, saving }: ResearchToolsProps) {
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Confidence</label>
-                    <Select value={h.confidence} onValueChange={(v) => updateHypothesis(h.id, { confidence: v })}>
-                      <SelectTrigger className="text-xs" data-testid={`select-hypothesis-confidence-${i}`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {CONFIDENCE_LEVELS.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex rounded-md border border-border overflow-hidden" data-testid={`toggle-hypothesis-confidence-${i}`}>
+                      {CONFIDENCE_LEVELS.map((c) => (
+                        <button
+                          key={c}
+                          onClick={() => updateHypothesis(h.id, { confidence: c })}
+                          className={`flex-1 px-2 py-1.5 text-xs font-medium transition-colors ${
+                            h.confidence === c
+                              ? c === "Low" ? "bg-gray-500/15 text-gray-700 dark:text-gray-300"
+                                : c === "Medium" ? "bg-amber-500/15 text-amber-700 dark:text-amber-300"
+                                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : "text-muted-foreground hover:bg-accent/40"
+                          }`}
+                        >
+                          {c}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div className="flex justify-end">
@@ -579,7 +578,7 @@ function TimelineTab({ project, onSave, saving }: ResearchToolsProps) {
 
       {sorted.length === 0 && (
         <div className="text-center py-8 text-muted-foreground text-sm">
-          No milestones yet. Click "Add Milestone" to start building your timeline.
+          No milestones yet. Add your first milestone in Step 10 or directly on the timeline.
         </div>
       )}
 
@@ -632,10 +631,10 @@ function TimelineTab({ project, onSave, saving }: ResearchToolsProps) {
                               title={`Click to toggle: ${st.label}`}
                             />
                             <div className="mt-1.5 text-center max-w-[80px]">
-                              <p className="text-[9px] text-muted-foreground">{m.targetDate}</p>
                               <p className={`text-[10px] font-medium truncate ${st.color}`}>
                                 {m.label || "—"}
                               </p>
+                              <p className="text-[9px] text-muted-foreground">{m.targetDate}</p>
                             </div>
                           </div>
                         );
