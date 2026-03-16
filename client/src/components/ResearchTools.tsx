@@ -751,7 +751,7 @@ export function PicoHelper({ project, onSave, saving }: ResearchToolsProps) {
           />
         </div>
       ))}
-      <ToolSaveButton label="PICO" saving={saving} onClick={() => onSave("PICO", { pico } as any)} />
+      <ToolSaveButton label="PICO" saving={saving} onClick={() => onSave("PICO", { pico })} />
     </div>
   );
 }
@@ -803,7 +803,7 @@ export function ProtocolChecklist({ project, onSave, saving }: ResearchToolsProp
           </button>
         ))}
       </div>
-      <ToolSaveButton label="Protocol" saving={saving} onClick={() => onSave("Protocol", { protocolChecklist: checklist } as any)} />
+      <ToolSaveButton label="Protocol" saving={saving} onClick={() => onSave("Protocol", { protocolChecklist: checklist })} />
     </div>
   );
 }
