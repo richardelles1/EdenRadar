@@ -361,7 +361,7 @@ function Slide({
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: accentColor }}>{String(index).padStart(2, "0")}</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
-      <div className={`relative z-10 w-full max-w-6xl mx-auto pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div className={`relative z-10 w-full max-w-6xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {children}
       </div>
       <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
@@ -395,22 +395,6 @@ function CoverSlide({ colors }: { colors: Colors }) {
       <div className="flex flex-1 items-stretch">
         {/* text panel — z-10 so it's above vine/dots */}
         <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
-          <div className="flex flex-col items-start gap-2.5 mb-6 w-fit">
-            {[
-              { Icon: Lightbulb, label: "EdenDiscovery", color: colors.amber, accent: "Discovery" },
-              { Icon: FlaskConical, label: "EdenLab", color: colors.violet, accent: "Lab" },
-              { Icon: Sprout, label: "EdenRadar", color: colors.green, accent: "Radar" },
-            ].map(({ Icon, label, color, accent }) => (
-              <div key={label} className="flex items-center gap-1.5">
-                <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: color }}>
-                  <Icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
-                </div>
-                <span className="font-bold text-xs" style={{ color: colors.text }}>
-                  Eden<span style={{ color }}>{accent}</span>
-                </span>
-              </div>
-            ))}
-          </div>
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
@@ -505,9 +489,9 @@ function ProblemSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 3 — SOLUTION ═══════════════════════ */
 function SolutionSlide({ colors }: { colors: Colors }) {
   const stages = [
-    { label: "Concept Community", sublabel: "EdenDiscovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
-    { label: "Project-Based Research", sublabel: "EdenLab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility." },
-    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored Technology Transfer Offices (TTOs) with real-time convergence signals." },
+    { label: "Concept Community", accent: "Discovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
+    { label: "Project-Based Research", accent: "Lab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility." },
+    { label: "Industry Intelligence", accent: "Radar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored Technology Transfer Offices (TTOs) with real-time convergence signals." },
   ];
   return (
     <Slide index={3} section="Our Solution" accent={colors.green} colors={colors}>
@@ -522,13 +506,17 @@ function SolutionSlide({ colors }: { colors: Colors }) {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 relative">
           {stages.map((s, i) => (
             <div key={s.label} className="rounded-xl p-5 sm:p-6 relative" style={{ background: s.dim, border: `1px solid ${s.color}44`, borderTop: `3px solid ${s.color}` }}>
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${s.color}22` }}>
-                  <s.icon className="w-4 h-4" style={{ color: s.color }} />
+              <div className="flex sm:flex-col items-center sm:items-start gap-4 sm:gap-0 mb-3">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 sm:mb-3" style={{ background: s.color }}>
+                  <s.icon className="w-6 h-6 sm:w-7 sm:h-7" style={{ color: "#fff" }} />
                 </div>
-                <span className="text-xs font-bold uppercase tracking-widest" style={{ color: s.color }}>{s.sublabel}</span>
+                <div>
+                  <p className="text-lg sm:text-xl font-bold leading-tight" style={{ color: colors.text }}>
+                    Eden<span style={{ color: s.color }}>{s.accent}</span>
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>{s.label}</p>
+                </div>
               </div>
-              <h3 className="text-base sm:text-lg font-bold mb-2" style={{ color: colors.text }}>{s.label}</h3>
               <p className="text-xs sm:text-sm" style={{ color: colors.textMuted }}>{s.desc}</p>
               {i < 2 && <ArrowRight className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-5 hidden sm:block z-10" style={{ color: colors.textMuted }} />}
             </div>
@@ -544,40 +532,39 @@ function PortalsSlide({ colors }: { colors: Colors }) {
   const portals = [
     {
       title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
-      items: ["Submit hypotheses before research begins", "AI credibility scoring (0 to 100)", "Discovered by collaborators and funders", "Landscape intelligence from PubMed and bioRxiv"],
+      items: ["Submit hypotheses before research begins", "AI credibility scoring (0 to 100)", "Discovered by collaborators and funders"],
     },
     {
       title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
-      items: ["Literature search across 35+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas", "Grant discovery matched to research profile"],
+      items: ["Literature search across 35+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas"],
     },
     {
       title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
-      items: ["200+ Tech Transfer Offices monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target", "Convergence signals and taxonomy tracking"],
+      items: ["200+ Tech Transfer Offices monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
     },
   ];
   return (
     <Slide index={4} section="Three Portals" accent={colors.green} colors={colors}>
-      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-5 sm:mb-7" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-7" style={{ color: colors.text }}>
         Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
       </h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
         {portals.map((p) => (
-          <div key={p.title} className="rounded-xl p-5 sm:p-6 flex flex-col" style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}>
-            {/* header: icon + tier + title — all on same baseline */}
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${p.color}22` }}>
-                <p.icon className="w-4 h-4" style={{ color: p.color }} />
+          <div key={p.title} className="rounded-xl p-3 sm:p-6 flex flex-col" style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}>
+            <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
+              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: p.color }}>
+                <p.icon className="w-4 h-4" style={{ color: "#fff" }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
+                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
                 <h3 className="text-sm sm:text-base font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
               </div>
             </div>
-            <p className="text-xs mb-4 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
-            <ul className="space-y-2 mt-auto">
+            <p className="text-[10px] sm:text-xs mb-2 sm:mb-4 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
+            <ul className="space-y-1 sm:space-y-2 mt-auto">
               {p.items.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-xs" style={{ color: colors.text }}>
-                  <ArrowRight className="w-3 h-3 mt-0.5 shrink-0" style={{ color: p.color }} />
+                <li key={item} className="flex items-start gap-1.5 sm:gap-2 text-[10px] sm:text-xs" style={{ color: colors.text }}>
+                  <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 mt-0.5 shrink-0" style={{ color: p.color }} />
                   {item}
                 </li>
               ))}
