@@ -566,8 +566,7 @@ function DiscoverySlide() {
             className="text-3xl sm:text-4xl font-bold"
             style={{ color: COLORS.text }}
           >
-            Eden{" "}
-            <span style={{ color: COLORS.amber }}>Discovery</span>
+            Eden<span style={{ color: COLORS.amber }}>Discovery</span>
           </h2>
           <p className="text-sm mt-1" style={{ color: COLORS.textMuted }}>
             Tier 1 — Pre-research concept registry

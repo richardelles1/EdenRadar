@@ -231,20 +231,52 @@ const RESEARCH_TIPS = [
   "Export your synthesis results to share with collaborators.",
 ];
 
+const PLATFORM_FACTS = [
+  "EdenRadar aggregates data from 30+ academic and patent databases worldwide.",
+  "AI Synthesis analyzes up to 10 of your strongest results in a single pass.",
+  "Your Library persists across sessions — save now, review anytime.",
+  "Each source is queried in parallel for faster, more comprehensive results.",
+  "EdenLab connects your research projects to real-time literature and grant data.",
+  "Discovery Cards let researchers showcase work directly to industry scouts.",
+];
+
+type InsightCard = { type: "tip"; text: string } | { type: "fact"; text: string };
+
 function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
-  const [tipIndex, setTipIndex] = useState(0);
+  const allCards: InsightCard[] = useMemo(() => {
+    const cards: InsightCard[] = [];
+    const max = Math.max(RESEARCH_TIPS.length, PLATFORM_FACTS.length);
+    for (let i = 0; i < max; i++) {
+      if (i < RESEARCH_TIPS.length) cards.push({ type: "tip", text: RESEARCH_TIPS[i] });
+      if (i < PLATFORM_FACTS.length) cards.push({ type: "fact", text: PLATFORM_FACTS[i] });
+    }
+    return cards;
+  }, []);
+
+  const [cardIndex, setCardIndex] = useState(0);
   const [fadeIn, setFadeIn] = useState(true);
+  const [highlightIdx, setHighlightIdx] = useState(0);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const cardInterval = setInterval(() => {
       setFadeIn(false);
       setTimeout(() => {
-        setTipIndex((prev) => (prev + 1) % RESEARCH_TIPS.length);
+        setCardIndex((prev) => (prev + 1) % allCards.length);
         setFadeIn(true);
       }, 400);
-    }, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    }, 4000);
+    return () => clearInterval(cardInterval);
+  }, [allCards.length]);
+
+  useEffect(() => {
+    if (activeSources.length === 0) return;
+    const hlInterval = setInterval(() => {
+      setHighlightIdx((prev) => (prev + 1) % activeSources.length);
+    }, 1500);
+    return () => clearInterval(hlInterval);
+  }, [activeSources.length]);
+
+  const current = allCards[cardIndex];
 
   return (
     <div className="rounded-xl border bg-card p-5 space-y-4" data-testid="search-insights-panel">
@@ -257,13 +289,17 @@ function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
         {activeSources.map((key, i) => (
           <span
             key={key}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border border-border bg-muted/50"
-            style={{ animationDelay: `${i * 0.2}s` }}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-500 ${
+              i === highlightIdx
+                ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+                : "border-border bg-muted/50 text-muted-foreground"
+            }`}
             data-testid={`source-pill-${key}`}
           >
             <span
-              className="w-1.5 h-1.5 rounded-full bg-violet-500"
-              style={{ animation: `source-dot 2.5s ease-in-out ${i * 0.2}s infinite` }}
+              className={`w-1.5 h-1.5 rounded-full transition-all duration-500 ${
+                i === highlightIdx ? "bg-violet-500 scale-125" : "bg-muted-foreground/40"
+              }`}
             />
             {SOURCE_LABELS[key] ?? key}
           </span>
@@ -272,12 +308,14 @@ function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
 
       <div className="border-t border-border pt-3">
         <p
-          className="text-sm text-muted-foreground leading-relaxed transition-opacity duration-400"
+          className="text-sm text-muted-foreground leading-relaxed transition-opacity duration-300"
           style={{ opacity: fadeIn ? 1 : 0 }}
           data-testid="research-tip"
         >
-          <span className="text-violet-500 font-medium mr-1.5">Tip:</span>
-          {RESEARCH_TIPS[tipIndex]}
+          <span className={`font-medium mr-1.5 ${current?.type === "tip" ? "text-violet-500" : "text-emerald-500"}`}>
+            {current?.type === "tip" ? "Tip:" : "Did you know?"}
+          </span>
+          {current?.text}
         </p>
       </div>
     </div>
