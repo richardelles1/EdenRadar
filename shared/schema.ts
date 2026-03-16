@@ -268,6 +268,17 @@ export const researchProjects = pgTable("research_projects", {
       evidenceStrength: string;
     }>;
   }>>(),
+  potentialPartners: jsonb("potential_partners").$type<Array<{
+    name: string;
+    website: string;
+    status: string;
+    outreachDate: string;
+    contactName: string;
+  }>>(),
+  section4Files: jsonb("section4_files").$type<string[]>(),
+  section5Files: jsonb("section5_files").$type<string[]>(),
+  section8Files: jsonb("section8_files").$type<string[]>(),
+  generalFiles: jsonb("general_files").$type<string[]>(),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({

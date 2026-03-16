@@ -3,7 +3,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useParams, useLocation } from "wouter";
 import {
   ArrowLeft, Save, Loader2, Trash2, Plus, X, ChevronDown, ChevronUp,
-  FlaskConical, ExternalLink, ArrowRight, Download,
+  FlaskConical, ExternalLink, ArrowRight, Download, Upload, Paperclip, FileText, Globe, Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,9 @@ type Dataset = { dataset_name: string; dataset_source: string; dataset_link: str
 type Contributor = { name: string; institution: string; role: string; email: string };
 type Experiment = { label: string; done: boolean };
 type EvidenceLink = { url: string; label: string };
+type Partner = { name: string; website: string; status: string; outreachDate: string; contactName: string };
+
+const PARTNER_STATUS_OPTIONS = ["No Contact", "Outreach Completed", "In Discussion", "In Negotiation", "Closed"];
 
 const SECTION_META = [
   { id: "overview",    num: 1,  label: "Overview",          short: "Overview" },
@@ -38,6 +41,7 @@ const SECTION_META = [
   { id: "risk",        num: 9,  label: "Risk",              short: "Risk" },
   { id: "milestones",  num: 10, label: "Milestones",        short: "Milestones" },
   { id: "discovery",   num: 11, label: "Discovery Card",    short: "Discovery Card" },
+  { id: "attachments", num: 12, label: "Attachments",       short: "Attachments" },
 ];
 
 const STATUS_OPTIONS = [
@@ -393,9 +397,29 @@ export default function ProjectDetail() {
             <FieldGroup label="Datasets Used">
               <DatasetsList datasets={local.datasetsUsed ?? []} onChange={(d) => setField("datasetsUsed", d)} />
             </FieldGroup>
+            <FieldGroup label="Attachments">
+              <SectionFileUpload
+                projectId={projectId}
+                section="section4"
+                files={local.section4Files ?? []}
+                maxFiles={3}
+                onUploaded={(url) => {
+                  const next = [...(local.section4Files ?? []), url];
+                  setField("section4Files", next);
+                  saveSection("Methods", { section4Files: next });
+                }}
+                onRemove={(url) => {
+                  const next = (local.section4Files ?? []).filter((f) => f !== url);
+                  setField("section4Files", next);
+                  saveSection("Methods", { section4Files: next });
+                }}
+                headers={researcherHeaders}
+              />
+            </FieldGroup>
             <SaveButton label="Methods" saving={saving} onClick={() => saveSection("Methods", {
               methodology: local.methodology, experimentalDesign: local.experimentalDesign,
               keyTechnologies: local.keyTechnologies, datasetsUsed: local.datasetsUsed,
+              section4Files: local.section4Files,
             })} />
           </SectionCard>
 
@@ -410,9 +434,28 @@ export default function ProjectDetail() {
             <FieldGroup label="Confidence Level">
               <SelectField value={local.confidenceLevel ?? ""} onChange={(v) => setField("confidenceLevel", v)} options={CONFIDENCE_OPTIONS} placeholder="Select confidence level" testId="select-confidence" />
             </FieldGroup>
+            <FieldGroup label="Attachments">
+              <SectionFileUpload
+                projectId={projectId}
+                section="section5"
+                files={local.section5Files ?? []}
+                maxFiles={3}
+                onUploaded={(url) => {
+                  const next = [...(local.section5Files ?? []), url];
+                  setField("section5Files", next);
+                  saveSection("Data & Evidence", { section5Files: next });
+                }}
+                onRemove={(url) => {
+                  const next = (local.section5Files ?? []).filter((f) => f !== url);
+                  setField("section5Files", next);
+                  saveSection("Data & Evidence", { section5Files: next });
+                }}
+                headers={researcherHeaders}
+              />
+            </FieldGroup>
             <SaveButton label="Data & Evidence" saving={saving} onClick={() => saveSection("Data & Evidence", {
               preliminaryData: local.preliminaryData, supportingEvidenceLinks: local.supportingEvidenceLinks,
-              confidenceLevel: local.confidenceLevel,
+              confidenceLevel: local.confidenceLevel, section5Files: local.section5Files,
             })} />
           </SectionCard>
 
@@ -430,9 +473,13 @@ export default function ProjectDetail() {
             <FieldGroup label="Startup Potential">
               <SelectField value={local.startupPotential ?? ""} onChange={(v) => setField("startupPotential", v)} options={STARTUP_OPTIONS} placeholder="Select startup potential" testId="select-startup-potential" />
             </FieldGroup>
+            <FieldGroup label="Potential Partners">
+              <PotentialPartnersList partners={local.potentialPartners ?? []} onChange={(p) => setField("potentialPartners", p)} />
+            </FieldGroup>
             <SaveButton label="Commercialization" saving={saving} onClick={() => saveSection("Commercialization", {
               potentialApplications: local.potentialApplications, industryRelevance: local.industryRelevance,
               patentStatus: local.patentStatus, startupPotential: local.startupPotential,
+              potentialPartners: local.potentialPartners,
             })} />
           </SectionCard>
 
@@ -478,9 +525,28 @@ export default function ProjectDetail() {
                 data-testid="input-budget"
               />
             </FieldGroup>
+            <FieldGroup label="Attachments">
+              <SectionFileUpload
+                projectId={projectId}
+                section="section8"
+                files={local.section8Files ?? []}
+                maxFiles={3}
+                onUploaded={(url) => {
+                  const next = [...(local.section8Files ?? []), url];
+                  setField("section8Files", next);
+                  saveSection("Funding", { section8Files: next });
+                }}
+                onRemove={(url) => {
+                  const next = (local.section8Files ?? []).filter((f) => f !== url);
+                  setField("section8Files", next);
+                  saveSection("Funding", { section8Files: next });
+                }}
+                headers={researcherHeaders}
+              />
+            </FieldGroup>
             <SaveButton label="Funding" saving={saving} onClick={() => saveSection("Funding", {
               fundingStatus: local.fundingStatus, fundingSources: local.fundingSources,
-              estimatedBudget: local.estimatedBudget,
+              estimatedBudget: local.estimatedBudget, section8Files: local.section8Files,
             })} />
           </SectionCard>
 
@@ -561,6 +627,31 @@ export default function ProjectDetail() {
                 <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </div>
+          </SectionCard>
+
+          {/* §12 — General Attachments */}
+          <SectionCard id="attachments" num={12} title="General Attachments" collapsed={collapsed["attachments"]} onToggle={() => toggleCollapse("attachments")} sectionRef={(el) => { sectionRefs.current["attachments"] = el; }}>
+            <div className="mb-3 p-3 rounded-lg bg-muted/40 border border-border text-xs text-muted-foreground flex items-center gap-2">
+              <Paperclip className="w-3.5 h-3.5 shrink-0" />
+              Upload general project files (protocols, datasets, reports). Max 5 files.
+            </div>
+            <SectionFileUpload
+              projectId={projectId}
+              section="general"
+              files={local.generalFiles ?? []}
+              maxFiles={5}
+              onUploaded={(url) => {
+                const next = [...(local.generalFiles ?? []), url];
+                setField("generalFiles", next);
+                saveSection("My Project", { generalFiles: next });
+              }}
+              onRemove={(url) => {
+                const next = (local.generalFiles ?? []).filter((f) => f !== url);
+                setField("generalFiles", next);
+                saveSection("My Project", { generalFiles: next });
+              }}
+              headers={researcherHeaders}
+            />
           </SectionCard>
 
           <div className="h-16" />
@@ -871,6 +962,146 @@ function ExperimentChecklist({ items, onChange }: { items: Experiment[]; onChang
           <Plus className="w-3.5 h-3.5" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+function PotentialPartnersList({ partners, onChange }: { partners: Partner[]; onChange: (p: Partner[]) => void }) {
+  function update(i: number, key: keyof Partner, val: string) {
+    onChange(partners.map((p, j) => j === i ? { ...p, [key]: val } : p));
+  }
+  function add() {
+    onChange([...partners, { name: "", website: "", status: "No Contact", outreachDate: "", contactName: "" }]);
+  }
+  function remove(i: number) { onChange(partners.filter((_, j) => j !== i)); }
+  return (
+    <div className="space-y-3">
+      {partners.map((p, i) => (
+        <div key={i} className="border border-border rounded-md p-3 space-y-2 bg-background" data-testid={`partner-${i}`}>
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-1.5">
+              <Users className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground">Partner {i + 1}</span>
+            </div>
+            <button onClick={() => remove(i)} className="text-muted-foreground hover:text-destructive" data-testid={`remove-partner-${i}`}><X className="w-3.5 h-3.5" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Input placeholder="Company / Organization" value={p.name} onChange={(e) => update(i, "name", e.target.value)} className="text-xs" data-testid={`partner-name-${i}`} />
+            <Input placeholder="Contact Name" value={p.contactName} onChange={(e) => update(i, "contactName", e.target.value)} className="text-xs" data-testid={`partner-contact-${i}`} />
+          </div>
+          <div className="flex items-center gap-2">
+            <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+            <Input placeholder="Website URL" value={p.website} onChange={(e) => update(i, "website", e.target.value)} className="text-xs flex-1" data-testid={`partner-website-${i}`} />
+            {p.website && (
+              <a href={p.website.startsWith("http") ? p.website : `https://${p.website}`} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+              </a>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={p.status || "No Contact"} onValueChange={(v) => update(i, "status", v)}>
+              <SelectTrigger className="text-xs" data-testid={`partner-status-${i}`}>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PARTNER_STATUS_OPTIONS.map((opt) => (
+                  <SelectItem key={opt} value={opt}>{opt}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input type="date" value={p.outreachDate} onChange={(e) => update(i, "outreachDate", e.target.value)} className="text-xs" data-testid={`partner-date-${i}`} />
+          </div>
+        </div>
+      ))}
+      <Button type="button" variant="outline" size="sm" className="gap-1.5 text-xs w-full" onClick={add} data-testid="add-partner">
+        <Plus className="w-3.5 h-3.5" /> Add Partner
+      </Button>
+    </div>
+  );
+}
+
+function SectionFileUpload({
+  projectId, section, files, maxFiles, onUploaded, onRemove, headers,
+}: {
+  projectId: number;
+  section: string;
+  files: string[];
+  maxFiles: number;
+  onUploaded: (url: string) => void;
+  onRemove: (url: string) => void;
+  headers: Record<string, string>;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const { toast } = useToast();
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (files.length >= maxFiles) {
+      toast({ title: `Max ${maxFiles} files allowed`, variant: "destructive" });
+      return;
+    }
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      toast({ title: "File too large (max 10 MB)", variant: "destructive" });
+      return;
+    }
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const r = await fetch(`/api/research/projects/${projectId}/files?section=${section}`, {
+        method: "POST",
+        headers,
+        body: formData,
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: "Upload failed" }));
+        throw new Error(err.error || "Upload failed");
+      }
+      const { url } = await r.json();
+      onUploaded(url);
+      toast({ title: "File uploaded" });
+    } catch (err: any) {
+      toast({ title: err.message || "Upload failed", variant: "destructive" });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  function fileName(url: string) {
+    try {
+      const parts = url.split("/");
+      return decodeURIComponent(parts[parts.length - 1]);
+    } catch {
+      return url;
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {files.map((f, i) => (
+        <div key={i} className="flex items-center gap-2 p-2 rounded-md border border-border bg-background" data-testid={`file-${section}-${i}`}>
+          <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+          <a href={f} target="_blank" rel="noopener noreferrer" className="flex-1 text-xs text-foreground hover:text-violet-600 dark:hover:text-violet-400 truncate">
+            {fileName(f)}
+          </a>
+          <button onClick={() => onRemove(f)} className="text-muted-foreground hover:text-destructive shrink-0" data-testid={`remove-file-${section}-${i}`}>
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+      {files.length < maxFiles && (
+        <label
+          className={`flex items-center justify-center gap-2 p-3 rounded-md border border-dashed border-border hover:border-violet-500/40 hover:bg-violet-500/5 cursor-pointer transition-colors ${uploading ? "pointer-events-none opacity-60" : ""}`}
+          data-testid={`upload-${section}`}
+        >
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin text-violet-600" /> : <Upload className="w-4 h-4 text-muted-foreground" />}
+          <span className="text-xs text-muted-foreground">{uploading ? "Uploading..." : `Upload file (${files.length}/${maxFiles})`}</span>
+          <input type="file" className="hidden" onChange={handleUpload} disabled={uploading} />
+        </label>
+      )}
     </div>
   );
 }

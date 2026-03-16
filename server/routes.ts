@@ -1514,6 +1514,14 @@ export async function registerRoutes(
       developmentStage: z.string().nullable().optional(),
       projectSeeking: z.array(z.string()).nullable().optional(),
       publishToIndustry: z.boolean().nullable().optional(),
+      potentialPartners: z.array(z.object({
+        name: z.string(), website: z.string(), status: z.string(),
+        outreachDate: z.string(), contactName: z.string(),
+      })).nullable().optional(),
+      section4Files: z.array(z.string()).nullable().optional(),
+      section5Files: z.array(z.string()).nullable().optional(),
+      section8Files: z.array(z.string()).nullable().optional(),
+      generalFiles: z.array(z.string()).nullable().optional(),
     });
     const parsed = patchSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
@@ -1534,6 +1542,7 @@ export async function registerRoutes(
     const jsonFields = [
       "keywords","keyPapers","keyTechnologies","datasetsUsed","supportingEvidenceLinks",
       "projectContributors","collaborationType","fundingSources","nextExperiments","projectSeeking",
+      "potentialPartners","section4Files","section5Files","section8Files","generalFiles",
     ] as const;
     for (const f of jsonFields) {
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
@@ -1580,6 +1589,75 @@ export async function registerRoutes(
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // File uploads for research projects
+  const multer = (await import("multer")).default;
+  const uploadMiddleware = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+  app.post("/api/research/projects/:id/files", uploadMiddleware.single("file"), async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const section = (req.query.section as string) || "general";
+    const allowedSections = ["section4", "section5", "section8", "general"];
+    if (!allowedSections.includes(section)) return res.status(400).json({ error: "Invalid section" });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file provided" });
+
+    try {
+      const project = await storage.getResearchProject(id, researcherId);
+      if (!project) return res.status(404).json({ error: "Project not found" });
+
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      if (!serviceKey || !sbUrl) return res.status(500).json({ error: "Storage not configured" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminClient = createClient(sbUrl, serviceKey);
+
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `research-projects/${id}/${section}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await adminClient.storage
+        .from("research-projects")
+        .upload(filePath, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false,
+        });
+
+      if (uploadError) {
+        if (uploadError.message?.includes("Bucket not found")) {
+          await adminClient.storage.createBucket("research-projects", { public: false });
+          const { error: retryError } = await adminClient.storage
+            .from("research-projects")
+            .upload(filePath, file.buffer, {
+              contentType: file.mimetype,
+              upsert: false,
+            });
+          if (retryError) return res.status(500).json({ error: retryError.message });
+        } else {
+          return res.status(500).json({ error: uploadError.message });
+        }
+      }
+
+      const { data: signedData, error: signedError } = await adminClient.storage
+        .from("research-projects")
+        .createSignedUrl(filePath, 60 * 60 * 24 * 365 * 10);
+
+      if (signedError || !signedData?.signedUrl) {
+        const { data: publicData } = adminClient.storage
+          .from("research-projects")
+          .getPublicUrl(filePath);
+        return res.json({ url: publicData.publicUrl });
+      }
+
+      res.json({ url: signedData.signedUrl });
+    } catch (err: any) {
+      console.error("[file-upload] Error:", err);
+      res.status(500).json({ error: err.message || "Upload failed" });
     }
   });
 
