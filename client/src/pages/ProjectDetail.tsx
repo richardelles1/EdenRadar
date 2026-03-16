@@ -547,7 +547,7 @@ export default function ProjectDetail() {
               <SaveButton label="My Project" saving={saving} onClick={() => saveSection("My Project", {
                 discoveryTitle: local.discoveryTitle, discoverySummary: local.discoverySummary,
                 technologyType: local.technologyType, developmentStage: local.developmentStage,
-                projectSeeking: local.projectSeeking, publishToIndustry: local.publishToIndustry,
+                projectSeeking: local.projectSeeking,
               })} />
               <Button
                 variant="outline"
