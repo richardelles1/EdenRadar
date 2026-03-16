@@ -711,7 +711,7 @@ function LabSlide({ colors }: { colors: Colors }) {
             </div>
           </div>
           <p className="text-sm mb-4 max-w-lg" style={{ color: colors.textMuted }}>
-            A research workspace built for biotech. Literature, grants, and industry visibility in one AI-powered canvas — same ecosystem as EdenRadar, seamless movement through the pipeline.
+            A research workspace built for biotech. Literature, grants, and industry visibility in one AI-powered canvas, same ecosystem as EdenRadar, with seamless movement through the pipeline.
           </p>
           <div className="space-y-2">
             {features.map((f) => (
@@ -726,7 +726,7 @@ function LabSlide({ colors }: { colors: Colors }) {
           </div>
         </div>
 
-        <div className="hidden md:block w-[38%] relative shrink-0" style={{ zIndex: 20 }}>
+        <div className="hidden md:block w-[40%] relative shrink-0" style={{ zIndex: 20 }}>
           <img src={imgLabComp} alt="Researchers collaborating" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center 35%" }} />
           <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 25%), linear-gradient(to top, ${colors.bg}88 0%, transparent 40%)` }} />
           <div className="absolute inset-0" style={{ background: `${colors.violet}12` }} />
