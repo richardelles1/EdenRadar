@@ -44,10 +44,10 @@ const FISHBONE_BRANCHES = ["Methods", "Materials", "Machines", "Measurement", "P
 
 const STATUS_COLORS: Record<string, string> = {
   Untested: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/30",
-  "In Testing": "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
+  "In Testing": "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
   Supported: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
   Refuted: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30",
-  Inconclusive: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30",
+  Inconclusive: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30",
 };
 
 interface ResearchToolsProps {
