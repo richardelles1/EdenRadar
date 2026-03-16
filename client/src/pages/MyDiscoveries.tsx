@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import {
@@ -10,6 +11,9 @@ import {
   Mail,
   Key,
   Beaker,
+  Archive,
+  ArchiveRestore,
+  Paperclip,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import type { DiscoveryCard } from "@shared/schema";
 
 type DiscoveriesResponse = { cards: DiscoveryCard[] };
+
+type TabKey = "all" | "active" | "archived";
 
 function formatDate(d: string | Date) {
   return new Date(d).toLocaleDateString("en-US", {
@@ -34,6 +40,7 @@ export default function MyDiscoveries() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [tab, setTab] = useState<TabKey>("active");
 
   const { data, isLoading } = useQuery<DiscoveriesResponse>({
     queryKey: ["/api/research/discoveries", researcherId],
@@ -56,19 +63,44 @@ export default function MyDiscoveries() {
     },
   });
 
+  const archiveToggle = useMutation({
+    mutationFn: (id: number) =>
+      fetch(`/api/research/discoveries/${id}/archive`, {
+        method: "PATCH",
+        headers: researcherHeaders,
+      }).then((r) => r.json()),
+    onSuccess: (_data, id) => {
+      qc.invalidateQueries({ queryKey: ["/api/research/discoveries", researcherId] });
+      const wasArchived = cards.find(c => c.id === id)?.archived;
+      toast({ title: wasArchived ? "Discovery restored" : "Discovery archived" });
+    },
+  });
+
   const cards = data?.cards ?? [];
-  const published = cards.filter((c) => c.published);
-  const drafts = cards.filter((c) => !c.published);
+  const activeCards = cards.filter((c) => !c.archived);
+  const archivedCards = cards.filter((c) => c.archived);
+
+  const visibleCards = tab === "all" ? cards : tab === "archived" ? archivedCards : activeCards;
+
+  const published = visibleCards.filter((c) => c.published && !c.archived);
+  const drafts = visibleCards.filter((c) => !c.published && !c.archived);
+  const archivedVisible = visibleCards.filter((c) => c.archived);
+
+  const tabs: { key: TabKey; label: string; count: number }[] = [
+    { key: "active", label: "Active", count: activeCards.length },
+    { key: "archived", label: "Archived", count: archivedCards.length },
+    { key: "all", label: "All", count: cards.length },
+  ];
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-8">
+    <div className="p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">My Discoveries</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {cards.length === 0
               ? "Create your first discovery card to reach industry partners."
-              : `${cards.length} discovery card${cards.length !== 1 ? "s" : ""} — ${published.length} published`}
+              : `${cards.length} discovery card${cards.length !== 1 ? "s" : ""} — ${cards.filter(c => c.published).length} published`}
           </p>
         </div>
         <Button
@@ -80,6 +112,25 @@ export default function MyDiscoveries() {
           New Discovery
         </Button>
       </div>
+
+      {cards.length > 0 && (
+        <div className="flex gap-1 border-b border-border" data-testid="discovery-tabs">
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                tab === t.key
+                  ? "border-violet-500 text-violet-600 dark:text-violet-400"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid={`tab-${t.key}`}
+            >
+              {t.label} ({t.count})
+            </button>
+          ))}
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -105,9 +156,13 @@ export default function MyDiscoveries() {
             Create Discovery Card
           </Button>
         </div>
+      ) : visibleCards.length === 0 ? (
+        <div className="border border-border rounded-lg p-8 text-center text-sm text-muted-foreground">
+          No {tab === "archived" ? "archived" : "active"} discoveries.
+        </div>
       ) : (
         <div className="space-y-8">
-          {published.length > 0 && (
+          {tab !== "archived" && published.length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <CheckCircle2 className="w-4 h-4 text-emerald-500" />
@@ -118,12 +173,19 @@ export default function MyDiscoveries() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {published.map((card) => (
-                  <DiscoveryCardItem key={card.id} card={card} onPublish={publish.mutate} publishPending={publish.isPending} />
+                  <DiscoveryCardItem
+                    key={card.id}
+                    card={card}
+                    onPublish={publish.mutate}
+                    publishPending={publish.isPending}
+                    onArchiveToggle={archiveToggle.mutate}
+                    archivePending={archiveToggle.isPending}
+                  />
                 ))}
               </div>
             </section>
           )}
-          {drafts.length > 0 && (
+          {tab !== "archived" && drafts.length > 0 && (
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Clock className="w-4 h-4 text-muted-foreground" />
@@ -131,7 +193,34 @@ export default function MyDiscoveries() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {drafts.map((card) => (
-                  <DiscoveryCardItem key={card.id} card={card} onPublish={publish.mutate} publishPending={publish.isPending} />
+                  <DiscoveryCardItem
+                    key={card.id}
+                    card={card}
+                    onPublish={publish.mutate}
+                    publishPending={publish.isPending}
+                    onArchiveToggle={archiveToggle.mutate}
+                    archivePending={archiveToggle.isPending}
+                  />
+                ))}
+              </div>
+            </section>
+          )}
+          {archivedVisible.length > 0 && (
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <Archive className="w-4 h-4 text-muted-foreground" />
+                <h2 className="text-sm font-semibold text-foreground">Archived ({archivedVisible.length})</h2>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {archivedVisible.map((card) => (
+                  <DiscoveryCardItem
+                    key={card.id}
+                    card={card}
+                    onPublish={publish.mutate}
+                    publishPending={publish.isPending}
+                    onArchiveToggle={archiveToggle.mutate}
+                    archivePending={archiveToggle.isPending}
+                  />
                 ))}
               </div>
             </section>
@@ -146,15 +235,22 @@ function DiscoveryCardItem({
   card,
   onPublish,
   publishPending,
+  onArchiveToggle,
+  archivePending,
 }: {
   card: DiscoveryCard;
   onPublish: (id: number) => void;
   publishPending: boolean;
+  onArchiveToggle: (id: number) => void;
+  archivePending: boolean;
 }) {
+  const attachments = card.attachmentUrls ?? [];
   return (
     <div
       className={`border rounded-lg p-4 bg-card flex flex-col gap-3 transition-colors ${
-        card.published
+        card.archived
+          ? "border-border opacity-70"
+          : card.published
           ? "border-emerald-500/30 bg-emerald-500/5"
           : "border-border hover:border-violet-500/30"
       }`}
@@ -164,14 +260,18 @@ function DiscoveryCardItem({
         <div className="flex-1 min-w-0">
           <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{card.title}</h3>
         </div>
-        {card.published ? (
-          <Badge variant="secondary" className="shrink-0 text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
-            <CheckCircle2 className="w-2.5 h-2.5 mr-1" />
-            Live
-          </Badge>
-        ) : (
-          <Badge variant="secondary" className="shrink-0 text-[10px]">Draft</Badge>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {card.archived ? (
+            <Badge variant="secondary" className="text-[10px]">Archived</Badge>
+          ) : card.published ? (
+            <Badge variant="secondary" className="text-[10px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+              <CheckCircle2 className="w-2.5 h-2.5 mr-1" />
+              Live
+            </Badge>
+          ) : (
+            <Badge variant="secondary" className="text-[10px]">Draft</Badge>
+          )}
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{card.summary}</p>
@@ -225,20 +325,63 @@ function DiscoveryCardItem({
         )}
       </div>
 
+      {attachments.length > 0 && (
+        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+          <Paperclip className="w-3 h-3 shrink-0" />
+          {attachments.map((url, i) => {
+            const name = decodeURIComponent(url.split("/").pop()?.replace(/^\d+-/, "") ?? `File ${i + 1}`);
+            return (
+              <a
+                key={i}
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-violet-500 hover:underline truncate max-w-[120px]"
+                data-testid={`attachment-link-${card.id}-${i}`}
+              >
+                {name}
+              </a>
+            );
+          })}
+        </div>
+      )}
+
       <div className="pt-1 border-t border-border flex items-center justify-between gap-2">
         <span className="text-[10px] text-muted-foreground">{formatDate(card.createdAt)}</span>
-        {!card.published && (
+        <div className="flex items-center gap-2">
           <Button
             size="sm"
-            onClick={() => onPublish(card.id)}
-            disabled={publishPending}
-            className="gap-1.5 h-7 text-xs bg-violet-600 hover:bg-violet-700 text-white"
-            data-testid={`button-publish-discovery-${card.id}`}
+            variant="ghost"
+            onClick={() => onArchiveToggle(card.id)}
+            disabled={archivePending}
+            className="gap-1 h-7 text-xs text-muted-foreground hover:text-foreground"
+            data-testid={`button-archive-${card.id}`}
           >
-            <Send className="w-3 h-3" />
-            Publish to EdenRadar Industry
+            {card.archived ? (
+              <>
+                <ArchiveRestore className="w-3 h-3" />
+                Restore
+              </>
+            ) : (
+              <>
+                <Archive className="w-3 h-3" />
+                Archive
+              </>
+            )}
           </Button>
-        )}
+          {!card.published && !card.archived && (
+            <Button
+              size="sm"
+              onClick={() => onPublish(card.id)}
+              disabled={publishPending}
+              className="gap-1.5 h-7 text-xs bg-violet-600 hover:bg-violet-700 text-white"
+              data-testid={`button-publish-discovery-${card.id}`}
+            >
+              <Send className="w-3 h-3" />
+              Publish to EdenRadar Industry
+            </Button>
+          )}
+        </div>
       </div>
     </div>
   );

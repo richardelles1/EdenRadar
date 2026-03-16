@@ -39,9 +39,14 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 **Researcher Portal**:
 - `ResearchLayout` checks Supabase session + role='researcher'; redirects to /login if unauthenticated, to /scout if wrong role
 - Researcher identity: Supabase `user.id` (UUID) — passed as `x-researcher-id` header
-- Researcher profile: still localStorage `eden-researcher-profile` = JSON
-- Routes: /research, /research/create-discovery, /research/my-discoveries, /research/data-sources, /research/profile
+- Researcher profile: localStorage `eden-researcher-profile` = JSON with fields: name, institution, lab, researchAreas, careerStage, institutionType, alertTopics, secondaryInterests
+- Routes: /research, /research/create-discovery, /research/my-discoveries, /research/data-sources, /research/profile, /research/alerts
 - Industry Bridge: Published discovery cards appear in GET /api/discoveries (public endpoint) — surfaced in industry Scout with "Lab Published" amber badge
+- Discovery Cards: schema has `archived` (boolean) and `attachmentUrls` (jsonb string[]) columns; archive toggle via PATCH `/api/research/discoveries/:id/archive`; file uploads via POST `/api/research/discoveries/:id/files` (max 3 files, 10MB each, server-side MIME validation, Supabase Storage bucket `research-discoveries`)
+- My Discoveries: tab strip (Active / Archived / All), archive/restore action on each card, attachment links display
+- Create Discovery: file attachment zone (drag-to-click, up to 3 files with PDF/DOCX/PPTX/XLSX/PNG/JPG), uploads after card creation with error reporting
+- Alerts: 3 collapsible sections — Breaking Research (PubMed/bioRxiv/arXiv), Grant Opportunities (NIH Reporter/NSF/Grants.gov), Discovery Updates (researcher's own cards with status timeline)
+- Profile: extended with careerStage, institutionType, alertTopics (override for alerts), secondaryInterests; dashboard subtitle shows institution + lab + careerStage
 
 **Eden Discovery Portal (Tier 1 — Amber Branding)**:
 - `DiscoveryLayout` checks Supabase session + role='concept'; redirects to /login if unauthenticated, to correct portal if wrong role

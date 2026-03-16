@@ -1,5 +1,27 @@
 import { useAuth } from "@/hooks/use-auth";
 
+export type ResearcherProfile = {
+  name: string;
+  institution: string;
+  lab: string;
+  researchAreas: string[];
+  careerStage: string;
+  institutionType: string;
+  alertTopics: string[];
+  secondaryInterests: string[];
+};
+
+const DEFAULT_PROFILE: ResearcherProfile = {
+  name: "",
+  institution: "",
+  lab: "",
+  researchAreas: [],
+  careerStage: "",
+  institutionType: "",
+  alertTopics: [],
+  secondaryInterests: [],
+};
+
 export function useResearcherId(): string {
   const { user } = useAuth();
   return user?.id ?? "";
@@ -16,14 +38,19 @@ export function useResearcherHeaders(): Record<string, string> {
   return headers;
 }
 
-export function getResearcherProfile() {
+export function getResearcherProfile(): ResearcherProfile {
   try {
     const raw = localStorage.getItem("eden-researcher-profile");
-    if (raw) return JSON.parse(raw) as { name: string; institution: string; lab: string; researchAreas: string[] };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return { ...DEFAULT_PROFILE, ...parsed };
+    }
   } catch {}
-  return { name: "", institution: "", lab: "", researchAreas: [] as string[] };
+  return { ...DEFAULT_PROFILE };
 }
 
-export function saveResearcherProfile(profile: { name: string; institution: string; lab: string; researchAreas: string[] }) {
-  localStorage.setItem("eden-researcher-profile", JSON.stringify(profile));
+export function saveResearcherProfile(profile: Partial<ResearcherProfile>) {
+  const existing = getResearcherProfile();
+  const merged = { ...existing, ...profile };
+  localStorage.setItem("eden-researcher-profile", JSON.stringify(merged));
 }

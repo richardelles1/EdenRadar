@@ -305,6 +305,8 @@ export const discoveryCards = pgTable("discovery_cards", {
   publicationLink: text("publication_link"),
   patentLink: text("patent_link"),
   published: boolean("published").default(false).notNull(),
+  archived: boolean("archived").default(false).notNull(),
+  attachmentUrls: jsonb("attachment_urls").$type<string[]>().default([]),
   adminStatus: text("admin_status").default("pending").notNull(),
   adminNote: text("admin_note"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),

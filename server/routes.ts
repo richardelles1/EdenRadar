@@ -1714,6 +1714,95 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/research/discoveries/:id/archive", async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    try {
+      const card = await storage.updateDiscoveryCard(id, researcherId, { archived: !((await storage.getDiscoveryCards(researcherId)).find(c => c.id === id)?.archived) });
+      if (!card) return res.status(404).json({ error: "Card not found" });
+      res.json({ card });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  const ALLOWED_DISCOVERY_MIMES = new Set([
+    "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/png", "image/jpeg", "image/jpg",
+  ]);
+  const ALLOWED_DISCOVERY_EXTS = new Set([".pdf", ".doc", ".docx", ".pptx", ".xlsx", ".png", ".jpg", ".jpeg"]);
+
+  app.post("/api/research/discoveries/:id/files", uploadMiddleware.single("file"), async (req, res) => {
+    const researcherId = req.headers["x-researcher-id"] as string;
+    if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "No file provided" });
+
+    const ext = "." + file.originalname.split(".").pop()?.toLowerCase();
+    if (!ALLOWED_DISCOVERY_MIMES.has(file.mimetype) && !ALLOWED_DISCOVERY_EXTS.has(ext)) {
+      return res.status(400).json({ error: "File type not allowed. Accepted: PDF, DOCX, PPTX, XLSX, PNG, JPG" });
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      return res.status(400).json({ error: "File too large. Maximum 10 MB" });
+    }
+
+    try {
+      const cards = await storage.getDiscoveryCards(researcherId);
+      const card = cards.find(c => c.id === id);
+      if (!card) return res.status(404).json({ error: "Card not found" });
+
+      const existing = card.attachmentUrls ?? [];
+      if (existing.length >= 3) return res.status(400).json({ error: "Maximum 3 attachments per discovery" });
+
+      const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      if (!serviceKey || !sbUrl) return res.status(500).json({ error: "Storage not configured" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminClient = createClient(sbUrl, serviceKey);
+
+      const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const filePath = `discoveries/${id}/${Date.now()}-${safeName}`;
+
+      const { error: uploadError } = await adminClient.storage
+        .from("research-discoveries")
+        .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+
+      if (uploadError) {
+        if (uploadError.message?.includes("Bucket not found")) {
+          await adminClient.storage.createBucket("research-discoveries", { public: false });
+          const { error: retryError } = await adminClient.storage
+            .from("research-discoveries")
+            .upload(filePath, file.buffer, { contentType: file.mimetype, upsert: false });
+          if (retryError) return res.status(500).json({ error: retryError.message });
+        } else {
+          return res.status(500).json({ error: uploadError.message });
+        }
+      }
+
+      const { data: signedData } = await adminClient.storage
+        .from("research-discoveries")
+        .createSignedUrl(filePath, 315360000);
+
+      const signedUrl = signedData?.signedUrl;
+      if (!signedUrl) return res.status(500).json({ error: "Failed to generate signed URL" });
+
+      const updatedUrls = [...existing, signedUrl];
+      const updated = await storage.updateDiscoveryCard(id, researcherId, { attachmentUrls: updatedUrls });
+      res.json({ card: updated, url: signedUrl });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Saved references
   app.get("/api/research/references", async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;

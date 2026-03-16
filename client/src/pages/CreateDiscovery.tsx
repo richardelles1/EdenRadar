@@ -1,7 +1,7 @@
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useLocation } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import {
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FlaskConical, Send } from "lucide-react";
+import { FlaskConical, Send, Paperclip, X, Upload } from "lucide-react";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { DiscoveryCard } from "@shared/schema";
@@ -60,6 +60,7 @@ export default function CreateDiscovery() {
   const researcherHeaders = useResearcherHeaders();
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const storedPrefill = (() => {
     try {
@@ -88,6 +89,38 @@ export default function CreateDiscovery() {
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
+  function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    setPendingFiles((prev) => {
+      const combined = [...prev, ...files];
+      return combined.slice(0, 3);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function removeFile(index: number) {
+    setPendingFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function uploadFiles(cardId: number): Promise<string[]> {
+    const errors: string[] = [];
+    for (const file of pendingFiles) {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch(`/api/research/discoveries/${cardId}/files`, {
+        method: "POST",
+        headers: researcherHeaders,
+        body: formData,
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({ error: "Upload failed" }));
+        errors.push(`${file.name}: ${body.error ?? "Upload failed"}`);
+      }
+    }
+    return errors;
+  }
 
   async function submitCard(values: FormValues, publish: boolean) {
     setIsSubmitting(true);
@@ -105,6 +138,18 @@ export default function CreateDiscovery() {
         body: JSON.stringify(body),
       });
       const { card } = await createRes.json() as { card: DiscoveryCard };
+
+      if (pendingFiles.length > 0) {
+        const uploadErrors = await uploadFiles(card.id);
+        if (uploadErrors.length > 0) {
+          toast({
+            title: "Some files failed to upload",
+            description: uploadErrors.join("; "),
+            variant: "destructive",
+          });
+        }
+      }
+
       if (publish) {
         await fetch(`/api/research/discoveries/${card.id}/publish`, {
           method: "PATCH",
@@ -357,6 +402,42 @@ export default function CreateDiscovery() {
                 </FormItem>
               )}
             />
+          </div>
+
+          <div className="space-y-2">
+            <FormLabel>Attachments <span className="text-muted-foreground font-normal">(up to 3 files, 10 MB each)</span></FormLabel>
+            <div
+              className="border-2 border-dashed border-border rounded-lg p-4 text-center cursor-pointer hover:border-violet-500/40 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="dropzone-attachments"
+            >
+              <Upload className="w-6 h-6 text-muted-foreground mx-auto mb-1.5" />
+              <p className="text-xs text-muted-foreground">
+                Click to upload supporting documents (PDF, DOCX, images)
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileSelect}
+                accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.pptx,.xlsx"
+                data-testid="input-attachment-file"
+              />
+            </div>
+            {pendingFiles.length > 0 && (
+              <div className="space-y-1.5">
+                {pendingFiles.map((file, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs border border-border rounded px-3 py-1.5 bg-muted/30">
+                    <Paperclip className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="truncate flex-1">{file.name}</span>
+                    <span className="text-muted-foreground shrink-0">{(file.size / 1024).toFixed(0)} KB</span>
+                    <button type="button" onClick={() => removeFile(i)} className="hover:text-red-500 transition-colors" data-testid={`button-remove-file-${i}`}>
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="pt-2 flex flex-col sm:flex-row gap-3">
