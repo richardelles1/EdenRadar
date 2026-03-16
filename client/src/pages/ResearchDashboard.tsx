@@ -36,7 +36,8 @@ export default function ResearchDashboard() {
   const profile = getResearcherProfile();
   const [, navigate] = useLocation();
 
-  const primaryArea = profile.researchAreas[0] ?? "CRISPR gene editing";
+  const allAreas = profile.researchAreas.length > 0 ? profile.researchAreas : ["CRISPR gene editing"];
+  const spotlightQuery = allAreas.join(" OR ");
 
   const { data: projectsData, isLoading: projectsLoading } = useQuery<ProjectsResponse>({
     queryKey: ["/api/research/projects", researcherId],
@@ -59,18 +60,20 @@ export default function ResearchDashboard() {
   });
 
   const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
-    queryKey: ["/api/search", primaryArea, "grants_gov_spotlight"],
+    queryKey: ["/api/search", spotlightQuery, "grants_spotlight"],
     queryFn: async () => {
       const r = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: primaryArea, sources: ["grants_gov"], maxPerSource: 3 }),
+        body: JSON.stringify({ query: spotlightQuery, sources: ["grants_gov", "nih_reporter", "nsf_awards", "eu_cordis"], maxPerSource: 3 }),
       });
       if (!r.ok) throw new Error("Failed to fetch grants");
       return r.json();
     },
-    enabled: !!primaryArea,
+    enabled: !!spotlightQuery,
   });
+
+  const primaryArea = allAreas[0];
 
   const { data: alertData, isLoading: alertLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", primaryArea, "pubmed"],
@@ -93,8 +96,7 @@ export default function ResearchDashboard() {
   const totalDiscoveries = discoveries.length;
   const publishedCount = discoveries.filter((c) => c.published).length;
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
-  const grantSignals = grantData?.assets?.[0]?.signals ?? [];
-  const spotlightGrant = grantSignals[0];
+  const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -250,11 +252,16 @@ export default function ResearchDashboard() {
             <BadgeDollarSign className="w-4 h-4 text-emerald-500" />
             <h2 className="text-base font-semibold text-foreground">Grants Spotlight</h2>
           </button>
-          {primaryArea && (
-            <Badge variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
-              {primaryArea}
-            </Badge>
-          )}
+          <div className="flex items-center gap-1 flex-wrap">
+            {allAreas.slice(0, 3).map((area) => (
+              <Badge key={area} variant="secondary" className="text-[11px] bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30">
+                {area}
+              </Badge>
+            ))}
+            {allAreas.length > 3 && (
+              <span className="text-[11px] text-muted-foreground">+{allAreas.length - 3}</span>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -269,44 +276,53 @@ export default function ResearchDashboard() {
 
         {grantLoading ? (
           <Skeleton className="h-24 w-full rounded-lg" />
-        ) : spotlightGrant ? (
-          <div
-            className="border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-4 flex flex-col gap-2 cursor-pointer hover:border-emerald-500/50 transition-colors"
-            onClick={() => navigate("/research/grants")}
-            data-testid="grants-spotlight"
-          >
-            <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{spotlightGrant.title}</h3>
-              {spotlightGrant.url && (
-                <a href={spotlightGrant.url} target="_blank" rel="noopener noreferrer" className="shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
-                </a>
-              )}
-            </div>
-            <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{spotlightGrant.text}</p>
-            <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-              {spotlightGrant.institution_or_sponsor && (
-                <span className="flex items-center gap-1">
-                  <Building2 className="w-3 h-3" />
-                  {spotlightGrant.institution_or_sponsor}
-                </span>
-              )}
-              {spotlightGrant.date && (
-                <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
-                  <Calendar className="w-3 h-3" />
-                  Deadline: {spotlightGrant.date}
-                </span>
-              )}
-              {spotlightGrant.metadata?.opp_num && (
-                <span className="text-muted-foreground">
-                  {spotlightGrant.metadata.opp_num}
-                </span>
-              )}
-            </div>
+        ) : grantSignals.length > 0 ? (
+          <div className="space-y-2">
+            {grantSignals.slice(0, 3).map((g, i) => (
+              <div
+                key={g.id ?? i}
+                className="border border-emerald-500/30 bg-emerald-500/5 rounded-lg p-4 flex flex-col gap-2 cursor-pointer hover:border-emerald-500/50 transition-colors"
+                onClick={() => navigate("/research/grants")}
+                data-testid={`grants-spotlight-${i}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{g.title}</h3>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {g.metadata?.source_label && (
+                      <Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                        {g.metadata.source_label as string}
+                      </Badge>
+                    )}
+                    {g.url && (
+                      <a href={g.url} target="_blank" rel="noopener noreferrer" className="shrink-0" onClick={(e) => e.stopPropagation()}>
+                        <ExternalLink className="w-3.5 h-3.5 text-muted-foreground hover:text-foreground" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {g.text && g.text !== g.title && (
+                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{g.text}</p>
+                )}
+                <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                  {g.institution_or_sponsor && (
+                    <span className="flex items-center gap-1">
+                      <Building2 className="w-3 h-3" />
+                      {g.institution_or_sponsor}
+                    </span>
+                  )}
+                  {g.date && (
+                    <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400 font-medium">
+                      <Calendar className="w-3 h-3" />
+                      {g.date}
+                    </span>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
         ) : (
           <div className="border border-border rounded-lg p-4 text-sm text-muted-foreground text-center">
-            No open funding found for "{primaryArea}" — try{" "}
+            No open funding found for your research areas — try{" "}
             <button
               className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
               onClick={() => navigate("/research/grants")}

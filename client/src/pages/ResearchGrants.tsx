@@ -23,7 +23,7 @@ import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 import type { SavedGrant, ResearchProject } from "@shared/schema";
 
-const GRANT_SOURCES = ["grants_gov"];
+const GRANT_SOURCES = ["grants_gov", "nih_reporter", "nsf_awards", "eu_cordis"];
 
 const RESEARCH_AREAS = [
   "Biotech", "Drug Discovery", "Genomics", "Immunology", "Oncology",
@@ -179,6 +179,7 @@ function GrantResultCard({
   }
 
   const oppStatus = signal.metadata?.opp_status;
+  const sourceLabel = (signal.metadata?.source_label as string) ?? signal.source_key ?? "";
 
   return (
     <div
@@ -189,6 +190,11 @@ function GrantResultCard({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
             <p className="text-sm font-semibold text-foreground line-clamp-2 leading-snug">{signal.title}</p>
+            {sourceLabel && (
+              <Badge variant="secondary" className="text-[9px] shrink-0 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30" data-testid={`grant-source-badge-${signal.id}`}>
+                {sourceLabel}
+              </Badge>
+            )}
             {oppStatus && (
               <Badge
                 variant="secondary"
@@ -695,7 +701,7 @@ export default function ResearchGrants() {
               <div className="text-center py-16 text-muted-foreground">
                 <BadgeDollarSign className="w-10 h-10 mx-auto mb-3 opacity-30" />
                 <p className="text-sm font-medium">Search open funding opportunities</p>
-                <p className="text-xs mt-1 max-w-xs mx-auto">Enter keywords to find active grants and forecasted opportunities from Grants.gov</p>
+                <p className="text-xs mt-1 max-w-xs mx-auto">Search across Grants.gov, NIH Reporter, NSF Awards, and EU CORDIS</p>
                 <div className="flex flex-wrap justify-center gap-2 mt-4">
                   {["CRISPR cancer therapy", "AI drug discovery", "gene editing", "immunotherapy"].map((s) => (
                     <button
@@ -749,6 +755,18 @@ export default function ResearchGrants() {
                 ))}
               </div>
             )}
+
+            <div className="rounded-lg border border-dashed border-border p-4 mt-6" data-testid="coming-soon-sources">
+              <p className="text-xs font-semibold text-muted-foreground mb-2">Coming Soon</p>
+              <div className="flex flex-wrap gap-2">
+                {["SBIR.gov", "UKRI", "Wellcome Trust", "ERC"].map((name) => (
+                  <Badge key={name} variant="outline" className="text-[11px] text-muted-foreground border-border">
+                    {name}
+                  </Badge>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">More funding databases will be added in upcoming releases.</p>
+            </div>
           </div>
         )}
 

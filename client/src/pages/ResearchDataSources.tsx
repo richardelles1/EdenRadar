@@ -788,7 +788,7 @@ export default function ResearchDataSources() {
                     <Sparkles className="w-4 h-4 text-violet-500" />
                     <span className="text-sm font-semibold text-foreground">AI Synthesis</span>
                     <Badge variant="secondary" className="text-[10px]">
-                      {Math.min(allSignals.length, 10)} results analyzed
+                      {Math.min(allSignals.length, 10)} of {allSignals.length} results analyzed
                     </Badge>
                   </div>
                   {synthesisCollapsed ? (
@@ -944,20 +944,24 @@ export default function ResearchDataSources() {
               </div>
             )}
 
-            {pagedSignals.map((signal, i) => (
-              <SignalCard
-                key={signal.id ?? `${clampedPage}-${i}`}
-                signal={signal}
-                index={(clampedPage - 1) * PAGE_SIZE + i}
-                isSaved={savedUrls.has(signal.url)}
-                projects={projectsData?.projects ?? []}
-                researcherHeaders={researcherHeaders}
-                researcherId={researcherId}
-                onSaved={() => {
-                  qc.invalidateQueries({ queryKey: ["/api/research/references", researcherId] });
-                }}
-              />
-            ))}
+            {pagedSignals.map((signal, i) => {
+              const globalIndex = (clampedPage - 1) * PAGE_SIZE + i;
+              return (
+                <SignalCard
+                  key={signal.id ?? `${clampedPage}-${i}`}
+                  signal={signal}
+                  index={globalIndex}
+                  isSaved={savedUrls.has(signal.url)}
+                  isSynthesized={!!synthesis && synthesis.strongest_signals.some((s) => s.index - 1 === globalIndex)}
+                  projects={projectsData?.projects ?? []}
+                  researcherHeaders={researcherHeaders}
+                  researcherId={researcherId}
+                  onSaved={() => {
+                    qc.invalidateQueries({ queryKey: ["/api/research/references", researcherId] });
+                  }}
+                />
+              );
+            })}
 
             {totalPages > 1 && (
               <div className="flex items-center justify-center gap-2 pt-4" data-testid="pagination">
@@ -1061,6 +1065,7 @@ function SignalCard({
   signal,
   index,
   isSaved,
+  isSynthesized,
   projects,
   researcherHeaders,
   researcherId,
@@ -1069,6 +1074,7 @@ function SignalCard({
   signal: Signal;
   index: number;
   isSaved: boolean;
+  isSynthesized?: boolean;
   projects: ResearchProject[];
   researcherHeaders: Record<string, string>;
   researcherId: string;
@@ -1112,12 +1118,17 @@ function SignalCard({
 
   return (
     <div
-      className="border border-border rounded-lg p-4 bg-card hover:border-violet-500/20 transition-colors flex flex-col gap-2"
+      className={`border rounded-lg p-4 bg-card hover:border-violet-500/20 transition-colors flex flex-col gap-2 ${isSynthesized ? "border-violet-500/30 ring-1 ring-violet-500/10" : "border-border"}`}
       data-testid={`signal-result-${index}`}
     >
       <div className="flex items-start gap-3 justify-between">
         <h3 className="text-sm font-semibold text-foreground leading-snug flex-1 line-clamp-2">{signal.title}</h3>
         <div className="flex items-center gap-2 shrink-0">
+          {isSynthesized && (
+            <Badge variant="secondary" className="text-[9px] bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/30" data-testid={`badge-synthesized-${index}`}>
+              ✦ Synthesized
+            </Badge>
+          )}
           <Badge variant="secondary" className="text-[10px]">
             {SOURCE_TYPE_LABELS[signal.source_type] ?? signal.source_type}
           </Badge>
