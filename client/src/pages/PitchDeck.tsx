@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, Fragment } from "react";
+import { useState, useEffect, useRef, Fragment, Children } from "react";
 import {
   Printer,
   ChevronUp,
@@ -364,6 +364,15 @@ function useCountUp(target: number, active: boolean, skip = false, duration = 12
   return value;
 }
 
+const containerVariants = {
+  hidden: {},
+  visible: { transition: { staggerChildren: 0.08 } },
+};
+const childVariants = {
+  hidden: { opacity: 0, y: 16 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } },
+};
+
 function Slide({
   index, section, accent, children, className = "", noPadding = false, colors,
 }: {
@@ -371,7 +380,7 @@ function Slide({
 }) {
   const accentColor = accent || colors.green;
   const sectionRef = useRef<HTMLElement>(null);
-  const inView = useInView(sectionRef, { once: true, amount: 0.3 });
+  const inView = useInView(sectionRef, { once: false, amount: 0.3 });
   const reducedMotion = useReducedMotion();
   const skip = !!reducedMotion;
   return (
@@ -388,11 +397,17 @@ function Slide({
       <motion.div
         className={`relative z-10 w-full max-w-6xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`}
         style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
-        initial={skip ? false : { opacity: 0, y: 20 }}
-        animate={skip || inView ? { opacity: 1, y: 0 } : { opacity: 0, y: 20 }}
-        transition={skip ? { duration: 0 } : { duration: 0.6, ease: "easeOut" }}
+        variants={skip ? undefined : containerVariants}
+        initial={skip ? undefined : "hidden"}
+        animate={skip || inView ? "visible" : "hidden"}
       >
-        {children}
+        {Children.map(children, (child, i) =>
+          child != null ? (
+            <motion.div key={i} variants={skip ? undefined : childVariants}>
+              {child}
+            </motion.div>
+          ) : null,
+        )}
       </motion.div>
       <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
@@ -560,7 +575,7 @@ function SolutionSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 4 — THREE PORTALS ═══════════════════════ */
 function PortalsSlide({ colors }: { colors: Colors }) {
   const gridRef = useRef<HTMLDivElement>(null);
-  const gridInView = useInView(gridRef, { once: true, amount: 0.2 });
+  const gridInView = useInView(gridRef, { once: false, amount: 0.2 });
   const reducedMotion = useReducedMotion();
   const skip = !!reducedMotion;
   const portals = [
@@ -588,8 +603,8 @@ function PortalsSlide({ colors }: { colors: Colors }) {
             key={p.title}
             className="rounded-xl p-3 sm:p-6 flex flex-col"
             style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}
-            initial={skip ? false : { x: -16 }}
-            animate={skip || gridInView ? { x: 0 } : {}}
+            initial={skip ? false : { opacity: 0, x: -12 }}
+            animate={skip || gridInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }}
             transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
           >
             <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
@@ -856,7 +871,7 @@ function StatCard({ num, suffix, text, label, icon: Icon, color, active, bgLight
 
 function TractionSlide({ colors }: { colors: Colors }) {
   const statsRef = useRef<HTMLDivElement>(null);
-  const statsInView = useInView(statsRef, { once: true, amount: 0.3 });
+  const statsInView = useInView(statsRef, { once: false, amount: 0.3 });
   const stats: { num?: number; suffix?: string; text?: string; label: string; icon: React.ElementType; color: string }[] = [
     { num: 200, suffix: "+", label: "Tech Transfer Offices", icon: Building2, color: colors.green },
     { num: 40, suffix: "+", label: "Research Data Sources", icon: Database, color: colors.violet },
