@@ -1,9 +1,12 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import type { CheerioAPI } from "cheerio";
 import { fetchHtml, cleanText } from "./utils";
 
 const INST = "Ohio State University";
 const BASE = "https://innovate.osu.edu";
 const LISTING_BASE = `${BASE}/available_technologies/`;
+const PAGE_SIZE = 20;
+const MAX_PAGES = 50;
 const DETAIL_CONCURRENCY = 4;
 
 const CATEGORIES: { id: number; name: string }[] = [
@@ -12,23 +15,51 @@ const CATEGORIES: { id: number; name: string }[] = [
   { id: 61816, name: "Research & Development Tools" },
 ];
 
-async function fetchCategoryListings(cat: { id: number; name: string }): Promise<string[]> {
-  const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}`;
-  const $ = await fetchHtml(pageUrl, 15_000);
-  if (!$) return [];
-
-  const seen = new Set<string>();
-  const urls: string[] = [];
-
+function extractTechUrls($: CheerioAPI): { id: string; url: string }[] {
+  const results: { id: string; url: string }[] = [];
   $('a[href]').each((_, el) => {
     const href = $(el).attr('href') ?? '';
     const match = href.match(/^\/available_technologies\/(\d+)\//);
-    if (match && !seen.has(match[1])) {
-      seen.add(match[1]);
-      urls.push(`${BASE}${href}`);
+    if (match) {
+      results.push({ id: match[1], url: `${BASE}${href}` });
     }
   });
+  return results;
+}
 
+async function fetchCategoryListings(cat: { id: number; name: string }): Promise<string[]> {
+  const seen = new Set<string>();
+  const urls: string[] = [];
+  let offset = 0;
+  let pageNum = 0;
+
+  while (pageNum < MAX_PAGES) {
+    const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}&limit=${PAGE_SIZE}&offset=${offset}`;
+    const $ = await fetchHtml(pageUrl, 15_000);
+    if (!$) break;
+
+    const found = extractTechUrls($);
+    if (found.length === 0) break;
+
+    let newCount = 0;
+    for (const item of found) {
+      if (!seen.has(item.id)) {
+        seen.add(item.id);
+        urls.push(item.url);
+        newCount++;
+      }
+    }
+
+    if (newCount === 0) {
+      console.log(`[scraper] ${INST}: ${cat.name} page ${pageNum + 1} (offset=${offset}) yielded no new IDs, stopping`);
+      break;
+    }
+
+    pageNum++;
+    offset += PAGE_SIZE;
+  }
+
+  console.log(`[scraper] ${INST}: ${cat.name} crawled ${pageNum} page(s), ${urls.length} unique listings`);
   return urls;
 }
 
