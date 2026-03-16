@@ -399,7 +399,7 @@ function Slide({
         style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
         variants={skip ? undefined : containerVariants}
         initial={skip ? undefined : "hidden"}
-        animate={skip || inView ? "visible" : "hidden"}
+        animate={skip ? { opacity: 1, y: 0 } : inView ? "visible" : "hidden"}
       >
         {Children.map(children, (child, i) =>
           child != null ? (
