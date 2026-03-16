@@ -352,7 +352,12 @@ function TopicSection({
           <Bell className="w-3.5 h-3.5 text-amber-500" />
           <h2 className="text-sm font-semibold text-foreground">{topic}</h2>
           <Badge variant="secondary" className="text-[10px]">
-            {isLoading ? "..." : allCount}
+            {isLoading ? "..." : (
+              (!showAllResearch && filteredResearch.length > ALERTS_CAP) ||
+              (!showAllGrants && filteredGrants.length > ALERTS_CAP)
+                ? `${Math.min(filteredResearch.length, ALERTS_CAP) + Math.min(filteredGrants.length, ALERTS_CAP)} of ${allCount}`
+                : allCount
+            )}
           </Badge>
         </div>
         <div className="flex items-center gap-3">

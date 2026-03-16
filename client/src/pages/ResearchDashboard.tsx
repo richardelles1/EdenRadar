@@ -104,6 +104,8 @@ export default function ResearchDashboard() {
   const publishedCount = discoveries.filter((c) => c.published).length;
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
   const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
+  const grantsPending = !deferredReady || grantLoading;
+  const alertsPending = !deferredReady || alertLoading;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">
@@ -283,7 +285,7 @@ export default function ResearchDashboard() {
           </Button>
         </div>
 
-        {grantLoading ? (
+        {grantsPending ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : grantSignals.length > 0 ? (
           <div className="space-y-2">
@@ -354,7 +356,7 @@ export default function ResearchDashboard() {
             </Badge>
           )}
         </div>
-        {alertLoading ? (
+        {alertsPending ? (
           <Skeleton className="h-24 w-full rounded-lg" />
         ) : latestSignal ? (
           <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 flex flex-col gap-2" data-testid="breaking-alert">
