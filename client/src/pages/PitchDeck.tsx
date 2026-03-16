@@ -428,7 +428,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
         </div>
 
         {/* photo panel — z-20 so it sits IN FRONT of vine/dots/radar */}
-        <div className="hidden md:block w-[42%] relative shrink-0" style={{ zIndex: 20 }}>
+        <div className="hidden md:block w-[40%] relative shrink-0" style={{ zIndex: 20 }}>
           <img
             src={imgLabWork}
             alt="Researchers at work"
@@ -615,9 +615,7 @@ function DiscoverySlide({ colors }: { colors: Colors }) {
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-5"
     >
-      {/* radar anchored left like cover */}
-      <PitchLeftRadar color={colors.amber} opacity={0.10} />
-      {/* more dots, no rings beyond PitchLeftRadar */}
+      {/* dots only — no rings/sweep on Discovery */}
       <PitchDots color={colors.amber} count={16} />
 
       <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
@@ -677,7 +675,7 @@ function DiscoverySlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 6 — EDEN LAB ═══════════════════════ */
 function LabSlide({ colors }: { colors: Colors }) {
   const features = [
-    { icon: BookOpen, label: "35+ Data Sources", desc: "PubMed, bioRxiv, ClinicalTrials.gov, PubChem, ChEMBL, Semantic Scholar, CrossRef, Lens.org, OpenAlex, Cochrane, Unpaywall, CORE, and more" },
+    { icon: BookOpen, label: "35+ Data Sources", desc: "PubMed, bioRxiv, ClinicalTrials.gov, PubChem, ChEMBL, Semantic Scholar, CrossRef, Lens.org, OpenAlex, Cochrane, Unpaywall, CORE" },
     { icon: Workflow, label: "Intuitive Research Project Workflow", desc: "Structured 11-section canvas guiding research from hypothesis through publication" },
     { icon: Brain, label: "AI Synthesis", desc: "Structured summaries, key finding extraction, and evidence mapping across all sources" },
     { icon: Award, label: "Grants & Smart Alerts", desc: "NIH, NSF, and SBIR matched to your profile. Personalized alerts based on interests and expertise" },
