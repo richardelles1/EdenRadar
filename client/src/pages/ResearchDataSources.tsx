@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Search, ExternalLink, Microscope, Loader2, ChevronLeft, ChevronRight,
+  Search, ExternalLink, Loader2, ChevronLeft, ChevronRight,
   Bookmark, BookmarkCheck, X, SlidersHorizontal, ChevronDown,
   Sparkles, ChevronUp, RefreshCw, Save, Lightbulb, HelpCircle, Star, ArrowRight,
 } from "lucide-react";
@@ -229,6 +229,22 @@ const RESEARCH_TIPS = [
   "Combine multiple data sources to cross-reference findings across databases.",
   "Check grants databases alongside literature to spot funded research trends.",
   "Export your synthesis results to share with collaborators.",
+  "Use MeSH terms (e.g. 'Neoplasms' instead of 'cancer') for precise PubMed results.",
+  "Add NOT to exclude noise — e.g. 'CRISPR NOT review' filters out review articles.",
+  "Filter ClinicalTrials results by trial phase to find late-stage assets closer to market.",
+  "Search patents alongside literature to spot IP filings before publications appear.",
+  "Scan abstracts for novelty claims, mechanism details, and translational potential.",
+  "Use author affiliation filters to find work from specific institutions or labs.",
+  "Search by NIH grant number in the Grants source to find funded research programs.",
+  "'Best match' ranks by relevance to your query; 'Most recent' shows newest first.",
+  "Combine bioRxiv with PubMed to catch preprints before peer-reviewed publication.",
+  "AI Synthesis analyzes up to 10 of your top results — select the most relevant ones.",
+  "Use Library folders to track different topics over time and revisit key findings.",
+  "Export synthesis reports as shareable summaries for grant applications.",
+  "Add quotes around multi-word phrases for exact match — e.g. 'gene therapy'.",
+  "Enable all sources for broad landscape scans, then narrow by source for deep dives.",
+  "Look for convergence: multiple groups publishing on the same target signals opportunity.",
+  "Cross-reference TTO listings with publications to find assets backed by strong data.",
 ];
 
 const PLATFORM_FACTS = [
@@ -238,19 +254,28 @@ const PLATFORM_FACTS = [
   "Each source is queried in parallel for faster, more comprehensive results.",
   "EdenLab connects your research projects to real-time literature and grant data.",
   "Discovery Cards let researchers showcase work directly to industry scouts.",
+  "PubMed searches now return up to 50 results per query for deeper coverage.",
+  "The platform checks for new TTO listings across 30+ universities daily.",
+  "Grants data covers NIH, NSF, and international funding agencies.",
+  "Search tips rotate with each query — watch for new strategies as you search.",
 ];
 
 type InsightCard = { type: "tip"; text: string } | { type: "fact"; text: string };
 
+function shuffleArray<T>(arr: T[]): T[] {
+  const shuffled = [...arr];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
   const allCards: InsightCard[] = useMemo(() => {
-    const cards: InsightCard[] = [];
-    const max = Math.max(RESEARCH_TIPS.length, PLATFORM_FACTS.length);
-    for (let i = 0; i < max; i++) {
-      if (i < RESEARCH_TIPS.length) cards.push({ type: "tip", text: RESEARCH_TIPS[i] });
-      if (i < PLATFORM_FACTS.length) cards.push({ type: "fact", text: PLATFORM_FACTS[i] });
-    }
-    return cards;
+    const tips: InsightCard[] = RESEARCH_TIPS.map((t) => ({ type: "tip", text: t }));
+    const facts: InsightCard[] = PLATFORM_FACTS.map((t) => ({ type: "fact", text: t }));
+    return shuffleArray([...tips, ...facts]);
   }, []);
 
   const [cardIndex, setCardIndex] = useState(0);
@@ -264,7 +289,7 @@ function SearchInsightsPanel({ activeSources }: { activeSources: string[] }) {
         setCardIndex((prev) => (prev + 1) % allCards.length);
         setFadeIn(true);
       }, 400);
-    }, 4000);
+    }, 5000);
     return () => clearInterval(cardInterval);
   }, [allCards.length]);
 
@@ -662,68 +687,7 @@ export default function ResearchDataSources() {
 
         {isLoading && (
           <div className="space-y-5" data-testid="search-scanning">
-            <div className="rounded-xl border bg-card p-5 space-y-4">
-              <div className="flex items-center gap-2.5">
-                <div className="relative w-5 h-5">
-                  <Microscope className="w-5 h-5 text-violet-500" />
-                  <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-violet-500 rounded-full animate-ping" />
-                </div>
-                <span className="text-sm font-medium">
-                  Scanning {selectedSources.length} data source{selectedSources.length !== 1 ? "s" : ""}...
-                </span>
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {selectedSources.map((key, i) => (
-                  <span
-                    key={key}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border transition-colors"
-                    style={{
-                      animation: `source-pulse 2s ease-in-out ${i * 0.15}s infinite`,
-                    }}
-                  >
-                    <span
-                      className="w-1.5 h-1.5 rounded-full bg-violet-500"
-                      style={{
-                        animation: `source-dot 2s ease-in-out ${i * 0.15}s infinite`,
-                      }}
-                    />
-                    {SOURCE_LABELS[key] ?? key}
-                  </span>
-                ))}
-              </div>
-
-              <div className="h-1 rounded-full bg-muted overflow-hidden">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-purple-500 to-violet-500"
-                  style={{
-                    animation: "scan-bar 2s ease-in-out infinite",
-                    width: "40%",
-                  }}
-                />
-              </div>
-            </div>
-
             <SearchInsightsPanel activeSources={selectedSources} />
-
-            <style>{`
-              @keyframes source-pulse {
-                0%, 100% { background-color: transparent; color: hsl(var(--muted-foreground)); }
-                50% { background-color: hsl(263 70% 50% / 0.1); color: hsl(263 70% 50%); border-color: hsl(263 70% 50% / 0.3); }
-              }
-              @keyframes source-dot {
-                0%, 100% { opacity: 0.3; transform: scale(1); }
-                50% { opacity: 1; transform: scale(1.4); }
-              }
-              @keyframes scan-bar {
-                0% { transform: translateX(-100%); }
-                100% { transform: translateX(350%); }
-              }
-              @keyframes skeleton-fade {
-                0%, 100% { opacity: 0.5; }
-                50% { opacity: 1; }
-              }
-            `}</style>
           </div>
         )}
 
