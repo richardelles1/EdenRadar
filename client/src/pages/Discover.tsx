@@ -154,7 +154,7 @@ export default function Discover() {
       const res = await apiRequest("POST", "/api/search", {
         query,
         sources: selectedSources,
-        maxPerSource: 8,
+        maxPerSource: 25,
         buyerProfile,
       });
       if (!res.ok) {
@@ -186,7 +186,7 @@ export default function Discover() {
       const res = await apiRequest("POST", "/api/report", {
         query,
         sources: selectedSources,
-        maxPerSource: 6,
+        maxPerSource: 20,
         buyerProfile,
       });
       if (!res.ok) {

@@ -376,7 +376,7 @@ export default function ResearchDataSources() {
         body: JSON.stringify({
           query: activeQuery,
           sources: selectedSources,
-          maxPerSource: 5,
+          maxPerSource: 25,
           ...filters,
         }),
       }).then((r) => r.json()),

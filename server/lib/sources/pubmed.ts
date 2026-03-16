@@ -51,7 +51,7 @@ async function retryOnce<T>(fn: () => Promise<T>, delayMs = 1000): Promise<T> {
   }
 }
 
-async function searchPMIDs(query: string, maxResults = 10): Promise<string[]> {
+async function searchPMIDs(query: string, maxResults = 50): Promise<string[]> {
   return retryOnce(async () => {
     const url = `${EUTILS_BASE}/esearch.fcgi?db=pubmed&term=${encodeURIComponent(query)}&retmax=${maxResults}&retmode=json`;
     const res = await fetch(url);
@@ -110,7 +110,7 @@ async function fetchPaperDetails(pmids: string[]): Promise<RawPaper[]> {
   });
 }
 
-export async function searchPubMed(query: string, maxResults = 10): Promise<RawPaper[]> {
+export async function searchPubMed(query: string, maxResults = 50): Promise<RawPaper[]> {
   const pmids = await searchPMIDs(query, maxResults);
   return fetchPaperDetails(pmids);
 }

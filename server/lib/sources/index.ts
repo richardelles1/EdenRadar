@@ -86,7 +86,7 @@ export interface DataSource {
   search(query: string, maxResults?: number): Promise<RawSignal[]>;
 }
 
-async function pubmedToSignals(query: string, maxResults = 10): Promise<RawSignal[]> {
+async function pubmedToSignals(query: string, maxResults = 50): Promise<RawSignal[]> {
   const papers = await searchPubMed(query, maxResults);
   return papers.map(
     (p): RawSignal => ({
@@ -362,7 +362,7 @@ const CONCURRENCY_LIMIT = 8;
 export async function collectAllSignals(
   query: string,
   sourceKeys: SourceKey[],
-  maxPerSource = 5
+  maxPerSource = 25
 ): Promise<RawSignal[]> {
   const selectedSources = sourceKeys
     .filter((k) => k in dataSources)
