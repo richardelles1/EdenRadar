@@ -813,18 +813,20 @@ function TractionSlide({ colors }: { colors: Colors }) {
         ))}
       </div>
       <p className="text-[10px] sm:text-xs font-bold uppercase tracking-widest mb-2 sm:mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
-      <div className="grid grid-cols-3 sm:grid-cols-3 gap-1.5 sm:gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 sm:gap-4">
         {tiers.map((t) => (
-          <div key={t.name} className="rounded-xl p-2.5 sm:p-5 flex flex-col items-center text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
-            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-1.5 sm:mb-3" style={{ background: `${t.color}22` }}>
+          <div key={t.name} className="rounded-xl p-2.5 sm:p-5 flex flex-row sm:flex-col items-center sm:items-center gap-2.5 sm:gap-0 text-left sm:text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
+            <div className="w-7 h-7 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0 sm:mb-3" style={{ background: `${t.color}22` }}>
               <t.icon className="w-3.5 h-3.5 sm:w-5 sm:h-5" style={{ color: t.color }} />
             </div>
-            <h3 className="text-[10px] sm:text-sm font-bold mb-0.5 sm:mb-1" style={{ color: colors.text }}>{t.name}</h3>
-            <div className="mb-1 sm:mb-2">
-              <span className="text-base sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
-              <span className="text-[9px] sm:text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-xs sm:text-sm font-bold mb-0.5 sm:mb-1" style={{ color: colors.text }}>{t.name}</h3>
+              <div className="mb-0.5 sm:mb-2">
+                <span className="text-sm sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
+                <span className="text-[9px] sm:text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
+              </div>
+              <p className="text-[9px] sm:text-xs leading-relaxed line-clamp-2 sm:line-clamp-none" style={{ color: colors.textMuted }}>{t.desc}</p>
             </div>
-            <p className="text-[9px] sm:text-xs leading-relaxed hidden sm:block" style={{ color: colors.textMuted }}>{t.desc}</p>
           </div>
         ))}
       </div>
