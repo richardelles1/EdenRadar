@@ -548,7 +548,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
     },
     {
       title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
-      items: ["Literature search across 40+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas", "Grant discovery matched to research profile"],
+      items: ["Literature search across 35+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas", "Grant discovery matched to research profile"],
     },
     {
       title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
@@ -677,7 +677,7 @@ function DiscoverySlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 6 — EDEN LAB ═══════════════════════ */
 function LabSlide({ colors }: { colors: Colors }) {
   const features = [
-    { icon: BookOpen, label: "40+ Data Sources", desc: "PubMed, bioRxiv, ClinicalTrials.gov, PubChem, ChEMBL, Semantic Scholar, CrossRef, Lens.org, OpenAlex, Cochrane, Unpaywall, CORE, and more" },
+    { icon: BookOpen, label: "35+ Data Sources", desc: "PubMed, bioRxiv, ClinicalTrials.gov, PubChem, ChEMBL, Semantic Scholar, CrossRef, Lens.org, OpenAlex, Cochrane, Unpaywall, CORE, and more" },
     { icon: Workflow, label: "Intuitive Research Project Workflow", desc: "Structured 11-section canvas guiding research from hypothesis through publication" },
     { icon: Brain, label: "AI Synthesis", desc: "Structured summaries, key finding extraction, and evidence mapping across all sources" },
     { icon: Award, label: "Grants & Smart Alerts", desc: "NIH, NSF, and SBIR matched to your profile. Personalized alerts based on interests and expertise" },
