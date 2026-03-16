@@ -19,6 +19,7 @@ import {
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
+import { getResearcherProfile } from "@/hooks/use-researcher";
 
 const NAV_ITEMS = [
   { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
@@ -31,10 +32,18 @@ const NAV_ITEMS = [
   { href: "/research/profile", label: "Profile", icon: User },
 ];
 
+function getInitials(name: string): string {
+  if (!name.trim()) return "";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location] = useLocation();
+  const profile = getResearcherProfile();
 
   async function handleSignOut() {
     await signOut();
@@ -101,6 +110,27 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </nav>
 
       <div className="px-3 pb-4 pt-2 border-t border-border space-y-0.5 shrink-0">
+        {(profile.name || profile.photoUrl) && (
+          <Link href="/research/profile">
+            <div
+              className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-md hover:bg-accent/60 cursor-pointer transition-colors"
+              data-testid="sidebar-avatar-link"
+              onClick={onClose}
+            >
+              <div className="w-7 h-7 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center overflow-hidden shrink-0">
+                {profile.photoUrl ? (
+                  <img src={profile.photoUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">
+                    {getInitials(profile.name)}
+                  </span>
+                )}
+              </div>
+              <span className="text-xs font-medium text-foreground truncate">{profile.name}</span>
+            </div>
+          </Link>
+        )}
+
         <Button
           variant="ghost"
           size="sm"

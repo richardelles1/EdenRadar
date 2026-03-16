@@ -20,8 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Plus, X, Camera, Loader2 } from "lucide-react";
-import { getResearcherProfile, saveResearcherProfile } from "@/hooks/use-researcher";
+import { User, Plus, X, Camera, Loader2, CheckCircle2, ExternalLink } from "lucide-react";
+import { getResearcherProfile, saveResearcherProfile, getProfileCompleteness } from "@/hooks/use-researcher";
 import { useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
 
@@ -31,6 +31,7 @@ const formSchema = z.object({
   lab: z.string().optional(),
   careerStage: z.string().optional(),
   institutionType: z.string().optional(),
+  orcidId: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -136,6 +137,44 @@ function TagInput({
   );
 }
 
+function CompletenessBar() {
+  const profile = getResearcherProfile();
+  const { percent, filled, total, missing } = getProfileCompleteness(profile);
+
+  const barColor = percent === 100
+    ? "bg-emerald-500"
+    : percent >= 70
+      ? "bg-amber-500"
+      : "bg-red-400";
+
+  return (
+    <div className="mb-6 space-y-2" data-testid="profile-completeness-bar">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {percent === 100 ? (
+            <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+          ) : null}
+          <span className="text-sm font-medium text-foreground">
+            Profile {percent}% complete
+          </span>
+          <span className="text-xs text-muted-foreground">({filled}/{total} fields)</span>
+        </div>
+      </div>
+      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      {missing.length > 0 && (
+        <p className="text-[11px] text-muted-foreground">
+          Missing: {missing.join(", ")}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function ResearchProfile() {
   const { toast } = useToast();
   const researcherHeaders = useResearcherHeaders();
@@ -146,6 +185,7 @@ export default function ResearchProfile() {
   const [photoUrl, setPhotoUrl] = useState(profile.photoUrl || "");
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
+  const [, forceUpdate] = useState(0);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -155,6 +195,7 @@ export default function ResearchProfile() {
       lab: profile.lab,
       careerStage: profile.careerStage || "",
       institutionType: profile.institutionType || "",
+      orcidId: profile.orcidId || "",
     },
   });
 
@@ -178,6 +219,7 @@ export default function ResearchProfile() {
       const { url } = await res.json();
       setPhotoUrl(url);
       saveResearcherProfile({ photoUrl: url });
+      forceUpdate(n => n + 1);
       toast({ title: "Photo updated" });
     } catch (err: any) {
       toast({ title: "Photo upload failed", description: err?.message, variant: "destructive" });
@@ -194,11 +236,13 @@ export default function ResearchProfile() {
       lab: values.lab ?? "",
       careerStage: values.careerStage ?? "",
       institutionType: values.institutionType ?? "",
+      orcidId: values.orcidId ?? "",
       researchAreas: areas,
       alertTopics,
       secondaryInterests,
       photoUrl,
     });
+    forceUpdate(n => n + 1);
     toast({ title: "Profile saved" });
   }
 
@@ -215,6 +259,8 @@ export default function ResearchProfile() {
           </p>
         </div>
       </div>
+
+      <CompletenessBar />
 
       <div className="flex items-center gap-4 mb-6">
         <div
@@ -339,6 +385,42 @@ export default function ResearchProfile() {
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name="orcidId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>
+                  ORCID ID <span className="text-muted-foreground font-normal">(optional)</span>
+                </FormLabel>
+                <FormControl>
+                  <div className="flex gap-2 items-center">
+                    <Input
+                      placeholder="0000-0002-1825-0097"
+                      {...field}
+                      data-testid="input-profile-orcid"
+                    />
+                    {field.value?.trim() && (
+                      <a
+                        href={`https://orcid.org/${field.value.trim()}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="shrink-0 text-muted-foreground hover:text-emerald-600 transition-colors"
+                        data-testid="link-orcid-profile"
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </FormControl>
+                <p className="text-[11px] text-muted-foreground">
+                  Your unique researcher identifier from orcid.org
+                </p>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <TagInput
             label="Research Areas"

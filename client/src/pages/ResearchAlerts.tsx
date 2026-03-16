@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState, useMemo } from "react";
-import { useLocation } from "wouter";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Bell,
   ExternalLink,
@@ -18,12 +17,15 @@ import {
   ShieldCheck,
   ShieldX,
   Archive,
+  Plus,
+  X,
+  Eye,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getResearcherProfile } from "@/hooks/use-researcher";
+import { getResearcherProfile, saveResearcherProfile } from "@/hooks/use-researcher";
 import { useResearcherId, useResearcherHeaders } from "@/hooks/use-researcher";
 import type { DiscoveryCard } from "@shared/schema";
 
@@ -41,56 +43,103 @@ type DiscoveriesResponse = { cards: DiscoveryCard[] };
 
 const RESEARCH_SOURCES = ["pubmed", "biorxiv", "arxiv"];
 const GRANT_SOURCES = ["grants_gov", "nih_reporter", "nsf_awards"];
+const MAX_TOPICS = 10;
+
+const DISMISSED_KEY = "eden-alerts-dismissed";
+const CHECKED_KEY = "eden-alerts-checked-at";
+
+function getDismissedIds(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY);
+    if (raw) return new Set(JSON.parse(raw));
+  } catch {}
+  return new Set();
+}
+
+function dismissId(id: string) {
+  const set = getDismissedIds();
+  set.add(id);
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
+}
+
+function getCheckedTimestamps(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(CHECKED_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {};
+}
+
+function stampChecked(topic: string) {
+  const ts = getCheckedTimestamps();
+  ts[topic] = Date.now();
+  localStorage.setItem(CHECKED_KEY, JSON.stringify(ts));
+}
+
+function formatTimestamp(ts: number): string {
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "Just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
 
 export default function ResearchAlerts() {
   const profile = getResearcherProfile();
   const researcherId = useResearcherId();
   const researcherHeaders = useResearcherHeaders();
-  const [, navigate] = useLocation();
   const alertTopics = profile.alertTopics?.length > 0 ? profile.alertTopics : profile.researchAreas;
   const primaryTopic = alertTopics[0] ?? "";
   const [filter, setFilter] = useState("");
+  const [dismissed, setDismissed] = useState<Set<string>>(getDismissedIds);
+  const [newTopicValue, setNewTopicValue] = useState("");
+  const [topicsList, setTopicsList] = useState<string[]>(alertTopics);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
-    research: true,
-    grants: true,
     discoveries: true,
+  });
+  const [expandedTopics, setExpandedTopics] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    alertTopics.forEach(t => { init[t] = true; });
+    return init;
   });
 
   function toggleSection(key: string) {
     setExpandedSections(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
-  const topicQuery = alertTopics.join(" OR ");
+  function toggleTopic(topic: string) {
+    setExpandedTopics(prev => ({ ...prev, [topic]: !prev[topic] }));
+  }
 
-  const { data: researchData, isLoading: researchLoading } = useQuery<SearchResponse>({
-    queryKey: ["/api/search", topicQuery, "research-alerts"],
-    queryFn: async () => {
-      const r = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: topicQuery, sources: RESEARCH_SOURCES, maxPerSource: 10 }),
-      });
-      if (!r.ok) throw new Error("Failed to fetch research alerts");
-      return r.json();
-    },
-    enabled: !!primaryTopic,
-    staleTime: 0,
-  });
+  function handleDismiss(id: string) {
+    dismissId(id);
+    setDismissed(prev => new Set([...prev, id]));
+  }
 
-  const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
-    queryKey: ["/api/search", topicQuery, "grant-alerts"],
-    queryFn: async () => {
-      const r = await fetch("/api/search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: topicQuery, sources: GRANT_SOURCES, maxPerSource: 10 }),
-      });
-      if (!r.ok) throw new Error("Failed to fetch grant alerts");
-      return r.json();
-    },
-    enabled: !!primaryTopic,
-    staleTime: 0,
-  });
+  function addTopic() {
+    const trimmed = newTopicValue.trim();
+    if (!trimmed || topicsList.includes(trimmed) || topicsList.length >= MAX_TOPICS) return;
+    const updated = [...topicsList, trimmed];
+    setTopicsList(updated);
+    saveResearcherProfile({ alertTopics: updated });
+    setExpandedTopics(prev => ({ ...prev, [trimmed]: true }));
+    setNewTopicValue("");
+  }
+
+  function removeTopic(topic: string) {
+    const updated = topicsList.filter(t => t !== topic);
+    setTopicsList(updated);
+    saveResearcherProfile({ alertTopics: updated });
+    setExpandedTopics(prev => {
+      const next = { ...prev };
+      delete next[topic];
+      return next;
+    });
+  }
 
   const { data: discoveriesData, isLoading: discoveriesLoading } = useQuery<DiscoveriesResponse>({
     queryKey: ["/api/research/discoveries", researcherId, "alerts"],
@@ -100,52 +149,7 @@ export default function ResearchAlerts() {
     staleTime: 0,
   });
 
-  const researchSignals = useMemo(() => {
-    return researchData?.assets?.flatMap(a => a.signals ?? []) ?? [];
-  }, [researchData]);
-
-  const grantSignals = useMemo(() => {
-    return grantData?.assets?.flatMap(a => a.signals ?? []) ?? [];
-  }, [grantData]);
-
   const discoveryCards = discoveriesData?.cards ?? [];
-
-  const filterItems = <T extends { title?: string; text?: string }>(items: T[]): T[] => {
-    if (!filter.trim()) return items;
-    const q = filter.toLowerCase();
-    return items.filter(s =>
-      (s.title ?? "").toLowerCase().includes(q) ||
-      (s.text ?? "").toLowerCase().includes(q)
-    );
-  };
-
-  const filteredResearch = filterItems(researchSignals);
-  const filteredGrants = filterItems(grantSignals);
-
-  if (!primaryTopic) {
-    return (
-      <div className="p-6 max-w-3xl mx-auto">
-        <div className="flex items-center gap-2 mb-6">
-          <Bell className="w-5 h-5 text-amber-500" />
-          <h1 className="text-xl font-bold text-foreground">My Alerts</h1>
-        </div>
-        <div className="border border-dashed border-border rounded-lg p-10 text-center">
-          <Bell className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground mb-3">
-            Set research areas or alert topics in your profile to activate alerts.
-          </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => navigate("/research/profile")}
-            data-testid="button-go-to-profile"
-          >
-            Go to Profile
-          </Button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
@@ -153,14 +157,53 @@ export default function ResearchAlerts() {
         <div className="flex items-center gap-2">
           <Bell className="w-5 h-5 text-amber-500" />
           <h1 className="text-xl font-bold text-foreground">My Alerts</h1>
-          <div className="flex gap-1.5 flex-wrap">
-            {alertTopics.map(t => (
-              <Badge key={t} variant="secondary" className="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
-                {t}
-              </Badge>
-            ))}
-          </div>
         </div>
+      </div>
+
+      <div className="border border-border rounded-lg p-4 bg-card" data-testid="alert-topic-manager">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-foreground">Alert Topics</h2>
+          <span className="text-[11px] text-muted-foreground">{topicsList.length}/{MAX_TOPICS} topics</span>
+        </div>
+        <div className="flex flex-wrap gap-2 mb-3">
+          {topicsList.map(t => (
+            <Badge
+              key={t}
+              variant="secondary"
+              className="gap-1.5 pr-1.5 bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+              data-testid={`badge-alert-topic-${t}`}
+            >
+              {t}
+              <button
+                onClick={() => removeTopic(t)}
+                className="hover:text-red-500 transition-colors"
+                data-testid={`button-remove-topic-${t}`}
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+        {topicsList.length < MAX_TOPICS && (
+          <div className="flex gap-2">
+            <Input
+              placeholder="Add a topic (e.g., CRISPR delivery)"
+              value={newTopicValue}
+              onChange={e => setNewTopicValue(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTopic(); } }}
+              className="text-sm"
+              data-testid="input-add-alert-topic"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={addTopic}
+              data-testid="button-add-alert-topic"
+            >
+              <Plus className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
       </div>
 
       <div className="relative">
@@ -174,50 +217,33 @@ export default function ResearchAlerts() {
         />
       </div>
 
-      <AlertSection
-        icon={<FlaskConical className="w-4 h-4 text-blue-500" />}
-        title="Breaking Research"
-        subtitle="Latest publications from PubMed, bioRxiv & arXiv"
-        count={filteredResearch.length}
-        expanded={expandedSections.research}
-        onToggle={() => toggleSection("research")}
-        loading={researchLoading}
-        sectionKey="research"
-      >
-        {filteredResearch.length === 0 ? (
-          <EmptyState text={filter ? "No research alerts match your filter." : "No recent research found for your topics."} />
-        ) : (
-          filteredResearch.map((signal, i) => (
-            <AlertCard key={signal.id ?? `r-${i}`} signal={signal} index={i} colorClass="hover:border-blue-500/30" />
-          ))
-        )}
-      </AlertSection>
-
-      <AlertSection
-        icon={<DollarSign className="w-4 h-4 text-emerald-500" />}
-        title="Grant Opportunities"
-        subtitle="Funding from NIH Reporter, NSF & Grants.gov"
-        count={filteredGrants.length}
-        expanded={expandedSections.grants}
-        onToggle={() => toggleSection("grants")}
-        loading={grantLoading}
-        sectionKey="grants"
-      >
-        {filteredGrants.length === 0 ? (
-          <EmptyState text={filter ? "No grant alerts match your filter." : "No grants found for your topics."} />
-        ) : (
-          filteredGrants.map((signal, i) => (
-            <AlertCard key={signal.id ?? `g-${i}`} signal={signal} index={i} colorClass="hover:border-emerald-500/30" />
-          ))
-        )}
-      </AlertSection>
+      {topicsList.length === 0 ? (
+        <div className="border border-dashed border-border rounded-lg p-8 text-center">
+          <Bell className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">
+            Add your first alert topic above to start receiving research & grant alerts.
+          </p>
+        </div>
+      ) : (
+        topicsList.map(topic => (
+          <TopicSection
+            key={topic}
+            topic={topic}
+            filter={filter}
+            dismissed={dismissed}
+            onDismiss={handleDismiss}
+            expanded={expandedTopics[topic] ?? true}
+            onToggle={() => toggleTopic(topic)}
+          />
+        ))
+      )}
 
       <AlertSection
         icon={<Activity className="w-4 h-4 text-violet-500" />}
         title="Discovery Updates"
         subtitle="Status timeline for your discovery cards"
         count={discoveryCards.length}
-        expanded={expandedSections.discoveries}
+        expanded={expandedSections.discoveries ?? true}
         onToggle={() => toggleSection("discoveries")}
         loading={discoveriesLoading}
         sectionKey="discoveries"
@@ -229,6 +255,163 @@ export default function ResearchAlerts() {
         )}
       </AlertSection>
     </div>
+  );
+}
+
+function TopicSection({
+  topic,
+  filter,
+  dismissed,
+  onDismiss,
+  expanded,
+  onToggle,
+}: {
+  topic: string;
+  filter: string;
+  dismissed: Set<string>;
+  onDismiss: (id: string) => void;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const { data: researchData, isLoading: researchLoading } = useQuery<SearchResponse>({
+    queryKey: ["/api/search", topic, "research-alerts-topic"],
+    queryFn: async () => {
+      const r = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: topic, sources: RESEARCH_SOURCES, maxPerSource: 5 }),
+      });
+      if (!r.ok) throw new Error("Failed to fetch research alerts");
+      stampChecked(topic);
+      return r.json();
+    },
+    enabled: !!topic,
+    staleTime: 0,
+  });
+
+  const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
+    queryKey: ["/api/search", topic, "grant-alerts-topic"],
+    queryFn: async () => {
+      const r = await fetch("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: topic, sources: GRANT_SOURCES, maxPerSource: 5 }),
+      });
+      if (!r.ok) throw new Error("Failed to fetch grant alerts");
+      return r.json();
+    },
+    enabled: !!topic,
+    staleTime: 0,
+  });
+
+  const researchSignals = useMemo(() =>
+    researchData?.assets?.flatMap(a => a.signals ?? []) ?? [], [researchData]);
+  const grantSignals = useMemo(() =>
+    grantData?.assets?.flatMap(a => a.signals ?? []) ?? [], [grantData]);
+
+  const filterList = useCallback((items: SearchResult[], prefix: string): Array<SearchResult & { dismissKey: string }> => {
+    const withKeys = items.map((s, i) => ({
+      ...s,
+      dismissKey: s.id || `${prefix}-${topic}-${i}`,
+    }));
+    let filtered = withKeys.filter(s => !dismissed.has(s.dismissKey));
+    if (filter.trim()) {
+      const q = filter.toLowerCase();
+      filtered = filtered.filter(s =>
+        (s.title ?? "").toLowerCase().includes(q) ||
+        (s.text ?? "").toLowerCase().includes(q)
+      );
+    }
+    return filtered;
+  }, [filter, dismissed, topic]);
+
+  const filteredResearch = filterList(researchSignals, "r");
+  const filteredGrants = filterList(grantSignals, "g");
+  const allCount = filteredResearch.length + filteredGrants.length;
+  const isLoading = researchLoading || grantLoading;
+  const [lastCheckedTs, setLastCheckedTs] = useState<number | undefined>(() => getCheckedTimestamps()[topic]);
+
+  useEffect(() => {
+    if (researchData) {
+      setLastCheckedTs(getCheckedTimestamps()[topic]);
+    }
+  }, [researchData, topic]);
+
+  return (
+    <section data-testid={`alert-topic-section-${topic}`} className="border border-border rounded-lg overflow-hidden">
+      <button
+        onClick={onToggle}
+        className="w-full flex items-center justify-between gap-2 p-3 bg-muted/30 hover:bg-muted/50 transition-colors"
+        data-testid={`toggle-topic-${topic}`}
+      >
+        <div className="flex items-center gap-2">
+          <Bell className="w-3.5 h-3.5 text-amber-500" />
+          <h2 className="text-sm font-semibold text-foreground">{topic}</h2>
+          <Badge variant="secondary" className="text-[10px]">
+            {isLoading ? "..." : allCount}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-3">
+          {lastCheckedTs && (
+            <span className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`last-checked-${topic}`}>
+              <Eye className="w-3 h-3" />
+              {formatTimestamp(lastCheckedTs)}
+            </span>
+          )}
+          {expanded ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="p-3 space-y-4">
+          {isLoading ? (
+            <div className="space-y-3">
+              {[1, 2].map(i => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
+            </div>
+          ) : (
+            <>
+              {filteredResearch.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs text-blue-500 font-medium">
+                    <FlaskConical className="w-3.5 h-3.5" />
+                    Research ({filteredResearch.length})
+                  </div>
+                  {filteredResearch.map((signal, i) => (
+                    <AlertCard
+                      key={signal.dismissKey}
+                      signal={signal}
+                      index={i}
+                      colorClass="hover:border-blue-500/30"
+                      onDismiss={() => onDismiss(signal.dismissKey)}
+                    />
+                  ))}
+                </div>
+              )}
+              {filteredGrants.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+                    <DollarSign className="w-3.5 h-3.5" />
+                    Grants ({filteredGrants.length})
+                  </div>
+                  {filteredGrants.map((signal, i) => (
+                    <AlertCard
+                      key={signal.dismissKey}
+                      signal={signal}
+                      index={i}
+                      colorClass="hover:border-emerald-500/30"
+                      onDismiss={() => onDismiss(signal.dismissKey)}
+                    />
+                  ))}
+                </div>
+              )}
+              {filteredResearch.length === 0 && filteredGrants.length === 0 && (
+                <EmptyState text={filter ? "No alerts match your filter for this topic." : "No recent alerts found for this topic."} />
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -285,7 +468,7 @@ function AlertSection({
   );
 }
 
-function AlertCard({ signal, index, colorClass }: { signal: SearchResult; index: number; colorClass: string }) {
+function AlertCard({ signal, index, colorClass, onDismiss }: { signal: SearchResult; index: number; colorClass: string; onDismiss?: () => void }) {
   return (
     <div
       className={`border border-border rounded-lg p-4 bg-card transition-colors ${colorClass}`}
@@ -293,17 +476,29 @@ function AlertCard({ signal, index, colorClass }: { signal: SearchResult; index:
     >
       <div className="flex items-start justify-between gap-3 mb-2">
         <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{signal.title}</h3>
-        {signal.url && (
-          <a
-            href={signal.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-muted-foreground hover:text-foreground"
-            data-testid={`alert-link-${index}`}
-          >
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        )}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {signal.url && (
+            <a
+              href={signal.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-muted-foreground hover:text-foreground"
+              data-testid={`alert-link-${index}`}
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
+          )}
+          {onDismiss && (
+            <button
+              onClick={onDismiss}
+              className="text-muted-foreground hover:text-red-500 transition-colors"
+              title="Dismiss"
+              data-testid={`alert-dismiss-${index}`}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
       {signal.text && (
         <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed mb-2">{signal.text}</p>
