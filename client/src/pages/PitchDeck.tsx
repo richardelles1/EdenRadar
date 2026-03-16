@@ -3,6 +3,8 @@ import {
   Printer,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   AlertTriangle,
   Lightbulb,
   FlaskConical,
@@ -21,13 +23,13 @@ import {
   Users,
   Building2,
   FileBarChart2,
-  Microscope,
   ExternalLink,
   Sun,
   Moon,
   Zap,
-  Bell,
   Link2,
+  Lock,
+  Workflow,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import imgIdeation from "@assets/pexels-edmond-dantes-4347481_1773638670423.jpg";
@@ -72,45 +74,108 @@ const LIGHT = {
 
 type Colors = typeof DARK;
 
-function PitchRadarBg({ color, opacity = 0.18 }: { color: string; opacity?: number }) {
+/* ─── Radar background anchored to LEFT quarter (doesn't hide behind photo) ─── */
+function PitchLeftRadar({ color, opacity = 0.18 }: { color: string; opacity?: number }) {
+  const hex = Math.round(opacity * 255).toString(16).padStart(2, "0");
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
+      {/* spinning sweep anchored at 25% x, 50% y */}
       <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
         style={{
-          width: "min(70vw, 650px)",
-          height: "min(70vw, 650px)",
+          position: "absolute",
+          left: "25%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(70vw, 620px)",
+          height: "min(70vw, 620px)",
           animation: "radar-bg-slow 22s linear infinite",
           transformOrigin: "center center",
-          background: `conic-gradient(from 0deg, transparent 260deg, ${color}0d 310deg, ${color}${Math.round(opacity * 255).toString(16).padStart(2, "0")} 360deg)`,
+          background: `conic-gradient(from 0deg, transparent 260deg, ${color}0d 310deg, ${color}${hex} 360deg)`,
           borderRadius: "50%",
         }}
       />
-      {[200, 340, 460, 580].map((r, i) => (
+      {[190, 320, 440, 550].map((r, i) => (
         <div
           key={r}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-          style={{ width: r, height: r, borderColor: `${color}${Math.round((0.09 - i * 0.015) * 255).toString(16).padStart(2, "0")}` }}
+          style={{
+            position: "absolute",
+            left: "25%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            width: r,
+            height: r,
+            borderRadius: "50%",
+            border: `1px solid ${color}${Math.round((0.09 - i * 0.015) * 255).toString(16).padStart(2, "0")}`,
+          }}
         />
       ))}
       <div
-        className="absolute left-1/2 top-1/2 w-2.5 h-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ background: color, animation: "pulse-ring 3s ease-out infinite", opacity: 0 }}
+        style={{
+          position: "absolute",
+          left: "25%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 10,
+          height: 10,
+          borderRadius: "50%",
+          background: color,
+          animation: "pulse-ring 3s ease-out infinite",
+          opacity: 0,
+        }}
       />
     </div>
   );
 }
 
+/* ─── Centered radar (for slides without a side photo panel) ─── */
+function PitchCenterRadar({ color, opacity = 0.12 }: { color: string; opacity?: number }) {
+  const hex = Math.round(opacity * 255).toString(16).padStart(2, "0");
+  return (
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
+      <div
+        style={{
+          position: "absolute",
+          left: "50%",
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: "min(70vw, 600px)",
+          height: "min(70vw, 600px)",
+          animation: "radar-bg-slow 22s linear infinite",
+          transformOrigin: "center center",
+          background: `conic-gradient(from 0deg, transparent 260deg, ${color}0d 310deg, ${color}${hex} 360deg)`,
+          borderRadius: "50%",
+        }}
+      />
+      {[180, 300, 420, 530].map((r, i) => (
+        <div
+          key={r}
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: "50%",
+            transform: "translate(-50%, -50%)",
+            width: r,
+            height: r,
+            borderRadius: "50%",
+            border: `1px solid ${color}${Math.round((0.09 - i * 0.015) * 255).toString(16).padStart(2, "0")}`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/* ─── Floating dots ─── */
 function PitchDots({ color, count = 8 }: { color: string; count?: number }) {
   const dots = Array.from({ length: count }, (_, i) => ({
-    x: `${12 + (i * 67 + 31) % 80}%`,
-    y: `${10 + (i * 53 + 17) % 78}%`,
-    size: 1.5 + (i % 3) * 0.8,
-    delay: `${i * 0.6}s`,
-    dur: `${5.5 + (i % 4) * 1.2}s`,
+    x: `${10 + (i * 71 + 29) % 82}%`,
+    y: `${8 + (i * 53 + 17) % 80}%`,
+    size: 1.2 + (i % 4) * 0.7,
+    delay: `${i * 0.55}s`,
+    dur: `${5.5 + (i % 5) * 1.1}s`,
   }));
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
+    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
       {dots.map((p, i) => (
         <div
           key={i}
@@ -127,7 +192,7 @@ function PitchDots({ color, count = 8 }: { color: string; count?: number }) {
   );
 }
 
-const MYC_COLOR_GREEN = "#3fb950";
+/* ─── Mycelium vine (cover only) ─── */
 const PRIMARY_PATHS = [
   "M 500 300 C 470 330, 420 380, 360 420 C 310 450, 250 485, 180 520",
   "M 500 300 C 496 350, 490 400, 484 445 C 480 475, 476 520, 470 565",
@@ -148,23 +213,18 @@ const SEC_TIPS: [number, number][][] = [
   [[290,478],[402,495]], [[418,502],[545,512]], [[615,495],[722,465]],
   [[292,205],[302,315]], [[335,172],[362,272]], [[708,218],[708,325]],
 ];
-
 interface MycStrand { d: string; sw: number; so: number; delay: number; dur: number }
 interface MycNode { cx: number; cy: number; r: number; delay: number }
-
 function buildMycelium() {
-  const strands: MycStrand[] = [];
-  const nodes: MycNode[] = [];
+  const strands: MycStrand[] = [], nodes: MycNode[] = [];
   const init = 1.2, pDur = 4, pGap = 0.9, sDur = 2.5;
   const pDel = (i: number) => init + i * pGap;
   const sDel = (pi: number) => pDel(pi) + pDur * 0.6;
-
   PRIMARY_PATHS.forEach((d, i) => { strands.push({ d, sw: 1.4, so: 0.22, delay: pDel(i), dur: pDur }); });
   SECONDARY_PATHS.forEach((pair, pi) => { pair.forEach((d) => { strands.push({ d, sw: 0.9, so: 0.15, delay: sDel(pi), dur: sDur }); }); });
   SEC_TIPS.forEach((pair, pi) => { pair.forEach(([cx, cy]) => { nodes.push({ cx, cy, r: 2.0, delay: sDel(pi) + sDur + 0.15 }); }); });
   return { strands, nodes };
 }
-
 const { strands: MYC_STRANDS, nodes: MYC_NODES } = buildMycelium();
 
 function CoverVine({ color }: { color: string }) {
@@ -186,71 +246,102 @@ function CoverVine({ color }: { color: string }) {
   );
 }
 
+/* ─── Broken Pipeline SVG — two break points ─── */
 function BrokenPipelineSVG({ color }: { color: string }) {
-  const nodePositions = [
-    { cx: 80, label: "Concept" },
-    { cx: 260, label: "Research" },
-    { cx: 440, label: "TTO" },
-    { cx: 620, label: "Industry" },
-  ];
   return (
     <div className="w-full flex items-center justify-center" aria-hidden>
-      <svg viewBox="0 0 700 220" className="w-full max-w-lg" style={{ overflow: "visible" }}>
+      <svg viewBox="0 0 820 200" className="w-full max-w-3xl" style={{ overflow: "visible" }}>
         <defs>
           <style>{`
-            @keyframes pipe-break { 0%,40% { stroke-dashoffset: 0; opacity: 0.5; } 60%,100% { stroke-dashoffset: 40; opacity: 0.15; } }
-            @keyframes node-fade { 0%,40% { opacity: 0.6; r: 22; } 55%,100% { opacity: 0.2; r: 18; } }
-            @keyframes node-blink { 0%,30% { opacity: 0.8; } 50% { opacity: 0.3; } 70%,100% { opacity: 0.8; } }
-            @keyframes gap-grow { 0%,40% { d: path("M 300 110 L 400 110"); } 60%,100% { d: path("M 280 110 L 420 110"); } }
+            @keyframes pipe-break-a { 0%,35%{stroke-dashoffset:0;opacity:.5}55%,100%{stroke-dashoffset:48;opacity:.12} }
+            @keyframes pipe-break-b { 0%,45%{stroke-dashoffset:0;opacity:.5}65%,100%{stroke-dashoffset:48;opacity:.12} }
+            @keyframes node-dim { 0%,40%{opacity:.65}60%,100%{opacity:.22} }
+            @keyframes node-steady { 0%,100%{opacity:.65} }
+            @keyframes x-flash { 0%,20%{opacity:0}35%{opacity:.85}55%{opacity:0}75%,100%{opacity:0} }
+            @keyframes x-flash-b { 0%,40%{opacity:0}55%{opacity:.85}75%{opacity:0}100%{opacity:0} }
           `}</style>
         </defs>
-        <line x1="102" y1="110" x2="238" y2="110" stroke={color} strokeWidth="2" strokeDasharray="8 6" strokeOpacity="0.5" />
-        <line x1="282" y1="110" x2="418" y2="110" stroke={color} strokeWidth="2.5" strokeDasharray="8 6"
-          style={{ animation: "pipe-break 4s ease-in-out infinite" }} />
-        <line x1="462" y1="110" x2="598" y2="110" stroke={color} strokeWidth="2" strokeDasharray="8 6" strokeOpacity="0.3" />
-        <line x1="320" y1="90" x2="380" y2="130" stroke={color} strokeWidth="3" strokeOpacity="0.7" strokeLinecap="round">
-          <animate attributeName="opacity" values="0;0.7;0" dur="4s" repeatCount="indefinite" />
-        </line>
-        <line x1="380" y1="90" x2="320" y2="130" stroke={color} strokeWidth="3" strokeOpacity="0.7" strokeLinecap="round">
-          <animate attributeName="opacity" values="0;0.7;0" dur="4s" repeatCount="indefinite" />
-        </line>
-        {nodePositions.map((n, i) => (
+
+        {/* nodes: Concept, Research, TTO, Industry — evenly spaced */}
+        {[
+          { cx: 90, label: "Concept", steady: true },
+          { cx: 300, label: "Research", steady: true },
+          { cx: 510, label: "TTO", dim: true },
+          { cx: 720, label: "Industry", dim: true },
+        ].map((n) => (
           <g key={n.label}>
-            <circle cx={n.cx} cy={110} r={22} fill="none" stroke={color} strokeWidth="2"
-              style={{
-                opacity: i === 1 || i === 2 ? undefined : 0.5,
-                animation: i === 1 || i === 2 ? "node-fade 4s ease-in-out infinite" : "node-blink 5s ease-in-out infinite",
-              }} />
-            <circle cx={n.cx} cy={110} r={4} fill={color}
-              style={{ opacity: i === 3 ? 0.2 : i === 2 ? 0.35 : 0.6 }} />
-            <text x={n.cx} y={155} textAnchor="middle" fill={color} fontSize="11" fontWeight="600"
-              style={{ opacity: i >= 2 ? 0.35 : 0.7 }}>{n.label}</text>
+            <circle cx={n.cx} cy={100} r={24} fill="none" stroke={color} strokeWidth="2"
+              style={{ animation: n.dim ? "node-dim 4s ease-in-out infinite" : "node-steady 4s ease-in-out infinite" }} />
+            <circle cx={n.cx} cy={100} r={5} fill={color} style={{ opacity: n.dim ? 0.3 : 0.65 }} />
+            <text x={n.cx} y={146} textAnchor="middle" fill={color} fontSize="12" fontWeight="600"
+              style={{ opacity: n.dim ? 0.35 : 0.72 }}>{n.label}</text>
           </g>
         ))}
-        <text x="350" y="195" textAnchor="middle" fill={color} fontSize="10" fontStyle="italic" opacity="0.5">
-          Pipeline breaks before industry ever sees it
+
+        {/* Connector: Concept → Research (solid, working) */}
+        <line x1="114" y1="100" x2="276" y2="100" stroke={color} strokeWidth="2" strokeDasharray="8 5" strokeOpacity="0.52" />
+
+        {/* BREAK 1: Research → TTO */}
+        <line x1="324" y1="100" x2="486" y2="100" stroke={color} strokeWidth="2.5" strokeDasharray="8 5"
+          style={{ animation: "pipe-break-a 4.5s ease-in-out infinite" }} />
+        {/* X mark on break 1 */}
+        <line x1="375" y1="80" x2="435" y2="120" stroke={color} strokeWidth="3" strokeLinecap="round"
+          style={{ animation: "x-flash 4.5s ease-in-out infinite" }} />
+        <line x1="435" y1="80" x2="375" y2="120" stroke={color} strokeWidth="3" strokeLinecap="round"
+          style={{ animation: "x-flash 4.5s ease-in-out infinite" }} />
+
+        {/* BREAK 2: TTO → Industry */}
+        <line x1="534" y1="100" x2="696" y2="100" stroke={color} strokeWidth="2.5" strokeDasharray="8 5"
+          style={{ animation: "pipe-break-b 4.5s ease-in-out 0.8s infinite" }} />
+        {/* X mark on break 2 */}
+        <line x1="585" y1="80" x2="645" y2="120" stroke={color} strokeWidth="3" strokeLinecap="round"
+          style={{ animation: "x-flash-b 4.5s ease-in-out 0.8s infinite" }} />
+        <line x1="645" y1="80" x2="585" y2="120" stroke={color} strokeWidth="3" strokeLinecap="round"
+          style={{ animation: "x-flash-b 4.5s ease-in-out 0.8s infinite" }} />
+
+        <text x="410" y="180" textAnchor="middle" fill={color} fontSize="11" fontStyle="italic" opacity="0.45">
+          Two breaks in the pipeline — industry never sees what research produces
         </text>
       </svg>
     </div>
   );
 }
 
+/* ─── Slide nav — right side on desktop, bottom bar on mobile ─── */
 function SlideNav({ current, onJump, colors }: { current: number; onJump: (i: number) => void; colors: Colors }) {
   return (
-    <div className="pitch-nav fixed right-6 top-1/2 -translate-y-1/2 z-50 flex flex-col items-center gap-2" data-testid="pitch-nav">
-      <button onClick={() => onJump(Math.max(0, current - 1))} className="p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Previous slide" data-testid="pitch-nav-prev">
-        <ChevronUp className="w-4 h-4" style={{ color: colors.textMuted }} />
-      </button>
-      {Array.from({ length: SLIDE_COUNT }, (_, i) => (
-        <button key={i} onClick={() => onJump(i)} className="group relative flex items-center justify-center" aria-label={`Go to slide ${i + 1}`} data-testid={`pitch-dot-${i}`}>
-          <span className="block rounded-full transition-all duration-300" style={{ width: current === i ? 10 : 6, height: current === i ? 10 : 6, background: current === i ? colors.green : "rgba(128,128,128,0.35)", boxShadow: current === i ? `0 0 8px ${colors.green}` : "none" }} />
-          <span className="absolute right-6 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" style={{ background: colors.bgLight, color: colors.text, border: `1px solid ${colors.border}` }}>{i + 1}</span>
+    <>
+      {/* Desktop: right side vertical */}
+      <div className="pitch-nav hidden md:flex fixed right-5 top-1/2 -translate-y-1/2 z-50 flex-col items-center gap-2">
+        <button onClick={() => onJump(Math.max(0, current - 1))} className="p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Previous slide" data-testid="pitch-nav-prev">
+          <ChevronUp className="w-4 h-4" style={{ color: colors.textMuted }} />
         </button>
-      ))}
-      <button onClick={() => onJump(Math.min(SLIDE_COUNT - 1, current + 1))} className="p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Next slide" data-testid="pitch-nav-next">
-        <ChevronDown className="w-4 h-4" style={{ color: colors.textMuted }} />
-      </button>
-    </div>
+        {Array.from({ length: SLIDE_COUNT }, (_, i) => (
+          <button key={i} onClick={() => onJump(i)} className="group relative flex items-center justify-center" aria-label={`Go to slide ${i + 1}`} data-testid={`pitch-dot-${i}`}>
+            <span className="block rounded-full transition-all duration-300" style={{ width: current === i ? 10 : 6, height: current === i ? 10 : 6, background: current === i ? colors.green : "rgba(128,128,128,0.35)", boxShadow: current === i ? `0 0 8px ${colors.green}` : "none" }} />
+            <span className="absolute right-6 px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none" style={{ background: colors.bgLight, color: colors.text, border: `1px solid ${colors.border}` }}>{i + 1}</span>
+          </button>
+        ))}
+        <button onClick={() => onJump(Math.min(SLIDE_COUNT - 1, current + 1))} className="p-1 rounded-full hover:bg-white/10 transition-colors" aria-label="Next slide" data-testid="pitch-nav-next">
+          <ChevronDown className="w-4 h-4" style={{ color: colors.textMuted }} />
+        </button>
+      </div>
+
+      {/* Mobile: bottom bar */}
+      <div className="pitch-nav md:hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-4 py-2 rounded-full" style={{ background: `${colors.bgLight}ee`, border: `1px solid ${colors.border}` }} data-testid="pitch-nav-mobile">
+        <button onClick={() => onJump(Math.max(0, current - 1))} className="p-1" aria-label="Previous slide">
+          <ChevronLeft className="w-4 h-4" style={{ color: colors.textMuted }} />
+        </button>
+        {Array.from({ length: SLIDE_COUNT }, (_, i) => (
+          <button key={i} onClick={() => onJump(i)} className="flex items-center justify-center" aria-label={`Go to slide ${i + 1}`}>
+            <span className="block rounded-full transition-all duration-300" style={{ width: current === i ? 8 : 5, height: current === i ? 8 : 5, background: current === i ? colors.green : "rgba(128,128,128,0.4)", boxShadow: current === i ? `0 0 6px ${colors.green}` : "none" }} />
+          </button>
+        ))}
+        <button onClick={() => onJump(Math.min(SLIDE_COUNT - 1, current + 1))} className="p-1" aria-label="Next slide">
+          <ChevronRight className="w-4 h-4" style={{ color: colors.textMuted }} />
+        </button>
+      </div>
+    </>
   );
 }
 
@@ -263,17 +354,17 @@ function Slide({
   return (
     <section
       className={`pitch-slide relative w-full flex flex-col justify-center overflow-hidden ${className}`}
-      style={{ minHeight: "100vh", height: "100vh", background: colors.bg, scrollSnapAlign: "start" }}
+      style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid={`pitch-slide-${index}`}
     >
-      <div className="absolute top-6 left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
+      <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: accentColor }}>{String(index).padStart(2, "0")}</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
-      <div className={`relative z-10 w-full max-w-6xl mx-auto ${noPadding ? "" : "px-8 sm:px-16 lg:px-24"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+      <div className={`relative z-10 w-full max-w-6xl mx-auto ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`} style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {children}
       </div>
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-8" style={{ zIndex: 10 }}>
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
       </div>
@@ -281,53 +372,54 @@ function Slide({
   );
 }
 
+/* ═══════════════════════ SLIDE 1 — COVER ═══════════════════════ */
 function CoverSlide({ colors }: { colors: Colors }) {
   return (
     <section
       className="pitch-slide relative w-full overflow-hidden flex"
-      style={{ minHeight: "100vh", height: "100vh", background: colors.bg, scrollSnapAlign: "start" }}
+      style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-1"
     >
-      <PitchRadarBg color={colors.green} opacity={0.2} />
+      {/* radar anchored left, behind everything */}
+      <PitchLeftRadar color={colors.green} opacity={0.2} />
+      {/* vine animation layer */}
       <CoverVine color={colors.green} />
-      <PitchDots color={colors.green} count={10} />
+      {/* dots above vine */}
+      <PitchDots color={colors.green} count={12} />
 
-      <div className="absolute top-6 left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
+      <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: colors.green }}>01</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>Cover</span>
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-8 sm:px-16 lg:px-24 py-20 relative z-10">
-          <div className="flex flex-col items-start gap-3 mb-6 w-fit">
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: colors.amber }}>
-                <Lightbulb className="w-3.5 h-3.5" style={{ color: "#fff" }} />
+        {/* text panel — z-10 so it's above vine/dots */}
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-16 sm:py-20 relative z-10">
+          <div className="flex flex-col items-start gap-2.5 mb-6 w-fit">
+            {[
+              { Icon: Lightbulb, label: "EdenDiscovery", color: colors.amber, accent: "Discovery" },
+              { Icon: FlaskConical, label: "EdenLab", color: colors.violet, accent: "Lab" },
+              { Icon: Sprout, label: "EdenRadar", color: colors.green, accent: "Radar" },
+            ].map(({ Icon, label, color, accent }) => (
+              <div key={label} className="flex items-center gap-1.5">
+                <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: color }}>
+                  <Icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
+                </div>
+                <span className="font-bold text-xs" style={{ color: colors.text }}>
+                  Eden<span style={{ color }}>{accent}</span>
+                </span>
               </div>
-              <span className="font-bold text-xs" style={{ color: colors.text }}>Eden<span style={{ color: colors.amber }}>Discovery</span></span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: colors.violet }}>
-                <FlaskConical className="w-3.5 h-3.5" style={{ color: "#fff" }} />
-              </div>
-              <span className="font-bold text-xs" style={{ color: colors.text }}>Eden<span style={{ color: colors.violet }}>Lab</span></span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-6 h-6 rounded flex items-center justify-center" style={{ background: colors.green }}>
-                <Sprout className="w-3.5 h-3.5" style={{ color: "#fff" }} />
-              </div>
-              <span className="font-bold text-xs" style={{ color: colors.text }}>Eden<span style={{ color: colors.green }}>Radar</span></span>
-            </div>
+            ))}
           </div>
-          <h1 className="text-5xl sm:text-6xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
-          <p className="text-xl font-semibold mb-4" style={{ color: colors.green }}>AI-Powered Biotech Asset Matchmaking</p>
-          <p className="text-base max-w-md mb-10" style={{ color: colors.textMuted }}>
+          <p className="text-lg sm:text-xl font-semibold mb-4" style={{ color: colors.green }}>AI-Powered Biotech Asset Matchmaking</p>
+          <p className="text-sm sm:text-base max-w-sm sm:max-w-md mb-8 sm:mb-10" style={{ color: colors.textMuted }}>
             The first platform to connect early-stage concept, development, structured labs, institutional research, and industry asset intelligence in a single ecosystem.
           </p>
-          <div className="flex items-center gap-5 text-xs" style={{ color: colors.textMuted }}>
-            <span>Founded 2025</span>
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-xs" style={{ color: colors.textMuted }}>
+            <span>Founded 2026</span>
             <span className="w-1 h-1 rounded-full" style={{ background: colors.green }} />
             <span>Pre-Seed</span>
             <span className="w-1 h-1 rounded-full" style={{ background: colors.green }} />
@@ -335,14 +427,20 @@ function CoverSlide({ colors }: { colors: Colors }) {
           </div>
         </div>
 
-        <div className="hidden md:block w-[42%] relative shrink-0">
-          <img src={imgLabWork} alt="Researchers at work" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center" }} />
-          <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 30%), linear-gradient(to top, ${colors.bg}88 0%, transparent 50%)` }} />
+        {/* photo panel — z-20 so it sits IN FRONT of vine/dots/radar */}
+        <div className="hidden md:block w-[42%] relative shrink-0" style={{ zIndex: 20 }}>
+          <img
+            src={imgLabWork}
+            alt="Researchers at work"
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ objectPosition: "right center" }}
+          />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 28%), linear-gradient(to top, ${colors.bg}88 0%, transparent 50%)` }} />
           <div className="absolute inset-0" style={{ background: `${colors.green}0d` }} />
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-8" style={{ zIndex: 10 }}>
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
       </div>
@@ -350,6 +448,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 2 — PROBLEM ═══════════════════════ */
 function ProblemSlide({ colors }: { colors: Colors }) {
   const problems = [
     { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no pathway to industry attention." },
@@ -360,42 +459,42 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   return (
     <section
       className="pitch-slide relative w-full overflow-hidden flex"
-      style={{ minHeight: "100vh", height: "100vh", background: colors.bg, scrollSnapAlign: "start" }}
+      style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-2"
     >
-      <PitchDots color={colors.red} count={6} />
+      <PitchDots color={colors.red} count={8} />
 
-      <div className="absolute top-6 left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
+      <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: colors.red }}>02</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>The Problem</span>
       </div>
 
-      <div className="flex flex-col justify-center flex-1 px-8 sm:px-16 lg:px-24 py-20 relative z-10">
+      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-16 relative z-10">
         <div className="mb-3 inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-widest w-fit" style={{ background: colors.redDim, color: colors.red }}>
           $2.6B average cost to bring a drug to market
         </div>
-        <h2 className="text-3xl sm:text-4xl font-bold mb-6" style={{ color: colors.text }}>
+        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-5" style={{ color: colors.text }}>
           The pipeline is <span style={{ color: colors.red }}>broken</span> before it begins.
         </h2>
 
-        <div className="mb-8">
+        <div className="mb-6 sm:mb-8">
           <BrokenPipelineSVG color={colors.red} />
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {problems.map((p) => (
-            <div key={p.title} className="flex items-start gap-4 rounded-xl p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
-              <p.icon className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.red }} />
+            <div key={p.title} className="flex items-start gap-3 sm:gap-4 rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+              <p.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" style={{ color: colors.red }} />
               <div>
                 <p className="text-sm font-bold mb-0.5" style={{ color: colors.text }}>{p.title}</p>
-                <p className="text-sm" style={{ color: colors.textMuted }}>{p.desc}</p>
+                <p className="text-xs sm:text-sm" style={{ color: colors.textMuted }}>{p.desc}</p>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-8" style={{ zIndex: 10 }}>
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
       </div>
@@ -403,45 +502,34 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 3 — SOLUTION ═══════════════════════ */
 function SolutionSlide({ colors }: { colors: Colors }) {
   const stages = [
-    {
-      label: "Concept Community", sublabel: "EdenDiscovery", color: colors.amber, dim: colors.amberDim,
-      icon: Lightbulb,
-      desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins.",
-    },
-    {
-      label: "Project-Based Research", sublabel: "EdenLab", color: colors.violet, dim: colors.violetDim,
-      icon: FlaskConical,
-      desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility.",
-    },
-    {
-      label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim,
-      icon: Sprout,
-      desc: "AI-enriched asset dossiers from 200+ monitored TTO institutions with real-time convergence signals.",
-    },
+    { label: "Concept Community", sublabel: "EdenDiscovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
+    { label: "Project-Based Research", sublabel: "EdenLab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, AI synthesis, grants, and industry visibility." },
+    { label: "Industry Intelligence", sublabel: "EdenRadar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "AI-enriched asset dossiers from 200+ monitored TTO institutions with real-time convergence signals." },
   ];
   return (
     <Slide index={3} section="Our Solution" accent={colors.green} colors={colors}>
       <PitchDots color={colors.green} count={6} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 30% 60%, ${colors.green}0a 0%, transparent 60%)` }} />
-      <p className="text-sm font-bold uppercase tracking-widest mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-3xl sm:text-4xl font-bold mb-10" style={{ color: colors.text }}>
+      <p className="text-xs sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
+      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-6 sm:mb-8" style={{ color: colors.text }}>
         EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
       <div className="relative">
-        <div className="absolute top-1/2 left-0 right-0 h-px" style={{ background: `linear-gradient(to right, ${colors.amber}, ${colors.violet}, ${colors.green})`, opacity: 0.4, transform: "translateY(-50%)" }} />
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 relative">
+        <div className="absolute top-1/2 left-0 right-0 h-px hidden sm:block" style={{ background: `linear-gradient(to right, ${colors.amber}, ${colors.violet}, ${colors.green})`, opacity: 0.4, transform: "translateY(-50%)" }} />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 relative">
           {stages.map((s, i) => (
-            <div key={s.label} className="rounded-xl p-6 relative" style={{ background: s.dim, border: `1px solid ${s.color}44`, borderTop: `3px solid ${s.color}` }}>
+            <div key={s.label} className="rounded-xl p-5 sm:p-6 relative" style={{ background: s.dim, border: `1px solid ${s.color}44`, borderTop: `3px solid ${s.color}` }}>
               <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: `${s.color}22` }}>
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${s.color}22` }}>
                   <s.icon className="w-4 h-4" style={{ color: s.color }} />
                 </div>
                 <span className="text-xs font-bold uppercase tracking-widest" style={{ color: s.color }}>{s.sublabel}</span>
               </div>
-              <h3 className="text-lg font-bold mb-2" style={{ color: colors.text }}>{s.label}</h3>
-              <p className="text-sm" style={{ color: colors.textMuted }}>{s.desc}</p>
+              <h3 className="text-base sm:text-lg font-bold mb-2" style={{ color: colors.text }}>{s.label}</h3>
+              <p className="text-xs sm:text-sm" style={{ color: colors.textMuted }}>{s.desc}</p>
               {i < 2 && <ArrowRight className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-5 hidden sm:block z-10" style={{ color: colors.textMuted }} />}
             </div>
           ))}
@@ -451,6 +539,7 @@ function SolutionSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 4 — THREE PORTALS ═══════════════════════ */
 function PortalsSlide({ colors }: { colors: Colors }) {
   const portals = [
     {
@@ -459,31 +548,32 @@ function PortalsSlide({ colors }: { colors: Colors }) {
     },
     {
       title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
-      items: ["Literature search across 35+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas", "Grant discovery matched to research profile"],
+      items: ["Literature search across 40+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas", "Grant discovery matched to research profile"],
     },
     {
-      title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence", color: colors.green, dim: colors.greenDim, icon: Sprout,
+      title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
       items: ["200+ TTO institutions monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target", "Convergence signals and taxonomy tracking"],
     },
   ];
   return (
     <Slide index={4} section="Three Portals" accent={colors.green} colors={colors}>
-      <h2 className="text-3xl sm:text-4xl font-bold mb-8" style={{ color: colors.text }}>
+      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-5 sm:mb-7" style={{ color: colors.text }}>
         Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
       </h2>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {portals.map((p) => (
-          <div key={p.title} className="rounded-xl p-6 flex flex-col" style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}>
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: `${p.color}22` }}>
-                <p.icon className="w-4.5 h-4.5" style={{ color: p.color }} />
+          <div key={p.title} className="rounded-xl p-5 sm:p-6 flex flex-col" style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}>
+            {/* header: icon + tier + title — all on same baseline */}
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${p.color}22` }}>
+                <p.icon className="w-4 h-4" style={{ color: p.color }} />
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: p.color }}>{p.tier}</p>
-                <h3 className="text-base font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
+              <div className="min-w-0">
+                <p className="text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
+                <h3 className="text-sm sm:text-base font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
               </div>
             </div>
-            <p className="text-xs mb-4" style={{ color: colors.textMuted }}>{p.tagline}</p>
+            <p className="text-xs mb-4 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
             <ul className="space-y-2 mt-auto">
               {p.items.map((item) => (
                 <li key={item} className="flex items-start gap-2 text-xs" style={{ color: colors.text }}>
@@ -495,69 +585,88 @@ function PortalsSlide({ colors }: { colors: Colors }) {
           </div>
         ))}
       </div>
+
+      {/* "One Pipeline of Innovation" gradient arrow */}
+      <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: `1px solid transparent` }}>
+        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
+        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: colors.text, letterSpacing: "0.15em" }}>
+          One Pipeline of Innovation
+        </span>
+        {/* arrowhead */}
+        <div className="relative z-10 flex items-center justify-center w-9 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.green}44, ${colors.green}88)` }}>
+          <ChevronRight className="w-5 h-5" style={{ color: colors.green }} />
+        </div>
+      </div>
     </Slide>
   );
 }
 
+/* ═══════════════════════ SLIDE 5 — EDEN DISCOVERY ═══════════════════════ */
 function DiscoverySlide({ colors }: { colors: Colors }) {
   const features = [
     { icon: Sparkles, label: "AI Credibility Scoring", desc: "0 to 100 scale with instant evaluation against existing literature" },
     { icon: Target, label: "Landscape Intelligence", desc: "Automated PubMed and bioRxiv scan at submission" },
-    { icon: Users, label: "Interest Signals", desc: "Collaborators, funders, and advisors can flag concepts" },
+    { icon: Users, label: "Interest Signals", desc: "Collaborators, funders, and advisors can flag and follow concepts" },
+    { icon: Lock, label: "Active Community Connection", desc: "Privacy-protected information exchange between scientists, collaborators, and funders within a verified ecosystem" },
   ];
   return (
     <section
       className="pitch-slide relative w-full overflow-hidden flex"
-      style={{ minHeight: "100vh", height: "100vh", background: colors.bg, scrollSnapAlign: "start" }}
+      style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-5"
     >
-      <PitchRadarBg color={colors.amber} opacity={0.12} />
-      <PitchDots color={colors.amber} count={8} />
+      {/* radar anchored left like cover */}
+      <PitchLeftRadar color={colors.amber} opacity={0.10} />
+      {/* more dots, no rings beyond PitchLeftRadar */}
+      <PitchDots color={colors.amber} count={16} />
 
-      <div className="absolute top-6 left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
+      <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: colors.amber }}>05</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>EdenDiscovery</span>
       </div>
 
-      <div className="flex flex-col justify-center flex-1 px-8 sm:px-12 lg:px-16 py-20 relative z-10">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: colors.amberDim }}>
-            <Lightbulb className="w-5 h-5" style={{ color: colors.amber }} />
-          </div>
-          <div>
-            <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: colors.text }}>
-              Eden<span style={{ color: colors.amber }}>Discovery</span>
-            </h2>
-            <p className="text-xs" style={{ color: colors.textMuted }}>Tier 1 — Creative concept community</p>
-          </div>
-        </div>
-        <p className="text-base mb-8 max-w-md" style={{ color: colors.textMuted }}>
-          Where biotech concepts are born. Submit a hypothesis, get scored, and get discovered by collaborators and funders before anyone else sees it.
-        </p>
-        <div className="space-y-3">
-          {features.map((f) => (
-            <div key={f.label} className="flex items-start gap-4 rounded-xl p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.amber}33`, minHeight: 72 }}>
-              <f.icon className="w-5 h-5 shrink-0 mt-0.5" style={{ color: colors.amber }} />
-              <div>
-                <p className="text-sm font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
-                <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
-              </div>
+      <div className="flex flex-1 items-stretch">
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-16 relative z-10">
+          <div className="flex items-center gap-3 mb-4 sm:mb-5">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.amberDim }}>
+              <Lightbulb className="w-5 h-5" style={{ color: colors.amber }} />
             </div>
-          ))}
+            <div>
+              <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
+                Eden<span style={{ color: colors.amber }}>Discovery</span>
+              </h2>
+              <p className="text-xs" style={{ color: colors.textMuted }}>Tier 1 — Creative concept community</p>
+            </div>
+          </div>
+          <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-md" style={{ color: colors.textMuted }}>
+            Where biotech concepts are born. Submit a hypothesis, get scored, and get discovered by collaborators and funders before anyone else sees it.
+          </p>
+          {/* 2-col grid for 4 boxes */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {features.map((f) => (
+              <div key={f.label} className="flex items-start gap-3 rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.amber}33` }}>
+                <f.icon className="w-4 h-4 sm:w-5 sm:h-5 shrink-0 mt-0.5" style={{ color: colors.amber }} />
+                <div>
+                  <p className="text-xs sm:text-sm font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
+                  <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-5 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold w-fit" style={{ background: colors.amberDim, color: colors.amber, border: `1px solid ${colors.amber}44` }}>
+            <Globe className="w-3.5 h-3.5" />
+            Public feed: no login required to browse
+          </div>
         </div>
-        <div className="mt-6 inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-semibold w-fit" style={{ background: colors.amberDim, color: colors.amber, border: `1px solid ${colors.amber}44` }}>
-          <Globe className="w-3.5 h-3.5" />
-          Public feed: no login required to browse
+
+        <div className="hidden md:block w-[36%] relative shrink-0" style={{ zIndex: 20 }}>
+          <img src={imgIdeation} alt="Team ideating" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center" }} />
+          <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 25%), linear-gradient(to top, ${colors.bg}cc 0%, transparent 50%)` }} />
+          <div className="absolute inset-0" style={{ background: `${colors.amber}12` }} />
         </div>
       </div>
 
-      <div className="hidden md:block w-[38%] relative shrink-0">
-        <img src={imgIdeation} alt="Team ideating" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center" }} />
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 25%), linear-gradient(to top, ${colors.bg}cc 0%, transparent 50%)` }} />
-        <div className="absolute inset-0" style={{ background: `${colors.amber}12` }} />
-      </div>
-
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-8" style={{ zIndex: 10 }}>
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
       </div>
@@ -565,32 +674,33 @@ function DiscoverySlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 6 — EDEN LAB ═══════════════════════ */
 function LabSlide({ colors }: { colors: Colors }) {
   const features = [
-    { icon: BookOpen, label: "35+ Data Sources", desc: "PubMed, bioRxiv, clinical trials, patents, and more" },
-    { icon: Layers, label: "Project Canvas", desc: "Structured 11-section workspace that guides research from hypothesis to publication" },
-    { icon: Brain, label: "AI Synthesis", desc: "Structured summaries, key finding extraction, and evidence mapping across sources" },
-    { icon: Award, label: "Grants & Alerts", desc: "NIH, NSF, and SBIR matched to your profile. Alerts based on interests and expertise" },
-    { icon: Link2, label: "Shared Ecosystem", desc: "Direct signal flow from EdenLab to EdenRadar, placing your work in front of industry partners" },
+    { icon: BookOpen, label: "40+ Data Sources", desc: "PubMed, bioRxiv, ClinicalTrials.gov, PubChem, ChEMBL, Semantic Scholar, CrossRef, Lens.org, OpenAlex, Cochrane, Unpaywall, CORE, and more" },
+    { icon: Workflow, label: "Intuitive Research Project Workflow", desc: "Structured 11-section canvas guiding research from hypothesis through publication" },
+    { icon: Brain, label: "AI Synthesis", desc: "Structured summaries, key finding extraction, and evidence mapping across all sources" },
+    { icon: Award, label: "Grants & Smart Alerts", desc: "NIH, NSF, and SBIR matched to your profile. Personalized alerts based on interests and expertise" },
+    { icon: Link2, label: "Shared Ecosystem", desc: "Direct signal flow from EdenLab to EdenRadar, placing your work in front of industry partners seamlessly" },
   ];
   return (
     <section
       className="pitch-slide relative w-full overflow-hidden flex"
-      style={{ minHeight: "100vh", height: "100vh", background: colors.bg, scrollSnapAlign: "start" }}
+      style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-6"
     >
-      <PitchRadarBg color={colors.violet} opacity={0.10} />
-      <PitchDots color={colors.violet} count={8} />
+      <PitchCenterRadar color={colors.violet} opacity={0.08} />
+      <PitchDots color={colors.violet} count={10} />
 
-      <div className="absolute top-6 left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
+      <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: colors.violet }}>06</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>EdenLab</span>
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-8 sm:px-12 lg:px-16 py-20 relative z-10">
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-12 lg:px-16 py-16 relative z-10">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: colors.violetDim }}>
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.violetDim }}>
               <FlaskConical className="w-5 h-5" style={{ color: colors.violet }} />
             </div>
             <div>
@@ -600,30 +710,30 @@ function LabSlide({ colors }: { colors: Colors }) {
               <p className="text-xs" style={{ color: colors.textMuted }}>Tier 2 — Project-based research workspace</p>
             </div>
           </div>
-          <p className="text-sm mb-6 max-w-lg" style={{ color: colors.textMuted }}>
-            A research workspace built for biotech. Literature, grants, and industry visibility in one AI-powered canvas. Same ecosystem as EdenRadar, seamless movement through the pipeline.
+          <p className="text-sm mb-4 max-w-lg" style={{ color: colors.textMuted }}>
+            A research workspace built for biotech. Literature, grants, and industry visibility in one AI-powered canvas — same ecosystem as EdenRadar, seamless movement through the pipeline.
           </p>
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             {features.map((f) => (
               <div key={f.label} className="flex items-start gap-3 rounded-lg p-3" style={{ background: colors.bgLight, border: `1px solid ${colors.violet}33` }}>
                 <f.icon className="w-4 h-4 shrink-0 mt-0.5" style={{ color: colors.violet }} />
                 <div>
                   <p className="text-xs font-semibold mb-0.5" style={{ color: colors.text }}>{f.label}</p>
-                  <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
+                  <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{f.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="hidden md:block w-[40%] relative shrink-0">
-          <img src={imgLabComp} alt="Researchers collaborating" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center 40%" }} />
+        <div className="hidden md:block w-[38%] relative shrink-0" style={{ zIndex: 20 }}>
+          <img src={imgLabComp} alt="Researchers collaborating" className="absolute inset-0 w-full h-full object-cover" style={{ objectPosition: "center 35%" }} />
           <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.bg} 0%, transparent 25%), linear-gradient(to top, ${colors.bg}88 0%, transparent 40%)` }} />
           <div className="absolute inset-0" style={{ background: `${colors.violet}12` }} />
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-0 right-0 flex items-center justify-between px-8" style={{ zIndex: 10 }}>
+      <div className="absolute bottom-3 left-0 right-0 flex items-center justify-between px-5 sm:px-8" style={{ zIndex: 10 }}>
         <span className="text-xs font-semibold tracking-widest" style={{ color: `${colors.text}22` }}>EDENRADAR</span>
         <span className="text-xs" style={{ color: `${colors.text}22` }}>Confidential</span>
       </div>
@@ -631,39 +741,40 @@ function LabSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 7 — EDEN RADAR ═══════════════════════ */
 function RadarSlide({ colors }: { colors: Colors }) {
   const features = [
     { icon: Building2, label: "200+ TTO Institutions", desc: "Continuously scraped with bespoke and automated ingestion pipelines across major research universities" },
     { icon: FileBarChart2, label: "AI-Enriched Dossiers", desc: "Every asset classified by target, modality, indication, and development stage with supporting literature" },
     { icon: Zap, label: "First to Know", desc: "Real-time alerts on new listings, convergence signals, and rising activity clusters by therapy area" },
-    { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry, from the labs and researchers themselves" },
+    { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
     <Slide index={7} section="EdenRadar" accent={colors.green} colors={colors}>
-      <PitchRadarBg color={colors.green} opacity={0.15} />
+      <PitchCenterRadar color={colors.green} opacity={0.12} />
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
-        <div className="w-11 h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
+        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
           <Sprout className="w-5 h-5" style={{ color: colors.green }} />
         </div>
         <div>
-          <h2 className="text-3xl sm:text-4xl font-bold" style={{ color: colors.text }}>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h2>
           <p className="text-xs" style={{ color: colors.textMuted }}>Tier 3 — Industry intelligence</p>
         </div>
       </div>
-      <p className="text-base mb-8 max-w-2xl" style={{ color: colors.textMuted }}>
-        The industry-facing layer. EdenRadar monitors 200+ technology transfer offices, ingests new listings, and enriches them with classification, scoring, and supporting literature to produce portfolio-grade dossiers. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
+      <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
+        The industry-facing layer. EdenRadar monitors 200+ technology transfer offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {features.map((f) => (
-          <div key={f.label} className="rounded-xl p-5 flex gap-4 items-start" style={{ background: colors.bgLight, border: `1px solid ${colors.green}33` }}>
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: colors.greenDim }}>
-              <f.icon className="w-5 h-5" style={{ color: colors.green }} />
+          <div key={f.label} className="rounded-xl p-4 sm:p-5 flex gap-3 sm:gap-4 items-start" style={{ background: colors.bgLight, border: `1px solid ${colors.green}33` }}>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center shrink-0" style={{ background: colors.greenDim }}>
+              <f.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: colors.green }} />
             </div>
             <div>
-              <p className="text-sm font-semibold mb-1" style={{ color: colors.text }}>{f.label}</p>
+              <p className="text-xs sm:text-sm font-semibold mb-1" style={{ color: colors.text }}>{f.label}</p>
               <p className="text-xs" style={{ color: colors.textMuted }}>{f.desc}</p>
             </div>
           </div>
@@ -673,48 +784,49 @@ function RadarSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 8 — TRACTION / PRICING ═══════════════════════ */
 function TractionSlide({ colors }: { colors: Colors }) {
   const stats = [
     { value: "200+", label: "TTO Institutions", icon: Building2, color: colors.green },
-    { value: "35+", label: "Research Data Sources", icon: Database, color: colors.violet },
-    { value: "40+", label: "Including Grants", icon: Award, color: colors.amber },
-    { value: "GPT-4", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
+    { value: "40+", label: "Research Data Sources", icon: Database, color: colors.violet },
+    { value: "Custom GPT-5", label: "Classifier & Enrichment", icon: Brain, color: colors.green },
+    { value: "11-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
   ];
   const tiers = [
     { name: "EdenDiscovery", price: "$9.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, AI scoring, landscape intelligence" },
-    { name: "EdenLab", price: "$24.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 35+ sources, project canvas, grants" },
-    { name: "EdenRadar", price: "$44.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 200+ TTOs, AI dossiers, convergence signals" },
+    { name: "EdenLab", price: "$24.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
+    { name: "EdenRadar", price: "$44.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 200+ TTOs, AI dossiers, convergence signals, full ecosystem access" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
-      <h2 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: colors.text }}>
+      <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
         Built, deployed, <span style={{ color: colors.green }}>running today</span>.
       </h2>
-      <p className="text-sm mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
+      <p className="text-xs sm:text-sm mb-4 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
         This is not a roadmap. Every component below is processing real biotech data in production.
       </p>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mb-6 sm:mb-7">
         {stats.map((s) => (
-          <div key={s.label} className="rounded-xl p-4 flex flex-col items-center text-center" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+          <div key={s.label} className="rounded-xl p-3 sm:p-4 flex flex-col items-center text-center" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
             <s.icon className="w-4 h-4 mb-1.5" style={{ color: s.color }} />
-            <span className="text-xl font-bold mb-0.5" style={{ color: s.color }}>{s.value}</span>
-            <span className="text-[10px]" style={{ color: colors.textMuted }}>{s.label}</span>
+            <span className="text-base sm:text-xl font-bold mb-0.5 leading-tight" style={{ color: s.color }}>{s.value}</span>
+            <span className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{s.label}</span>
           </div>
         ))}
       </div>
-      <p className="text-sm font-bold uppercase tracking-widest mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <p className="text-xs font-bold uppercase tracking-widest mb-3 sm:mb-4" style={{ color: colors.green }}>Monthly Subscriptions</p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         {tiers.map((t) => (
-          <div key={t.name} className="rounded-xl p-5 flex flex-col items-center text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center mb-3" style={{ background: `${t.color}22` }}>
-              <t.icon className="w-5 h-5" style={{ color: t.color }} />
+          <div key={t.name} className="rounded-xl p-4 sm:p-5 flex flex-col items-center text-center" style={{ background: t.dim, border: `1px solid ${t.color}44`, borderTop: `3px solid ${t.color}` }}>
+            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-lg flex items-center justify-center mb-2 sm:mb-3" style={{ background: `${t.color}22` }}>
+              <t.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: t.color }} />
             </div>
-            <h3 className="text-sm font-bold mb-1" style={{ color: colors.text }}>{t.name}</h3>
+            <h3 className="text-xs sm:text-sm font-bold mb-1" style={{ color: colors.text }}>{t.name}</h3>
             <div className="mb-2">
-              <span className="text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
+              <span className="text-xl sm:text-2xl font-bold" style={{ color: t.color }}>{t.price}</span>
               <span className="text-xs" style={{ color: colors.textMuted }}>{t.period}</span>
             </div>
-            <p className="text-xs" style={{ color: colors.textMuted }}>{t.desc}</p>
+            <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{t.desc}</p>
           </div>
         ))}
       </div>
@@ -722,24 +834,25 @@ function TractionSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 9 — VISION ═══════════════════════ */
 function VisionSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={9} section="The Vision" accent={colors.green} colors={colors}>
-      <PitchDots color={colors.green} count={6} />
+      <PitchDots color={colors.green} count={8} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 50% 50%, ${colors.green}0a 0%, transparent 60%)` }} />
-      <div className="flex flex-col items-center text-center px-8">
-        <p className="text-xs font-bold uppercase tracking-widest mb-6" style={{ color: colors.green }}>Why this matters</p>
-        <blockquote className="text-2xl sm:text-3xl lg:text-4xl font-bold leading-snug max-w-4xl mb-10" style={{ color: colors.text }}>
+      <div className="flex flex-col items-center text-center px-2 sm:px-8">
+        <p className="text-xs font-bold uppercase tracking-widest mb-5 sm:mb-6" style={{ color: colors.green }}>Why this matters</p>
+        <blockquote className="text-xl sm:text-2xl lg:text-3xl xl:text-4xl font-bold leading-snug max-w-4xl mb-8 sm:mb-10" style={{ color: colors.text }}>
           "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments in creating direct connections between scientists and the industry partners who can advance it."
         </blockquote>
-        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6 mb-10">
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-6 mb-8 sm:mb-10">
           {[
             { label: "Concept", sublabel: "Early ideas matter", color: colors.amber },
             { label: "Research", sublabel: "Science needs reach", color: colors.violet },
             { label: "Industry", sublabel: "Business needs signal", color: colors.green },
           ].map((s, i) => (
             <div key={s.label} className="flex items-center gap-3 sm:gap-6">
-              <div className="flex flex-col items-center gap-1.5 px-5 py-3 rounded-xl" style={{ background: `${s.color}18`, border: `1px solid ${s.color}44` }}>
+              <div className="flex flex-col items-center gap-1.5 px-4 sm:px-5 py-3 rounded-xl" style={{ background: `${s.color}18`, border: `1px solid ${s.color}44` }}>
                 <span className="w-2 h-2 rounded-full" style={{ background: s.color }} />
                 <span className="text-sm font-bold" style={{ color: s.color }}>{s.label}</span>
                 <span className="text-xs" style={{ color: colors.textMuted }}>{s.sublabel}</span>
@@ -748,7 +861,7 @@ function VisionSlide({ colors }: { colors: Colors }) {
             </div>
           ))}
         </div>
-        <p className="text-sm max-w-xl" style={{ color: colors.textMuted }}>
+        <p className="text-xs sm:text-sm max-w-xl" style={{ color: colors.textMuted }}>
           EdenRadar is building the connective tissue of biotech: an intelligence layer that makes the entire pipeline visible, searchable, and actionable from concept to commercialization.
         </p>
       </div>
@@ -756,42 +869,43 @@ function VisionSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ SLIDE 10 — CONTACT ═══════════════════════ */
 function ContactSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={10} section="Contact" accent={colors.green} colors={colors}>
-      <PitchRadarBg color={colors.green} opacity={0.08} />
-      <PitchDots color={colors.green} count={6} />
-      <div className="flex flex-col items-center text-center px-8">
-        <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-6" style={{ background: colors.greenDim, border: `2px solid ${colors.green}44` }}>
-          <Sprout className="w-8 h-8" style={{ color: colors.green }} />
+      <PitchCenterRadar color={colors.green} opacity={0.08} />
+      <PitchDots color={colors.green} count={8} />
+      <div className="flex flex-col items-center text-center px-2 sm:px-8">
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl flex items-center justify-center mb-5 sm:mb-6" style={{ background: colors.greenDim, border: `2px solid ${colors.green}44` }}>
+          <Sprout className="w-7 h-7 sm:w-8 sm:h-8" style={{ color: colors.green }} />
         </div>
-        <h2 className="text-3xl sm:text-4xl font-bold mb-2" style={{ color: colors.text }}>
+        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
           Let's build the future of <span style={{ color: colors.green }}>biotech intelligence</span>.
         </h2>
-        <p className="text-base mb-8 max-w-lg" style={{ color: colors.textMuted }}>
+        <p className="text-sm sm:text-base mb-6 sm:mb-8 max-w-lg" style={{ color: colors.textMuted }}>
           We're seeking advisors and early partners who believe the drug discovery pipeline should start earlier and move faster.
         </p>
         <a
           href="https://edenradar.com"
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full text-base font-semibold transition-all hover:scale-105 mb-10"
+          className="inline-flex items-center gap-2 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full text-sm sm:text-base font-semibold transition-all hover:scale-105 mb-8 sm:mb-10"
           style={{ background: colors.green, color: "#fff" }}
           data-testid="pitch-cta-request-access"
         >
           Request Access
           <ExternalLink className="w-4 h-4" />
         </a>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-left max-w-md">
-          <div className="rounded-xl p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 text-left max-w-sm sm:max-w-md w-full">
+          <div className="rounded-xl p-4 sm:p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
             <p className="text-sm font-bold mb-0.5" style={{ color: colors.text }}>Wafick Mohamed</p>
             <p className="text-xs mb-1.5" style={{ color: colors.textMuted }}>Co-Founder & CEO</p>
-            <p className="text-xs font-medium" style={{ color: colors.accent }}>w.mohamed@edenradar.com</p>
+            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>w.mohamed@edenradar.com</p>
           </div>
-          <div className="rounded-xl p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
+          <div className="rounded-xl p-4 sm:p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
             <p className="text-sm font-bold mb-0.5" style={{ color: colors.text }}>Richard Elles</p>
             <p className="text-xs mb-1.5" style={{ color: colors.textMuted }}>Co-Founder & COO</p>
-            <p className="text-xs font-medium" style={{ color: colors.accent }}>r.elles@edenradar.com</p>
+            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>r.elles@edenradar.com</p>
           </div>
         </div>
       </div>
@@ -799,6 +913,7 @@ function ContactSlide({ colors }: { colors: Colors }) {
   );
 }
 
+/* ═══════════════════════ ROOT ═══════════════════════ */
 export default function PitchDeck() {
   const [current, setCurrent] = useState(0);
   const [isDark, setIsDark] = useState(() => localStorage.getItem("eden-theme") !== "light");
@@ -838,16 +953,22 @@ export default function PitchDeck() {
     <div
       ref={containerRef}
       className={`pitch-deck ${isPrint ? "pitch-print" : ""}`}
-      style={{ height: "100vh", overflowY: "auto", scrollSnapType: isPrint ? "none" : "y mandatory", scrollBehavior: "smooth" }}
+      style={{
+        height: "100svh",
+        overflowY: "auto",
+        scrollSnapType: isPrint ? "none" : "y mandatory",
+        scrollBehavior: "smooth",
+        WebkitOverflowScrolling: "touch",
+      } as React.CSSProperties}
       data-testid="pitch-deck"
     >
       {!isPrint && <SlideNav current={current} onJump={jumpTo} colors={colors} />}
 
       {!isPrint && (
-        <div className="pitch-export fixed top-6 right-6 z-50 flex items-center gap-2">
+        <div className="pitch-export fixed top-4 sm:top-6 right-14 sm:right-6 z-50 flex items-center gap-2">
           <button
             onClick={toggleTheme}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all hover:scale-105"
             style={{ background: colors.bgLight, color: colors.textMuted, border: `1px solid ${colors.border}` }}
             data-testid="pitch-theme-toggle"
           >
@@ -855,7 +976,7 @@ export default function PitchDeck() {
           </button>
           <button
             onClick={() => window.print()}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
+            className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:scale-105"
             style={{ background: colors.bgLight, color: colors.text, border: `1px solid ${colors.border}` }}
             data-testid="pitch-export-pdf"
           >
