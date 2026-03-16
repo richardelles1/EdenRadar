@@ -723,7 +723,7 @@ export function PicoHelper({ project, onSave, saving }: ResearchToolsProps) {
 
   useEffect(() => {
     const saved = project.pico as PicoData | null;
-    if (saved) setPico(saved);
+    setPico(saved ?? { population: "", intervention: "", comparison: "", outcome: "" });
   }, [project.pico]);
 
   const fields: Array<{ key: keyof PicoData; label: string; placeholder: string }> = [
@@ -761,7 +761,7 @@ export function ProtocolChecklist({ project, onSave, saving }: ResearchToolsProp
 
   useEffect(() => {
     const saved = project.protocolChecklist as Record<string, boolean> | null;
-    if (saved) setChecklist(saved);
+    setChecklist(saved ?? {});
   }, [project.protocolChecklist]);
 
   function toggle(key: string) {
