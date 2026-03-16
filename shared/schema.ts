@@ -279,6 +279,27 @@ export const researchProjects = pgTable("research_projects", {
   section5Files: jsonb("section5_files").$type<string[]>(),
   section8Files: jsonb("section8_files").$type<string[]>(),
   generalFiles: jsonb("general_files").$type<string[]>(),
+  hypotheses: jsonb("hypotheses").$type<Array<{
+    id: string;
+    statement: string;
+    independentVars: string;
+    dependentVars: string;
+    expectedOutcome: string;
+    nullHypothesis: string;
+    evidenceNotes: string;
+    status: string;
+    confidence: string;
+  }>>().default([]),
+  fishbone: jsonb("fishbone").$type<{
+    effect: string;
+    branches: Record<string, string[]>;
+  }>(),
+  milestones: jsonb("milestones").$type<Array<{
+    id: string;
+    label: string;
+    targetDate: string;
+    completed: boolean;
+  }>>().default([]),
 });
 
 export const insertResearchProjectSchema = createInsertSchema(researchProjects).omit({

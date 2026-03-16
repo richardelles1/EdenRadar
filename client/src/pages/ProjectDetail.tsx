@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { ResearchProject } from "@shared/schema";
 import { ResearchBriefPDF } from "@/components/ResearchBriefPDF";
 import { computeReadinessScore } from "@/lib/readiness";
+import ResearchTools from "@/components/ResearchTools";
 
 type Paper = { paper_title: string; authors: string; journal: string; year: string; paper_link: string; notes: string };
 type Dataset = { dataset_name: string; dataset_source: string; dataset_link: string; notes: string };
@@ -41,6 +42,7 @@ const SECTION_META = [
   { id: "risk",        num: 9,  label: "Risk",              short: "Risk" },
   { id: "milestones",  num: 10, label: "Milestones",        short: "Milestones" },
   { id: "discovery",   num: 11, label: "Discovery Card",    short: "Discovery Card" },
+  { id: "tools",       num: 12, label: "Research Tools",    short: "Tools" },
 ];
 
 const STATUS_OPTIONS = [
@@ -627,6 +629,11 @@ export default function ProjectDetail() {
               </Button>
             </div>
           </SectionCard>
+
+          {/* §12 — Research Tools */}
+          <div ref={(el) => { sectionRefs.current["tools"] = el; }} id="section-tools">
+            <ResearchTools project={local} onSave={saveSection} saving={saving} />
+          </div>
 
           {/* General Attachments — unlabeled trailing panel */}
           <div className="border border-border rounded-lg bg-card overflow-hidden">

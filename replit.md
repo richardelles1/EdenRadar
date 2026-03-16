@@ -47,6 +47,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 - Create Discovery: file attachment zone (drag-to-click, up to 3 files with PDF/DOCX/PPTX/XLSX/PNG/JPG), uploads after card creation with error reporting
 - Alerts: 3 collapsible sections — Breaking Research (PubMed/bioRxiv/arXiv), Grant Opportunities (NIH Reporter/NSF/Grants.gov), Discovery Updates (researcher's own cards with status timeline)
 - Profile: extended with careerStage, institutionType, alertTopics (override for alerts), secondaryInterests; dashboard subtitle shows institution + lab + careerStage
+- Research Tools (§12 in ProjectDetail): Three sub-tabs inside each project — Hypothesis Builder (CRUD with status/confidence badges, expandable cards), Fishbone Diagram (Ishikawa 6-branch cause-and-effect, clipboard Markdown export), Visual Timeline (milestones with horizontal CSS timeline, today marker, color-coded status: green=completed, amber=overdue, grey=upcoming). All tools use local state with explicit save buttons (no per-keystroke PATCH). Schema columns: `hypotheses` (jsonb), `fishbone` (jsonb), `milestones` (jsonb) on `researchProjects`.
 
 **Eden Discovery Portal (Tier 1 — Amber Branding)**:
 - `DiscoveryLayout` checks Supabase session + role='concept'; redirects to /login if unauthenticated, to correct portal if wrong role
