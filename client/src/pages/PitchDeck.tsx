@@ -166,14 +166,17 @@ function PitchCenterRadar({ color, opacity = 0.12 }: { color: string; opacity?: 
 }
 
 /* ─── Floating dots ─── */
-function PitchDots({ color, count = 8 }: { color: string; count?: number }) {
-  const dots = Array.from({ length: count }, (_, i) => ({
-    x: `${10 + (i * 71 + 29) % 82}%`,
-    y: `${8 + (i * 53 + 17) % 80}%`,
-    size: 1.2 + (i % 4) * 0.7,
-    delay: `${i * 0.55}s`,
-    dur: `${5.5 + (i % 5) * 1.1}s`,
-  }));
+function PitchDots({ color, count = 8, seed = 0 }: { color: string; count?: number; seed?: number }) {
+  const dots = Array.from({ length: count }, (_, i) => {
+    const k = i + seed * 7;
+    return {
+      x: `${10 + (k * 71 + 29) % 82}%`,
+      y: `${8 + (k * 53 + 17) % 80}%`,
+      size: 1.2 + (k % 4) * 0.7,
+      delay: `${(i + seed * 3) * 0.55}s`,
+      dur: `${5.5 + (k % 5) * 1.1}s`,
+    };
+  });
   return (
     <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
       {dots.map((p, i) => (
@@ -540,9 +543,9 @@ function SolutionSlide({ colors }: { colors: Colors }) {
   ];
   return (
     <Slide index={3} section="Our Solution" accent={colors.green} colors={colors}>
-      <PitchDots color={colors.amber} count={4} />
-      <PitchDots color={colors.violet} count={4} />
-      <PitchDots color={colors.green} count={4} />
+      <PitchDots color={colors.amber} count={4} seed={0} />
+      <PitchDots color={colors.violet} count={4} seed={1} />
+      <PitchDots color={colors.green} count={4} seed={2} />
       <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 30% 60%, ${colors.green}0a 0%, transparent 60%)` }} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
       <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-8" style={{ color: colors.text }}>
@@ -632,7 +635,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
 
       <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: `1px solid transparent` }}>
         <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: colors.text, letterSpacing: "0.15em" }}>
+        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
           One Pipeline of Innovation
         </span>
         <div className="relative z-10 flex items-center justify-center w-9 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.green}44, ${colors.green}88)` }}>
