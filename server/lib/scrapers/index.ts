@@ -248,6 +248,19 @@ import {
   stjudeScraper,
   nationwideChildrensScraper,
   nemoursScraper,
+  // Task #113 — International Batch A
+  oxfordInnovationScraper,
+  bristolScraper,
+  uclbScraper,
+  kuLeuvenScraper,
+  ghentScraper,
+  uniquestScraper,
+  mcgillScraper,
+  leidenScraper,
+  tuDelftScraper,
+  nusScraper,
+  nottinghamScraper,
+  sheffieldScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -553,6 +566,19 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   stjudeScraper,               // St. Jude Children's Research Hospital — 6 category pages
   nationwideChildrensScraper,  // Nationwide Children's Hospital — bespoke HTML
   nemoursScraper,              // Nemours Children's Health — inline listing ~7 techs
+  // ── International Batch A (Task #113) ────────────────────────────────────────
+  oxfordInnovationScraper,     // Oxford University Innovation — WP pagination 18 pages, ~200 techs
+  bristolScraper,              // University of Bristol — HTML listing + detail fetch
+  uclbScraper,                 // UCL Business — stub (InPart disabled, XIP JS-rendered)
+  kuLeuvenScraper,             // KU Leuven R&D — attempt fetch (IP-blocked, returns empty)
+  ghentScraper,                // Ghent University TTO — stub (no public catalog)
+  uniquestScraper,             // UniQuest (UQ) — direct fetch + Playwright fallback (403 WAF)
+  mcgillScraper,               // McGill University OTT — attempt fetch (site offline)
+  leidenScraper,               // Leiden University LURIS — stub (Wix JS-rendered)
+  tuDelftScraper,              // TU Delft TTO — stub (no public listing URL found)
+  nusScraper,                  // NUS Enterprise — direct fetch + Playwright (Incapsula block)
+  nottinghamScraper,           // University of Nottingham — stub (Contensis CMS, no listing)
+  sheffieldScraper,            // University of Sheffield — stub (all URLs redirect to home)
 ];
 
 async function runWithConcurrency<T>(
@@ -594,7 +620,7 @@ export async function runAllScrapers(
   const activeInstitutions = new Set<string>();
 
   const emitProgress = () => {
-    onProgress?.(doneCount, totalCount, listingsFound, [...activeInstitutions]);
+    onProgress?.(doneCount, totalCount, listingsFound, Array.from(activeInstitutions));
   };
 
   emitProgress();

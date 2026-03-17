@@ -1041,11 +1041,8 @@ export const imperialScraper = createStubScraper("Imperial College London");
 export const uclScraper = createStubScraper("University College London");
 export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
 export const edinburghScraper = createStubScraper("University of Edinburgh");
-export const bristolScraper = createStubScraper("University of Bristol");
 export const glasgowScraper = createStubScraper("University of Glasgow");
 export const birminghamScraper = createStubScraper("University of Birmingham");
-export const nottinghamScraper = createStubScraper("University of Nottingham");
-export const sheffieldScraper = createStubScraper("University of Sheffield");
 export const warwickScraper = createStubScraper("University of Warwick");
 export const kclScraper = createInPartScraper("kcl", "King's College London");
 export const liverpoolScraper = createInPartScraper("liverpool", "University of Liverpool");
@@ -1065,7 +1062,6 @@ export const ugentScraper = createStubScraper("Ghent University");
 export const groningenScraper = createStubScraper("University of Groningen");
 export const uamsterdamScraper = createStubScraper("University of Amsterdam");
 export const vuamsterdamScraper = createStubScraper("Vrije Universiteit Amsterdam");
-export const leidenScraper = createStubScraper("Leiden University");
 
 // ── International: Nordic ────────────────────────────────────────────────
 export const karolinskaScraper = createStubScraper("Karolinska Institutet");
@@ -1105,7 +1101,6 @@ export const utorontoScraper = createInPartScraper("toronto", "University of Tor
 export const westernScraper = createInPartScraper("western", "Western University");
 export const queensuScraper = createInPartScraper("queensu", "Queen's University");
 export const ualbertaScraper = createInPartScraper("ualberta", "University of Alberta");
-export const mcgillScraper = createStubScraper("McGill University", "Flintbox API deprecated, no public alternative found");
 export const ubcScraper = createInPartScraper("ubc", "University of British Columbia");
 export const ucalgaryScraper = createStubScraper("University of Calgary", "Flintbox API deprecated, no public alternative found");
 export const umanitobaScraper = createInPartScraper("manitoba", "University of Manitoba");
@@ -1157,8 +1152,6 @@ export const monashScraper = createFlintboxScraper(
   "Monash University"
 );
 export const usydneyScraper = createStubScraper("University of Sydney");
-export const uniquestScraper = createStubScraper("University of Queensland");
-export const nusScraper = createStubScraper("National University of Singapore", "Flintbox API deprecated, no public alternative found");
 export const hkustScraper = createStubScraper("Hong Kong University of Science and Technology");
 export const hkuScraper = createStubScraper("University of Hong Kong");
 export const griffithScraper = createInPartScraper("griffith", "Griffith University");
@@ -1372,14 +1365,15 @@ export const nauScraper: InstitutionScraper = {
       "other", "research-tools", "software-hardware",
     ];
     const $index = await fetchHtml(baseUrl, 15000);
-    const categories = new Set(knownCategories);
+    const categoriesSet = new Set(knownCategories);
     if ($index) {
       $index(`a[href*="/available-technologies/"]`).each((_, el) => {
         const href = $index(el).attr("href") ?? "";
         const match = href.match(/available-technologies\/([a-z0-9-]+)\/?$/);
-        if (match && match[1] !== "available-technologies") categories.add(match[1]);
+        if (match && match[1] !== "available-technologies") categoriesSet.add(match[1]);
       });
     }
+    const categories = Array.from(categoriesSet);
     const results: ScrapedListing[] = [];
     const seenUrls = new Set<string>();
     for (const cat of categories) {
@@ -3463,3 +3457,424 @@ export const nemoursScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── International Batch A (Task #113) ──────────────────────────────────────
+
+// ── Oxford University Innovation ─────────────────────────────────────────────
+// Technologies paginated at /technologies-available/technology-licensing/page/N/
+// Individual tech URLs are at /licence-details/SLUG/ — 18 pages, ~12 per page.
+// Title derived by converting slug hyphens → spaces + title-casing each word.
+export const oxfordInnovationScraper: InstitutionScraper = {
+  institution: "Oxford University Innovation",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Oxford University Innovation";
+    const BASE = "https://innovation.ox.ac.uk/technologies-available/technology-licensing";
+    const TIMEOUT_MS = 20_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    const slugToTitle = (slug: string): string =>
+      slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+
+    try {
+      const seenSlugs = new Set<string>();
+      const results: ScrapedListing[] = [];
+
+      const fetchPage = async (url: string): Promise<string> => {
+        const res = await fetch(url, {
+          headers: { "User-Agent": UA },
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.text();
+      };
+
+      const extractFromHtml = (html: string) => {
+        const licenceRe = /href="https:\/\/innovation\.ox\.ac\.uk\/licence-details\/([^/"]+)\/"/g;
+        let m: RegExpExecArray | null;
+        while ((m = licenceRe.exec(html)) !== null) {
+          const slug = m[1];
+          if (seenSlugs.has(slug)) continue;
+          seenSlugs.add(slug);
+          results.push({
+            title: slugToTitle(slug),
+            description: "",
+            url: `https://innovation.ox.ac.uk/licence-details/${slug}/`,
+            institution: INST,
+          });
+        }
+      };
+
+      // Page 1 = base listing URL (with all-category filter to force server-side render)
+      const categoryIds = ["4337","26","10","14","24","45","16","21","22","23","4338","42","4339","33","37","4341","18","4340"];
+      const filterQS = categoryIds.map(id => `filter%5B%5D=${id}`).join("&");
+      try {
+        const page1Html = await fetchPage(`${BASE}/?${filterQS}`);
+        extractFromHtml(page1Html);
+      } catch {
+        // If the filter approach fails, page 1 results will be picked up via next pages
+      }
+
+      // Pages 2..25 are server-rendered without any filter needed
+      for (let page = 2; page <= 25; page++) {
+        try {
+          const html = await fetchPage(`${BASE}/page/${page}/`);
+          const before = results.length;
+          extractFromHtml(html);
+          if (results.length === before && page > 3) break; // No new listings = past last page
+        } catch {
+          if (page > 5) break;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── University of Bristol ─────────────────────────────────────────────────────
+// Technologies at /business/innovate-and-grow/research-commercialisation/available-technologies/
+// Each has a dedicated slug page; H1 on the detail page gives the real title.
+export const bristolScraper: InstitutionScraper = {
+  institution: "University of Bristol",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "University of Bristol";
+    const BASE_URL = "https://www.bristol.ac.uk";
+    const LISTING_URL = `${BASE_URL}/business/innovate-and-grow/research-commercialisation/available-technologies/`;
+    const TIMEOUT_MS = 20_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    try {
+      const listRes = await fetch(LISTING_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!listRes.ok) throw new Error(`HTTP ${listRes.status}`);
+      const listHtml = await listRes.text();
+
+      // Extract relative tech slugs: /business/.../available-technologies/SLUG/
+      const slugRe = /href="(\/business\/innovate-and-grow\/research-commercialisation\/available-technologies\/([^/"]+)\/?)"/g;
+      const slugSet = new Set<string>();
+      let sm: RegExpExecArray | null;
+      while ((sm = slugRe.exec(listHtml)) !== null) {
+        const path = sm[1];
+        const slug = sm[2];
+        // Exclude self-referential link
+        if (!slug || slug === "available-technologies") continue;
+        slugSet.add(path);
+      }
+
+      const results: ScrapedListing[] = [];
+      for (const path of Array.from(slugSet)) {
+        try {
+          const detailRes = await fetch(`${BASE_URL}${path}`, {
+            headers: { "User-Agent": UA },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          });
+          if (!detailRes.ok) continue;
+          const detailHtml = await detailRes.text();
+
+          const h1Match = detailHtml.match(/<h1[^>]*class="[^"]*page-title[^"]*"[^>]*>([^<]+)<\/h1>/i)
+            || detailHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+          const titleRaw = h1Match ? cleanText(h1Match[1]) : "";
+          if (!titleRaw || titleRaw.length < 4) continue;
+
+          const metaDesc = detailHtml.match(/<meta[^>]+name="description"[^>]+content="([^"]+)"/i);
+          const description = metaDesc ? cleanText(metaDesc[1]) : "";
+
+          results.push({
+            title: titleRaw,
+            description,
+            url: `${BASE_URL}${path}`,
+            institution: INST,
+          });
+        } catch {
+          continue;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── UCL Business (UCLB) ───────────────────────────────────────────────────────
+// InPart portal (uclb.portals.in-part.com) returns "404: Portal not enabled".
+// XIP express-licensing storefront (xip.uclb.com) requires JavaScript rendering.
+// No server-side accessible technology listing found. Stub pending JS-render approach.
+export const uclbScraper: InstitutionScraper = createStubScraper(
+  "UCL Business (UCLB)",
+  "InPart portal disabled; XIP storefront (xip.uclb.com) requires JavaScript — needs Playwright"
+);
+
+// ── KU Leuven Research & Development ─────────────────────────────────────────
+// TTO site: lrd.kuleuven.be/en/ip/which-technologies-do-we-offer/technology-offers
+// All outbound requests time out (server-side IP block or firewall). Returns empty.
+export const kuLeuvenScraper: InstitutionScraper = {
+  institution: "KU Leuven R&D",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "KU Leuven R&D";
+    const URL = "https://lrd.kuleuven.be/en/ip/which-technologies-do-we-offer/technology-offers";
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    try {
+      const res = await fetch(URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      // Extract any technology-offer links
+      const linkRe = /href="(https?:\/\/lrd\.kuleuven\.be[^"]*(?:technolog|offer|licens)[^"]*)"/gi;
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      let m: RegExpExecArray | null;
+      while ((m = linkRe.exec(html)) !== null) {
+        const url = m[1];
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({ title: url.split("/").pop() ?? url, description: "", url, institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: unreachable (${err?.message}) — server-side IP block suspected`);
+      return [];
+    }
+  },
+};
+
+// ── Ghent University Technology Transfer ─────────────────────────────────────
+// Site: techtransfer.ugent.be — informational Drupal site, no enumerable tech listing.
+// IP/licensing section links to SharePoint intranet only. No public catalog found.
+export const ghentScraper: InstitutionScraper = createStubScraper(
+  "Ghent University TTO",
+  "No public technology listing — techtransfer.ugent.be is informational only; catalog behind SharePoint intranet"
+);
+
+// ── UniQuest (University of Queensland TTO) ───────────────────────────────────
+// Site: uniquest.com.au/technologies/ returns 403 (WAF IP block) on all endpoints
+// including WordPress REST API. Playwright attempt to bypass WAF.
+export const uniquestScraper: InstitutionScraper = {
+  institution: "UniQuest (University of Queensland)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "UniQuest (University of Queensland)";
+    const LIST_URL = "https://uniquest.com.au/technologies/";
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    // Try direct fetch first (may bypass WAF in some environments)
+    try {
+      const res = await fetch(LIST_URL, {
+        headers: { "User-Agent": UA, Referer: "https://uniquest.com.au/" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const techRe = /href="(https?:\/\/uniquest\.com\.au\/(?:technology|technologies)\/([^/"]+)\/?)"/gi;
+        const results: ScrapedListing[] = [];
+        const seen = new Set<string>();
+        let m: RegExpExecArray | null;
+        while ((m = techRe.exec(html)) !== null) {
+          if (seen.has(m[1])) continue;
+          seen.add(m[1]);
+          const slug = m[2];
+          const title = slug.split("-").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+          results.push({ title, description: "", url: m[1], institution: INST });
+        }
+        if (results.length > 0) {
+          console.log(`[scraper] ${INST}: ${results.length} listings (direct fetch)`);
+          return results;
+        }
+      }
+    } catch {
+      // Direct fetch blocked — fall through to Playwright
+    }
+
+    // Playwright fallback
+    try {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({ "User-Agent": UA });
+      await page.goto(LIST_URL, { waitUntil: "networkidle", timeout: 30_000 });
+      await page.waitForSelector("a[href*='/technology']", { timeout: 10_000 }).catch(() => null);
+      const links = await page.evaluate(() => {
+        const anchors = Array.from(document.querySelectorAll("a[href*='/technology']"));
+        return anchors.map(a => ({ href: (a as HTMLAnchorElement).href, text: (a as HTMLElement).innerText.trim() }));
+      });
+      await browser.close();
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      for (const { href, text } of links) {
+        if (!href.includes("uniquest.com.au") || seen.has(href)) continue;
+        if (href === LIST_URL || !text || text.length < 4) continue;
+        seen.add(href);
+        results.push({ title: text, description: "", url: href, institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright)`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: both direct fetch and Playwright failed — ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── McGill University OTT ─────────────────────────────────────────────────────
+// OTT site (mcgill.ca/ott) was offline ("Offline" maintenance page) at probe time.
+// Attempt fetch; gracefully returns empty if still down.
+export const mcgillScraper: InstitutionScraper = {
+  institution: "McGill University OTT",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "McGill University OTT";
+    const LISTING_URL = "https://www.mcgill.ca/ott/technologies-for-licensing";
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    try {
+      const res = await fetch(LISTING_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      if (html.includes("Offline") || html.includes("noindex, nofollow")) {
+        console.warn(`[scraper] ${INST}: site offline or maintenance`);
+        return [];
+      }
+      const techRe = /href="(https?:\/\/www\.mcgill\.ca\/ott\/[^"]*(?:technolog|licens)[^"]*)"/gi;
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      let m: RegExpExecArray | null;
+      while ((m = techRe.exec(html)) !== null) {
+        if (seen.has(m[1])) continue;
+        seen.add(m[1]);
+        results.push({ title: m[1].split("/").pop() ?? m[1], description: "", url: m[1], institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: failed — ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── Leiden University (LURIS) ─────────────────────────────────────────────────
+// LURIS (Leiden University Research and Innovation Services) at luris.nl is a
+// Wix-hosted site — all content rendered client-side via JavaScript. No static listing.
+export const leidenScraper: InstitutionScraper = createStubScraper(
+  "Leiden University (LURIS)",
+  "luris.nl is a Wix site — content fully JS-rendered, no static technology listing accessible"
+);
+
+// ── TU Delft Technology Transfer ─────────────────────────────────────────────
+// TU Delft TTO has no publicly enumerable technology listing URL. Innovation-impact
+// section covers entrepreneurship and patents but not a browsable licensing catalog.
+export const tuDelftScraper: InstitutionScraper = createStubScraper(
+  "TU Delft TTO",
+  "No public technology licensing catalog found — tudelft.nl innovation pages are informational only"
+);
+
+// ── NUS Enterprise (National University of Singapore) ────────────────────────
+// enterprise.nus.edu.sg is protected by Imperva/Incapsula anti-bot (SWUDNSAI challenge).
+// Playwright fallback — Incapsula may still block headless browsers.
+export const nusScraper: InstitutionScraper = {
+  institution: "NUS Enterprise",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "NUS Enterprise";
+    const LIST_URL = "https://enterprise.nus.edu.sg/technologies/";
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    // Try direct fetch first
+    try {
+      const res = await fetch(LIST_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const html = await res.text();
+        if (!html.includes("Incapsula") && !html.includes("SWUDNSAI")) {
+          const techRe = /href="(https?:\/\/enterprise\.nus\.edu\.sg\/(?:technologies?|tech)[^"]+)"/gi;
+          const results: ScrapedListing[] = [];
+          const seen = new Set<string>();
+          let m: RegExpExecArray | null;
+          while ((m = techRe.exec(html)) !== null) {
+            if (seen.has(m[1])) continue;
+            seen.add(m[1]);
+            results.push({ title: m[1].split("/").filter(Boolean).pop() ?? m[1], description: "", url: m[1], institution: INST });
+          }
+          if (results.length > 0) {
+            console.log(`[scraper] ${INST}: ${results.length} listings (direct fetch)`);
+            return results;
+          }
+        }
+      }
+    } catch {
+      // Fall through to Playwright
+    }
+
+    // Playwright fallback (Incapsula detection may still block)
+    try {
+      const { chromium } = await import("playwright");
+      const browser = await chromium.launch({
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({ "User-Agent": UA });
+      await page.goto(LIST_URL, { waitUntil: "networkidle", timeout: 40_000 });
+
+      // Check for Incapsula challenge
+      const bodyText = await page.textContent("body") ?? "";
+      if (bodyText.includes("Incapsula") || bodyText.includes("Request unsuccessful")) {
+        await browser.close();
+        console.warn(`[scraper] ${INST}: blocked by Incapsula anti-bot`);
+        return [];
+      }
+
+      await page.waitForSelector("a[href*='/tech']", { timeout: 8_000 }).catch(() => null);
+      const links = await page.evaluate(() => {
+        const anchors = Array.from(document.querySelectorAll("a"));
+        return anchors.map(a => ({ href: (a as HTMLAnchorElement).href, text: (a as HTMLElement).innerText.trim() }));
+      });
+      await browser.close();
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      for (const { href, text } of links) {
+        if (!href.includes("enterprise.nus.edu.sg/tech") || seen.has(href)) continue;
+        if (!text || text.length < 4) continue;
+        seen.add(href);
+        results.push({ title: text, description: "", url: href, institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright)`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: Playwright failed — ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── University of Nottingham Enterprise ──────────────────────────────────────
+// Nottingham uses Contensis CMS. No public technology licensing catalog URL found.
+// /business/ links to Business School; /enterprise/ 404s. No TTO tech listing accessible.
+export const nottinghamScraper: InstitutionScraper = createStubScraper(
+  "University of Nottingham",
+  "No public technology catalog — Contensis CMS site has no enumerable TTO listing URL"
+);
+
+// ── University of Sheffield ───────────────────────────────────────────────────
+// All /research/enterprise/ paths redirect to homepage (sheffield.ac.uk/).
+// Drupal-based site shows no technology listing in any discoverable URL.
+export const sheffieldScraper: InstitutionScraper = createStubScraper(
+  "University of Sheffield",
+  "All /research/enterprise/technology* URLs redirect to homepage — no public listing found"
+);
