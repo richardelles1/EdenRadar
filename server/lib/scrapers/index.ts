@@ -48,6 +48,8 @@ import {
   vanderbiltScraper,
   queensBelfastScraper,
   uclBusinessScraper,
+  cernKtScraper,
+  cancerResearchHorizonsScraper,
 } from "./new-institutions";
 
 import {
@@ -623,6 +625,9 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   vanderbiltScraper,              // Vanderbilt University — TechPublisher "vanderbilt" — 213 sitemap techs
   queensBelfastScraper,           // Queen's Univ. Belfast — TechPublisher "qub" — listings confirmed
   uclBusinessScraper,             // UCL Business (xip.uclb.com) — Playwright/Elucid3 SPA — 34+ categories (supersedes blocked in-part "ucl" target)
+  // ── International Scrapers — Batch D (Task #119) ────────────────────────
+  cernKtScraper,                  // CERN Knowledge Transfer — Drupal SSR, 54 tech pages — probed 2026-03-17
+  cancerResearchHorizonsScraper,  // Cancer Research Horizons (CRUK) — Playwright, JS-rendered, oncology portfolio — probed 2026-03-17
 ];
 
 async function runWithConcurrency<T>(

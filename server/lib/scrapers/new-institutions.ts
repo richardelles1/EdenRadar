@@ -4552,3 +4552,190 @@ export const uclBusinessScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── International Scrapers — Batch D (Task #119) ──────────────────────────
+//
+// Probe-first mandate satisfied (2026-03-17):
+//   CERN KT:               kt.cern/technology-portfolio     200 OK  54 tech slugs
+//   Cancer Research Horiz: cancerresearchhorizons.com/...   200 OK  173 KB (JS-rendered, Cloudflare Rocket Loader)
+//
+// All other probed targets returned HTTP 000 (Replit egress blocked) or had no
+// enumerable tech listing — see Task #119 scoping notes.
+
+// ── 1. CERN Knowledge Transfer ────────────────────────────────────────────
+// Probe: 2026-03-17 — https://kt.cern/technology-portfolio — 200 OK — 54 tech slugs
+// Drupal SSR; all techs listed on one page (no pagination). Individual tech pages
+// at /technologies/[slug]. H1 on each page is the technology name.
+// Mix of physics/instrumentation/biomedical (Medipix, MEDICIS isotopes, ventilator).
+export const cernKtScraper: InstitutionScraper = {
+  institution: "CERN Knowledge Transfer",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "CERN Knowledge Transfer";
+    const BASE = "https://kt.cern";
+    const LISTING = `${BASE}/technology-portfolio`;
+
+    try {
+      const $listing = await fetchHtml(LISTING, 15_000);
+      if (!$listing) {
+        console.warn(`[scraper] ${INST}: could not fetch listing page`);
+        return [];
+      }
+
+      // Harvest unique tech slugs — all 54 appear on a single listing page
+      const slugs = new Set<string>();
+      $listing("a[href^='/technologies/']").each((_, el) => {
+        const href = $listing(el).attr("href") ?? "";
+        if (href && /^\/technologies\/[a-z0-9][a-z0-9-]*$/.test(href)) {
+          slugs.add(href);
+        }
+      });
+
+      if (slugs.size === 0) {
+        console.warn(`[scraper] ${INST}: no tech slugs found on listing page`);
+        return [];
+      }
+
+      const techUrls = Array.from(slugs).map((s) => `${BASE}${s}`);
+      const results: ScrapedListing[] = [];
+      const CONCURRENCY = 5;
+      const queue = [...techUrls];
+
+      await Promise.all(
+        Array.from({ length: Math.min(CONCURRENCY, queue.length) }, async () => {
+          while (queue.length > 0) {
+            const url = queue.shift()!;
+            try {
+              const $ = await fetchHtml(url, 12_000);
+              if (!$) continue;
+
+              // Title: iterate h1 elements, skip the site-wide header "CERN Accelerating science"
+              let title = "";
+              $("h1").each((_, el) => {
+                if (title) return;
+                const t = cleanText($(el).text());
+                if (t.length > 5 && !/accelerating science/i.test(t)) {
+                  title = t;
+                }
+              });
+              if (!title || title.length < 3) continue;
+
+              // Description: grab text from the "Description" field block if present
+              let description = "";
+              $(".field--label").each((_, el) => {
+                if (description) return;
+                const label = $(el).text().trim();
+                if (label === "Description") {
+                  const text = cleanText(
+                    $(el).closest(".field").find(".field--item").first().text()
+                  );
+                  if (text.length > 5) description = text;
+                }
+              });
+
+              results.push({ title, description, url, institution: INST });
+            } catch {
+              continue;
+            }
+          }
+        })
+      );
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (${slugs.size} slugs found)`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
+      return [];
+    }
+  },
+};
+
+// ── 2. Cancer Research Horizons ───────────────────────────────────────────
+// Probe: 2026-03-17 — cancerresearchhorizons.com/our-portfolio/our-licensing-opportunities
+//         200 OK, 173 KB — fully JS-rendered (Cloudflare Rocket Loader, no SSR tech data)
+// CRUK's commercial arm; highly relevant oncology/cancer therapeutic portfolio.
+// Approach: Playwright navigates listing page, waits for tech cards to render,
+// then extracts all a[href*='/our-portfolio/our-licensing-opportunities/'] links.
+// Scrolls to bottom to trigger any lazy-loading. Follows same pattern as
+// uclBusinessScraper / edinburghInnovationsScraper.
+export const cancerResearchHorizonsScraper: InstitutionScraper = {
+  institution: "Cancer Research Horizons",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Cancer Research Horizons";
+    const BASE = "https://www.cancerresearchhorizons.com";
+    const LISTING = `${BASE}/our-portfolio/our-licensing-opportunities`;
+    let browser: import("playwright").Browser | null = null;
+
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Referer": "https://www.google.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+      });
+
+      // Navigate and wait for JS to render tech cards
+      await page.goto(LISTING, { timeout: 45_000, waitUntil: "domcontentloaded" });
+
+      // Allow Cloudflare Rocket Loader and lazy content to settle
+      await page.waitForTimeout(4_000);
+
+      // Scroll to bottom to trigger any lazy-loaded items
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2_000);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(1_500);
+
+      // Try to click any "Load more" button if present
+      try {
+        const loadMoreBtn = page.locator('button:has-text("Load more"), button:has-text("Show more"), a:has-text("Load more")').first();
+        const visible = await loadMoreBtn.isVisible({ timeout: 2_000 });
+        if (visible) {
+          await loadMoreBtn.click();
+          await page.waitForTimeout(2_500);
+        }
+      } catch {
+        // No load-more button — all items already rendered
+      }
+
+      // Extract all individual tech page links (not the listing page itself)
+      const links = await page.$$eval(
+        `a[href*='/our-portfolio/our-licensing-opportunities/']`,
+        (els) =>
+          els.map((el) => ({
+            href: (el as HTMLAnchorElement).href ?? "",
+            text: el.textContent?.trim() ?? "",
+          }))
+      );
+
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+
+      for (const l of links) {
+        if (!l.href || seen.has(l.href)) continue;
+        // Skip the listing page itself
+        if (l.href.replace(/\/$/, "") === LISTING.replace(/\/$/, "")) continue;
+        seen.add(l.href);
+        const title = l.text.replace(/\s+/g, " ").trim();
+        if (title.length < 5) continue;
+        results.push({ title, description: "", url: l.href, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
+    }
+  },
+};
