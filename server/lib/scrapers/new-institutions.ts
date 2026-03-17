@@ -3878,3 +3878,77 @@ export const sheffieldScraper: InstitutionScraper = createStubScraper(
   "University of Sheffield",
   "All /research/enterprise/technology* URLs redirect to homepage — no public listing found"
 );
+
+// ── Yissum Research Development Co. (Hebrew University of Jerusalem) ──────────
+// Technologies listed via WordPress Custom Post Type REST API.
+// Endpoint: /wp-json/wp/v2/technology — 234 total techs, per_page=100 (3 pages).
+// Title in title.rendered (HTML-decoded); description in excerpt.rendered.
+export const yissumScraper: InstitutionScraper = {
+  institution: "Yissum (Hebrew University of Jerusalem)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Yissum (Hebrew University of Jerusalem)";
+    const API_BASE = "https://www.yissum.co.il/wp-json/wp/v2/technology";
+    const PER_PAGE = 100;
+    const TIMEOUT_MS = 20_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    const decodeHtml = (html: string): string =>
+      html
+        .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#039;/g, "'")
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    try {
+      const results: ScrapedListing[] = [];
+      const seenIds = new Set<number>();
+
+      for (let page = 1; page <= 10; page++) {
+        const url = `${API_BASE}?per_page=${PER_PAGE}&page=${page}&_fields=id,slug,title,excerpt,link`;
+        let data: Array<{
+          id: number;
+          slug: string;
+          title?: { rendered?: string };
+          excerpt?: { rendered?: string };
+          link?: string;
+        }>;
+
+        try {
+          const res = await fetch(url, {
+            headers: { "User-Agent": UA, Accept: "application/json" },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          });
+          if (!res.ok) break; // 400 = past last page
+          data = await res.json() as typeof data;
+        } catch {
+          break;
+        }
+
+        if (!Array.isArray(data) || data.length === 0) break;
+
+        for (const item of data) {
+          if (seenIds.has(item.id)) continue;
+          seenIds.add(item.id);
+          const title = decodeHtml(item.title?.rendered ?? "");
+          if (!title || title.length < 4) continue;
+          const description = decodeHtml(item.excerpt?.rendered ?? "");
+          const techUrl = item.link ?? `https://www.yissum.co.il/technology/${item.slug}/`;
+          results.push({ title, description, url: techUrl, institution: INST });
+        }
+
+        if (data.length < PER_PAGE) break; // Last page
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
