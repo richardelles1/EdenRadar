@@ -1062,10 +1062,11 @@ export const boiseStateScraper: InstitutionScraper = {
         const title = currentCategory
           ? `BSU-${bsuFile}: ${currentCategory} (${inventors})`
           : `BSU-${bsuFile}: ${inventors}`;
+        const anchorId = currentCategory.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
         results.push({
           title,
-          description: "",
-          url: patentUrl || pageUrl,
+          description: patentUrl ? `Google Patents: ${patentUrl}` : "",
+          url: anchorId ? `${pageUrl}#h-${anchorId}` : pageUrl,
           institution: "Boise State University",
           inventors: inventors ? inventors.split(/,\s*/).filter(Boolean) : undefined,
           technologyId: `BSU-${bsuFile}`,
