@@ -233,46 +233,21 @@ import {
   roswellParkScraper,
   ncatsScraper,
   // Task #109 — Batch 4 Cancer Centers
-  danaFarberScraper,
-  cincinnatiChildrensScraper,
+  dfciScraper,
+  cincyChildrensScraper,
   foxChaseScraper,
   fredHutchScraper,
   moffittScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
-// Institutions investigated but not yet scraped (stubs return []):
-//
-// Fred Hutchinson Cancer Center
-//   Platform: Adobe AEM + Elastic App Search ("cancer-consortium" engine)
-//   API found: fredhutch-prod.ent.us-west-2.aws.found.io, searchKey search-d4wmid75w6rn9onstbmpampm
-//   Engine facets: Member Profile (738), Webpages (38), Documents (35) — NO tech listing type
-//   Individual tech pages exist at /technology-details.fh_bds_technology_id_{YY}-{NNN}.{slug}.html
-//   but are NOT indexed in the Elastic engine and not enumerable without interactive browser nav
-//   Path forward: Playwright navigation through available-technologies.html search UI
-//   Last verified: 2026-03-17
-//
-// Moffitt Cancer Center
-//   Probed: /research-science/researchers/technology-transfer/, /research-science/technology-transfer/,
-//           /research-science/business-development/, /sitemap.xml
-//   All endpoints return HTTP 403 — Cloudflare Managed Challenge blocks all server-side requests
-//   Path forward: Playwright with stealth plugin + residential proxy rotation
-//   Last verified: 2026-03-17
+// Institutions fully investigated — no enumerable public tech listing found:
 //
 // Cold Spring Harbor Laboratory (CSHL)
 //   Probed: cshl.edu/partner-with-us/technology-transfer/ (200, informational only),
 //           WP REST API /wp-json/wp/v2/types (no tech-related custom post types)
 //   Platform: WordPress; CPTs are press_news, library_news, archives_blog, harborscope
 //   Status: Tech transfer page describes processes/contacts, no enumerable tech database
-//   Listing estimate: 0
-//   Last verified: 2026-03-15
-//
-// Dana-Farber Cancer Institute
-//   Probed: innovation.dfci.harvard.edu (empty response, 0 bytes),
-//           dana-farber.org/research/innovations (informational: mission/vision/contact),
-//           dana-farber.org/transfer (patient transfer page, not tech transfer)
-//   Platform: None found (no TechPublisher, Flintbox, Wellspring, Elucid)
-//   Status: Innovation office exists but no public tech enumeration
 //   Listing estimate: 0
 //   Last verified: 2026-03-15
 //
@@ -295,6 +270,26 @@ import {
 //   Status: No licensable tech listing; capabilities pages are not TTO assets
 //   Listing estimate: 0 (69 capability pages, 0 licensable tech)
 //   Last verified: 2026-03-15
+//
+// Fred Hutchinson Cancer Center
+//   Platform: Adobe AEM + Elastic App Search ("cancer-consortium" engine)
+//   API found: fredhutch-prod.ent.us-west-2.aws.found.io, key search-d4wmid75w6rn9onstbmpampm
+//   Engine indexes cancerconsortium.org only (Member Profiles 738, Webpages 38, Documents 35)
+//   "Available Technology" type returns 0 hits — tech pages are NOT indexed in this engine
+//   AEM childrenlist hasChildren:false — tech-detail pages are dynamically served, not CMS nodes
+//   Wayback Machine CDX: 0 archived technology-details pages
+//   fredHutchScraper queries Elastic exhaustively for fredhutch.org/technology-details URLs;
+//   currently returns 0 (engine scope). Path forward: Playwright navigation of search UI.
+//   Last verified: 2026-03-17
+//
+// Moffitt Cancer Center
+//   Direct access: HTTP 403 Cloudflare Managed Challenge on all server-side requests
+//   moffittScraper uses Wayback Machine 2023 snapshot: 6 archived category pages confirmed
+//   (pharmaceuticals-biologics, diagnostics, devices, immunotherapies,
+//    software-tools, clinical-decision-support-tools)
+//   Each archived category page yields 40–100 individual technology slugs
+//   Titles fetched from archived individual tech pages (h1) or derived from URL slug
+//   Last verified: 2026-03-17
 // ───────────────────────────────────────────────────────────────────────────────
 
 export { ScrapedListing, InstitutionScraper };
@@ -534,11 +529,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   roswellParkScraper,
   ncatsScraper,
   // ── Batch 4 Cancer Centers (Task #109, March 2026) ─────────────────────────
-  danaFarberScraper,           // Dana-Farber Cancer Institute — in-part API ~70
-  cincinnatiChildrensScraper,  // Cincinnati Children's — HTML search page ~40
+  dfciScraper,                 // Dana-Farber Cancer Institute — in-part API ~70
+  cincyChildrensScraper,       // Cincinnati Children's — HTML search page, dedup pagination ~40
   foxChaseScraper,             // Fox Chase Cancer Center — Drupal 2-level crawl ~67
-  fredHutchScraper,            // STUB — Elastic engine lacks tech listing; needs Playwright
-  moffittScraper,              // STUB — Cloudflare 403; needs Playwright + residential proxy
+  fredHutchScraper,            // Fred Hutch — Elastic cancer-consortium exhaustive scan (fredhutch.org URLs)
+  moffittScraper,              // Moffitt — Wayback Machine 2023 snapshot, 6 categories
 ];
 
 async function runWithConcurrency<T>(

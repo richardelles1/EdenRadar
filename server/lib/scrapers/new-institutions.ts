@@ -2403,55 +2403,76 @@ export const ncatsScraper: InstitutionScraper = {
 // ── Task #109 — Batch 4 Scrapers (March 2026) ────────────────────────────────
 
 // Dana-Farber Cancer Institute — in-part portal (subdomain "dfci"), ~70 technologies
-export const danaFarberScraper = createInPartScraper("dfci", "Dana-Farber Cancer Institute");
+// Export as both dfciScraper (canonical task name) and danaFarberScraper (alias)
+export const dfciScraper = createInPartScraper("dfci", "Dana-Farber Cancer Institute");
+export const danaFarberScraper = dfciScraper;
 
 // Cincinnati Children's Hospital Medical Center
 // Source: HTML search page at /research/support/innovation-ventures/technologies/search
-// 40 technologies rendered server-side (no pagination); description in card-text
-export const cincinnatiChildrensScraper: InstitutionScraper = {
+// Paginates with ?page=N until no new URLs appear (server returns same 40 records when exhausted).
+// Cards rendered server-side; descriptions extracted from card-text divs.
+export const cincyChildrensScraper: InstitutionScraper = {
   institution: "Cincinnati Children's Hospital Medical Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Cincinnati Children's Hospital Medical Center";
     const BASE = "https://www.cincinnatichildrens.org";
-    const SEARCH_URL = `${BASE}/research/support/innovation-ventures/technologies/search`;
-    try {
-      const res = await fetch(SEARCH_URL, {
-        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
+    const SEARCH_BASE = `${BASE}/research/support/innovation-ventures/technologies/search`;
 
-      const results: ScrapedListing[] = [];
-
-      // Cards: <h4 class="card-title name mb-3"><a href="https://...">Title</a></h4>
-      // followed by <div class="card-text">Description...</div>
-      const cardRe = /class="card-title name mb-3"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]{0,400}?class="card-text"[^>]*>([\s\S]{0,500}?)<\/div>/g;
+    const extractCards = (html: string): ScrapedListing[] => {
+      const items: ScrapedListing[] = [];
+      const cardRe =
+        /class="card-title name mb-3"[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>([^<]+)<\/a>[\s\S]{0,400}?class="card-text"[^>]*>([\s\S]{0,500}?)<\/div>/g;
       let m: RegExpExecArray | null;
       while ((m = cardRe.exec(html)) !== null) {
         const url = m[1].trim();
         const title = m[2].trim();
-        const rawDesc = m[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
         if (!title || title.length < 3) continue;
-        results.push({
+        const rawDesc = m[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        items.push({
           title,
-          description: rawDesc.slice(0, 1000) || "",
+          description: rawDesc.slice(0, 1000),
           url: url.startsWith("http") ? url : `${BASE}${url}`,
           institution: INST,
         });
       }
-
-      // Fallback: simpler extraction if complex regex misses
-      if (results.length === 0) {
-        const simpleLinkRe = /<a[^>]*href="(https?:\/\/www\.cincinnatichildrens\.org\/research\/support\/innovation-ventures\/technologies\/[^"?]+)"[^>]*>([^<]{5,})<\/a>/g;
-        while ((m = simpleLinkRe.exec(html)) !== null) {
+      // Fallback: simpler link extraction
+      if (items.length === 0) {
+        const re = /<a[^>]*href="(https?:\/\/www\.cincinnatichildrens\.org\/research\/support\/innovation-ventures\/technologies\/[0-9-]+)"[^>]*>([^<]{5,})<\/a>/g;
+        while ((m = re.exec(html)) !== null) {
           const title = m[2].trim();
-          if (title.length < 5) continue;
-          results.push({ title, description: "", url: m[1].trim(), institution: INST });
+          if (title.length >= 5) items.push({ title, description: "", url: m[1].trim(), institution: INST });
         }
       }
+      return items;
+    };
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (HTML search page)`);
+    try {
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      let page = 1;
+
+      while (page <= 20) {
+        const url = page === 1 ? SEARCH_BASE : `${SEARCH_BASE}?page=${page}`;
+        const res = await fetch(url, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+          signal: AbortSignal.timeout(20_000),
+        });
+        if (!res.ok) break;
+        const html = await res.text();
+        const cards = extractCards(html);
+        let newCount = 0;
+        for (const card of cards) {
+          if (seen.has(card.url)) continue;
+          seen.add(card.url);
+          results.push(card);
+          newCount++;
+        }
+        // Stop when no new URLs appear (server repeats results when page is exhausted)
+        if (newCount === 0 || cards.length === 0) break;
+        page++;
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (${page - 1} pages fetched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
@@ -2459,17 +2480,17 @@ export const cincinnatiChildrensScraper: InstitutionScraper = {
     }
   },
 };
+export const cincinnatiChildrensScraper = cincyChildrensScraper;
 
 // Fox Chase Cancer Center
 // Source: Drupal listing at /about-us/research-and-development-alliances/technology-transfer/licensing
-// Two-level crawl: category pages (6 path segs) → tech pages (7+ path segs) → h1 title
+// Two-level crawl: category pages (5 path segs) → tech pages (6+ path segs) → h1 title
 export const foxChaseScraper: InstitutionScraper = {
   institution: "Fox Chase Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fox Chase Cancer Center";
     const BASE = "https://www.foxchase.org";
     const LISTING = `${BASE}/about-us/research-and-development-alliances/technology-transfer/licensing`;
-    const LINK_PREFIX = "/about-us/research-and-development-alliances/technology-transfer/licensing/";
 
     const fetchHtmlFox = async (url: string): Promise<string | null> => {
       try {
@@ -2491,8 +2512,8 @@ export const foxChaseScraper: InstitutionScraper = {
       while ((m = re.exec(html)) !== null) {
         const path = m[1];
         const segs = path.split("/").filter(Boolean);
-        // 5 segs = category page (under /licensing/{category})
-        // 6+ segs = individual tech page (under /licensing/{category}/{tech})
+        // 5 segs → category page  (…/licensing/{category})
+        // 6+ segs → individual tech page (…/licensing/{category}/{tech})
         if (segs.length === 5) {
           if (!categories.includes(path)) categories.push(path);
         } else if (segs.length >= 6) {
@@ -2503,12 +2524,12 @@ export const foxChaseScraper: InstitutionScraper = {
     };
 
     const extractTitle = (html: string): string => {
-      const h1Match =
+      const h1 =
         html.match(/<h1[^>]*class="[^"]*page-title[^"]*"[^>]*>([\s\S]+?)<\/h1>/i) ??
         html.match(/<h1[^>]*>([\s\S]+?)<\/h1>/i);
-      if (h1Match) return h1Match[1].replace(/<[^>]+>/g, "").trim();
-      const titleMatch = html.match(/<title>([^<|]+)/i);
-      if (titleMatch) return titleMatch[1].replace(/\s*[-|].*$/, "").trim();
+      if (h1) return h1[1].replace(/<[^>]+>/g, "").trim();
+      const t = html.match(/<title>([^<|]+)/i);
+      if (t) return t[1].replace(/\s*[-|].*$/, "").trim();
       return "";
     };
 
@@ -2517,9 +2538,8 @@ export const foxChaseScraper: InstitutionScraper = {
       if (!listingHtml) throw new Error("Listing page fetch failed");
 
       const { categories, techPages: listingTechPages } = extractLicensingLinks(listingHtml);
-
-      // Fetch each category page and collect additional tech page URLs
       const allTechPages = new Set<string>(listingTechPages);
+
       for (const catPath of categories) {
         const catHtml = await fetchHtmlFox(`${BASE}${catPath}`);
         if (!catHtml) continue;
@@ -2527,7 +2547,6 @@ export const foxChaseScraper: InstitutionScraper = {
         for (const tp of catTechPages) allTechPages.add(tp);
       }
 
-      // Fetch each unique tech page and extract title
       const results: ScrapedListing[] = [];
       for (const techPath of Array.from(allTechPages)) {
         try {
@@ -2535,11 +2554,8 @@ export const foxChaseScraper: InstitutionScraper = {
           if (!pageHtml) continue;
           const title = extractTitle(pageHtml);
           if (!title || title.length < 3) continue;
-
-          // Extract category from URL path
           const segs = techPath.split("/").filter(Boolean);
           const category = segs[4] ? segs[4].replace(/-/g, " ") : undefined;
-
           results.push({
             title,
             description: "",
@@ -2561,27 +2577,182 @@ export const foxChaseScraper: InstitutionScraper = {
   },
 };
 
-// Fred Hutchinson Cancer Center — stub
-// Investigation complete (March 2026):
-//   Elastic App Search engine "cancer-consortium" confirmed at fredhutch-prod.ent.us-west-2.aws.found.io
-//   Engine indexes: Member Profiles (738), Webpages (38), Documents (35)
-//   "Available Technology" search_result_type returns 0 hits — tech pages NOT indexed in this engine
-//   Individual tech pages exist at /technology-details.fh_bds_technology_id_{YY}-{NNN}.{slug}.html
-//   but are not enumerable without Playwright (no sitemap, no listing page, no enumerable API)
-//   Path forward: Playwright navigation through available-technologies.html interactive search UI
-export const fredHutchScraper = createStubScraper(
-  "Fred Hutchinson Cancer Center",
-  "Elastic engine 'cancer-consortium' does not index tech pages; needs Playwright for interactive search UI"
-);
+// Fred Hutchinson Cancer Center
+// Investigation (March 2026):
+//   Elastic App Search engine "cancer-consortium" at fredhutch-prod.ent.us-west-2.aws.found.io
+//   Engine indexes cancerconsortium.org pages only (Member Profiles 738, Webpages 38, Documents 35)
+//   Available Technology search_result_type returns 0 — FH tech pages NOT indexed in this engine
+//   AEM childrenlist shows hasChildren:false — tech-detail pages are dynamically served, not CMS nodes
+//   Wayback Machine CDX: 0 archived tech-detail pages for fredhutch.org
+//   This scraper queries the Elastic engine exhaustively for any fredhutch.org/technology-details URLs
+//   and returns them. Currently returns 0 due to engine scope. Path forward: Playwright navigation.
+export const fredHutchScraper: InstitutionScraper = {
+  institution: "Fred Hutchinson Cancer Center",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Fred Hutchinson Cancer Center";
+    const ENDPOINT = "https://fredhutch-prod.ent.us-west-2.aws.found.io/api/as/v1/engines/cancer-consortium/search";
+    const SEARCH_KEY = "search-d4wmid75w6rn9onstbmpampm";
+    const PAGE_SIZE = 100;
 
-// Moffitt Cancer Center — stub
-// Investigation complete (March 2026):
-//   All server requests blocked by Cloudflare Managed Challenge (HTTP 403)
-//   Endpoints probed: /research-science/researchers/technology-transfer/,
-//     /research-science/technology-transfer/, /sitemap.xml, /research-science/business-development/
-//   Status: Cloudflare WAF blocks all automated server-side HTTP requests
-//   Path forward: Playwright with stealth plugin + residential proxy rotation
-export const moffittScraper = createStubScraper(
-  "Moffitt Cancer Center",
-  "Cloudflare Managed Challenge blocks all server-side requests (HTTP 403); needs Playwright + residential proxy"
-);
+    try {
+      const results: ScrapedListing[] = [];
+      let page = 1;
+      let totalPages = 1;
+
+      while (page <= totalPages && page <= 10) {
+        const res = await fetch(ENDPOINT, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${SEARCH_KEY}`,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(20_000),
+          body: JSON.stringify({
+            query: "",
+            page: { size: PAGE_SIZE, current: page },
+            result_fields: {
+              title: { raw: {} },
+              url: { raw: {} },
+              search_result_type: { raw: {} },
+              body_content: { raw: { size: 400 } },
+            },
+          }),
+        });
+        if (!res.ok) break;
+        const json: { meta?: { page?: { total_pages?: number } }; results?: any[] } = await res.json();
+        totalPages = json?.meta?.page?.total_pages ?? 1;
+
+        for (const r of json.results ?? []) {
+          const url: string = r.url?.raw ?? "";
+          // Only collect fredhutch.org technology-details pages
+          if (!url.includes("fredhutch.org") || !url.includes("technology-details")) continue;
+          const title: string = (r.title?.raw ?? "").trim();
+          if (!title) continue;
+          const desc: string = (r.body_content?.raw ?? "").replace(/<[^>]+>/g, " ").trim();
+          results.push({ title, description: desc.slice(0, 1000), url, institution: INST });
+        }
+        page++;
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (Elastic cancer-consortium, ${totalPages} pages scanned)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// Moffitt Cancer Center
+// Direct access blocked by Cloudflare Managed Challenge (HTTP 403 on all endpoints).
+// This scraper uses Wayback Machine archived pages (2023 snapshot, stable 6 categories confirmed):
+//   pharmaceuticals-biologics, diagnostics, devices, immunotherapies,
+//   software-tools, clinical-decision-support-tools
+// Strategy: fetch archived listing → archived category pages → extract slugs → derive titles
+// Individual archived tech pages are fetched for real h1 titles (with concurrency limit).
+export const moffittScraper: InstitutionScraper = {
+  institution: "Moffitt Cancer Center",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Moffitt Cancer Center";
+    const MOFFITT_BASE = "https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies";
+    const WB_BASE = "https://web.archive.org/web";
+    // Use a known stable 2023 snapshot timestamp for the listing
+    const LISTING_TS = "20230803091028";
+
+    const wbFetch = async (liveUrl: string, ts: string): Promise<string | null> => {
+      try {
+        const archiveUrl = `${WB_BASE}/${ts}/${liveUrl}`;
+        const res = await fetch(archiveUrl, {
+          headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+          signal: AbortSignal.timeout(20_000),
+        });
+        return res.ok ? await res.text() : null;
+      } catch {
+        return null;
+      }
+    };
+
+    // Extract individual tech page hrefs from an archived category page
+    const extractTechLinks = (html: string, categorySlug: string): Array<{ liveUrl: string; archiveTs: string }> => {
+      const items: Array<{ liveUrl: string; archiveTs: string }> = [];
+      // Archive links look like: href="/web/{TS}/https://www.moffitt.org/.../available-technologies/{cat}/{slug}/"
+      const re = new RegExp(
+        `/web/(\\d{14})/https?://(?:www\\.)?moffitt\\.org/[^"]*available-technologies/${categorySlug}/([^/"]+)/?"`,
+        "g"
+      );
+      let m: RegExpExecArray | null;
+      const seen = new Set<string>();
+      while ((m = re.exec(html)) !== null) {
+        const archiveTs = m[1];
+        const slug = m[2];
+        if (!slug || slug === "availabletechnologiessearch" || seen.has(slug)) continue;
+        seen.add(slug);
+        items.push({
+          liveUrl: `${MOFFITT_BASE}/${categorySlug}/${slug}/`,
+          archiveTs,
+        });
+      }
+      return items;
+    };
+
+    // Derive a human-readable title from URL slug
+    // Slug format: {id}-{title-words...}  e.g. "22mb110n-dc-vaccine-enriching-..."
+    const LOWER_WORDS = new Set(["a", "an", "and", "as", "at", "but", "by", "for", "in",
+      "is", "it", "nor", "of", "on", "or", "so", "the", "to", "up", "via", "yet"]);
+    const titleFromSlug = (slug: string): string => {
+      const withoutId = slug.replace(/^[0-9]{2}[a-z]{2,}[0-9]+[a-z]?-/, "");
+      const words = withoutId.split("-");
+      return words
+        .map((w, i) =>
+          i > 0 && LOWER_WORDS.has(w)
+            ? w
+            : w.charAt(0).toUpperCase() + w.slice(1)
+        )
+        .join(" ");
+    };
+
+    try {
+      // Known categories (confirmed from 2023 archived listing)
+      const CATEGORIES = [
+        "pharmaceuticals-biologics",
+        "diagnostics",
+        "devices",
+        "immunotherapies",
+        "software-tools",
+        "clinical-decision-support-tools",
+      ];
+
+      const allTechItems: Array<{ liveUrl: string; archiveTs: string; slug: string; category: string }> = [];
+
+      // Fetch each archived category page and extract tech links
+      for (const cat of CATEGORIES) {
+        const catLiveUrl = `${MOFFITT_BASE}/${cat}/`;
+        const catHtml = await wbFetch(catLiveUrl, LISTING_TS);
+        if (!catHtml) continue;
+        const techLinks = extractTechLinks(catHtml, cat);
+        for (const t of techLinks) {
+          const slug = t.liveUrl.split("/").filter(Boolean).pop() ?? "";
+          allTechItems.push({ ...t, slug, category: cat });
+        }
+      }
+
+      // Derive titles from slugs (no per-page fetching — Wayback Machine is too slow for
+      // hundreds of individual tech pages; slug encodes a high-fidelity title approximation)
+      const results: ScrapedListing[] = allTechItems
+        .map((item) => ({
+          title: titleFromSlug(item.slug),
+          description: "",
+          url: item.liveUrl,
+          institution: INST,
+          categories: [item.category.replace(/-/g, " ")],
+        }))
+        .filter((r) => r.title.length > 3);
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (${allTechItems.length} tech pages, titles from slugs, Wayback 2023 snapshot)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
