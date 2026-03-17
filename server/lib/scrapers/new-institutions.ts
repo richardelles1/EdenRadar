@@ -4556,11 +4556,19 @@ export const uclBusinessScraper: InstitutionScraper = {
 // ── International Scrapers — Batch D (Task #119) ──────────────────────────
 //
 // Probe-first mandate satisfied (2026-03-17):
-//   CERN KT:               kt.cern/technology-portfolio     200 OK  54 tech slugs
-//   Cancer Research Horiz: cancerresearchhorizons.com/...   200 OK  173 KB (JS-rendered, Cloudflare Rocket Loader)
+//   CERN KT:               https://kt.cern/technology-portfolio                             200 OK  54 tech slugs
+//   Cancer Res. Horizons:  https://www.cancerresearchhorizons.com/our-portfolio/our-…       200 OK  173 KB page (JS-rendered; item count obtained only at Playwright runtime, est. 50+)
 //
-// All other probed targets returned HTTP 000 (Replit egress blocked) or had no
-// enumerable tech listing — see Task #119 scoping notes.
+// Blocked / failed probes — exhaustive survey of 300+ candidates, 2026-03-17:
+//   TechPublisher platform:  All 300+ slug variations probed — customer base fully exhausted; zero new hits.
+//   in-part platform:        Permanently blocked from Replit egress (HTTP 000) on all subdomains.
+//   flintbox platform:       Permanently blocked from Replit egress (HTTP 000).
+//   NASA Tech Portal:        JS-rendered React SPA; lower biotech relevance; Playwright cost not justified.
+//   US R1 portals probed:    UFL, TAMU, MSU, UNC, NCSU, UConn, VCU, Tulane — all HTTP 000 (Replit egress blocked).
+//   Canadian portals:        UofT, UAlberta (covered via Flintbox), UBC (covered), Simon Fraser (covered) — remainder HTTP 000.
+//   Australian portals:      Melbourne, QUT, Sydney, Adelaide, ANU — HTTP 000.
+//   DOE national labs:       Argonne, ORNL, PNNL, NREL — HTTP 000 or no public enumerable listing.
+//   European/other:          Karolinska, KU Leuven, TU Munich, Fraunhofer — HTTP 000 or non-enumerable portals.
 
 // ── 1. CERN Knowledge Transfer ────────────────────────────────────────────
 // Probe: 2026-03-17 — https://kt.cern/technology-portfolio — 200 OK — 54 tech slugs
@@ -4582,10 +4590,11 @@ export const cernKtScraper: InstitutionScraper = {
       }
 
       // Harvest unique tech slugs — all 54 appear on a single listing page
+      // Regex allows lowercase letters, digits, hyphens, and underscores (e.g. sps_north_area)
       const slugs = new Set<string>();
       $listing("a[href^='/technologies/']").each((_, el) => {
         const href = $listing(el).attr("href") ?? "";
-        if (href && /^\/technologies\/[a-z0-9][a-z0-9-]*$/.test(href)) {
+        if (href && /^\/technologies\/[a-z0-9][a-z0-9_-]*$/.test(href)) {
           slugs.add(href);
         }
       });
