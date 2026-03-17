@@ -232,18 +232,32 @@ import {
   lblScraper,
   roswellParkScraper,
   ncatsScraper,
+  // Task #109 — Batch 4 Cancer Centers
+  danaFarberScraper,
+  cincinnatiChildrensScraper,
+  foxChaseScraper,
+  fredHutchScraper,
+  moffittScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
-// Institutions investigated but EXCLUDED — no public enumerable tech listing:
+// Institutions investigated but not yet scraped (stubs return []):
 //
 // Fred Hutchinson Cancer Center
-//   Probed: fredhutch.org/en/research/innovation (404), /about/business-development (404),
-//           /about/technology-transfer (404), research.fredhutch.org/tech-transfer (302→404)
-//   Platform: None found (no TechPublisher, Flintbox, Wellspring, Elucid, or in-part)
-//   Status: No public tech listing exists. Innovation page removed/relocated.
-//   Listing estimate: 0 (no enumerable source)
-//   Last verified: 2026-03-15
+//   Platform: Adobe AEM + Elastic App Search ("cancer-consortium" engine)
+//   API found: fredhutch-prod.ent.us-west-2.aws.found.io, searchKey search-d4wmid75w6rn9onstbmpampm
+//   Engine facets: Member Profile (738), Webpages (38), Documents (35) — NO tech listing type
+//   Individual tech pages exist at /technology-details.fh_bds_technology_id_{YY}-{NNN}.{slug}.html
+//   but are NOT indexed in the Elastic engine and not enumerable without interactive browser nav
+//   Path forward: Playwright navigation through available-technologies.html search UI
+//   Last verified: 2026-03-17
+//
+// Moffitt Cancer Center
+//   Probed: /research-science/researchers/technology-transfer/, /research-science/technology-transfer/,
+//           /research-science/business-development/, /sitemap.xml
+//   All endpoints return HTTP 403 — Cloudflare Managed Challenge blocks all server-side requests
+//   Path forward: Playwright with stealth plugin + residential proxy rotation
+//   Last verified: 2026-03-17
 //
 // Cold Spring Harbor Laboratory (CSHL)
 //   Probed: cshl.edu/partner-with-us/technology-transfer/ (200, informational only),
@@ -519,6 +533,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   lblScraper,
   roswellParkScraper,
   ncatsScraper,
+  // ── Batch 4 Cancer Centers (Task #109, March 2026) ─────────────────────────
+  danaFarberScraper,           // Dana-Farber Cancer Institute — in-part API ~70
+  cincinnatiChildrensScraper,  // Cincinnati Children's — HTML search page ~40
+  foxChaseScraper,             // Fox Chase Cancer Center — Drupal 2-level crawl ~67
+  fredHutchScraper,            // STUB — Elastic engine lacks tech listing; needs Playwright
+  moffittScraper,              // STUB — Cloudflare 403; needs Playwright + residential proxy
 ];
 
 async function runWithConcurrency<T>(
