@@ -1032,3 +1032,164 @@ export const ukyScraper = createFlintboxScraper(
   { slug: "uky", orgId: 78, accessKey: "38378c10-972e-4f49-b91f-a7eb0d8c7f31" },
   "University of Kentucky"
 );
+
+// ── Bespoke HTML scrapers (Task #101, March 2026) ───────────────────────────
+
+export const boiseStateScraper: InstitutionScraper = {
+  institution: "Boise State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.boisestate.edu/research-ott/available-technologies/";
+    const $ = await fetchHtml(url, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seenUrls = new Set<string>();
+    $("table.tablepress tbody tr").each((_, row) => {
+      const cols = $(row).find("td");
+      if (cols.length < 3) return;
+      const bsuFile = cleanText($(cols[0]).text());
+      const inventors = cleanText($(cols[1]).text());
+      const linkEl = $(cols[2]).find("a");
+      const patentUrl = linkEl.attr("href") ?? "";
+      const linkText = cleanText(linkEl.text());
+      if (!patentUrl || seenUrls.has(patentUrl)) return;
+      seenUrls.add(patentUrl);
+      const title = linkText.replace(/^BSU\s*\d+\s*/i, "").trim() || `BSU ${bsuFile}`;
+      results.push({
+        title: title.length > 3 ? title : `BSU ${bsuFile} — ${inventors}`,
+        description: "",
+        url: patentUrl,
+        institution: "Boise State University",
+        inventors: inventors ? inventors.split(/,\s*/).filter(Boolean) : undefined,
+        technologyId: bsuFile ? `BSU-${bsuFile}` : undefined,
+      });
+    });
+    console.log(`[scraper] Boise State University: ${results.length} listings (tablepress)`);
+    return results;
+  },
+};
+
+export const nauScraper: InstitutionScraper = {
+  institution: "Northern Arizona University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const categories = [
+      "biomedical", "cybersecurity", "energy", "environmental",
+      "other", "research-tools", "software-hardware",
+    ];
+    const results: ScrapedListing[] = [];
+    const seenTitles = new Set<string>();
+    for (const cat of categories) {
+      const catUrl = `https://in.nau.edu/research/innovations/available-technologies/${cat}/`;
+      const $ = await fetchHtml(catUrl, 15000);
+      if (!$) continue;
+      let currentSubHeading = cat;
+      $("main h2, main ul.wp-block-list").each((_, el) => {
+        const tag = $(el).prop("tagName");
+        if (tag === "H2") {
+          currentSubHeading = cleanText($(el).text());
+          return;
+        }
+        $(el).find("li").each((__, li) => {
+          const title = cleanText($(li).text());
+          if (!title || title.length < 10 || title.length > 200) return;
+          const lower = title.toLowerCase();
+          if (seenTitles.has(lower)) return;
+          seenTitles.add(lower);
+          results.push({
+            title,
+            description: "",
+            url: catUrl,
+            institution: "Northern Arizona University",
+            categories: [cat, currentSubHeading].filter(Boolean),
+          });
+        });
+      });
+    }
+    console.log(`[scraper] Northern Arizona University: ${results.length} listings (${categories.length} categories)`);
+    return results;
+  },
+};
+
+export const utennesseeScraper: InstitutionScraper = {
+  institution: "University of Tennessee",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://utrf.tennessee.edu";
+    const results: ScrapedListing[] = [];
+    const seenUrls = new Set<string>();
+
+    async function scrapePage(pageUrl: string): Promise<boolean> {
+      const $ = await fetchHtml(pageUrl, 15000);
+      if (!$) return false;
+      let found = 0;
+      $('a[href*="/technologies/"]').each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href.includes("/technologies/")) return;
+        const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+        if (seenUrls.has(fullUrl)) return;
+        if (fullUrl.includes("Read More") || href.endsWith("/technologies/")) return;
+        const title = cleanText($(el).text());
+        if (!title || title === "Read More" || title.length < 5) return;
+        seenUrls.add(fullUrl);
+        found++;
+        results.push({
+          title,
+          description: "",
+          url: fullUrl,
+          institution: "University of Tennessee",
+        });
+      });
+      return found > 0;
+    }
+
+    const entryPoints = [
+      `${base}/industry/available-technologies/`,
+      `${base}/technology-category/human-health/`,
+    ];
+
+    for (const entry of entryPoints) {
+      await scrapePage(entry);
+      for (let pg = 2; pg <= 10; pg++) {
+        const pageUrl = `${entry}page/${pg}/`;
+        const hasMore = await scrapePage(pageUrl);
+        if (!hasMore) break;
+      }
+    }
+
+    console.log(`[scraper] University of Tennessee: ${results.length} listings (UTRF)`);
+    return results;
+  },
+};
+
+export const ncatScraper: InstitutionScraper = {
+  institution: "NC A&T State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.ncat.edu/research/technology-transfer/available-technologies.php";
+    const $ = await fetchHtml(url, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seenTitles = new Set<string>();
+    $("main p > strong, main p > b").each((_, el) => {
+      const title = cleanText($(el).text());
+      if (!title || title.length < 10 || title.length > 200) return;
+      if (/^(home|research|technology transfer|available|page|search|office|contact)/i.test(title)) return;
+      const lower = title.toLowerCase();
+      if (seenTitles.has(lower)) return;
+      seenTitles.add(lower);
+      const parentP = $(el).closest("p");
+      const patentLink = parentP.find('a[href*="patents.google.com"]').first();
+      const patentUrl = patentLink.attr("href") ?? "";
+      results.push({
+        title,
+        description: "",
+        url: patentUrl || url,
+        institution: "NC A&T State University",
+      });
+    });
+    console.log(`[scraper] NC A&T State University: ${results.length} listings`);
+    return results;
+  },
+};
+
+export const morganStateScraper = createStubScraper(
+  "Morgan State University",
+  "IPD Executive Summaries page says 'Coming Soon' — no listings available yet"
+);

@@ -192,6 +192,11 @@ import {
   kansasScraper,
   siuScraper,
   ukyScraper,
+  boiseStateScraper,
+  nauScraper,
+  utennesseeScraper,
+  ncatScraper,
+  morganStateScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -439,6 +444,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   kansasScraper,
   siuScraper,
   ukyScraper,
+  // ── Bespoke HTML scrapers (Task #101, March 2026) ─────────────────────────
+  boiseStateScraper,
+  nauScraper,
+  utennesseeScraper,
+  ncatScraper,
+  morganStateScraper,
 ];
 
 async function runWithConcurrency<T>(
