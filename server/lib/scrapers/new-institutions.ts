@@ -563,7 +563,66 @@ export const sdstateScraper = createTechPublisherScraper("sdstate", "South Dakot
 export const olemissScraper = createTechPublisherScraper("olemiss", "University of Mississippi", { maxPg: 30 });
 
 // ── New US: verified working TechPublisher slugs (international) ─────────
-export const leedsScraper = createTechPublisherScraper("leeds", "University of Leeds", { maxPg: 50 });
+// Leeds TechPublisher RSS is empty and SearchResults page is JS-rendered.
+// Leeds uses a separate storefront (licensing.leeds.ac.uk) with a JSON client API.
+export const leedsScraper: InstitutionScraper = {
+  institution: "University of Leeds",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "University of Leeds";
+    const BASE = "https://licensing.leeds.ac.uk";
+
+    interface LeedsItem {
+      url?: string;
+      name?: string;
+      shortDescription?: string | null;
+    }
+    interface LeedsPage {
+      total?: number;
+      pages?: number;
+      items?: LeedsItem[];
+    }
+
+    const results: ScrapedListing[] = [];
+    let page = 1;
+    let totalPages = 1;
+
+    while (page <= totalPages) {
+      const apiUrl =
+        `${BASE}/client/products/search` +
+        `?page=${page}&itemsPerPage=300` +
+        `&columns[]=url&columns[]=name&columns[]=shortDescription`;
+
+      try {
+        const res = await fetch(apiUrl, {
+          headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+          signal: AbortSignal.timeout(15_000),
+        });
+        if (!res.ok) {
+          console.error(`[scraper] ${INST}: API returned ${res.status} on page ${page}`);
+          break;
+        }
+        const json: LeedsPage = await res.json();
+        totalPages = json.pages ?? 1;
+        for (const item of json.items ?? []) {
+          const title = cleanText(item.name ?? "");
+          const itemUrl = item.url ?? "";
+          if (!title || title.length < 5 || !itemUrl) continue;
+          const fullUrl = itemUrl.startsWith("http") ? itemUrl : `${BASE}${itemUrl}`;
+          const desc = cleanText(item.shortDescription ?? "");
+          results.push({ title, description: desc, url: fullUrl, institution: INST });
+        }
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[scraper] ${INST}: fetch error on page ${page}: ${msg}`);
+        break;
+      }
+      page++;
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings via Leeds Licensing API`);
+    return results;
+  },
+};
 export const southamptonScraper = createTechPublisherScraper("southampton", "University of Southampton", { maxPg: 50 });
 export const usaskScraper = createTechPublisherScraper("usask", "University of Saskatchewan", { maxPg: 30 });
 
