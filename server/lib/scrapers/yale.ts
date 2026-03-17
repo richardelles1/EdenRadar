@@ -110,7 +110,8 @@ export const yaleScraper: InstitutionScraper = {
         if (!isNaN(id) && id > 0) nodeIds0.push(id);
       });
 
-      const totalPages = await getTotalPages(html0);
+      // Call-time path guard: only paginate when we are on the yale-technologies listing URL.
+      const totalPages = LIST_URL.includes("yale-technologies") ? await getTotalPages(html0) : 0;
       console.log(`[scraper] ${INST}: found ${totalPages + 1} pages, ${nodeIds0.length} nodes on page 0`);
 
       const additionalPageIds: number[][] = [];

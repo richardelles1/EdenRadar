@@ -2973,6 +2973,20 @@ export const fredHutchScraper: InstitutionScraper = {
           if (allLinks.size === prevSize) break;
         }
 
+        // Fallback: if main AEM listing rendered empty (JS failed to hydrate),
+        // crawl the research-tools sub-page which contains additional tech-detail links.
+        if (allLinks.size === 0) {
+          const RESEARCH_TOOLS_URL =
+            "https://www.fredhutch.org/en/investors/business-development/available-technologies/research-tools.html";
+          try {
+            await page.goto(RESEARCH_TOOLS_URL, { timeout: 30_000, waitUntil: "networkidle" });
+            await page.waitForSelector('a[href*="technology-details"]', { timeout: 10_000 });
+            await collectPage();
+          } catch {
+            // sub-page unavailable — proceed with empty results
+          }
+        }
+
         const results: ScrapedListing[] = [];
         for (const [href, title] of Array.from(allLinks.entries())) {
           if (!title || title.length < 3) continue;

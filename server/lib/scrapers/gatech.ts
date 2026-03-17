@@ -47,7 +47,8 @@ async function playwrightScrape(): Promise<ScrapedListing[]> {
     });
 
     await page.goto(`${BASE}/technologies`, { timeout: 45_000, waitUntil: "networkidle" });
-    await page.waitForTimeout(4_000);
+    // Wait for the first technology card link to be visible before extracting.
+    await page.waitForSelector('a[href*="/technologies/"]', { state: "visible", timeout: 30_000 });
 
     const allLinks = new Map<string, string>();
 
@@ -137,7 +138,7 @@ async function apiScrape(orgId: number, accessKey: string): Promise<ScrapedListi
     const url =
       `${BASE}/api/v1/technologies` +
       `?organizationId=${orgId}` +
-      `&accessKey=${accessKey}` +
+      `&organizationAccessKey=${accessKey}` +
       `&page=${page}` +
       `&query=`;
     try {
