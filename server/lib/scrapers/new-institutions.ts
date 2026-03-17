@@ -3201,3 +3201,273 @@ export const moffittScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── Pediatric / Children's Hospital Batch (Task #112, March 2026) ─────────────
+
+// ── InPart API scrapers ───────────────────────────────────────────────────────
+
+export const chlaScraper = createInPartScraper(
+  "chla",
+  "Children's Hospital Los Angeles"
+);
+
+export const lurieChildrensScraper = createInPartScraper(
+  "luriechildrens",
+  "Lurie Children's Hospital"
+);
+
+// bcmScraper omitted — identical to existing baylorScraper (same "bcm" subdomain, same institution)
+
+export const childrensNationalScraper = createInPartScraper(
+  "childrensnational",
+  "Children's National"
+);
+
+// ── TechPublisher ─────────────────────────────────────────────────────────────
+
+export const bostonChildrensScraper = createTechPublisherScraper(
+  "bch",
+  "Boston Children's Hospital",
+  { maxPg: 50 }
+);
+
+// ── Flintbox ──────────────────────────────────────────────────────────────────
+
+export const chopScraper = createFlintboxScraper(
+  { slug: "chop", orgId: 96, accessKey: "f12b8075-623f-4993-aeb5-ba16d11c0a29" },
+  "Children's Hospital of Philadelphia"
+);
+
+// ── St. Jude Children's Research Hospital — bespoke HTML scraper ──────────────
+// Category pages at .../technology-licensing/<cat>.html contain links to individual
+// tech pages at .../technology-licensing/technologies/<slug>.html.
+// Title: <h1>, Description: <meta name="description">.
+export const stjudeScraper: InstitutionScraper = {
+  institution: "St. Jude Children's Research Hospital",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "St. Jude Children's Research Hospital";
+    const BASE = "https://www.stjude.org";
+    const TTO_BASE = `${BASE}/research/why-st-jude/shared-resources/technology-licensing`;
+    const CATEGORY_PAGES = [
+      `${TTO_BASE}/technologies.html`,
+      `${TTO_BASE}/antibodies-for-basic-research.html`,
+      `${TTO_BASE}/biologics.html`,
+      `${TTO_BASE}/diagnostics.html`,
+      `${TTO_BASE}/drug-discovery-development-tools.html`,
+      `${TTO_BASE}/vaccines.html`,
+    ];
+    const TIMEOUT_MS = 15_000;
+
+    try {
+      const seenUrls = new Set<string>();
+      const techUrls: string[] = [];
+
+      // Collect tech-page links from all category pages
+      for (const catUrl of CATEGORY_PAGES) {
+        try {
+          const res = await fetch(catUrl, {
+            headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          });
+          if (!res.ok) continue;
+          const html = await res.text();
+          const hrefRe = /href="(\/research\/why-st-jude\/shared-resources\/technology-licensing\/technologies\/[^"]+\.html)"/g;
+          let m: RegExpExecArray | null;
+          while ((m = hrefRe.exec(html)) !== null) {
+            const fullUrl = `${BASE}${m[1]}`;
+            if (!seenUrls.has(fullUrl)) {
+              seenUrls.add(fullUrl);
+              techUrls.push(fullUrl);
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      if (techUrls.length === 0) {
+        console.log(`[scraper] ${INST}: 0 tech URLs collected from category pages`);
+        return [];
+      }
+
+      // Fetch each detail page for title + description
+      const CONCUR = 5;
+      const results: ScrapedListing[] = [];
+      const queue = [...techUrls];
+
+      const worker = async (): Promise<void> => {
+        while (queue.length > 0) {
+          const url = queue.shift();
+          if (!url) return;
+          try {
+            const res = await fetch(url, {
+              headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+              signal: AbortSignal.timeout(TIMEOUT_MS),
+            });
+            if (!res.ok) continue;
+            const html = await res.text();
+            const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+            const metaMatch = html.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+            const title = h1Match ? cleanText(h1Match[1]) : "";
+            const description = metaMatch ? cleanText(metaMatch[1]) : "";
+            if (title && title.length > 5) {
+              results.push({ title, description, url, institution: INST });
+            }
+          } catch {
+            continue;
+          }
+        }
+      };
+
+      await Promise.all(Array.from({ length: CONCUR }, () => worker()));
+      console.log(`[scraper] ${INST}: ${results.length} listings (${techUrls.length} tech pages, ${CATEGORY_PAGES.length} category pages)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── Nationwide Children's Hospital — bespoke HTML scraper ─────────────────────
+// Main listing at /research/technology-commercialization/available-technologies.
+// Individual tech pages at /research/technology-commercialization/available-technologies/<slug>.
+// Title: <h1 class=" contentHeading"> (or any <h1>), Description: <meta name="og:description">.
+export const nationwideChildrensScraper: InstitutionScraper = {
+  institution: "Nationwide Children's Hospital",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Nationwide Children's Hospital";
+    const BASE = "https://www.nationwidechildrens.org";
+    const INDEX_URL = `${BASE}/research/technology-commercialization/available-technologies`;
+    const INDEX_PATH = "/research/technology-commercialization/available-technologies";
+    const TIMEOUT_MS = 15_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+    try {
+      const res = await fetch(INDEX_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+
+      // Collect /research/technology-commercialization/available-technologies/<slug>
+      const seenUrls = new Set<string>();
+      const techUrls: string[] = [];
+      const hrefRe = /href="(\/research\/technology-commercialization\/available-technologies\/[^"]+)"/g;
+      let m: RegExpExecArray | null;
+      while ((m = hrefRe.exec(html)) !== null) {
+        const fullUrl = `${BASE}${m[1]}`;
+        if (!seenUrls.has(fullUrl)) {
+          seenUrls.add(fullUrl);
+          techUrls.push(fullUrl);
+        }
+      }
+
+      if (techUrls.length === 0) {
+        console.log(`[scraper] ${INST}: 0 tech URLs found on listing page`);
+        return [];
+      }
+
+      const results: ScrapedListing[] = [];
+      for (const url of techUrls) {
+        try {
+          const pageRes = await fetch(url, {
+            headers: { "User-Agent": UA },
+            signal: AbortSignal.timeout(TIMEOUT_MS),
+          });
+          if (!pageRes.ok) continue;
+          const pageHtml = await pageRes.text();
+          const h1Match = pageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+          const ogDescMatch = pageHtml.match(/<meta\s+name="og:description"\s+content="([^"]+)"/i);
+          const metaDescMatch = pageHtml.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
+          const title = h1Match ? cleanText(h1Match[1]) : "";
+          const description = ogDescMatch
+            ? cleanText(ogDescMatch[1])
+            : metaDescMatch ? cleanText(metaDescMatch[1]) : "";
+          if (title && title.length > 5) {
+            results.push({ title, description, url, institution: INST });
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── Nemours Children's Health — bespoke static-HTML scraper ──────────────────
+// Technologies are listed inline on the tech-transfer page as <li> items with
+// <p><b>Title</b><br>Patent status: ...<br>Inventor: ...</p>.
+// No pagination and no separate detail pages.
+export const nemoursScraper: InstitutionScraper = {
+  institution: "Nemours Children's Health",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Nemours Children's Health";
+    const PAGE_URL = "https://www.nemours.org/pediatric-research/technology-transfer.html";
+    const TIMEOUT_MS = 15_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+
+    try {
+      const res = await fetch(PAGE_URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+
+      // Technologies are embedded in the page as JSON inside data-cmp-data-layer attributes.
+      // The relevant block contains a <ul> with <li><p><b>Title</b>...metadata...</p></li>.
+      // Extract them by parsing the escaped HTML from the data layer JSON.
+      const results: ScrapedListing[] = [];
+      const seenTitles = new Set<string>();
+
+      // Method 1: parse xdm:text from data-cmp-data-layer JSON blobs
+      const dataLayerRe = /data-cmp-data-layer="(\{[^"]+\})"/g;
+      let m: RegExpExecArray | null;
+      while ((m = dataLayerRe.exec(html)) !== null) {
+        try {
+          const raw = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
+          const obj = JSON.parse(raw);
+          const keys = Object.keys(obj);
+          for (const key of keys) {
+            const xdmText: string = obj[key]?.["xdm:text"] ?? "";
+            if (!xdmText.includes("<b>")) continue;
+            // Extract each <li>...<b>Title</b>...content...</li>
+            const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+            let liM: RegExpExecArray | null;
+            while ((liM = liRe.exec(xdmText)) !== null) {
+              const liHtml = liM[1];
+              const boldMatch = liHtml.match(/<b>([^<]+)<\/b>/i);
+              if (!boldMatch) continue;
+              const title = cleanText(boldMatch[1]);
+              if (!title || title.length < 5 || seenTitles.has(title)) continue;
+              seenTitles.add(title);
+              const descText = liHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+              results.push({
+                title,
+                description: cleanText(descText),
+                url: PAGE_URL,
+                institution: INST,
+              });
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (inline tab HTML)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};

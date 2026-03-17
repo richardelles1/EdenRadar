@@ -238,6 +238,16 @@ import {
   foxChaseScraper,
   fredHutchScraper,
   moffittScraper,
+  // Task #112 — Pediatric / Children's Hospital batch
+  chlaScraper,
+  lurieChildrensScraper,
+  // bcmScraper omitted — already covered by existing baylorScraper (subdomain "bcm")
+  childrensNationalScraper,
+  bostonChildrensScraper,
+  chopScraper,
+  stjudeScraper,
+  nationwideChildrensScraper,
+  nemoursScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -533,6 +543,16 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   foxChaseScraper,             // Fox Chase Cancer Center — Drupal 2-level crawl ~67
   fredHutchScraper,            // Fred Hutch — Elastic cancer-consortium exhaustive scan (fredhutch.org URLs)
   moffittScraper,              // Moffitt — Wayback Machine 2023 snapshot, 6 categories
+  // ── Pediatric / Children's Hospital batch (Task #112, March 2026) ─────────
+  chlaScraper,                 // Children's Hospital Los Angeles — in-part API ~27
+  lurieChildrensScraper,       // Lurie Children's Hospital — in-part API
+  // Baylor College of Medicine already covered by baylorScraper (subdomain "bcm") above
+  childrensNationalScraper,    // Children's National — in-part API
+  bostonChildrensScraper,      // Boston Children's Hospital — TechPublisher "bch"
+  chopScraper,                 // Children's Hospital of Philadelphia — Flintbox orgId=96
+  stjudeScraper,               // St. Jude Children's Research Hospital — 6 category pages
+  nationwideChildrensScraper,  // Nationwide Children's Hospital — bespoke HTML
+  nemoursScraper,              // Nemours Children's Health — inline listing ~7 techs
 ];
 
 async function runWithConcurrency<T>(
