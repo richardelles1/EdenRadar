@@ -1,0 +1,28 @@
+Fred Hutch:
+https://www.fredhutch.org/en/investors/business-development/available-technologies.html?size=n_10_n&filters%5B0%5D%5Bfield%5D=search_result_type&filters%5B0%5D%5Btype%5D=any&filters%5B0%5D%5Bvalues%5D%5B0%5D=Available%20Technologies
+https://www.fredhutch.org/en/investors/business-development/available-technologies/technology-details.fh_bds_technology_id_17-079.tcr-cell-therapy-targeting-mage-a1.html
+https://www.fredhutch.org/en/investors/business-development/available-technologies/technology-details.fh_bds_technology_id_10-038.immunotherapy-for-the-treatment-of-obesity.html
+https://www.fredhutch.org/en/investors/business-development/available-technologies/technology-details.fh_bds_technology_id_14-029.gene-expression-biomarkers-to-track-facioscapulohumeral-dystrophy-disease-progression.html
+
+Fox Chase (it just uses the ref number after headline):
+https://www.foxchase.org/about-us/research-and-development-alliances/technology-transfer/licensing
+https://www.foxchase.org/about-us/research-and-development-alliances/technology-transfer/licensing/cancer-therapeutics-discovery-targets
+https://www.foxchase.org/about-us/research-and-development-alliances/technology-transfer/licensing/cancer-therapeutics/02-15
+https://www.foxchase.org/about-us/research-and-development-alliances/technology-transfer/licensing/cancer-therapeutics-discovery-targets/06-16
+
+Dana Farber CI:
+https://dfci.portals.in-part.com/
+
+Moffit:
+https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies/
+https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies/immunotherapies/
+https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies/immunotherapies/22mb110n-dc-vaccine-enriching-monocyte-derived-dendritic-cells-to-create-dc-vaccine-based-immunotherapy-using-l-fucose/
+https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies/immunotherapies/20ma027-olfactory-receptor-targeting-chimeric-antigen-receptor-expressing-t-cell-car-t-for-solid-tumors/
+https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies/immunotherapies/19ma015n-gpc3-enhancing-carcinoma-infiltration-by-anti-gpc3-targeted-car-t-cells-by-co-expression-of-the-chemokine-receptor-cx3cr1/
+
+Cincy Childrens:
+https://www.cincinnatichildrens.org/research/support/innovation-ventures/technologies
+https://www.cincinnatichildrens.org/research/support/innovation-ventures/technologies/search?TechnologyCategories=TWVkaWNhbCBEZXZpY2Vz
+https://www.cincinnatichildrens.org/research/support/innovation-ventures/technologies/2021-0208
+https://www.cincinnatichildrens.org/research/support/innovation-ventures/technologies/search?TechnologyCategories=VGhlcmFwZXV0aWNz
+https://www.cincinnatichildrens.org/research/support/innovation-ventures/technologies/2016-1202
