@@ -31,10 +31,28 @@ async function fetchWpPage(page: number): Promise<WpPost[]> {
   return Object.assign(posts, { totalPages });
 }
 
+// ── Network Block Notice ───────────────────────────────────────────────────────
+// otc.duke.edu is blocked at the TCP level from our server's IP range.
+// All connection attempts return HTTP 000 / ConnectTimeoutError (verified March 2026).
+// This affects EVERY endpoint on the domain — the root page, the WP REST API,
+// sitemaps, and individual technology pages all fail with the same TCP timeout.
+// The site IS publicly accessible from browsers; the block is IP-range-specific
+// (likely Duke's CDN/WAF targeting cloud hosting providers).
+//
+// Do NOT attempt alternative URL patterns, different user-agents, or proxy tricks —
+// the block is at the TCP handshake layer, not HTTP. Until Duke's CDN allows
+// server-side access, this scraper will always return 0 results.
+//
+// To unblock: contact Duke OTC (otcinfo@duke.edu) and request server-IP allowlisting,
+// or set up a proxy/tunnel outside the blocked IP range.
+// ──────────────────────────────────────────────────────────────────────────────
+
 export const dukeScraper: InstitutionScraper = {
   institution: INST,
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
+    // otc.duke.edu is TCP-blocked from our server — always returns [].
+    // See block notice above.
     try {
       const posts = await fetchWpPage(1);
       return posts.slice(0, maxResults).map((p) => ({
@@ -49,7 +67,9 @@ export const dukeScraper: InstitutionScraper = {
   },
 
   async scrape(): Promise<ScrapedListing[]> {
-    console.log(`[scraper] ${INST}: attempting WP REST API...`);
+    // otc.duke.edu is TCP-blocked from our server — always returns [].
+    // See block notice above for full details and remediation steps.
+    console.log(`[scraper] ${INST}: attempting WP REST API (note: otc.duke.edu is TCP-blocked from server IP range)...`);
     try {
       const firstPage = await fetchWpPage(1);
       const totalPages: number = (firstPage as any).totalPages ?? 1;
@@ -77,7 +97,7 @@ export const dukeScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings via WP REST API`);
       return results;
     } catch (err: any) {
-      console.warn(`[scraper] ${INST}: WP REST API failed (${err?.message}) — site may be JS-rendered or rate-limited`);
+      console.warn(`[scraper] ${INST}: WP REST API failed (${err?.message}) — TCP-blocked from server IP range (see block notice in source)`);
       return [];
     }
   },
