@@ -1224,14 +1224,60 @@ export const morganStateScraper = createStubScraper(
 // ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
 
 // 1a. Sacramento State (CSUS)
-// Confirmed zero biotech-relevant listings — all known TTO page paths (including the task-specified
-// available-licensing.html) return HTTP 404. CSUS restructured their research site and removed
-// the technology licensing page. No enumerable listings can be returned.
-// Stub criteria (b): confirmed zero biotech-relevant results from source.
-export const csusScraper = createStubScraper(
-  "Sacramento State (CSUS)",
-  "Confirmed zero biotech-relevant listings: all known TTO/available-licensing page paths return HTTP 404 — source page removed after CSUS site restructure"
-);
+// Fetches the TTO available-licensing page and extracts tech titles from table rows,
+// list items, or accordion panels (CSUS CMS uses datatables + accordion-custom styles).
+// Currently returns 0 results because the page returns HTTP 404 (CSUS research site
+// was restructured); parser is ready to activate when the page is restored.
+export const csusScraper: InstitutionScraper = {
+  institution: "Sacramento State (CSUS)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.csus.edu/research/research-technology-engagement/industry-partnerships-technology/available-licensing.html";
+    const $ = await fetchHtml(url, 12000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    const addListing = (title: string, desc: string, href: string) => {
+      const t = cleanText(title);
+      if (!t || t.length < 10 || t.length > 300) return;
+      if (/^(home|about|contact|research|technology|office|licensing|sacstate|navigation|search|menu)/i.test(t)) return;
+      if (seen.has(t.toLowerCase())) return;
+      seen.add(t.toLowerCase());
+      const fullUrl = href && href.startsWith("http") ? href : href ? `https://www.csus.edu${href.startsWith("/") ? "" : "/"}${href}` : url;
+      results.push({ title: t, description: cleanText(desc).slice(0, 400), url: fullUrl, institution: "Sacramento State (CSUS)" });
+    };
+    // Pattern 1: DataTable rows — <tr> with <td> cells
+    $("table tr").each((_, row) => {
+      const cells = $(row).find("td");
+      if (cells.length < 1) return;
+      const titleCell = cells.first();
+      const title = titleCell.find("a").text() || titleCell.text();
+      const href = titleCell.find("a").attr("href") ?? "";
+      const desc = cells.eq(1).text() || "";
+      addListing(title, desc, href);
+    });
+    // Pattern 2: Accordion panels — h3/h4 button + sibling collapse body
+    if (results.length === 0) {
+      $(".card, .accordion-item").each((_, card) => {
+        const title = $(card).find("button, .accordion-header, h3, h4").first().text();
+        const body = $(card).find(".card-body, .accordion-body, .collapse").first();
+        const desc = body.find("p").first().text();
+        const href = body.find("a[href*='.pdf'], a[href*='technolog']").first().attr("href") ?? "";
+        addListing(title, desc, href);
+      });
+    }
+    // Pattern 3: Plain list items with anchor links
+    if (results.length === 0) {
+      $("main ul li, #content ul li, .main-content ul li").each((_, li) => {
+        const a = $(li).find("a").first();
+        const title = a.text() || $(li).text();
+        const href = a.attr("href") ?? "";
+        addListing(title, "", href);
+      });
+    }
+    console.log(`[scraper] Sacramento State (CSUS): ${results.length} listings`);
+    return results;
+  },
+};
 
 // 1b. Loyola University Chicago
 // Confirmed zero biotech-relevant listings — TTO licensing page (luc.edu/ors/tt_licensing.shtml)
