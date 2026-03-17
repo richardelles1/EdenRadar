@@ -1319,6 +1319,9 @@ export const ohioScraper: InstitutionScraper = {
       if (/^(engineering|environmental|life.science|technologies)$/i.test(title)) return;
       const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
       if (seen.has(fullUrl) || fullUrl.endsWith("/technologies/") || fullUrl.endsWith("/technologies")) return;
+      // Exclude category hub pages: paths with only 1 segment after /technologies/ are category roots
+      const techPath = fullUrl.split("/technologies/")[1] ?? "";
+      if (!techPath.includes("/")) return; // must have at least 2 segments (category/slug)
       seen.add(fullUrl);
       stubs.push({ title, url: fullUrl });
     });
@@ -1502,7 +1505,8 @@ export const umventuresScraper: InstitutionScraper = {
           const title = cleanText($(el).text());
           if (!title || title.length < 8) return;
           const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
-          if (seen.has(fullUrl) || fullUrl.endsWith("/technologies") || fullUrl.endsWith("/technologies/")) return;
+          // Exclude the listing root and any URLs with query params (faceted filter/category links)
+          if (seen.has(fullUrl) || fullUrl.includes("?") || fullUrl.endsWith("/technologies") || fullUrl.endsWith("/technologies/")) return;
           seen.add(fullUrl);
           found++;
           results.push({ title, description: "", url: fullUrl, institution: "University of Maryland (UMVentures)" });
