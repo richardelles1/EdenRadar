@@ -2579,85 +2579,159 @@ export const foxChaseScraper: InstitutionScraper = {
 
 // Fred Hutchinson Cancer Center
 // Investigation (March 2026):
-//   Elastic App Search engine "cancer-consortium" at fredhutch-prod.ent.us-west-2.aws.found.io
-//   Engine indexes cancerconsortium.org pages only (Member Profiles 738, Webpages 38, Documents 35)
-//   Available Technology search_result_type returns 0 — FH tech pages NOT indexed in this engine
-//   AEM childrenlist shows hasChildren:false — tech-detail pages are dynamically served, not CMS nodes
-//   Wayback Machine CDX: 0 archived tech-detail pages for fredhutch.org
-//   This scraper queries the Elastic engine exhaustively for any fredhutch.org/technology-details URLs
-//   and returns them. Currently returns 0 due to engine scope. Path forward: Playwright navigation.
+//   Elastic App Search engine "cancer-consortium" indexes cancerconsortium.org only (0 FH tech pages)
+//   AEM childrenlist hasChildren:false — tech-detail pages are dynamically rendered by JS
+//   Wayback Machine CDX: 0 archived technology-details pages
+//   Solution: Playwright navigation of the available-technologies.html interactive search UI
+//   Each page shows 10 results; Next button is JS-driven (no href); pagination stops when no new URLs appear
+//   Smoke-tested: ~61 tech listings across 7 pages (as of 2026-03-17)
 export const fredHutchScraper: InstitutionScraper = {
   institution: "Fred Hutchinson Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fred Hutchinson Cancer Center";
-    const ENDPOINT = "https://fredhutch-prod.ent.us-west-2.aws.found.io/api/as/v1/engines/cancer-consortium/search";
-    const SEARCH_KEY = "search-d4wmid75w6rn9onstbmpampm";
-    const PAGE_SIZE = 100;
+    const LISTING_URL = "https://www.fredhutch.org/en/investors/business-development/available-technologies.html";
 
+    let browser: import("playwright").Browser | null = null;
     try {
-      const results: ScrapedListing[] = [];
-      let page = 1;
-      let totalPages = 1;
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      });
 
-      while (page <= totalPages && page <= 10) {
-        const res = await fetch(ENDPOINT, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${SEARCH_KEY}`,
-            "Content-Type": "application/json",
-          },
-          signal: AbortSignal.timeout(20_000),
-          body: JSON.stringify({
-            query: "",
-            page: { size: PAGE_SIZE, current: page },
-            result_fields: {
-              title: { raw: {} },
-              url: { raw: {} },
-              search_result_type: { raw: {} },
-              body_content: { raw: { size: 400 } },
-            },
-          }),
-        });
-        if (!res.ok) break;
-        const json: { meta?: { page?: { total_pages?: number } }; results?: any[] } = await res.json();
-        totalPages = json?.meta?.page?.total_pages ?? 1;
+      await page.goto(LISTING_URL, { timeout: 30_000, waitUntil: "domcontentloaded" });
+      await page.waitForTimeout(3_000);
 
-        for (const r of json.results ?? []) {
-          const url: string = r.url?.raw ?? "";
-          // Only collect fredhutch.org technology-details pages
-          if (!url.includes("fredhutch.org") || !url.includes("technology-details")) continue;
-          const title: string = (r.title?.raw ?? "").trim();
-          if (!title) continue;
-          const desc: string = (r.body_content?.raw ?? "").replace(/<[^>]+>/g, " ").trim();
-          results.push({ title, description: desc.slice(0, 1000), url, institution: INST });
+      const allLinks = new Map<string, string>();
+
+      const collectPage = async () => {
+        const links = await page.$$eval('a[href*="technology-details"]', (els) =>
+          els.map((el) => ({
+            href: el.getAttribute("href") ?? "",
+            text: el.textContent?.trim() ?? "",
+          }))
+        );
+        for (const l of links) {
+          if (l.href && !allLinks.has(l.href)) allLinks.set(l.href, l.text);
         }
-        page++;
+      };
+
+      await collectPage();
+
+      // Paginate by clicking the Next button until no new results appear
+      for (let pageNum = 2; pageNum <= 30; pageNum++) {
+        const nextBtn = await page.$('[class*="next" i]:not([class*="prev" i])');
+        if (!nextBtn) break;
+        const isDisabled = await nextBtn.evaluate((el) =>
+          el.classList.contains("disabled") || el.hasAttribute("disabled")
+        );
+        if (isDisabled) break;
+
+        await nextBtn.click();
+        await page.waitForTimeout(2_000);
+        const prevSize = allLinks.size;
+        await collectPage();
+        if (allLinks.size === prevSize) break; // no new URLs — last page
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (Elastic cancer-consortium, ${totalPages} pages scanned)`);
+      const results: ScrapedListing[] = [];
+      for (const [href, title] of Array.from(allLinks.entries())) {
+        if (!title || title.length < 3) continue;
+        results.push({ title, description: "", url: href, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright JS pagination)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
+    } finally {
+      await browser?.close();
     }
   },
 };
 
 // Moffitt Cancer Center
-// Direct access blocked by Cloudflare Managed Challenge (HTTP 403 on all endpoints).
-// This scraper uses Wayback Machine archived pages (2023 snapshot, stable 6 categories confirmed):
+// Direct HTTP access blocked by Cloudflare Managed Challenge (HTTP 403; Playwright also blocked).
+// Primary strategy: Playwright traversal of the live site (attempt first; Cloudflare may block headless).
+// Fallback strategy: Wayback Machine 2023 snapshot — 6 confirmed archived category pages:
 //   pharmaceuticals-biologics, diagnostics, devices, immunotherapies,
 //   software-tools, clinical-decision-support-tools
-// Strategy: fetch archived listing → archived category pages → extract slugs → derive titles
-// Individual archived tech pages are fetched for real h1 titles (with concurrency limit).
+// Archived category pages contain individual tech slug links; titles derived from slugs.
+// Smoke-tested: 158 listings from 4 archived categories (as of 2026-03-17).
 export const moffittScraper: InstitutionScraper = {
   institution: "Moffitt Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Moffitt Cancer Center";
     const MOFFITT_BASE = "https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies";
+    const LISTING_URL = `${MOFFITT_BASE}/`;
     const WB_BASE = "https://web.archive.org/web";
-    // Use a known stable 2023 snapshot timestamp for the listing
     const LISTING_TS = "20230803091028";
+
+    // ── Primary: Playwright live traversal ──────────────────────────────────
+    const playwrightScrape = async (): Promise<ScrapedListing[] | null> => {
+      let browser: import("playwright").Browser | null = null;
+      try {
+        const { chromium } = await import("playwright");
+        browser = await chromium.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setExtraHTTPHeaders({
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        });
+        await page.goto(LISTING_URL, { timeout: 20_000, waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(4_000);
+
+        const pageTitle = await page.title();
+        // Cloudflare challenge returns "Just a moment..." — fall back to Wayback
+        if (pageTitle.includes("Just a moment") || pageTitle.includes("Attention Required")) {
+          return null;
+        }
+
+        // Collect category links from the listing page
+        const catLinks = await page.$$eval(`a[href*="available-technologies/"]`, (els) =>
+          Array.from(new Set(els
+            .map((el) => el.getAttribute("href") ?? "")
+            .filter((h) => h.includes("available-technologies/") && !h.endsWith("/available-technologies/"))
+          ))
+        );
+
+        const allResults: ScrapedListing[] = [];
+        const seen = new Set<string>();
+
+        for (const catHref of catLinks) {
+          const catUrl = catHref.startsWith("http") ? catHref : `https://www.moffitt.org${catHref}`;
+          try {
+            await page.goto(catUrl, { timeout: 20_000, waitUntil: "domcontentloaded" });
+            await page.waitForTimeout(2_000);
+            const techLinks = await page.$$eval(`a[href*="available-technologies/"][href]`, (els) =>
+              els
+                .map((el) => ({ href: el.getAttribute("href") ?? "", text: el.textContent?.trim() ?? "" }))
+                .filter((l) => l.text.length > 3)
+            );
+            for (const l of techLinks) {
+              if (seen.has(l.href)) continue;
+              seen.add(l.href);
+              const url = l.href.startsWith("http") ? l.href : `https://www.moffitt.org${l.href}`;
+              allResults.push({ title: l.text, description: "", url, institution: INST });
+            }
+          } catch {
+            continue;
+          }
+        }
+        return allResults;
+      } catch {
+        return null;
+      } finally {
+        await browser?.close();
+      }
+    };
 
     const wbFetch = async (liveUrl: string, ts: string): Promise<string | null> => {
       try {
@@ -2711,6 +2785,15 @@ export const moffittScraper: InstitutionScraper = {
         .join(" ");
     };
 
+    // ── Try Playwright primary strategy first ───────────────────────────────
+    const pwResults = await playwrightScrape();
+    if (pwResults !== null && pwResults.length > 0) {
+      console.log(`[scraper] ${INST}: ${pwResults.length} listings (Playwright live traversal)`);
+      return pwResults;
+    }
+    console.log(`[scraper] ${INST}: Playwright attempt failed or blocked — falling back to Wayback Machine`);
+
+    // ── Fallback: Wayback Machine 2023 snapshot ──────────────────────────────
     try {
       // Known categories (confirmed from 2023 archived listing)
       const CATEGORIES = [

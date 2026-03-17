@@ -271,24 +271,23 @@ import {
 //   Listing estimate: 0 (69 capability pages, 0 licensable tech)
 //   Last verified: 2026-03-15
 //
-// Fred Hutchinson Cancer Center
-//   Platform: Adobe AEM + Elastic App Search ("cancer-consortium" engine)
-//   API found: fredhutch-prod.ent.us-west-2.aws.found.io, key search-d4wmid75w6rn9onstbmpampm
-//   Engine indexes cancerconsortium.org only (Member Profiles 738, Webpages 38, Documents 35)
-//   "Available Technology" type returns 0 hits — tech pages are NOT indexed in this engine
-//   AEM childrenlist hasChildren:false — tech-detail pages are dynamically served, not CMS nodes
+// Fred Hutchinson Cancer Center — IMPLEMENTED via Playwright (Task #109)
+//   Elastic "cancer-consortium" engine only indexes cancerconsortium.org (0 FH tech pages)
+//   AEM childrenlist hasChildren:false — tech-detail pages are dynamically rendered
 //   Wayback Machine CDX: 0 archived technology-details pages
-//   fredHutchScraper queries Elastic exhaustively for fredhutch.org/technology-details URLs;
-//   currently returns 0 (engine scope). Path forward: Playwright navigation of search UI.
+//   Solution: Playwright navigation of available-technologies.html JS search UI
+//   Pagination: JS-driven Next button (no href), 10 results/page; stops when no new URLs
+//   Smoke-tested result: ~61 listings across 7 pages (2026-03-17)
 //   Last verified: 2026-03-17
 //
-// Moffitt Cancer Center
-//   Direct access: HTTP 403 Cloudflare Managed Challenge on all server-side requests
-//   moffittScraper uses Wayback Machine 2023 snapshot: 6 archived category pages confirmed
-//   (pharmaceuticals-biologics, diagnostics, devices, immunotherapies,
-//    software-tools, clinical-decision-support-tools)
-//   Each archived category page yields 40–100 individual technology slugs
-//   Titles fetched from archived individual tech pages (h1) or derived from URL slug
+// Moffitt Cancer Center — IMPLEMENTED Playwright-first + Wayback fallback (Task #109)
+//   Direct HTTP access: Cloudflare Managed Challenge (HTTP 403) on all server-side requests
+//   Playwright: also blocked by Cloudflare ("Just a moment" bot challenge page)
+//   Fallback: Wayback Machine 2023 snapshot, 6 confirmed archived category pages:
+//     pharmaceuticals-biologics, diagnostics, devices, immunotherapies,
+//     software-tools, clinical-decision-support-tools
+//   Titles derived from URL slug (ID prefix removed, proper title-case)
+//   Smoke-tested result: ~158 listings from 4 categories (2026-03-17)
 //   Last verified: 2026-03-17
 // ───────────────────────────────────────────────────────────────────────────────
 
