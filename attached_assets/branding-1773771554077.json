@@ -1,0 +1,134 @@
+{
+  "colorScheme": "light",
+  "fonts": [
+    {
+      "family": "Source Sans Pro",
+      "role": "body"
+    }
+  ],
+  "colors": {
+    "primary": "#002147",
+    "accent": "#347AD8",
+    "background": "#EEEEEE",
+    "textPrimary": "#347AD8",
+    "link": "#347AD8"
+  },
+  "typography": {
+    "fontFamilies": {
+      "primary": "Source Sans Pro",
+      "heading": "Source Sans Pro"
+    },
+    "fontStacks": {
+      "heading": [
+        "Source Sans Pro",
+        "sans-serif",
+        "Helvetica",
+        "Arial"
+      ],
+      "body": [
+        "Source Sans Pro",
+        "sans-serif",
+        "Helvetica",
+        "Arial"
+      ],
+      "paragraph": [
+        "Source Sans Pro",
+        "sans-serif",
+        "Helvetica",
+        "Arial"
+      ]
+    },
+    "fontSizes": {
+      "h1": "32px",
+      "h2": "32px",
+      "body": "16px"
+    }
+  },
+  "spacing": {
+    "baseUnit": 4,
+    "borderRadius": "4px"
+  },
+  "components": {
+    "buttonPrimary": {
+      "background": "#347AD8",
+      "textColor": "#FFFFFF",
+      "borderColor": "#347AD8",
+      "borderRadius": "6px",
+      "borderRadiusCorners": {
+        "topLeft": "6px",
+        "topRight": "6px",
+        "bottomRight": "6px",
+        "bottomLeft": "6px"
+      },
+      "shadow": "none"
+    },
+    "buttonSecondary": {
+      "background": "#002147",
+      "textColor": "#FFFFFF",
+      "borderColor": "#FFFFFF",
+      "borderRadius": "6px",
+      "borderRadiusCorners": {
+        "topLeft": "6px",
+        "topRight": "6px",
+        "bottomRight": "6px",
+        "bottomLeft": "6px"
+      },
+      "shadow": "none"
+    }
+  },
+  "images": {
+    "logo": "File saved at: attached_assets/logo.svg",
+    "favicon": "https://innovation.ox.ac.uk/favicon.ico",
+    "ogImage": null,
+    "logoHref": "https://innovation.ox.ac.uk/"
+  },
+  "__llm_logo_reasoning": {
+    "selectedIndex": 0,
+    "reasoning": "Selected #0 because it is a visible, medium-sized logo located in the header with a link to the homepage, matching the brand 'Oxford University Innovation'.",
+    "confidence": 0.95,
+    "source": "llm"
+  },
+  "__llm_button_reasoning": {
+    "primary": {
+      "index": 1,
+      "text": "Contact Us",
+      "reasoning": "Button #1 has a vibrant blue background (#347AD8), which is a strong indicator of a primary CTA. It also has a more modern design with rounded corners, making it stand out as the main action button."
+    },
+    "secondary": {
+      "index": 2,
+      "text": "Contact Us",
+      "reasoning": "Button #2, while sharing the same background color as Button #0, has a different design with a border and rounded corners, making it suitable as a secondary button."
+    },
+    "confidence": 0.9
+  },
+  "personality": {
+    "tone": "professional",
+    "energy": "medium",
+    "targetAudience": "academic and business professionals"
+  },
+  "designSystem": {
+    "framework": "custom",
+    "componentLibrary": ""
+  },
+  "confidence": {
+    "buttons": 0.9,
+    "colors": 0.9,
+    "overall": 0.9
+  },
+  "__llm_metadata": {
+    "logoSelection": {
+      "llmCalled": true,
+      "llmSucceeded": true,
+      "finalSource": "llm",
+      "rawLogoSelection": {
+        "selectedLogoIndex": 0,
+        "selectedLogoReasoning": "Selected #0 because it is a visible, medium-sized logo located in the header with a link to the homepage, matching the brand 'Oxford University Innovation'.",
+        "confidence": 0.95
+      }
+    },
+    "buttonClassification": {
+      "llmCalled": true,
+      "llmSucceeded": true
+    }
+  }
+}
