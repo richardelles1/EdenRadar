@@ -622,7 +622,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   latrobeScraper,                 // La Trobe University — TechPublisher "latrobe" — 9 sitemap techs
   vanderbiltScraper,              // Vanderbilt University — TechPublisher "vanderbilt" — 213 sitemap techs
   queensBelfastScraper,           // Queen's Univ. Belfast — TechPublisher "qub" — listings confirmed
-  uclBusinessScraper,             // UCL Business (xip.uclb.com) — Playwright/Elucid3 SPA — 34+ categories
+  uclBusinessScraper,             // UCL Business (xip.uclb.com) — Playwright/Elucid3 SPA — 34+ categories (supersedes blocked in-part "ucl" target)
 ];
 
 async function runWithConcurrency<T>(
