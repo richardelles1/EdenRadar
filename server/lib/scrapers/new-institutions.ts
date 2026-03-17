@@ -3403,16 +3403,17 @@ export const nationwideChildrensScraper: InstitutionScraper = {
 };
 
 // ── Nemours Children's Health — bespoke static-HTML scraper ──────────────────
-// Technologies are listed inline on the tech-transfer page as <li> items with
-// <p><b>Title</b><br>Patent status: ...<br>Inventor: ...</p>.
-// No pagination and no separate detail pages.
+// Technologies are listed directly in the page HTML as <li><p><b>Title</b><br>
+// Patent status: ...<br>Inventor: ...</p></li> items. We identify technology
+// entries (vs. general benefit bullets) by the presence of "Patent", "Inventor",
+// or "Licens" keywords in the list item text.
 export const nemoursScraper: InstitutionScraper = {
   institution: "Nemours Children's Health",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Nemours Children's Health";
     const PAGE_URL = "https://www.nemours.org/pediatric-research/technology-transfer.html";
-    const TIMEOUT_MS = 15_000;
-    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+    const TIMEOUT_MS = 20_000;
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
     try {
       const res = await fetch(PAGE_URL, {
@@ -3422,48 +3423,36 @@ export const nemoursScraper: InstitutionScraper = {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const html = await res.text();
 
-      // Technologies are embedded in the page as JSON inside data-cmp-data-layer attributes.
-      // The relevant block contains a <ul> with <li><p><b>Title</b>...metadata...</p></li>.
-      // Extract them by parsing the escaped HTML from the data layer JSON.
       const results: ScrapedListing[] = [];
       const seenTitles = new Set<string>();
 
-      // Method 1: parse xdm:text from data-cmp-data-layer JSON blobs
-      const dataLayerRe = /data-cmp-data-layer="(\{[^"]+\})"/g;
+      // Technologies are <li> items that contain <p><b>Title</b> and have
+      // patent/inventor/licensing keywords — distinguishes them from benefit bullets.
+      const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
       let m: RegExpExecArray | null;
-      while ((m = dataLayerRe.exec(html)) !== null) {
-        try {
-          const raw = m[1].replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">");
-          const obj = JSON.parse(raw);
-          const keys = Object.keys(obj);
-          for (const key of keys) {
-            const xdmText: string = obj[key]?.["xdm:text"] ?? "";
-            if (!xdmText.includes("<b>")) continue;
-            // Extract each <li>...<b>Title</b>...content...</li>
-            const liRe = /<li[^>]*>([\s\S]*?)<\/li>/gi;
-            let liM: RegExpExecArray | null;
-            while ((liM = liRe.exec(xdmText)) !== null) {
-              const liHtml = liM[1];
-              const boldMatch = liHtml.match(/<b>([^<]+)<\/b>/i);
-              if (!boldMatch) continue;
-              const title = cleanText(boldMatch[1]);
-              if (!title || title.length < 5 || seenTitles.has(title)) continue;
-              seenTitles.add(title);
-              const descText = liHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-              results.push({
-                title,
-                description: cleanText(descText),
-                url: PAGE_URL,
-                institution: INST,
-              });
-            }
-          }
-        } catch {
-          continue;
-        }
+      while ((m = liRe.exec(html)) !== null) {
+        const inner = m[1];
+        // Must contain a paragraph with bold title
+        if (!inner.includes("<p>") || !inner.includes("<b>")) continue;
+        // Must look like a technology entry (has patent/inventor/licensing info)
+        const plainText = inner.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        if (!/patent|inventor|licens/i.test(plainText)) continue;
+
+        const boldMatch = inner.match(/<b>([^<]+)<\/b>/i);
+        if (!boldMatch) continue;
+        const title = cleanText(boldMatch[1]);
+        if (!title || title.length < 5 || seenTitles.has(title)) continue;
+        seenTitles.add(title);
+
+        results.push({
+          title,
+          description: cleanText(plainText),
+          url: PAGE_URL,
+          institution: INST,
+        });
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (inline tab HTML)`);
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
