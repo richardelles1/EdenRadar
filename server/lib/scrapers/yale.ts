@@ -11,20 +11,22 @@ function slugToTitle(slug: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-async function fetchPage(url: string): Promise<string> {
+async function fetchPage(url: string): Promise<{ html: string; finalUrl: string }> {
   const res = await fetch(url, {
+    redirect: "follow",
     headers: {
       "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)",
       Accept: "text/html",
     },
   });
   if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return res.text();
+  const html = await res.text();
+  return { html, finalUrl: res.url };
 }
 
 async function getNodeIdsFromPage(page: number): Promise<number[]> {
   const url = page === 0 ? LIST_URL : `${LIST_URL}?page=${page}`;
-  const html = await fetchPage(url);
+  const { html } = await fetchPage(url);
   const $ = cheerio.load(html);
   const ids: number[] = [];
   $("[data-history-node-id]").each((_, el) => {
@@ -34,11 +36,16 @@ async function getNodeIdsFromPage(page: number): Promise<number[]> {
   return ids;
 }
 
-async function getTotalPages(html: string): Promise<number> {
+// sourceUrl: the actual (post-redirect) URL of the fetched page — used to validate
+// that we are on the yale-technologies listing before trusting ?page=N links.
+function getTotalPages(html: string, sourceUrl: string): number {
+  // Runtime path guard: only count pagination links when the fetched page
+  // is actually the yale-technologies listing (not a redirect to an unrelated page).
+  if (!sourceUrl.includes("yale-technologies")) return 0;
+
   const $ = cheerio.load(html);
   let maxPage = 0;
   // Pagination links on this page are relative (?page=N), not absolute.
-  // Do not filter by "yale-technologies" — that guard excluded all relative hrefs.
   $("a").each((_, el) => {
     const href = $(el).attr("href") || "";
     const m = href.match(/[?&]page=(\d+)/);
@@ -50,16 +57,7 @@ async function getTotalPages(html: string): Promise<number> {
 async function resolveNodeUrl(nodeId: number): Promise<{ url: string; title: string; description: string } | null> {
   try {
     const nodeUrl = `${BASE_URL}/node/${nodeId}`;
-    const res = await fetch(nodeUrl, {
-      redirect: "follow",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)",
-        Accept: "text/html",
-      },
-    });
-    if (!res.ok) return null;
-    const finalUrl = res.url;
-    const html = await res.text();
+    const { html, finalUrl } = await fetchPage(nodeUrl);
     const $ = cheerio.load(html);
 
     let title = $("title").text().replace(/\s*\|.*$/, "").trim();
@@ -102,7 +100,7 @@ export const yaleScraper: InstitutionScraper = {
   async scrape(): Promise<ScrapedListing[]> {
     console.log(`[scraper] ${INST}: fetching yale-technologies listing pages...`);
     try {
-      const html0 = await fetchPage(LIST_URL);
+      const { html: html0, finalUrl: listFinalUrl } = await fetchPage(LIST_URL);
       const $ = cheerio.load(html0);
       const nodeIds0: number[] = [];
       $("[data-history-node-id]").each((_, el) => {
@@ -110,8 +108,8 @@ export const yaleScraper: InstitutionScraper = {
         if (!isNaN(id) && id > 0) nodeIds0.push(id);
       });
 
-      // Call-time path guard: only paginate when we are on the yale-technologies listing URL.
-      const totalPages = LIST_URL.includes("yale-technologies") ? await getTotalPages(html0) : 0;
+      // Pass the actual fetched URL so getTotalPages validates the path at runtime.
+      const totalPages = getTotalPages(html0, listFinalUrl);
       console.log(`[scraper] ${INST}: found ${totalPages + 1} pages, ${nodeIds0.length} nodes on page 0`);
 
       const additionalPageIds: number[][] = [];
@@ -138,8 +136,9 @@ export const yaleScraper: InstitutionScraper = {
 
       console.log(`[scraper] ${INST}: scraped ${listings.length} listings`);
       return listings;
-    } catch (err: any) {
-      console.error(`[scraper] ${INST}: error — ${err.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST}: error — ${msg}`);
       return [];
     }
   },
