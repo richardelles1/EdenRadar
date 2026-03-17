@@ -1864,14 +1864,17 @@ export const launchTNScraper: InstitutionScraper = {
     $('a[href*="app.firstignite.com/public/listings/"]').each((_, el) => {
       links.push({ href: $(el).attr("href") ?? "", text: cleanText($(el).text()) });
     });
-    // Deduplicate by URL so each unique UUID appears once with its title
+    // Deduplicate by UUID — validate pairing: both links in a pair must share the same href
+    // (title-link and institution-link for each tech both point to the same UUID URL)
     const seen = new Set<string>();
     const stubs: Array<{ title: string; institution: string; url: string }> = [];
     for (let i = 0; i + 1 < links.length; i += 2) {
       const href = links[i].href;
-      if (!href || seen.has(href)) continue;
+      const pairHref = links[i + 1]?.href ?? "";
+      // Guard: if pair hrefs differ, the alternating assumption is broken — skip
+      if (!href || seen.has(href) || href !== pairHref) continue;
       const title = links[i].text;
-      const institution = links[i + 1]?.text ?? "LaunchTN";
+      const institution = links[i + 1].text || "LaunchTN";
       if (!title || title.length < 5) continue;
       seen.add(href);
       stubs.push({ title, institution, url: href });
@@ -1990,30 +1993,47 @@ export const nmTechScraper: InstitutionScraper = {
 };
 
 // 8. Sandia National Laboratories
-// Uses WordPress sitemap (wp-sitemap-posts-ip-opportunity-1.xml) to enumerate all 218 opportunity URLs
-// Titles are derived from the URL slug (human-readable, e.g. "brain-targeting-nanobodies")
+// Discovers ip-opportunity sitemap pages via WP sitemap index (wp-sitemap.xml);
+// fetches each discovered page concurrently and derives titles from URL slugs.
 export const sandiaScraper: InstitutionScraper = {
   institution: "Sandia National Laboratories",
   async scrape(): Promise<ScrapedListing[]> {
-    const sitemapUrl = "https://ip.sandia.gov/wp-sitemap-posts-ip-opportunity-1.xml";
+    const base = "https://ip.sandia.gov";
+    const allUrls: string[] = [];
     try {
-      const res = await fetch(sitemapUrl, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "Mozilla/5.0" } });
-      if (!res.ok) return [];
-      const xml = await res.text();
-      const oppUrls = Array.from(xml.matchAll(/<loc>(https:\/\/ip\.sandia\.gov\/opportunity\/[^<]+)<\/loc>/g)).map(m => m[1]);
-      const results: ScrapedListing[] = oppUrls.map(url => {
-        const slug = url.replace(/\/$/, "").split("/").pop() ?? "";
-        const title = slug
-          .split("-")
-          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
-          .join(" ");
-        return { title, description: "", url, institution: "Sandia National Laboratories" };
-      });
-      console.log(`[scraper] Sandia National Laboratories: ${results.length} listings`);
-      return results;
+      // Step 1: discover sitemap pages from WP sitemap index
+      const indexRes = await fetch(`${base}/wp-sitemap.xml`, { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "Mozilla/5.0" } });
+      let sitemapPages: string[] = [];
+      if (indexRes.ok) {
+        const indexXml = await indexRes.text();
+        sitemapPages = Array.from(
+          indexXml.matchAll(/<loc>(https:\/\/ip\.sandia\.gov\/wp-sitemap-posts-ip-opportunity-[^<]+)<\/loc>/g)
+        ).map(m => m[1]);
+      }
+      // Fall back to known page if sitemap index not available or contains no opportunity sitemaps
+      if (sitemapPages.length === 0) {
+        sitemapPages = [`${base}/wp-sitemap-posts-ip-opportunity-1.xml`];
+      }
+      // Step 2: fetch all sitemap pages for opportunity URLs
+      for (const page of sitemapPages) {
+        try {
+          const res = await fetch(page, { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "Mozilla/5.0" } });
+          if (!res.ok) continue;
+          const xml = await res.text();
+          const urls = Array.from(xml.matchAll(/<loc>(https:\/\/ip\.sandia\.gov\/opportunity\/[^<]+)<\/loc>/g)).map(m => m[1]);
+          allUrls.push(...urls);
+        } catch { continue; }
+      }
     } catch {
       return [];
     }
+    const results: ScrapedListing[] = allUrls.map(url => {
+      const slug = url.replace(/\/$/, "").split("/").pop() ?? "";
+      const title = slug.split("-").map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+      return { title, description: "", url, institution: "Sandia National Laboratories" };
+    });
+    console.log(`[scraper] Sandia National Laboratories: ${results.length} listings`);
+    return results;
   },
 };
 
