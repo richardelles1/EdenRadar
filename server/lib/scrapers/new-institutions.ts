@@ -1224,58 +1224,23 @@ export const morganStateScraper = createStubScraper(
 // ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
 
 // 1a. Sacramento State (CSUS)
-// The TTO page serves navigation boilerplate only — no enumerable tech listing in static HTML.
-// Scraper attempts link/heading harvest; returns empty when page has no licensed-technology entries.
-export const csusScraper: InstitutionScraper = {
-  institution: "Sacramento State (CSUS)",
-  async scrape(): Promise<ScrapedListing[]> {
-    const urls = [
-      "https://www.csus.edu/research/research-technology-engagement/industry-partnerships-technology/",
-      "https://www.csus.edu/research/",
-    ];
-    const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-    for (const url of urls) {
-      const $ = await fetchHtml(url, 12000);
-      if (!$) continue;
-      $("h2, h3, h4").each((_, el) => {
-        const title = cleanText($(el).text());
-        if (!title || title.length < 15 || title.length > 250) return;
-        if (/^(research|technology|innovation|office|services|about|contact|sacstate|sacramento|faculty|student|news|event)/i.test(title)) return;
-        if (seen.has(title.toLowerCase())) return;
-        seen.add(title.toLowerCase());
-        results.push({ title, description: "", url, institution: "Sacramento State (CSUS)" });
-      });
-      if (results.length > 0) break;
-    }
-    console.log(`[scraper] Sacramento State (CSUS): ${results.length} listings`);
-    return results;
-  },
-};
+// All known TTO/licensing page paths return HTTP 404; CSUS restructured their research site
+// and the available-licensing page no longer exists at any discoverable URL.
+// Justified stub — checked: /available-licensing.html, /available-licensing.htm,
+// /research/research-technology-engagement/industry-partnerships-technology/, /research/ott/
+export const csusScraper = createStubScraper(
+  "Sacramento State (CSUS)",
+  "TTO available-licensing page returns 404 — CSUS research site was restructured and the page no longer exists at any known path"
+);
 
 // 1b. Loyola University Chicago
-// TTO licensing page returns a WAF-protected shell with no enumerable tech listings.
-// Scraper attempts heading/link harvest; returns empty when page has no licensed-technology entries.
-export const loyolaChicagoScraper: InstitutionScraper = {
-  institution: "Loyola University Chicago",
-  async scrape(): Promise<ScrapedListing[]> {
-    const url = "https://www.luc.edu/ors/tt_licensing.shtml";
-    const $ = await fetchHtml(url, 12000);
-    if (!$) return [];
-    const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-    $("h2, h3, h4").each((_, el) => {
-      const title = cleanText($(el).text());
-      if (!title || title.length < 15 || title.length > 250) return;
-      if (/^(technology|licensing|office|research|about|contact|loyola|available|intellectual|campus|resources|quick|links|news|events|apply|give|mylu)/i.test(title)) return;
-      if (seen.has(title.toLowerCase())) return;
-      seen.add(title.toLowerCase());
-      results.push({ title, description: "", url, institution: "Loyola University Chicago" });
-    });
-    console.log(`[scraper] Loyola University Chicago: ${results.length} listings`);
-    return results;
-  },
-};
+// TTO licensing page (luc.edu/ors/tt_licensing.shtml) returns HTTP 202 with an AWS WAF
+// JavaScript challenge shell (~2.4 KB body); no static HTML content or tech listings served.
+// Justified stub — page is bot-protected and inaccessible to static scraping.
+export const loyolaChicagoScraper = createStubScraper(
+  "Loyola University Chicago",
+  "TTO licensing page returns AWS WAF JavaScript challenge shell — no static tech listings accessible"
+);
 
 // 2. Ohio University
 export const ohioScraper: InstitutionScraper = {
@@ -1313,32 +1278,41 @@ export const ohioScraper: InstitutionScraper = {
       );
       settled.forEach((r) => {
         if (r.status === "fulfilled") results.push(r.value);
-        else results.push({ title: "", description: "", url: "", institution: "Ohio University" });
       });
     }
-    const final = results.filter(r => r.title.length > 0);
-    console.log(`[scraper] Ohio University: ${final.length} listings`);
-    return final;
+    console.log(`[scraper] Ohio University: ${results.length} listings`);
+    return results;
   },
 };
 
 // 2. UMKC
+// Page uses Bootstrap accordion: each .card has a h3 button (title) + .card-body (description + PDF link)
 export const umkcScraper: InstitutionScraper = {
   institution: "University of Missouri – Kansas City (UMKC)",
   async scrape(): Promise<ScrapedListing[]> {
-    const url = "https://ori.umkc.edu/facilities-compliance-and-commercialization/commercialization/technologies.html";
-    const $ = await fetchHtml(url, 15000);
+    const base = "https://ori.umkc.edu/facilities-compliance-and-commercialization/commercialization";
+    const listUrl = `${base}/technologies.html`;
+    const $ = await fetchHtml(listUrl, 15000);
     if (!$) return [];
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
-    $("h3").each((_, el) => {
-      const title = cleanText($(el).text());
+    // Each accordion card: .card-header (title button) + .card-body (description + PDF)
+    $(".card").each((_, card) => {
+      const title = cleanText($(card).find(".card-header button, .card-header h3").text());
       if (!title || title.length < 10 || title.length > 250) return;
       if (seen.has(title.toLowerCase())) return;
       seen.add(title.toLowerCase());
-      // Try to grab a description from the next sibling paragraph
-      const desc = cleanText($(el).next("p, h4").text()).slice(0, 300);
-      results.push({ title, description: desc, url, institution: "University of Missouri – Kansas City (UMKC)" });
+      const cardBody = $(card).find(".card-body");
+      // Description: first <p> after h4 containing "Description"
+      const descP = cardBody.find("h4").filter((_: any, h: any) => /description/i.test($(h).text()))
+        .first().next("p");
+      const description = cleanText(descP.text()).slice(0, 400);
+      // PDF URL: any relative link to technology-docs or .pdf file
+      const pdfHref = cardBody.find('a[href*="technology-docs"], a[href*=".pdf"]').first().attr("href") ?? "";
+      const pdfUrl = pdfHref
+        ? (pdfHref.startsWith("http") ? pdfHref : `${base}/${pdfHref.replace(/^\/+/, "")}`)
+        : listUrl;
+      results.push({ title, description, url: pdfUrl, institution: "University of Missouri – Kansas City (UMKC)" });
     });
     console.log(`[scraper] UMKC: ${results.length} listings`);
     return results;
