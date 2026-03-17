@@ -565,18 +565,118 @@ export const olemissScraper = createTechPublisherScraper("olemiss", "University 
 // ── New US: verified working TechPublisher slugs (international) ─────────
 // Leeds TechPublisher RSS is empty and SearchResults page is fully JS-rendered.
 // Leeds runs a separate licensing storefront at licensing.leeds.ac.uk.
-// Primary: Playwright category traversal collects product links with titles + descriptions.
-// Fallback: licensing.leeds.ac.uk JSON client API.
-// Final fallback: Playwright on the legacy TechPublisher SearchResults page.
+// Product pages: /product/<slug> (singular); category listing: /products/<cat>
+// Strategy 1: JSON client API — fastest, returns all 51 items with name + shortDescription.
+//             Per-product page fetch enriches items that have null shortDescription.
+// Strategy 2: Playwright traversal of licensing.leeds.ac.uk category pages.
+// Strategy 3 (final fallback): Playwright on leeds.technologypublisher.com SearchResults.
 export const leedsScraper: InstitutionScraper = {
   institution: "University of Leeds",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "University of Leeds";
     const BASE = "https://licensing.leeds.ac.uk";
-    const DEADLINE = Date.now() + 120_000; // 120 s cap
+    const TP_URL = "https://leeds.technologypublisher.com/SearchResults.aspx?type=Tech&q=";
 
-    // ── Strategy 1: Playwright traversal of licensing.leeds.ac.uk ─────────────
-    const playwrightScrape = async (): Promise<ScrapedListing[]> => {
+    // ── Strategy 1: JSON client API with per-product detail enrichment ─────────
+    const apiScrape = async (): Promise<ScrapedListing[]> => {
+      interface LeedsItem {
+        url?: string;
+        name?: string;
+        shortDescription?: string | null;
+      }
+      interface LeedsPage {
+        total?: number;
+        pages?: number;
+        items?: LeedsItem[];
+      }
+
+      const raw: ScrapedListing[] = [];
+      let pg = 1;
+      let totalPgs = 1;
+
+      while (pg <= totalPgs) {
+        const apiUrl =
+          `${BASE}/client/products/search` +
+          `?page=${pg}&itemsPerPage=300` +
+          `&columns[]=url&columns[]=name&columns[]=shortDescription`;
+        try {
+          const res = await fetch(apiUrl, {
+            headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!res.ok) break;
+          const json: LeedsPage = await res.json();
+          totalPgs = json.pages ?? 1;
+          for (const item of json.items ?? []) {
+            const title = cleanText(item.name ?? "");
+            const itemUrl = item.url ?? "";
+            if (!title || title.length < 5 || !itemUrl) continue;
+            const fullUrl = itemUrl.startsWith("http") ? itemUrl : `${BASE}${itemUrl}`;
+            raw.push({
+              title,
+              description: cleanText(item.shortDescription ?? ""),
+              url: fullUrl,
+              institution: INST,
+            });
+          }
+        } catch {
+          break;
+        }
+        pg++;
+      }
+
+      if (raw.length === 0) return raw;
+
+      // Per-product detail fetch: for items with empty description, visit product page
+      // and extract title from h1 and description from meta description or first paragraph.
+      const needsDetail = raw.filter((r) => !r.description || r.description.length < 10);
+      if (needsDetail.length > 0) {
+        const CONCURRENCY = 5;
+        const BATCH_LIMIT = 30;
+        const toFetch = needsDetail.slice(0, BATCH_LIMIT);
+        const semaphore = Array.from({ length: CONCURRENCY });
+        let idx = 0;
+        const worker = async () => {
+          while (idx < toFetch.length) {
+            const item = toFetch[idx++];
+            if (!item) continue;
+            try {
+              const res = await fetch(item.url, {
+                headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+                signal: AbortSignal.timeout(10_000),
+              });
+              if (!res.ok) continue;
+              const html = await res.text();
+              // Extract title from <h1>
+              const h1Match = html.match(/<h1[^>]*>([^<]+)<\/h1>/i);
+              if (h1Match) {
+                const h1Title = cleanText(h1Match[1]);
+                if (h1Title && h1Title.length > 5) item.title = h1Title;
+              }
+              // Extract description from meta description or first non-empty paragraph
+              const metaMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)
+                ?? html.match(/<meta[^>]*content=["']([^"']+)["'][^>]*name=["']description["']/i);
+              if (metaMatch && metaMatch[1] && metaMatch[1].length > 20) {
+                item.description = cleanText(metaMatch[1]);
+              } else {
+                const pMatch = html.match(/<p[^>]*>([\s\S]{30,600}?)<\/p>/i);
+                if (pMatch) {
+                  item.description = cleanText(pMatch[1].replace(/<[^>]+>/g, " "));
+                }
+              }
+            } catch {
+              // skip on timeout or error
+            }
+          }
+        };
+        await Promise.all(semaphore.map(() => worker()));
+      }
+
+      return raw;
+    };
+
+    // ── Strategy 2: Playwright traversal of licensing.leeds.ac.uk/products ─────
+    const playwrightLicensingScrape = async (): Promise<ScrapedListing[]> => {
       let browser: import("playwright").Browser | null = null;
       try {
         const { chromium } = await import("playwright");
@@ -590,23 +690,23 @@ export const leedsScraper: InstitutionScraper = {
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         });
 
-        // Step 1: collect category/subcategory links from /products
         await page.goto(`${BASE}/products`, { timeout: 30_000, waitUntil: "networkidle" });
         await page.waitForTimeout(2_500);
 
+        // Collect category/subcategory links under /products/
         const categoryHrefs = await page.$$eval('a[href^="/products/"]', (els) =>
           Array.from(
             new Set(
               els
                 .map((el) => el.getAttribute("href") ?? "")
-                .filter((h) => h.split("/").length >= 3)
+                .filter((h) => h.split("/").length >= 3 && h !== "/products/")
             )
           )
         );
 
-        // Step 2: for each category page, collect product links (a[href^="/product/"])
         const seenUrls = new Set<string>();
         const results: ScrapedListing[] = [];
+        const DEADLINE = Date.now() + 100_000;
 
         for (const catHref of categoryHrefs) {
           if (Date.now() > DEADLINE) break;
@@ -618,18 +718,20 @@ export const leedsScraper: InstitutionScraper = {
             continue;
           }
 
+          // Products are served at /product/<slug> (singular)
           const productItems = await page.$$eval(
-            'a[href^="/product/"], a[href*="/product/"]',
+            'a[href^="/product/"]',
             (els) =>
               els.map((el) => {
                 const anchor = el as HTMLAnchorElement;
                 const href = anchor.getAttribute("href") ?? "";
                 const titleAttr = anchor.getAttribute("title") ?? "";
                 const h6 = anchor.querySelector("h6");
+                const h1 = anchor.querySelector("h1");
                 const p = anchor.querySelector("p");
                 return {
                   href,
-                  title: titleAttr || (h6 ? h6.textContent?.trim() ?? "" : ""),
+                  title: titleAttr || (h1 ? h1.textContent?.trim() ?? "" : "") || (h6 ? h6.textContent?.trim() ?? "" : ""),
                   desc: p ? p.textContent?.trim().substring(0, 600) ?? "" : "",
                 };
               })
@@ -652,78 +754,100 @@ export const leedsScraper: InstitutionScraper = {
         return results;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+        console.error(`[scraper] ${INST} Playwright licensing failed: ${msg}`);
         return [];
       } finally {
         await browser?.close();
       }
     };
 
-    // ── Strategy 2: Leeds Licensing JSON client API (fast fallback) ───────────
-    const apiScrape = async (): Promise<ScrapedListing[]> => {
-      interface LeedsItem {
-        url?: string;
-        name?: string;
-        shortDescription?: string | null;
-      }
-      interface LeedsPage {
-        total?: number;
-        pages?: number;
-        items?: LeedsItem[];
-      }
+    // ── Strategy 3: Playwright on leeds.technologypublisher.com ──────────────
+    // Final fallback — site is JS-rendered so requires Playwright.
+    const playwrightTechPublisher = async (): Promise<ScrapedListing[]> => {
+      let browser: import("playwright").Browser | null = null;
+      try {
+        const { chromium } = await import("playwright");
+        browser = await chromium.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setExtraHTTPHeaders({
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        });
 
-      const results: ScrapedListing[] = [];
-      let pg = 1;
-      let totalPgs = 1;
+        await page.goto(TP_URL, { timeout: 45_000, waitUntil: "networkidle" });
+        await page.waitForTimeout(4_000);
 
-      while (pg <= totalPgs) {
-        const apiUrl =
-          `${BASE}/client/products/search` +
-          `?page=${pg}&itemsPerPage=300` +
-          `&columns[]=url&columns[]=name&columns[]=shortDescription`;
-        try {
-          const res = await fetch(apiUrl, {
-            headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-            signal: AbortSignal.timeout(15_000),
-          });
-          if (!res.ok) break;
-          const json: LeedsPage = await res.json();
-          totalPgs = json.pages ?? 1;
-          for (const item of json.items ?? []) {
-            const title = cleanText(item.name ?? "");
-            const itemUrl = item.url ?? "";
-            if (!title || title.length < 5 || !itemUrl) continue;
-            const fullUrl = itemUrl.startsWith("http") ? itemUrl : `${BASE}${itemUrl}`;
-            results.push({
-              title,
-              description: cleanText(item.shortDescription ?? ""),
-              url: fullUrl,
-              institution: INST,
-            });
+        const allLinks = new Map<string, string>();
+        const collectLinks = async () => {
+          const links = await page.$$eval(
+            'a[href*="/tech/"], a[href*="/technology/"]',
+            (els) =>
+              els.map((el) => ({
+                href: el.getAttribute("href") ?? "",
+                text: (el as HTMLElement).innerText?.trim() ?? el.textContent?.trim() ?? "",
+              }))
+          );
+          for (const l of links) {
+            if (l.href && l.text.length > 4 && !allLinks.has(l.href)) {
+              allLinks.set(l.href, l.text);
+            }
           }
-        } catch {
-          break;
+        };
+
+        await collectLinks();
+
+        // Paginate via Next button
+        for (let pg = 2; pg <= 20; pg++) {
+          const nextBtn = await page.$('a[title="Next"], [class*="next" i] a').catch(() => null);
+          if (!nextBtn) break;
+          const isDisabled = await nextBtn.evaluate((el) =>
+            el.hasAttribute("disabled") || el.classList.contains("disabled")
+          ).catch(() => true);
+          if (isDisabled) break;
+          await nextBtn.click();
+          await page.waitForTimeout(3_000);
+          const prev = allLinks.size;
+          await collectLinks();
+          if (allLinks.size === prev) break;
         }
-        pg++;
+
+        const results: ScrapedListing[] = [];
+        for (const [href, title] of Array.from(allLinks.entries())) {
+          const fullUrl = href.startsWith("http") ? href : `https://leeds.technologypublisher.com${href}`;
+          results.push({ title: cleanText(title), description: "", url: fullUrl, institution: INST });
+        }
+        return results;
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[scraper] ${INST} TechPublisher Playwright failed: ${msg}`);
+        return [];
+      } finally {
+        await browser?.close();
       }
-      return results;
     };
 
-    // Run Playwright-first; fall back to API if it yields < 5
-    const pwResults = await playwrightScrape();
-    if (pwResults.length >= 5) {
-      console.log(`[scraper] ${INST}: ${pwResults.length} listings via Playwright`);
-      return pwResults;
-    }
-
+    // ── Execution order ───────────────────────────────────────────────────────
+    // Strategy 1: JSON API (fastest, most complete)
     const apiResults = await apiScrape();
     if (apiResults.length >= 5) {
-      console.log(`[scraper] ${INST}: ${apiResults.length} listings via Leeds Licensing API`);
+      console.log(`[scraper] ${INST}: ${apiResults.length} listings via JSON API`);
       return apiResults;
     }
 
-    console.log(`[scraper] ${INST}: ${apiResults.length} listings (all strategies yielded low results)`);
-    return apiResults;
+    // Strategy 2: Playwright on licensing.leeds.ac.uk
+    const pwLicensing = await playwrightLicensingScrape();
+    if (pwLicensing.length >= 5) {
+      console.log(`[scraper] ${INST}: ${pwLicensing.length} listings via Playwright licensing`);
+      return pwLicensing;
+    }
+
+    // Strategy 3: Playwright on TechPublisher
+    const pwTP = await playwrightTechPublisher();
+    console.log(`[scraper] ${INST}: ${pwTP.length} listings via TechPublisher Playwright`);
+    return pwTP;
   },
 };
 export const southamptonScraper = createTechPublisherScraper("southampton", "University of Southampton", { maxPg: 50 });
