@@ -3216,7 +3216,11 @@ export const lurieChildrensScraper = createInPartScraper(
   "Lurie Children's Hospital"
 );
 
-// bcmScraper omitted — identical to existing baylorScraper (same "bcm" subdomain, same institution)
+// Baylor College of Medicine — InPart subdomain "bcm"
+// Note: the legacy baylorScraper export (line ~897) also covers this institution.
+// bcmScraper is the Task #112 canonical export; baylorScraper is kept for compat
+// but only ONE of them should appear in ALL_SCRAPERS.
+export const bcmScraper = createInPartScraper("bcm", "Baylor College of Medicine");
 
 export const childrensNationalScraper = createInPartScraper(
   "childrensnational",

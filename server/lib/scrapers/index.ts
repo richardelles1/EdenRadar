@@ -241,7 +241,7 @@ import {
   // Task #112 — Pediatric / Children's Hospital batch
   chlaScraper,
   lurieChildrensScraper,
-  // bcmScraper omitted — already covered by existing baylorScraper (subdomain "bcm")
+  bcmScraper,
   childrensNationalScraper,
   bostonChildrensScraper,
   chopScraper,
@@ -426,7 +426,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ucfScraper,
   fiuScraper,
   riceScraper,
-  baylorScraper,
+  // baylorScraper replaced by explicit bcmScraper in Task #112 section below — same InPart "bcm" subdomain
   usuScraper,
   auburnScraper,
   ugaScraper,
@@ -546,7 +546,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ── Pediatric / Children's Hospital batch (Task #112, March 2026) ─────────
   chlaScraper,                 // Children's Hospital Los Angeles — in-part API ~27
   lurieChildrensScraper,       // Lurie Children's Hospital — in-part API
-  // Baylor College of Medicine already covered by baylorScraper (subdomain "bcm") above
+  bcmScraper,                  // Baylor College of Medicine — in-part API "bcm" (replaces legacy baylorScraper)
   childrensNationalScraper,    // Children's National — in-part API
   bostonChildrensScraper,      // Boston Children's Hospital — TechPublisher "bch"
   chopScraper,                 // Children's Hospital of Philadelphia — Flintbox orgId=96
