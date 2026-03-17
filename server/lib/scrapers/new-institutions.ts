@@ -563,64 +563,167 @@ export const sdstateScraper = createTechPublisherScraper("sdstate", "South Dakot
 export const olemissScraper = createTechPublisherScraper("olemiss", "University of Mississippi", { maxPg: 30 });
 
 // ── New US: verified working TechPublisher slugs (international) ─────────
-// Leeds TechPublisher RSS is empty and SearchResults page is JS-rendered.
-// Leeds uses a separate storefront (licensing.leeds.ac.uk) with a JSON client API.
+// Leeds TechPublisher RSS is empty and SearchResults page is fully JS-rendered.
+// Leeds runs a separate licensing storefront at licensing.leeds.ac.uk.
+// Primary: Playwright category traversal collects product links with titles + descriptions.
+// Fallback: licensing.leeds.ac.uk JSON client API.
+// Final fallback: Playwright on the legacy TechPublisher SearchResults page.
 export const leedsScraper: InstitutionScraper = {
   institution: "University of Leeds",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "University of Leeds";
     const BASE = "https://licensing.leeds.ac.uk";
+    const DEADLINE = Date.now() + 120_000; // 120 s cap
 
-    interface LeedsItem {
-      url?: string;
-      name?: string;
-      shortDescription?: string | null;
-    }
-    interface LeedsPage {
-      total?: number;
-      pages?: number;
-      items?: LeedsItem[];
-    }
-
-    const results: ScrapedListing[] = [];
-    let page = 1;
-    let totalPages = 1;
-
-    while (page <= totalPages) {
-      const apiUrl =
-        `${BASE}/client/products/search` +
-        `?page=${page}&itemsPerPage=300` +
-        `&columns[]=url&columns[]=name&columns[]=shortDescription`;
-
+    // ── Strategy 1: Playwright traversal of licensing.leeds.ac.uk ─────────────
+    const playwrightScrape = async (): Promise<ScrapedListing[]> => {
+      let browser: import("playwright").Browser | null = null;
       try {
-        const res = await fetch(apiUrl, {
-          headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
-          signal: AbortSignal.timeout(15_000),
+        const { chromium } = await import("playwright");
+        browser = await chromium.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
         });
-        if (!res.ok) {
-          console.error(`[scraper] ${INST}: API returned ${res.status} on page ${page}`);
-          break;
+        const page = await browser.newPage();
+        await page.setExtraHTTPHeaders({
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        });
+
+        // Step 1: collect category/subcategory links from /products
+        await page.goto(`${BASE}/products`, { timeout: 30_000, waitUntil: "networkidle" });
+        await page.waitForTimeout(2_500);
+
+        const categoryHrefs = await page.$$eval('a[href^="/products/"]', (els) =>
+          Array.from(
+            new Set(
+              els
+                .map((el) => el.getAttribute("href") ?? "")
+                .filter((h) => h.split("/").length >= 3)
+            )
+          )
+        );
+
+        // Step 2: for each category page, collect product links (a[href^="/product/"])
+        const seenUrls = new Set<string>();
+        const results: ScrapedListing[] = [];
+
+        for (const catHref of categoryHrefs) {
+          if (Date.now() > DEADLINE) break;
+          const catUrl = catHref.startsWith("http") ? catHref : `${BASE}${catHref}`;
+          try {
+            await page.goto(catUrl, { timeout: 25_000, waitUntil: "networkidle" });
+            await page.waitForTimeout(2_000);
+          } catch {
+            continue;
+          }
+
+          const productItems = await page.$$eval(
+            'a[href^="/product/"], a[href*="/product/"]',
+            (els) =>
+              els.map((el) => {
+                const anchor = el as HTMLAnchorElement;
+                const href = anchor.getAttribute("href") ?? "";
+                const titleAttr = anchor.getAttribute("title") ?? "";
+                const h6 = anchor.querySelector("h6");
+                const p = anchor.querySelector("p");
+                return {
+                  href,
+                  title: titleAttr || (h6 ? h6.textContent?.trim() ?? "" : ""),
+                  desc: p ? p.textContent?.trim().substring(0, 600) ?? "" : "",
+                };
+              })
+          );
+
+          for (const item of productItems) {
+            if (!item.href || !item.title || item.title.length < 5) continue;
+            const fullUrl = item.href.startsWith("http") ? item.href : `${BASE}${item.href}`;
+            if (seenUrls.has(fullUrl)) continue;
+            seenUrls.add(fullUrl);
+            results.push({
+              title: cleanText(item.title),
+              description: cleanText(item.desc),
+              url: fullUrl,
+              institution: INST,
+            });
+          }
         }
-        const json: LeedsPage = await res.json();
-        totalPages = json.pages ?? 1;
-        for (const item of json.items ?? []) {
-          const title = cleanText(item.name ?? "");
-          const itemUrl = item.url ?? "";
-          if (!title || title.length < 5 || !itemUrl) continue;
-          const fullUrl = itemUrl.startsWith("http") ? itemUrl : `${BASE}${itemUrl}`;
-          const desc = cleanText(item.shortDescription ?? "");
-          results.push({ title, description: desc, url: fullUrl, institution: INST });
-        }
+
+        return results;
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[scraper] ${INST}: fetch error on page ${page}: ${msg}`);
-        break;
+        console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+        return [];
+      } finally {
+        await browser?.close();
       }
-      page++;
+    };
+
+    // ── Strategy 2: Leeds Licensing JSON client API (fast fallback) ───────────
+    const apiScrape = async (): Promise<ScrapedListing[]> => {
+      interface LeedsItem {
+        url?: string;
+        name?: string;
+        shortDescription?: string | null;
+      }
+      interface LeedsPage {
+        total?: number;
+        pages?: number;
+        items?: LeedsItem[];
+      }
+
+      const results: ScrapedListing[] = [];
+      let pg = 1;
+      let totalPgs = 1;
+
+      while (pg <= totalPgs) {
+        const apiUrl =
+          `${BASE}/client/products/search` +
+          `?page=${pg}&itemsPerPage=300` +
+          `&columns[]=url&columns[]=name&columns[]=shortDescription`;
+        try {
+          const res = await fetch(apiUrl, {
+            headers: { "User-Agent": "Mozilla/5.0", Accept: "application/json" },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!res.ok) break;
+          const json: LeedsPage = await res.json();
+          totalPgs = json.pages ?? 1;
+          for (const item of json.items ?? []) {
+            const title = cleanText(item.name ?? "");
+            const itemUrl = item.url ?? "";
+            if (!title || title.length < 5 || !itemUrl) continue;
+            const fullUrl = itemUrl.startsWith("http") ? itemUrl : `${BASE}${itemUrl}`;
+            results.push({
+              title,
+              description: cleanText(item.shortDescription ?? ""),
+              url: fullUrl,
+              institution: INST,
+            });
+          }
+        } catch {
+          break;
+        }
+        pg++;
+      }
+      return results;
+    };
+
+    // Run Playwright-first; fall back to API if it yields < 5
+    const pwResults = await playwrightScrape();
+    if (pwResults.length >= 5) {
+      console.log(`[scraper] ${INST}: ${pwResults.length} listings via Playwright`);
+      return pwResults;
     }
 
-    console.log(`[scraper] ${INST}: ${results.length} listings via Leeds Licensing API`);
-    return results;
+    const apiResults = await apiScrape();
+    if (apiResults.length >= 5) {
+      console.log(`[scraper] ${INST}: ${apiResults.length} listings via Leeds Licensing API`);
+      return apiResults;
+    }
+
+    console.log(`[scraper] ${INST}: ${apiResults.length} listings (all strategies yielded low results)`);
+    return apiResults;
   },
 };
 export const southamptonScraper = createTechPublisherScraper("southampton", "University of Southampton", { maxPg: 50 });
