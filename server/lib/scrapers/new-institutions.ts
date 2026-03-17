@@ -2579,79 +2579,137 @@ export const foxChaseScraper: InstitutionScraper = {
 
 // Fred Hutchinson Cancer Center
 // Investigation (March 2026):
-//   Elastic App Search engine "cancer-consortium" indexes cancerconsortium.org only (0 FH tech pages)
+//   Elastic App Search engine "cancer-consortium" at fredhutch-prod.ent.us-west-2.aws.found.io
+//   Engine indexes cancerconsortium.org only — "Available Technology" type returns 0 hits
 //   AEM childrenlist hasChildren:false — tech-detail pages are dynamically rendered by JS
 //   Wayback Machine CDX: 0 archived technology-details pages
-//   Solution: Playwright navigation of the available-technologies.html interactive search UI
-//   Each page shows 10 results; Next button is JS-driven (no href); pagination stops when no new URLs appear
-//   Smoke-tested: ~61 tech listings across 7 pages (as of 2026-03-17)
+//   Strategy: (1) Elastic API exhaustive scan for fredhutch.org/technology-details URLs,
+//             (2) Playwright JS navigation of available-technologies.html as fallback
+//   Smoke-tested: ~61 listings via Playwright across 7 pages (as of 2026-03-17)
 export const fredHutchScraper: InstitutionScraper = {
   institution: "Fred Hutchinson Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fred Hutchinson Cancer Center";
     const LISTING_URL = "https://www.fredhutch.org/en/investors/business-development/available-technologies.html";
+    const ELASTIC_ENDPOINT = "https://fredhutch-prod.ent.us-west-2.aws.found.io/api/as/v1/engines/cancer-consortium/search";
+    const ELASTIC_KEY = "search-d4wmid75w6rn9onstbmpampm";
 
-    let browser: import("playwright").Browser | null = null;
-    try {
-      const { chromium } = await import("playwright");
-      browser = await chromium.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      });
-      const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-      });
-
-      await page.goto(LISTING_URL, { timeout: 30_000, waitUntil: "domcontentloaded" });
-      await page.waitForTimeout(3_000);
-
-      const allLinks = new Map<string, string>();
-
-      const collectPage = async () => {
-        const links = await page.$$eval('a[href*="technology-details"]', (els) =>
-          els.map((el) => ({
-            href: el.getAttribute("href") ?? "",
-            text: el.textContent?.trim() ?? "",
-          }))
-        );
-        for (const l of links) {
-          if (l.href && !allLinks.has(l.href)) allLinks.set(l.href, l.text);
-        }
-      };
-
-      await collectPage();
-
-      // Paginate by clicking the Next button until no new results appear
-      for (let pageNum = 2; pageNum <= 30; pageNum++) {
-        const nextBtn = await page.$('[class*="next" i]:not([class*="prev" i])');
-        if (!nextBtn) break;
-        const isDisabled = await nextBtn.evaluate((el) =>
-          el.classList.contains("disabled") || el.hasAttribute("disabled")
-        );
-        if (isDisabled) break;
-
-        await nextBtn.click();
-        await page.waitForTimeout(2_000);
-        const prevSize = allLinks.size;
-        await collectPage();
-        if (allLinks.size === prevSize) break; // no new URLs — last page
-      }
-
+    // ── Strategy 1: Elastic App Search exhaustive scan ──────────────────────
+    // Engine currently indexes cancerconsortium.org (not fredhutch.org tech pages),
+    // but we attempt this first in case the engine scope expands in future.
+    const elasticScan = async (): Promise<ScrapedListing[]> => {
       const results: ScrapedListing[] = [];
-      for (const [href, title] of Array.from(allLinks.entries())) {
-        if (!title || title.length < 3) continue;
-        results.push({ title, description: "", url: href, institution: INST });
+      try {
+        let page = 1;
+        let totalPages = 1;
+        while (page <= totalPages && page <= 10) {
+          const res = await fetch(ELASTIC_ENDPOINT, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${ELASTIC_KEY}`, "Content-Type": "application/json" },
+            signal: AbortSignal.timeout(15_000),
+            body: JSON.stringify({
+              query: "",
+              page: { size: 100, current: page },
+              result_fields: {
+                title: { raw: {} },
+                url: { raw: {} },
+                body_content: { raw: { size: 400 } },
+              },
+            }),
+          });
+          if (!res.ok) break;
+          const json: { meta?: { page?: { total_pages?: number } }; results?: Array<Record<string, { raw?: string }>> } = await res.json();
+          totalPages = json?.meta?.page?.total_pages ?? 1;
+          for (const r of json.results ?? []) {
+            const url = r.url?.raw ?? "";
+            if (!url.includes("fredhutch.org") || !url.includes("technology-details")) continue;
+            const title = (r.title?.raw ?? "").trim();
+            if (!title) continue;
+            const desc = (r.body_content?.raw ?? "").replace(/<[^>]+>/g, " ").trim();
+            results.push({ title, description: desc.slice(0, 1000), url, institution: INST });
+          }
+          page++;
+        }
+      } catch {
+        // Elastic unavailable — proceed to Playwright fallback
       }
-
-      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright JS pagination)`);
       return results;
-    } catch (err: any) {
-      console.error(`[scraper] ${INST} failed: ${err?.message}`);
-      return [];
-    } finally {
-      await browser?.close();
+    };
+
+    // ── Strategy 2: Playwright JS navigation fallback ────────────────────────
+    const playwrightScan = async (): Promise<ScrapedListing[]> => {
+      let browser: import("playwright").Browser | null = null;
+      try {
+        const { chromium } = await import("playwright");
+        browser = await chromium.launch({
+          headless: true,
+          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        });
+        const page = await browser.newPage();
+        await page.setExtraHTTPHeaders({
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        });
+
+        await page.goto(LISTING_URL, { timeout: 30_000, waitUntil: "domcontentloaded" });
+        await page.waitForTimeout(3_000);
+
+        const allLinks = new Map<string, string>();
+
+        const collectPage = async () => {
+          const links = await page.$$eval('a[href*="technology-details"]', (els) =>
+            els.map((el) => ({
+              href: el.getAttribute("href") ?? "",
+              text: el.textContent?.trim() ?? "",
+            }))
+          );
+          for (const l of links) {
+            if (l.href && !allLinks.has(l.href)) allLinks.set(l.href, l.text);
+          }
+        };
+
+        await collectPage();
+
+        // Paginate by clicking the Next button until no new results appear
+        for (let pageNum = 2; pageNum <= 30; pageNum++) {
+          const nextBtn = await page.$('[class*="next" i]:not([class*="prev" i])');
+          if (!nextBtn) break;
+          const isDisabled = await nextBtn.evaluate((el) =>
+            el.classList.contains("disabled") || el.hasAttribute("disabled")
+          );
+          if (isDisabled) break;
+
+          await nextBtn.click();
+          await page.waitForTimeout(2_000);
+          const prevSize = allLinks.size;
+          await collectPage();
+          if (allLinks.size === prevSize) break;
+        }
+
+        const results: ScrapedListing[] = [];
+        for (const [href, title] of Array.from(allLinks.entries())) {
+          if (!title || title.length < 3) continue;
+          results.push({ title, description: "", url: href, institution: INST });
+        }
+        return results;
+      } catch (err: any) {
+        console.error(`[scraper] ${INST} Playwright failed: ${err?.message}`);
+        return [];
+      } finally {
+        await browser?.close();
+      }
+    };
+
+    // Run Elastic scan first; if it returns 0 (expected until engine scope changes),
+    // fall back to Playwright navigation which yields real results
+    const elasticResults = await elasticScan();
+    if (elasticResults.length > 0) {
+      console.log(`[scraper] ${INST}: ${elasticResults.length} listings (Elastic cancer-consortium)`);
+      return elasticResults;
     }
+
+    const pwResults = await playwrightScan();
+    console.log(`[scraper] ${INST}: ${pwResults.length} listings (Playwright JS pagination)`);
+    return pwResults;
   },
 };
 
