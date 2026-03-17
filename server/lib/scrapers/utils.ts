@@ -149,3 +149,53 @@ export function extractList($: cheerio.CheerioAPI, selectors: string[]): string[
   }
   return [];
 }
+
+/**
+ * Fetch an HTML page through the egress proxy defined by SCRAPER_PROXY_URL.
+ * Falls back to direct fetchHtml if the env var is not set.
+ *
+ * Used for sources that block Replit's shared egress IPs (e.g. DOE national labs).
+ * Set SCRAPER_PROXY_URL to the deployed Cloudflare Worker URL from
+ * server/lib/scrapers/cloudflare-proxy/worker.js before running these scrapers.
+ */
+export async function fetchHtmlViaProxy(
+  url: string,
+  timeoutMs = 15_000,
+  externalSignal?: AbortSignal,
+): Promise<cheerio.CheerioAPI | null> {
+  const proxyBase = process.env.SCRAPER_PROXY_URL?.trim();
+
+  if (!proxyBase) {
+    console.warn(`[scraper] SCRAPER_PROXY_URL not set — falling back to direct fetch for: ${url}`);
+    return fetchHtml(url, timeoutMs, externalSignal);
+  }
+
+  const proxyUrl = `${proxyBase}?url=${encodeURIComponent(url)}`;
+
+  try {
+    const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
+    try {
+      const res = await fetch(proxyUrl, {
+        signal,
+        redirect: "follow",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      });
+      cleanup();
+      if (!res.ok) {
+        console.warn(`[scraper] Proxy returned HTTP ${res.status} for ${url}`);
+        return null;
+      }
+      const html = await res.text();
+      return cheerio.load(html);
+    } catch (err: any) {
+      cleanup();
+      throw err;
+    }
+  } catch (err: any) {
+    console.warn(`[scraper] Proxy fetch failed for ${url}: ${err?.message ?? err}`);
+    return null;
+  }
+}

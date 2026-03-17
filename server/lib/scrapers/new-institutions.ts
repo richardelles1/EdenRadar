@@ -1,7 +1,7 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
-import { fetchHtml, cleanText } from "./utils";
+import { fetchHtml, fetchHtmlViaProxy, cleanText } from "./utils";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
@@ -1037,13 +1037,13 @@ export const asuScraper = createWordPressApiScraper("https://skysonginnovations.
 
 // ── International: UK ────────────────────────────────────────────────────
 export const oxfordScraper = createStubScraper("University of Oxford");
-export const imperialScraper = createStubScraper("Imperial College London");
+// imperialScraper — real in-part "imperial" implementation is in Batch E section (end of file)
 export const uclScraper = createStubScraper("University College London");
 export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
 export const edinburghScraper = createStubScraper("University of Edinburgh");
 // glasgowScraper: real in-part "gla" implementation is at Task #114 section (end of file)
-export const birminghamScraper = createStubScraper("University of Birmingham");
-export const warwickScraper = createStubScraper("University of Warwick");
+// birminghamScraper — real in-part "birmingham" implementation is in Batch E section (end of file)
+// warwickScraper — real in-part "warwick" implementation is in Batch E section (end of file)
 export const kclScraper = createInPartScraper("kcl", "King's College London");
 export const liverpoolScraper = createInPartScraper("liverpool", "University of Liverpool");
 export const durhamInPartScraper = createInPartScraper("durham", "Durham University");
@@ -3729,43 +3729,8 @@ export const uniquestScraper: InstitutionScraper = {
   },
 };
 
-// ── McGill University OTT ─────────────────────────────────────────────────────
-// OTT site (mcgill.ca/ott) was offline ("Offline" maintenance page) at probe time.
-// Attempt fetch; gracefully returns empty if still down.
-export const mcgillScraper: InstitutionScraper = {
-  institution: "McGill University OTT",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "McGill University OTT";
-    const LISTING_URL = "https://www.mcgill.ca/ott/technologies-for-licensing";
-    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-    try {
-      const res = await fetch(LISTING_URL, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(20_000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-      if (html.includes("Offline") || html.includes("noindex, nofollow")) {
-        console.warn(`[scraper] ${INST}: site offline or maintenance`);
-        return [];
-      }
-      const techRe = /href="(https?:\/\/www\.mcgill\.ca\/ott\/[^"]*(?:technolog|licens)[^"]*)"/gi;
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
-      let m: RegExpExecArray | null;
-      while ((m = techRe.exec(html)) !== null) {
-        if (seen.has(m[1])) continue;
-        seen.add(m[1]);
-        results.push({ title: m[1].split("/").pop() ?? m[1], description: "", url: m[1], institution: INST });
-      }
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
-      return results;
-    } catch (err: any) {
-      console.warn(`[scraper] ${INST}: failed — ${err?.message}`);
-      return [];
-    }
-  },
-};
+// mcgillScraper — real in-part "mcgill" implementation is in Batch E section (end of file).
+// Previous OTT website (mcgill.ca/ott) was offline/maintenance and is superseded by in-part portal.
 
 // ── Leiden University (LURIS) ─────────────────────────────────────────────────
 // LURIS (Leiden University Research and Innovation Services) at luris.nl is a
@@ -3865,13 +3830,8 @@ export const nusScraper: InstitutionScraper = {
 
 // University of Nottingham — implemented via TechPublisher factory below (Task #113)
 
-// ── University of Sheffield ───────────────────────────────────────────────────
-// All /research/enterprise/ paths redirect to homepage (sheffield.ac.uk/).
-// Drupal-based site shows no technology listing in any discoverable URL.
-export const sheffieldScraper: InstitutionScraper = createStubScraper(
-  "University of Sheffield",
-  "All /research/enterprise/technology* URLs redirect to homepage — no public listing found"
-);
+// sheffieldScraper — real in-part "sheffield" implementation is in Batch E section (end of file).
+// Previous probe of sheffield.ac.uk showed no public listing; in-part portal confirmed 2026-03-17.
 
 // ── Yissum Research Development Co. (Hebrew University of Jerusalem) ──────────
 // Technologies listed via WordPress Custom Post Type REST API.
@@ -4758,5 +4718,293 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
     } finally {
       await browser?.close();
     }
+  },
+};
+
+// ── International Scrapers — Batch E (Task #120) ─────────────────────────────
+//
+// Probe results (confirmed from Replit egress IPs, 2026-03-17):
+//
+// ALL targets use the in-part platform (portals.in-part.com).
+// Landing pages: HTTP 200 confirmed for all 11 subdomains below.
+// in-part API (app.in-part.com/api/v3/public/opportunities): live data confirmed
+// for mcmaster; other portals may be empty or API-gated — createInPartScraper
+// handles this gracefully (API → SSR fallback → returns []).
+//
+// Note: Batch C recorded in-part as "HTTP 000 from all Replit egress IPs" —
+// that was specific to the app.in-part.com/partners/ Playwright flow used at
+// the time. The portals.in-part.com subdomain + API v3 approach used here
+// is accessible from Replit egress today (2026-03-17).
+//
+// UK targets (7):
+//   imperial   — Imperial College London      (imperial.portals.in-part.com → 200)
+//   birmingham — University of Birmingham     (birmingham.portals.in-part.com → 200)
+//   sheffield  — University of Sheffield      (sheffield.portals.in-part.com → 200)
+//   exeter     — University of Exeter         (exeter.portals.in-part.com → 200)
+//   cardiff    — Cardiff University           (cardiff.portals.in-part.com → 200)
+//   dundee     — University of Dundee         (dundee.portals.in-part.com → 200)
+//   warwick    — University of Warwick        (warwick.portals.in-part.com → 200)
+//
+// Canada targets (4):
+//   mcgill     — McGill University            (mcgill.portals.in-part.com → 200)
+//   waterloo   — University of Waterloo       (waterloo.portals.in-part.com → 200)
+//   mcmaster   — McMaster University          (mcmaster.portals.in-part.com → 200, API data confirmed)
+//   ucalgary   — University of Calgary        (ucalgary.portals.in-part.com → 200)
+//
+// Total: 267 → 278 scrapers
+
+// ── UK ────────────────────────────────────────────────────────────────────────
+
+// ── 1. Imperial College London — in-part "imperial" ──────────────────────────
+export const imperialScraper = createInPartScraper("imperial", "Imperial College London");
+
+// ── 2. University of Birmingham — in-part "birmingham" ───────────────────────
+export const birminghamScraper = createInPartScraper("birmingham", "University of Birmingham");
+
+// ── 3. University of Sheffield — in-part "sheffield" ─────────────────────────
+export const sheffieldScraper = createInPartScraper("sheffield", "University of Sheffield");
+
+// ── 4. University of Exeter — in-part "exeter" ───────────────────────────────
+export const exeterScraper = createInPartScraper("exeter", "University of Exeter");
+
+// ── 5. Cardiff University — in-part "cardiff" ────────────────────────────────
+export const cardiffScraper = createInPartScraper("cardiff", "Cardiff University");
+
+// ── 6. University of Dundee — in-part "dundee" ───────────────────────────────
+export const dundeeScraper = createInPartScraper("dundee", "University of Dundee");
+
+// ── 7. University of Warwick — in-part "warwick" ─────────────────────────────
+export const warwickScraper = createInPartScraper("warwick", "University of Warwick");
+
+// ── Canada ────────────────────────────────────────────────────────────────────
+
+// ── 8. McGill University — in-part "mcgill" ──────────────────────────────────
+export const mcgillScraper = createInPartScraper("mcgill", "McGill University");
+
+// ── 9. University of Waterloo — in-part "waterloo" ───────────────────────────
+export const waterlooScraper = createInPartScraper("waterloo", "University of Waterloo");
+
+// ── 10. McMaster University — in-part "mcmaster" — API data confirmed ─────────
+export const mcmasterScraper = createInPartScraper("mcmaster", "McMaster University");
+
+// ── 11. University of Calgary — in-part "ucalgary" ───────────────────────────
+export const calgaryScraper = createInPartScraper("ucalgary", "University of Calgary");
+
+// ── DOE National Labs — Proxy-Routed Scrapers (Task #121) ────────────────────
+//
+// These three labs are confirmed accessible from normal browsers but return
+// HTTP 000 (connection refused) from Replit's shared egress IP range.
+//
+// Infrastructure: Deploy server/lib/scrapers/cloudflare-proxy/worker.js as a
+// Cloudflare Worker, then set SCRAPER_PROXY_URL env secret to the *.workers.dev
+// URL. fetchHtmlViaProxy() routes through the worker when that env var is set.
+// Without it, the scrapers fall back to direct fetch (works outside Replit).
+//
+// Probe targets (all return HTTP 000 from Replit, confirmed 2026-03-17):
+//   ORNL  — technology.ornl.gov/license-search/
+//   ANL   — www.anl.gov/partnerships/argonne-technologies-available-for-licensing
+//   PNNL  — availabletechnologies.pnl.gov/
+//
+// Listing estimates based on public records:
+//   ORNL  — ~120+ technologies (searchable database)
+//   ANL   — ~200+ technologies (card-grid listing)
+//   PNNL  — ~150+ technologies (category-based listing)
+//
+// Total with DOE: 278 → 281 scrapers
+
+// ── Oak Ridge National Laboratory (ORNL) ─────────────────────────────────────
+export const ornlScraper: InstitutionScraper = {
+  institution: "Oak Ridge National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Oak Ridge National Laboratory";
+    const BASE = "https://technology.ornl.gov";
+    const LISTING = `${BASE}/license-search/`;
+
+    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
+    if (!$) {
+      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
+      return [];
+    }
+
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+
+    // ORNL license-search renders tech cards; try known selectors first
+    const candidateSelectors = [
+      'a[href*="/license/"]',
+      'a[href*="/technology/"]',
+      ".technology-card a",
+      ".result-item a",
+      "article h2 a",
+      "article h3 a",
+      ".tech-title a",
+    ];
+
+    for (const sel of candidateSelectors) {
+      $(sel).each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const text = cleanText($(el).text());
+        if (!text || text.length < 5) return;
+        const url = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
+        if (seen.has(url)) return;
+        seen.add(url);
+        results.push({ title: text, description: "", url, institution: INST });
+      });
+      if (results.length > 0) break;
+    }
+
+    // Generic fallback
+    if (results.length === 0) {
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const text = cleanText($(el).text());
+        if (
+          text.length >= 10 &&
+          (href.includes("/license/") || href.includes("/technology/") || href.includes("/tech/")) &&
+          !href.includes("category") && !href.includes("search")
+        ) {
+          const url = href.startsWith("http") ? href : `${BASE}${href}`;
+          if (seen.has(url)) return;
+          seen.add(url);
+          results.push({ title: text, description: "", url, institution: INST });
+        }
+      });
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
+    return results;
+  },
+};
+
+// ── Argonne National Laboratory (ANL) ────────────────────────────────────────
+export const argonneScraper: InstitutionScraper = {
+  institution: "Argonne National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Argonne National Laboratory";
+    const BASE = "https://www.anl.gov";
+    const LISTING = `${BASE}/partnerships/argonne-technologies-available-for-licensing`;
+
+    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
+    if (!$) {
+      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
+      return [];
+    }
+
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+
+    // ANL technologies page: Drupal-based, typically uses views with card rows
+    const candidateSelectors = [
+      'a[href*="/technology/"]',
+      'a[href*="/ip/"]',
+      ".views-row a",
+      ".field--name-title a",
+      "article h2 a",
+      "article h3 a",
+      ".card__title a",
+    ];
+
+    for (const sel of candidateSelectors) {
+      $(sel).each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const text = cleanText($(el).text());
+        if (!text || text.length < 5) return;
+        const url = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (seen.has(url)) return;
+        seen.add(url);
+        results.push({ title: text, description: "", url, institution: INST });
+      });
+      if (results.length > 0) break;
+    }
+
+    // Generic fallback
+    if (results.length === 0) {
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const text = cleanText($(el).text());
+        if (
+          text.length >= 10 &&
+          (href.includes("/technology/") || href.match(/\/anl-\d+/i) || href.includes("anl.gov/tech"))
+        ) {
+          const url = href.startsWith("http") ? href : `${BASE}${href}`;
+          if (seen.has(url)) return;
+          seen.add(url);
+          results.push({ title: text, description: "", url, institution: INST });
+        }
+      });
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
+    return results;
+  },
+};
+
+// ── Pacific Northwest National Laboratory (PNNL) ─────────────────────────────
+export const pnnlScraper: InstitutionScraper = {
+  institution: "Pacific Northwest National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Pacific Northwest National Laboratory";
+    const BASE = "https://availabletechnologies.pnl.gov";
+    const LISTING = `${BASE}/`;
+
+    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
+    if (!$) {
+      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
+      return [];
+    }
+
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+
+    // PNNL uses a category-based structure — collect category pages then recurse
+    const categoryLinks: string[] = [];
+    $("a[href]").each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      const text = cleanText($(el).text());
+      if (
+        text.length > 3 &&
+        (href.includes("/category/") || href.includes("/area/") || href.match(/^\/[a-z-]+\/?$/)) &&
+        href !== "/" && !href.includes("search") && !href.includes("contact")
+      ) {
+        const url = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (!categoryLinks.includes(url)) categoryLinks.push(url);
+      }
+    });
+
+    for (const catUrl of categoryLinks.slice(0, 15)) {
+      const cat$ = await fetchHtmlViaProxy(catUrl, 15_000);
+      if (!cat$) continue;
+      cat$("a[href]").each((_, el) => {
+        const href = cat$(el).attr("href") ?? "";
+        const text = cleanText(cat$(el).text());
+        if (
+          text.length >= 10 &&
+          (href.includes("/technology/") || href.includes("/tech/") || href.match(/\/\d{3,}/)) &&
+          !href.includes("category") && !href.includes("area")
+        ) {
+          const url = href.startsWith("http") ? href : `${BASE}${href}`;
+          if (seen.has(url)) return;
+          seen.add(url);
+          results.push({ title: text, description: "", url, institution: INST });
+        }
+      });
+    }
+
+    // Fallback: direct tech links from listing page
+    if (results.length === 0) {
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const text = cleanText($(el).text());
+        if (text.length >= 10 && (href.includes("/technology/") || href.includes("/tech/"))) {
+          const url = href.startsWith("http") ? href : `${BASE}${href}`;
+          if (seen.has(url)) return;
+          seen.add(url);
+          results.push({ title: text, description: "", url, institution: INST });
+        }
+      });
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
+    return results;
   },
 };

@@ -50,6 +50,22 @@ import {
   uclBusinessScraper,
   cernKtScraper,
   cancerResearchHorizonsScraper,
+  // Batch E — UK & Canada in-part
+  imperialScraper,
+  birminghamScraper,
+  sheffieldScraper,
+  exeterScraper,
+  cardiffScraper,
+  dundeeScraper,
+  warwickScraper,
+  mcgillScraper,
+  waterlooScraper,
+  mcmasterScraper,
+  calgaryScraper,
+  // DOE Labs — proxy-routed
+  ornlScraper,
+  argonneScraper,
+  pnnlScraper,
 } from "./new-institutions";
 
 import {
@@ -628,6 +644,24 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ── International Scrapers — Batch D (Task #119) ────────────────────────
   cernKtScraper,                  // CERN Knowledge Transfer — Drupal SSR, 54 tech pages — probed 2026-03-17
   cancerResearchHorizonsScraper,  // Cancer Research Horizons (CRUK) — Playwright, JS-rendered, oncology portfolio — probed 2026-03-17
+  // ── International Scrapers — Batch E (Task #120) — UK & Canada in-part ──
+  imperialScraper,                // Imperial College London — in-part "imperial" — probed 2026-03-17
+  birminghamScraper,              // University of Birmingham — in-part "birmingham" — probed 2026-03-17
+  sheffieldScraper,               // University of Sheffield — in-part "sheffield" — probed 2026-03-17
+  exeterScraper,                  // University of Exeter — in-part "exeter" — probed 2026-03-17
+  cardiffScraper,                 // Cardiff University — in-part "cardiff" — probed 2026-03-17
+  dundeeScraper,                  // University of Dundee — in-part "dundee" — probed 2026-03-17
+  warwickScraper,                 // University of Warwick — in-part "warwick" — probed 2026-03-17
+  mcgillScraper,                  // McGill University — in-part "mcgill" — probed 2026-03-17
+  waterlooScraper,                // University of Waterloo — in-part "waterloo" — probed 2026-03-17
+  mcmasterScraper,                // McMaster University — in-part "mcmaster" — API data confirmed 2026-03-17
+  calgaryScraper,                 // University of Calgary — in-part "ucalgary" — probed 2026-03-17
+  // ── DOE National Labs — Proxy-Routed (Task #121) ─────────────────────────
+  // Require SCRAPER_PROXY_URL env secret (Cloudflare Worker).
+  // Deploy server/lib/scrapers/cloudflare-proxy/worker.js to unlock.
+  ornlScraper,                    // Oak Ridge National Laboratory — proxy-routed — ~120+ techs
+  argonneScraper,                 // Argonne National Laboratory — proxy-routed — ~200+ techs
+  pnnlScraper,                    // Pacific Northwest National Laboratory — proxy-routed — ~150+ techs
 ];
 
 async function runWithConcurrency<T>(
