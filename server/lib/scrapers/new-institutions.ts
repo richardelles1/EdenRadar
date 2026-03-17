@@ -1675,6 +1675,228 @@ export const uwmrfScraper: InstitutionScraper = {
   },
 };
 
+// ── Batch 2B additions (Task #105) ───────────────────────────────────────────
+
+// 1. Jackson State University
+// HBCU TTO page lists technologies as Google Patents links and internal patent PDFs
+export const jacksonStateScraper: InstitutionScraper = {
+  institution: "Jackson State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.jsums.edu/technologytransfer/industry/";
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const $ = (await import("cheerio")).load(html);
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    // Select Google Patents links and internal patent PDFs (exclude student handbooks etc.)
+    $('a[href*="patents.google.com"], a[href*="/technologytransfer/"], a[href*="/research/files/"][href$=".pdf"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      if (!href || href.includes("student") || href.includes("handbook")) return;
+      const fullUrl = href.startsWith("http") ? href : `https://www.jsums.edu${href}`;
+      if (seen.has(fullUrl)) return;
+      const title = cleanText($(el).text());
+      if (!title || title.length < 5) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "Jackson State University" });
+    });
+    console.log(`[scraper] Jackson State University: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 2. Ferris State University
+// TTO page lists technologies as Google Patent image PDF links (patentimages.storage.googleapis.com)
+export const ferrisStateScraper: InstitutionScraper = {
+  institution: "Ferris State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.ferris.edu/administration/academicaffairs/vpoffice/Academic_Research/int-prop-and-tech-transfer.htm";
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const $ = (await import("cheerio")).load(html);
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    // Extract Google Patent image PDFs and internal FSU patent PDFs (exclude policy/process docs)
+    $('a[href*="patentimages.storage.googleapis.com"], a[href*="image-ppubs.uspto.gov"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      if (!href || seen.has(href)) return;
+      const title = cleanText($(el).text());
+      if (!title || title.length < 5 || /^(AAU|process|policy|form|guidelines|charter)/i.test(title)) return;
+      seen.add(href);
+      results.push({ title, description: "", url: href, institution: "Ferris State University" });
+    });
+    // Also capture internal patent PDFs with descriptive anchor text
+    $('a[href*="pdfs-docs/Protoconch"], a[href*="/technologytransfer/files/"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      if (!href || seen.has(href)) return;
+      const title = cleanText($(el).text());
+      if (!title || title.length < 10 || /^(description|DESCRIPTION)/i.test(title.slice(0,15))) return;
+      const fullUrl = href.startsWith("http") ? href : `https://www.ferris.edu${href}`;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "Ferris State University" });
+    });
+    console.log(`[scraper] Ferris State University: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 3. Brookhaven National Laboratory
+// List pages at /techtransfer/list.php?t=1&q=XXXX enumerate tech IDs;
+// anchor text from list page is the title (includes BNL case number prefix)
+export const brookhavenScraper: InstitutionScraper = {
+  institution: "Brookhaven National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.bnl.gov/techtransfer";
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    const cheerio = await import("cheerio");
+    // Iterate q values — categories with known content: 1001,1003-1006
+    for (let q = 1001; q <= 1020; q++) {
+      try {
+        const r = await fetch(`${base}/list.php?t=1&q=${q}`, {
+          signal: AbortSignal.timeout(12000),
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
+        if (!r.ok) continue;
+        const $ = cheerio.load(await r.text());
+        $('a[href*="technology.php"]').each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const m = href.match(/sel=(\d+)/);
+          if (!m) return;
+          const fullUrl = `${base}/${href.startsWith("/") ? href.slice(1) : href}`;
+          if (seen.has(fullUrl)) return;
+          const title = cleanText($(el).text());
+          if (!title || title.length < 5) return;
+          seen.add(fullUrl);
+          results.push({ title, description: "", url: fullUrl, institution: "Brookhaven National Laboratory" });
+        });
+      } catch {
+        continue;
+      }
+    }
+    console.log(`[scraper] Brookhaven National Laboratory: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 4. LaunchTN
+// Elementor JS-rendered page — confirmed zero static listings accessible;
+// no custom WordPress post type, technologies rendered via client-side JavaScript
+export const launchTNScraper = createStubScraper(
+  "LaunchTN",
+  "Available-technologies page is Elementor JS-rendered; no custom WP post type found, no static tech listings in page source"
+);
+
+// 5. RIT (Rochester Institute of Technology)
+// Listing page at /ipmo/available-technologies has links to /ipmo/patents/us-XXXXXXXX
+export const ritScraper: InstitutionScraper = {
+  institution: "Rochester Institute of Technology (RIT)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.rit.edu";
+    const url = `${base}/ipmo/available-technologies`;
+    const $ = await fetchHtml(url, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $('a[href*="/ipmo/patents/"], a[href*="/ipmo/license/"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      if (!href) return;
+      const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+      if (seen.has(fullUrl)) return;
+      const title = cleanText($(el).text());
+      if (!title || title.length < 8 || /^(technical.review|panel|review)/i.test(title)) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "Rochester Institute of Technology (RIT)" });
+    });
+    console.log(`[scraper] RIT: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 6. New Mexico State University (Tradespace)
+// React SPA — no public JSON API found at /api/opportunities or /graphql endpoints
+export const nmStateScraper = createStubScraper(
+  "New Mexico State University (Tradespace)",
+  "Tradespace marketplace is a React SPA with no public API endpoint — same pattern as UTEP Tradespace stub"
+);
+
+// 7. New Mexico Tech
+// Invention summaries page lists technologies as PDF links with descriptive anchor text
+export const nmTechScraper: InstitutionScraper = {
+  institution: "New Mexico Tech",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.nmt.edu";
+    const url = `${base}/oic/invention-summaries.php`;
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    if (!res.ok) return [];
+    const html = await res.text();
+    const $ = (await import("cheerio")).load(html);
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $("a[href$='.pdf'], a[href*='/oic/']").each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      if (!href || !href.endsWith(".pdf")) return;
+      const title = cleanText($(el).text());
+      if (!title || title.length < 8) return;
+      const fullUrl = href.startsWith("http") ? href : `${base}${href.startsWith("/") ? "" : "/"}${href}`;
+      if (seen.has(fullUrl)) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "New Mexico Tech" });
+    });
+    console.log(`[scraper] New Mexico Tech: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 8. Sandia National Laboratories
+// Uses WordPress sitemap (wp-sitemap-posts-ip-opportunity-1.xml) to enumerate all 218 opportunity URLs
+// Titles are derived from the URL slug (human-readable, e.g. "brain-targeting-nanobodies")
+export const sandiaScraper: InstitutionScraper = {
+  institution: "Sandia National Laboratories",
+  async scrape(): Promise<ScrapedListing[]> {
+    const sitemapUrl = "https://ip.sandia.gov/wp-sitemap-posts-ip-opportunity-1.xml";
+    try {
+      const res = await fetch(sitemapUrl, { signal: AbortSignal.timeout(15000), headers: { "User-Agent": "Mozilla/5.0" } });
+      if (!res.ok) return [];
+      const xml = await res.text();
+      const oppUrls = [...xml.matchAll(/<loc>(https:\/\/ip\.sandia\.gov\/opportunity\/[^<]+)<\/loc>/g)].map(m => m[1]);
+      const results: ScrapedListing[] = oppUrls.map(url => {
+        const slug = url.replace(/\/$/, "").split("/").pop() ?? "";
+        const title = slug
+          .split("-")
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+        return { title, description: "", url, institution: "Sandia National Laboratories" };
+      });
+      console.log(`[scraper] Sandia National Laboratories: ${results.length} listings`);
+      return results;
+    } catch {
+      return [];
+    }
+  },
+};
+
+// 9. Los Alamos National Laboratory
+// Tech-and-capability-search page and all known LANL tech listing URLs return HTTP 404;
+// confirmed zero listings accessible via static scraping
+export const losAlamosScraper = createStubScraper(
+  "Los Alamos National Laboratory",
+  "Confirmed zero listings: tech-and-capability-search page and all known LANL tech listing paths return HTTP 404"
+);
+
 // Flintbox portals
 export const umbcScraper = createFlintboxScraper(
   { slug: "umbc", orgId: 131, accessKey: "886542e2-8300-4e8a-ad5a-136fbc497726" },
