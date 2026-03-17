@@ -2799,6 +2799,8 @@ export const fredHutchScraper: InstitutionScraper = {
     };
 
     // ── Strategy 2: Playwright JS navigation fallback ────────────────────────
+    // Tech listings are rendered via JavaScript (AEM). Must use networkidle so the
+    // JS bundle finishes loading before we collect links.
     const playwrightScan = async (): Promise<ScrapedListing[]> => {
       let browser: import("playwright").Browser | null = null;
       try {
@@ -2812,8 +2814,9 @@ export const fredHutchScraper: InstitutionScraper = {
           "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
         });
 
-        await page.goto(LISTING_URL, { timeout: 30_000, waitUntil: "domcontentloaded" });
-        await page.waitForTimeout(3_000);
+        await page.goto(LISTING_URL, { timeout: 45_000, waitUntil: "networkidle" });
+        // Wait for at least one technology-details link to appear in the DOM
+        await page.waitForSelector('a[href*="technology-details"]', { timeout: 15_000 });
 
         const allLinks = new Map<string, string>();
 
@@ -2831,17 +2834,18 @@ export const fredHutchScraper: InstitutionScraper = {
 
         await collectPage();
 
-        // Paginate by clicking the Next button until no new results appear
-        for (let pageNum = 2; pageNum <= 30; pageNum++) {
-          const nextBtn = await page.$('[class*="next" i]:not([class*="prev" i])');
+        // The listing page loads all items at once (no pagination button).
+        // Attempt to click a Next/load-more button in case of future pagination.
+        for (let pg = 2; pg <= 20; pg++) {
+          const nextBtn = await page.$('[class*="next" i] a, button[aria-label*="next" i]').catch(() => null);
           if (!nextBtn) break;
           const isDisabled = await nextBtn.evaluate((el) =>
             el.classList.contains("disabled") || el.hasAttribute("disabled")
-          );
+          ).catch(() => true);
           if (isDisabled) break;
 
           await nextBtn.click();
-          await page.waitForTimeout(2_000);
+          await page.waitForTimeout(2_500);
           const prevSize = allLinks.size;
           await collectPage();
           if (allLinks.size === prevSize) break;
@@ -2850,11 +2854,13 @@ export const fredHutchScraper: InstitutionScraper = {
         const results: ScrapedListing[] = [];
         for (const [href, title] of Array.from(allLinks.entries())) {
           if (!title || title.length < 3) continue;
-          results.push({ title, description: "", url: href, institution: INST });
+          const fullUrl = href.startsWith("http") ? href : `https://www.fredhutch.org${href}`;
+          results.push({ title, description: "", url: fullUrl, institution: INST });
         }
         return results;
-      } catch (err: any) {
-        console.error(`[scraper] ${INST} Playwright failed: ${err?.message}`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
         return [];
       } finally {
         await browser?.close();

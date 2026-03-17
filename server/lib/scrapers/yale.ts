@@ -37,12 +37,12 @@ async function getNodeIdsFromPage(page: number): Promise<number[]> {
 async function getTotalPages(html: string): Promise<number> {
   const $ = cheerio.load(html);
   let maxPage = 0;
+  // Pagination links on this page are relative (?page=N), not absolute.
+  // Do not filter by "yale-technologies" — that guard excluded all relative hrefs.
   $("a").each((_, el) => {
     const href = $(el).attr("href") || "";
-    if (href.includes("yale-technologies")) {
-      const m = href.match(/[?&]page=(\d+)/);
-      if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
-    }
+    const m = href.match(/[?&]page=(\d+)/);
+    if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
   });
   return maxPage;
 }
