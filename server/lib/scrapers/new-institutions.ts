@@ -1844,15 +1844,63 @@ export const brookhavenScraper: InstitutionScraper = {
 };
 
 // 4. LaunchTN
-// Confirmed zero biotech-relevant listings in static HTML. The available-technologies
-// page uses Elementor with client-side rendering — no tech titles, cards, or links
-// appear in raw HTML. No custom WP post type found (/wp-json/wp/v2/types has no
-// 'technology' type). WP posts endpoint returns blog content only (184 blog, 98 PR posts).
-// Stub criteria (b): confirmed zero biotech-relevant results from source.
-export const launchTNScraper = createStubScraper(
-  "LaunchTN",
-  "Confirmed zero biotech-relevant listings: available-technologies page is Elementor client-side rendered — no tech data in static HTML, no custom WP post type, WP posts are blog/PR content only"
-);
+// available-technologies page (with curl UA to bypass WAF) embeds static First Ignite
+// (app.firstignite.com/public/listings/{UUID}) anchor pairs: (title, institution) per tech.
+// Fetches detail page at app.firstignite.com for description field.
+export const launchTNScraper: InstitutionScraper = {
+  institution: "LaunchTN",
+  async scrape(): Promise<ScrapedListing[]> {
+    // Must use curl UA to bypass WAF; Chrome/Firefox UA gets 403
+    const cheerio = await import("cheerio");
+    const res = await fetch("https://launchtn.org/available-technologies/", {
+      signal: AbortSignal.timeout(15000),
+      redirect: "follow",
+      headers: { "User-Agent": "curl/7.88.1", "Accept": "text/html,*/*" },
+    });
+    if (!res.ok) return [];
+    const $ = cheerio.load(await res.text());
+    // Collect First Ignite listing links — every pair (even idx = title, odd idx = institution)
+    const links: Array<{ href: string; text: string }> = [];
+    $('a[href*="app.firstignite.com/public/listings/"]').each((_, el) => {
+      links.push({ href: $(el).attr("href") ?? "", text: cleanText($(el).text()) });
+    });
+    // Deduplicate by URL so each unique UUID appears once with its title
+    const seen = new Set<string>();
+    const stubs: Array<{ title: string; institution: string; url: string }> = [];
+    for (let i = 0; i + 1 < links.length; i += 2) {
+      const href = links[i].href;
+      if (!href || seen.has(href)) continue;
+      const title = links[i].text;
+      const institution = links[i + 1]?.text ?? "LaunchTN";
+      if (!title || title.length < 5) continue;
+      seen.add(href);
+      stubs.push({ title, institution, url: href });
+    }
+    // Fetch First Ignite detail pages for description (limit 5 concurrent)
+    const CONC = 5;
+    const results: ScrapedListing[] = [];
+    for (let i = 0; i < stubs.length; i += CONC) {
+      const batch = stubs.slice(i, i + CONC);
+      const settled = await Promise.allSettled(
+        batch.map(async (s) => {
+          const detail = await fetchHtml(s.url, 10000);
+          let description = "";
+          if (detail) {
+            detail("p").each((_, el) => {
+              const txt = cleanText(detail(el).text());
+              if (txt.length > description.length && txt.length > 30) description = txt;
+            });
+            description = description.slice(0, 400);
+          }
+          return { title: s.title, description, url: s.url, institution: `LaunchTN (${s.institution})` };
+        })
+      );
+      settled.forEach((r) => { if (r.status === "fulfilled") results.push(r.value); });
+    }
+    console.log(`[scraper] LaunchTN: ${results.length} listings`);
+    return results;
+  },
+};
 
 // 5. RIT (Rochester Institute of Technology)
 // Listing page at /ipmo/available-technologies has links to /ipmo/patents/us-XXXXXXXX;
