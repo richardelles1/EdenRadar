@@ -3343,7 +3343,6 @@ export const nationwideChildrensScraper: InstitutionScraper = {
     const INST = "Nationwide Children's Hospital";
     const BASE = "https://www.nationwidechildrens.org";
     const INDEX_URL = `${BASE}/research/technology-commercialization/available-technologies`;
-    const INDEX_PATH = "/research/technology-commercialization/available-technologies";
     const TIMEOUT_MS = 15_000;
     const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
 
