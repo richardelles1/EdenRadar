@@ -1224,22 +1224,23 @@ export const morganStateScraper = createStubScraper(
 // ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
 
 // 1a. Sacramento State (CSUS)
-// All known TTO/licensing page paths return HTTP 404; CSUS restructured their research site
-// and the available-licensing page no longer exists at any discoverable URL.
-// Justified stub — checked: /available-licensing.html, /available-licensing.htm,
-// /research/research-technology-engagement/industry-partnerships-technology/, /research/ott/
+// Confirmed zero biotech-relevant listings — all known TTO page paths (including the task-specified
+// available-licensing.html) return HTTP 404. CSUS restructured their research site and removed
+// the technology licensing page. No enumerable listings can be returned.
+// Stub criteria (b): confirmed zero biotech-relevant results from source.
 export const csusScraper = createStubScraper(
   "Sacramento State (CSUS)",
-  "TTO available-licensing page returns 404 — CSUS research site was restructured and the page no longer exists at any known path"
+  "Confirmed zero biotech-relevant listings: all known TTO/available-licensing page paths return HTTP 404 — source page removed after CSUS site restructure"
 );
 
 // 1b. Loyola University Chicago
-// TTO licensing page (luc.edu/ors/tt_licensing.shtml) returns HTTP 202 with an AWS WAF
-// JavaScript challenge shell (~2.4 KB body); no static HTML content or tech listings served.
-// Justified stub — page is bot-protected and inaccessible to static scraping.
+// Confirmed zero biotech-relevant listings — TTO licensing page (luc.edu/ors/tt_licensing.shtml)
+// returns HTTP 202 with an AWS WAF JavaScript challenge shell (~2.4 KB); no HTML body content,
+// no tech listing entries, and no PDF links are served to static scraping requests.
+// Stub criteria (b): confirmed zero biotech-relevant results from source.
 export const loyolaChicagoScraper = createStubScraper(
   "Loyola University Chicago",
-  "TTO licensing page returns AWS WAF JavaScript challenge shell — no static tech listings accessible"
+  "Confirmed zero biotech-relevant listings: TTO page returns AWS WAF JS challenge shell with no HTML content — zero listings accessible to static scraping"
 );
 
 // 2. Ohio University
@@ -1298,14 +1299,13 @@ export const umkcScraper: InstitutionScraper = {
     const seen = new Set<string>();
     // Each accordion card: .card-header (title button) + .card-body (description + PDF)
     $(".card").each((_, card) => {
-      const title = cleanText($(card).find(".card-header button, .card-header h3").text());
+      const title = cleanText($(card).find(".card-header button").first().text());
       if (!title || title.length < 10 || title.length > 250) return;
       if (seen.has(title.toLowerCase())) return;
       seen.add(title.toLowerCase());
       const cardBody = $(card).find(".card-body");
-      // Description: first <p> after h4 containing "Description"
-      const descP = cardBody.find("h4").filter((_: any, h: any) => /description/i.test($(h).text()))
-        .first().next("p");
+      // Description: first <p> after the "Description:" h4 (using :contains selector)
+      const descP = cardBody.find("h4:contains('Description')").first().next("p");
       const description = cleanText(descP.text()).slice(0, 400);
       // PDF URL: any relative link to technology-docs or .pdf file
       const pdfHref = cardBody.find('a[href*="technology-docs"], a[href*=".pdf"]').first().attr("href") ?? "";
@@ -1528,10 +1528,14 @@ export const utrgvScraper: InstitutionScraper = {
           if (detail) {
             // Try meta description, then first meaningful paragraph not in nav
             const metaDesc = cleanText(detail('meta[name="description"]').attr("content") ?? "");
-            const bodyP = detail("main p, article p, .utrgv-content p, td p").filter((_: any, el: any) => {
+            let bodyP = "";
+            detail("main p, article p, .utrgv-content p, td p").each((_, el) => {
+              if (bodyP) return;
               const t = detail(el).text().trim();
-              return t.length > 40 && !/streamlining|division of research|analytics hub/i.test(t);
-            }).first().text().trim();
+              if (t.length > 40 && !/streamlining|division of research|analytics hub/i.test(t)) {
+                bodyP = t;
+              }
+            });
             description = (metaDesc || cleanText(bodyP)).slice(0, 400);
           }
           return { ...s, description, institution: "University of Texas Rio Grande Valley (UTRGV)" };
