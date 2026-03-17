@@ -4557,7 +4557,7 @@ export const uclBusinessScraper: InstitutionScraper = {
 //
 // Probe-first mandate satisfied (2026-03-17):
 //   CERN KT:               https://kt.cern/technology-portfolio                             200 OK  54 tech slugs
-//   Cancer Res. Horizons:  https://www.cancerresearchhorizons.com/our-portfolio/our-…       200 OK  173 KB page (JS-rendered; item count obtained only at Playwright runtime, est. 50+)
+//   Cancer Res. Horizons:  https://www.cancerresearchhorizons.com/our-portfolio/our-…       200 OK  173 KB page (JS-rendered; 12 items observed at Playwright runtime 2026-03-17)
 //
 // Blocked / failed probes — exhaustive survey of 300+ candidates, 2026-03-17:
 //   TechPublisher platform:  All 300+ slug variations probed — customer base fully exhausted; zero new hits.
@@ -4628,7 +4628,9 @@ export const cernKtScraper: InstitutionScraper = {
               });
               if (!title || title.length < 3) continue;
 
-              // Description: grab text from the "Description" field block if present
+              // Description: try the "Description" labelled field first, then first
+              // substantial <p> in the page body (Drupal tech pages often have rich
+              // paragraph content even when the structured field is missing/short)
               let description = "";
               $(".field--label").each((_, el) => {
                 if (description) return;
@@ -4637,9 +4639,18 @@ export const cernKtScraper: InstitutionScraper = {
                   const text = cleanText(
                     $(el).closest(".field").find(".field--item").first().text()
                   );
-                  if (text.length > 5) description = text;
+                  if (text.length > 20) description = text;
                 }
               });
+              if (!description) {
+                $("p").each((_, el) => {
+                  if (description) return;
+                  const text = cleanText($(el).text());
+                  if (text.length > 40 && !/cookie|privacy|copyright/i.test(text)) {
+                    description = text.slice(0, 500);
+                  }
+                });
+              }
 
               results.push({ title, description, url, institution: INST });
             } catch {
@@ -4660,8 +4671,9 @@ export const cernKtScraper: InstitutionScraper = {
 };
 
 // ── 2. Cancer Research Horizons ───────────────────────────────────────────
-// Probe: 2026-03-17 — cancerresearchhorizons.com/our-portfolio/our-licensing-opportunities
+// Probe: 2026-03-17 — https://www.cancerresearchhorizons.com/our-portfolio/our-licensing-opportunities
 //         200 OK, 173 KB — fully JS-rendered (Cloudflare Rocket Loader, no SSR tech data)
+//         12 items observed at Playwright runtime (2026-03-17)
 // CRUK's commercial arm; highly relevant oncology/cancer therapeutic portfolio.
 // Approach: Playwright navigates listing page, waits for tech cards to render,
 // then extracts all a[href*='/our-portfolio/our-licensing-opportunities/'] links.
