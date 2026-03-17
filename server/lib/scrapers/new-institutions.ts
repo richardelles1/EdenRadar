@@ -2054,3 +2054,348 @@ export const bostonCollegeScraper = createFlintboxScraper(
   { slug: "bc", orgId: 134, accessKey: "bd07e4dd-db0e-422f-9fe1-5e4995879b5f" },
   "Boston College"
 );
+
+// ─── Batch 3: Government & Cancer Center Scrapers (Task #107) ─────────────────
+
+// 1. NIDDK (National Institute of Diabetes and Digestive and Kidney Diseases)
+// RSS feed at niddk.nih.gov/rss/research-materials;
+// 50 items with CDATA titles and HTML-encoded descriptions.
+export const niddkScraper: InstitutionScraper = {
+  institution: "NIDDK (NIH)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "NIDDK (NIH)";
+    try {
+      const r = await fetch("https://www.niddk.nih.gov/rss/research-materials", {
+        signal: AbortSignal.timeout(15_000),
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const xml = await r.text();
+
+      const results: ScrapedListing[] = [];
+      const items = Array.from(xml.matchAll(/<item>([\s\S]+?)<\/item>/g));
+
+      for (const item of items) {
+        const block = item[1];
+        const rawTitle =
+          block.match(/<title><!\[CDATA\[(.+?)\]\]><\/title>/)?.[1] ??
+          block.match(/<title>(.+?)<\/title>/)?.[1] ??
+          "";
+        const title = rawTitle
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(parseInt(n, 10)))
+          .replace(/&[a-z#0-9]+;/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        const link = (
+          block.match(/<link>([^<\s]+)<\/link>/)?.[1] ??
+          block.match(/<guid[^>]*>([^<]+)<\/guid>/)?.[1] ??
+          ""
+        ).trim();
+        const rawDesc =
+          block.match(/<description><!\[CDATA\[([\s\S]+?)\]\]><\/description>/)?.[1] ??
+          block.match(/<description>([\s\S]+?)<\/description>/)?.[1] ??
+          "";
+        const description = rawDesc
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&amp;/g, "&")
+          .replace(/&quot;/g, '"')
+          .replace(/&#(\d+);/g, (_, n: string) => String.fromCharCode(parseInt(n, 10)))
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&[a-z#0-9]+;/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 2000);
+
+        if (!title || !link) continue;
+        results.push({ title, description: description || title, url: link, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// 2. Lawrence Berkeley National Laboratory
+// WordPress REST API: ipo.lbl.gov/wp-json/wp/v2/posts?per_page=100&page=N
+// ~1066 posts across ~11 pages; descriptions extracted from content.rendered
+// using the longest-paragraph strategy — no separate detail-page fetch needed.
+export const lblScraper: InstitutionScraper = {
+  institution: "Lawrence Berkeley National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Lawrence Berkeley National Laboratory";
+    const BASE = "https://ipo.lbl.gov";
+    const PER_PAGE = 100;
+
+    function extractDescription(html: string): string {
+      const paras = Array.from(html.matchAll(/<p[^>]*>([\s\S]+?)<\/p>/gi));
+      let longest = "";
+      for (const m of paras) {
+        const text = m[1]
+          .replace(/<[^>]+>/g, "")
+          .replace(/&[a-z#0-9]+;/gi, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if (text.length > longest.length) longest = text;
+      }
+      return longest.slice(0, 2000);
+    }
+
+    function decodeTitle(html: string): string {
+      return html
+        .replace(/<[^>]+>/g, "")
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+        .replace(/&[a-z#0-9]+;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    }
+
+    try {
+      const firstRes = await fetch(`${BASE}/wp-json/wp/v2/posts?per_page=${PER_PAGE}&page=1`, {
+        signal: AbortSignal.timeout(20_000),
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      if (!firstRes.ok) throw new Error(`HTTP ${firstRes.status}`);
+      const totalPages = Math.min(parseInt(firstRes.headers.get("X-WP-TotalPages") ?? "1", 10), 50);
+      const firstPosts: any[] = await firstRes.json();
+      const allPosts: any[] = [...firstPosts];
+
+      for (let pg = 2; pg <= totalPages; pg += 5) {
+        const batch: Promise<any[]>[] = [];
+        for (let i = pg; i < Math.min(pg + 5, totalPages + 1); i++) {
+          batch.push(
+            fetch(`${BASE}/wp-json/wp/v2/posts?per_page=${PER_PAGE}&page=${i}`, {
+              signal: AbortSignal.timeout(20_000),
+              headers: { "User-Agent": "Mozilla/5.0" },
+            })
+              .then((r) => (r.ok ? r.json() : []))
+              .catch(() => [])
+          );
+        }
+        const batchResults = await Promise.all(batch);
+        for (const posts of batchResults) allPosts.push(...(posts as any[]));
+      }
+
+      const results: ScrapedListing[] = [];
+      for (const post of allPosts) {
+        const title = decodeTitle(post.title?.rendered ?? "");
+        const url: string = post.link ?? "";
+        if (!title || !url) continue;
+        const description = extractDescription(post.content?.rendered ?? "");
+        results.push({ title, description: description || title, url, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// 3. Roswell Park Comprehensive Cancer Center
+// Sitemap pages 1–8 at roswellpark.org/sitemap.xml?page=N filtered for
+// /commercialization/technologies/ URLs; concurrent detail-page fetch (limit 5)
+// for h1 title and longest-paragraph description.
+export const roswellParkScraper: InstitutionScraper = {
+  institution: "Roswell Park Comprehensive Cancer Center",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Roswell Park Comprehensive Cancer Center";
+    const BASE = "https://www.roswellpark.org";
+    const TECH_PREFIX = `${BASE}/commercialization/technologies/`;
+
+    const techUrls = new Set<string>();
+    for (let pg = 1; pg <= 8; pg++) {
+      try {
+        const r = await fetch(`${BASE}/sitemap.xml?page=${pg}`, {
+          signal: AbortSignal.timeout(12_000),
+          headers: { "User-Agent": "Mozilla/5.0" },
+        });
+        if (!r.ok) break;
+        const xml = await r.text();
+        const locs = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g)).map((m) => m[1]);
+        let found = 0;
+        for (const u of locs) {
+          if (u.startsWith(TECH_PREFIX) && u !== TECH_PREFIX) {
+            techUrls.add(u);
+            found++;
+          }
+        }
+        if (pg >= 4 && locs.length < 100) break;
+      } catch {
+        break;
+      }
+    }
+
+    if (techUrls.size === 0) {
+      console.log(`[scraper] ${INST}: 0 tech URLs found in sitemap`);
+      return [];
+    }
+
+    const CONCURRENCY = 5;
+    const urlList = Array.from(techUrls);
+    const results: ScrapedListing[] = [];
+
+    for (let i = 0; i < urlList.length; i += CONCURRENCY) {
+      const batch = urlList.slice(i, i + CONCURRENCY);
+      const fetched = await Promise.all(
+        batch.map(async (url) => {
+          try {
+            const r = await fetch(url, {
+              signal: AbortSignal.timeout(12_000),
+              headers: { "User-Agent": "Mozilla/5.0" },
+            });
+            if (!r.ok) return null;
+            const html = await r.text();
+            const title = (html.match(/<h1[^>]*>([\s\S]+?)<\/h1>/i)?.[1] ?? "")
+              .replace(/<[^>]+>/g, "")
+              .replace(/&[a-z#0-9]+;/gi, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!title) return null;
+            const paras = Array.from(html.matchAll(/<p[^>]*>([\s\S]+?)<\/p>/gi));
+            let description = "";
+            for (const m of paras) {
+              const text = m[1]
+                .replace(/<[^>]+>/g, "")
+                .replace(/&[a-z#0-9]+;/gi, " ")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (text.length > 80 && text.length > description.length) description = text;
+            }
+            return {
+              title,
+              description: description.slice(0, 2000) || title,
+              url,
+              institution: INST,
+            } satisfies ScrapedListing;
+          } catch {
+            return null;
+          }
+        })
+      );
+      for (const r of fetched) if (r) results.push(r);
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 4. NCATS (National Center for Advancing Translational Sciences)
+// Same Algolia infrastructure as nihott.ts; filter by field_ics:NCATS.
+// 143 records confirmed. Data source is NIHTT; URLs resolve to techtransfer.nih.gov/tech/*.
+const NCATS_ALGOLIA_APP_ID = "WEXCESI5EU";
+const NCATS_ALGOLIA_API_KEY = "3986149b687b8f20e2468432f329f08c";
+const NCATS_ALGOLIA_URL = `https://${NCATS_ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/ott/query`;
+const NCATS_BASE_URL = "https://techtransfer.nih.gov";
+
+export const ncatsScraper: InstitutionScraper = {
+  institution: "NCATS (NIH)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "NCATS (NIH)";
+    const HITS_PER_PAGE = 200;
+
+    function stripHtml(html: string): string {
+      return html.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
+    }
+
+    try {
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      let page = 0;
+      let nbPages = 1;
+
+      while (page < nbPages) {
+        const res = await fetch(NCATS_ALGOLIA_URL, {
+          method: "POST",
+          signal: AbortSignal.timeout(30_000),
+          headers: {
+            "X-Algolia-Application-Id": NCATS_ALGOLIA_APP_ID,
+            "X-Algolia-API-Key": NCATS_ALGOLIA_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            query: "",
+            hitsPerPage: HITS_PER_PAGE,
+            page,
+            filters: "type:tech AND field_ics:NCATS",
+            attributesToRetrieve: [
+              "title", "body", "url",
+              "field_therapeutic_areas", "field_development_stages",
+              "field_applications", "field_ics", "field_data_source",
+              "field_collaborations", "field_date_published",
+              "field_inventor_names", "field_patent_statuses",
+              "field_inventor_emails", "field_commercial_applications",
+              "field_competitive_advantages", "objectID",
+            ],
+          }),
+        });
+        if (!res.ok) throw new Error(`Algolia HTTP ${res.status}`);
+        const json: { hits: any[]; nbPages: number; nbHits: number } = await res.json();
+        nbPages = json.nbPages;
+
+        for (const hit of json.hits) {
+          const title = (hit.title ?? "").trim();
+          if (!title || title.length < 5) continue;
+          const rawUrl: string = hit.url ?? "";
+          const url = rawUrl.startsWith("http")
+            ? rawUrl
+            : rawUrl.startsWith("/")
+            ? `${NCATS_BASE_URL}${rawUrl}`
+            : "";
+          if (!url) continue;
+          const dedupKey: string = hit.objectID || url || title;
+          if (seen.has(dedupKey)) continue;
+          seen.add(dedupKey);
+
+          const bodyText = stripHtml(hit.body ?? "");
+          const commercialApps = stripHtml(hit.field_commercial_applications ?? "");
+          const advantages = stripHtml(hit.field_competitive_advantages ?? "");
+          const description =
+            [bodyText, commercialApps, advantages].filter(Boolean).join(" ").slice(0, 2000) || title;
+
+          const toArr = (v: unknown): string[] =>
+            Array.isArray(v) ? v : typeof v === "string" && v ? [v] : [];
+
+          results.push({
+            title,
+            description,
+            url,
+            institution: INST,
+            categories: [
+              ...toArr(hit.field_therapeutic_areas),
+              ...toArr(hit.field_applications),
+            ].filter(Boolean),
+            stage: toArr(hit.field_development_stages)[0] ?? undefined,
+            inventors: toArr(hit.field_inventor_names).length ? toArr(hit.field_inventor_names) : undefined,
+            patentStatus: toArr(hit.field_patent_statuses)[0] ?? undefined,
+            publishedDate: hit.field_date_published ?? undefined,
+            contactEmail: toArr(hit.field_inventor_emails)[0] ?? undefined,
+            technologyId: hit.objectID ?? undefined,
+          });
+        }
+        page++;
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (Algolia field_ics:NCATS)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};

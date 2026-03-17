@@ -227,6 +227,11 @@ import {
   nmTechScraper,
   sandiaScraper,
   losAlamosScraper,
+  // Task #107 — Government & Cancer Center Scrapers (Batch 3)
+  niddkScraper,
+  lblScraper,
+  roswellParkScraper,
+  ncatsScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -509,6 +514,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nmTechScraper,
   sandiaScraper,
   losAlamosScraper,
+  // ── Government & Cancer Center Scrapers (Task #107, March 2026) ───────────
+  niddkScraper,
+  lblScraper,
+  roswellParkScraper,
+  ncatsScraper,
 ];
 
 async function runWithConcurrency<T>(

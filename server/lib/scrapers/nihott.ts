@@ -70,20 +70,23 @@ function hitToListing(hit: AlgoliaHit, institution: string): ScrapedListing | nu
 
   const description = stripHtml(hit.body ?? "").slice(0, 2000);
 
+  const toArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v : typeof v === "string" && v ? [v] : [];
+
   return {
     title,
     description: description || title,
     url,
     institution,
     categories: [
-      ...(hit.field_therapeutic_areas ?? []),
-      ...(hit.field_applications ?? []),
+      ...toArr(hit.field_therapeutic_areas),
+      ...toArr(hit.field_applications),
     ].filter(Boolean),
-    stage: (hit.field_development_stages ?? [])[0] ?? undefined,
-    inventors: hit.field_inventor_names ?? undefined,
-    patentStatus: (hit.field_patent_statuses ?? [])[0] ?? undefined,
+    stage: toArr(hit.field_development_stages)[0] ?? undefined,
+    inventors: toArr(hit.field_inventor_names).length ? toArr(hit.field_inventor_names) : undefined,
+    patentStatus: toArr(hit.field_patent_statuses)[0] ?? undefined,
     publishedDate: hit.field_date_published ?? undefined,
-    contactEmail: (hit.field_inventor_emails ?? [])[0] ?? undefined,
+    contactEmail: toArr(hit.field_inventor_emails)[0] ?? undefined,
     technologyId: hit.objectID ?? undefined,
   };
 }
