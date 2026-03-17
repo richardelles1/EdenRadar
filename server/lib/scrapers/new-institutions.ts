@@ -1220,3 +1220,30 @@ export const morganStateScraper = createStubScraper(
   "Morgan State University",
   "IPD Executive Summaries page says 'Coming Soon' — no listings available yet"
 );
+
+// ── Task #103: Platform Scrapers Batch 2 (March 2026) ─────────────────────────
+
+// In-Part portals
+export const howardScraper = createInPartScraper("howard", "Howard University");
+export const uncChapelHillScraper = createInPartScraper("chapelhill", "UNC Chapel Hill");
+export const prscienceTrustScraper = createInPartScraper("prsciencetrust", "Puerto Rico Science Trust");
+
+// TechPublisher portals
+export const umassAmherstScraper = createTechPublisherScraper(
+  "tto-umass-amherst",
+  "UMass Amherst"
+);
+export const southAlabamaScraper = createTechPublisherScraper(
+  "southalabama",
+  "University of South Alabama"
+);
+
+// Flintbox portals
+export const umbcScraper = createFlintboxScraper(
+  { slug: "umbc", orgId: 131, accessKey: "886542e2-8300-4e8a-ad5a-136fbc497726" },
+  "University of Maryland Baltimore County (UMBC)"
+);
+export const bostonCollegeScraper = createFlintboxScraper(
+  { slug: "bc", orgId: 134, accessKey: "bd07e4dd-db0e-422f-9fe1-5e4995879b5f" },
+  "Boston College"
+);

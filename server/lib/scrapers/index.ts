@@ -197,6 +197,14 @@ import {
   utennesseeScraper,
   ncatScraper,
   morganStateScraper,
+  // Task #103 — Platform Scrapers Batch 2
+  howardScraper,
+  uncChapelHillScraper,
+  prscienceTrustScraper,
+  umassAmherstScraper,
+  southAlabamaScraper,
+  umbcScraper,
+  bostonCollegeScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -450,6 +458,14 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   utennesseeScraper,
   ncatScraper,
   morganStateScraper,
+  // ── Platform scrapers batch 2 (Task #103, March 2026) ─────────────────────
+  howardScraper,
+  uncChapelHillScraper,
+  prscienceTrustScraper,
+  umassAmherstScraper,
+  southAlabamaScraper,
+  umbcScraper,
+  bostonCollegeScraper,
 ];
 
 async function runWithConcurrency<T>(
