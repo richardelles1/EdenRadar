@@ -825,11 +825,12 @@ export class DatabaseStorage implements IStorage {
     if (institution) {
       conditions.push(eq(ingestedAssets.institution, institution));
     }
-    const result = await db
+    const updated = await db
       .update(ingestedAssets)
       .set({ relevant: true })
-      .where(and(...conditions));
-    return { updated: (result as any).rowCount ?? 0 };
+      .where(and(...conditions))
+      .returning({ id: ingestedAssets.id });
+    return { updated: updated.length };
   }
 }
 

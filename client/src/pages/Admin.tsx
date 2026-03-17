@@ -2294,10 +2294,14 @@ function NewArrivals({ pw }: { pw: string }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-4 gap-4">
           <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-total-assets">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">New assets</p>
             <p className="text-3xl font-bold text-foreground mt-1">{data?.totalAssets ?? 0}</p>
+          </div>
+          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-institutions">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Institutions</p>
+            <p className="text-3xl font-bold text-foreground mt-1">{data?.totalInstitutions ?? 0}</p>
           </div>
           <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-indexed">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Already indexed</p>
