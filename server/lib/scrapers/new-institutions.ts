@@ -1041,7 +1041,7 @@ export const imperialScraper = createStubScraper("Imperial College London");
 export const uclScraper = createStubScraper("University College London");
 export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
 export const edinburghScraper = createStubScraper("University of Edinburgh");
-export const glasgowScraper = createStubScraper("University of Glasgow");
+// glasgowScraper: real in-part "gla" implementation is at Task #114 section (end of file)
 export const birminghamScraper = createStubScraper("University of Birmingham");
 export const warwickScraper = createStubScraper("University of Warwick");
 export const kclScraper = createInPartScraper("kcl", "King's College London");
@@ -4191,3 +4191,192 @@ export const researchPortalGhentScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── International Batch B (Task #114) ──────────────────────────────────────
+// 11 new institutions: Yeda/Weizmann (custom), Glasgow/SDU/UEA/Sussex/
+// Newcastle/Plymouth/Saarland/Stellenbosch/Macquarie (in-part API),
+// Edinburgh Innovations (Playwright/Elucid3).
+// Total after registration: 252 scrapers (241 + 11).
+
+// ── 1. Yeda Research and Development (Weizmann Institute of Science) ────────
+// Technology search page lists all available technologies with titles in
+// mailto share links: href="mailto:?body=URL&subject=TITLE_ENCODED"
+export const yedaResearchScraper: InstitutionScraper = {
+  institution: "Yeda Research and Development",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Yeda Research and Development";
+    const BASE = "https://www.yedarnd.com";
+    try {
+      const res = await fetch(`${BASE}/technology-search`, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          Referer: "https://www.google.com/",
+        },
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+
+      // Extract from mailto share links:
+      // href="mailto:?body=https://www.yedarnd.com/technology/ID&subject=TITLE"
+      const re =
+        /href="mailto:\?body=https:\/\/www\.yedarnd\.com\/(technology\/[^&"]+)&subject=([^"]+)"/g;
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(html)) !== null) {
+        const path = m[1];
+        const rawTitle = m[2];
+        const url = `${BASE}/${path}`;
+        if (seen.has(url)) continue;
+        seen.add(url);
+        const title = decodeURIComponent(rawTitle.replace(/\+/g, " ")).trim();
+        if (title.length < 5) continue;
+        results.push({ title, description: "", url, institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
+      return [];
+    }
+  },
+};
+
+// ── 2–10. In-Part API scrapers (confirmed working subdomains) ───────────────
+export const glasgowScraper = createInPartScraper("gla", "University of Glasgow");
+export const sduScraper = createInPartScraper("sdu", "University of Southern Denmark");
+export const ueaScraper = createInPartScraper("uea", "University of East Anglia");
+export const sussexScraper = createInPartScraper("sussex", "University of Sussex");
+export const newcastleScraper = createInPartScraper("newcastle", "Newcastle University");
+export const plymouthScraper = createInPartScraper("plymouth", "University of Plymouth");
+export const saarlandScraper = createInPartScraper("saarland", "Saarland University");
+export const stellenboschScraper = createInPartScraper("sun", "Stellenbosch University");
+export const macquarieScraper = createInPartScraper("mq", "Macquarie University");
+
+// ── 11. Edinburgh Innovations (Elucid3 storefront, Playwright) ──────────────
+// The Edinburgh Innovations licensing portal is a jQuery/Elucid3 SPA that
+// renders product cards client-side. Playwright is required to retrieve the
+// product list. Categories: /products/research-materials, /products/software,
+// /products/datasets, /products/education.
+export const edinburghInnovationsScraper: InstitutionScraper = {
+  institution: "Edinburgh Innovations",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Edinburgh Innovations";
+    const BASE = "https://licensing.edinburgh-innovations.ed.ac.uk";
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+        ],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: "https://www.google.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+      });
+
+      const allProducts = new Map<string, string>();
+
+      const collectProducts = async () => {
+        const links = await page.$$eval("a[href*='/product/']", (els) =>
+          els.map((el) => ({
+            href: (el as HTMLAnchorElement).href ?? "",
+            text: el.textContent?.trim() ?? "",
+          }))
+        );
+        for (const l of links) {
+          if (!l.href || l.href.includes("/products/") || allProducts.has(l.href))
+            continue;
+          const title = l.text.replace(/\s+/g, " ").trim();
+          if (title.length < 5) continue;
+          allProducts.set(l.href, title);
+        }
+      };
+
+      // Load the main products catalogue
+      await page.goto(`${BASE}/products`, {
+        timeout: 30_000,
+        waitUntil: "networkidle",
+      });
+      await collectProducts();
+
+      // Discover category pages and visit each
+      const categoryUrls = await page.$$eval("a[href*='/products/']", (els) =>
+        Array.from(
+          new Set(
+            els
+              .map((el) => (el as HTMLAnchorElement).href ?? "")
+              .filter((h) => h.includes("/products/"))
+          )
+        )
+      );
+
+      for (const catUrl of categoryUrls.slice(0, 10)) {
+        try {
+          await page.goto(catUrl, {
+            timeout: 25_000,
+            waitUntil: "networkidle",
+          });
+          await collectProducts();
+        } catch {
+          continue;
+        }
+      }
+
+      const results: ScrapedListing[] = Array.from(allProducts.entries()).map(
+        ([url, title]) => ({ title, description: "", url, institution: INST })
+      );
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
+    }
+  },
+};
+
+// ── Deferred stubs (Task #114 targets that are network-blocked or have no
+//    enumerable public tech listing; NOT registered in ALL_SCRAPERS) ─────────
+//
+// Ramot Technology Transfer (Tel Aviv University) — ramot.org
+//   TCP connection refused from all Replit egress IPs (132.66.x.x GeoIP block).
+//   Stub kept for future VPN/residential-proxy implementation.
+//
+// Technion T3 (t3.technion.ac.il)
+//   TCP connection refused; no response on any path.
+//   Stub kept for future VPN implementation.
+//
+// Karolinska Institutet Innovations (ki-innovations.se)
+//   Connection refused from Replit IPs; ki.se innovation pages return 404.
+//   No enumerable tech listing discovered on any path.
+//
+// Lund University Innovation / LU Innovation
+//   lu.se/en/research/innovation redirects to Swedish-language portal;
+//   no in-part or other machine-readable TTO listing found.
+//
+// University of Copenhagen Technology Transfer (techtransfer.ku.dk)
+//   301 redirect to ku.dk/en page that returns 404; no in-part portal found.
+//
+// EPFL Technology Transfer Office
+//   epfl.flintbox.com: TCP connection refused from Replit egress (GeoIP block?);
+//   WP REST API on epfl.ch/research/technology-transfer returns 401 (auth required).
+//
+// University of Zurich Innovation Hub (innovation.uzh.ch)
+//   innovation.uzh.ch/en/technologies.html returns 404; hub is entrepreneurship-
+//   focused and has no publicly enumerable technology licensing catalog.

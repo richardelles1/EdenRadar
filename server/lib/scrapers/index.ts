@@ -255,6 +255,18 @@ import {
   nottinghamScraper,
   techLinkScraper,
   researchPortalGhentScraper,
+  // Task #114 — International Batch B
+  yedaResearchScraper,
+  glasgowScraper,
+  sduScraper,
+  ueaScraper,
+  sussexScraper,
+  newcastleScraper,
+  plymouthScraper,
+  saarlandScraper,
+  stellenboschScraper,
+  macquarieScraper,
+  edinburghInnovationsScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -567,6 +579,18 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nottinghamScraper,              // University of Nottingham — TechPublisher slug "uon"
   techLinkScraper,                // TechLink (DoD) — Playwright, React SPA, no bot protection
   researchPortalGhentScraper,     // Ghent Univ. — Playwright + stealth, Akamai-gated (1637 patents)
+  // ── International Batch B (Task #114) ────────────────────────────────────
+  yedaResearchScraper,            // Yeda R&D / Weizmann Institute — 159 techs, mailto href extraction
+  glasgowScraper,                 // University of Glasgow — in-part "gla" — 31 techs
+  sduScraper,                     // Univ. of Southern Denmark — in-part "sdu" — 29 techs
+  ueaScraper,                     // University of East Anglia — in-part "uea" — 23 techs
+  sussexScraper,                  // University of Sussex — in-part "sussex" — 27 techs
+  newcastleScraper,               // Newcastle University — in-part "newcastle" — 37 techs
+  plymouthScraper,                // University of Plymouth — in-part "plymouth" — 18 techs
+  saarlandScraper,                // Saarland University — in-part "saarland" — 34 techs
+  stellenboschScraper,            // Stellenbosch University — in-part "sun" — 76 techs
+  macquarieScraper,               // Macquarie University — in-part "mq" — 11 techs
+  edinburghInnovationsScraper,    // Edinburgh Innovations — Playwright, Elucid3 — 50+ techs
 ];
 
 async function runWithConcurrency<T>(
