@@ -1693,8 +1693,8 @@ export const jacksonStateScraper: InstitutionScraper = {
     const $ = (await import("cheerio")).load(html);
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
-    // Select Google Patents links and internal patent PDFs (exclude student handbooks etc.)
-    $('a[href*="patents.google.com"], a[href*="/technologytransfer/"], a[href*="/research/files/"][href$=".pdf"]').each((_, el) => {
+    // Select Google Patents links and internal patent PDF files only (not nav links)
+    $('a[href*="patents.google.com"], a[href*="/technologytransfer/files/"][href$=".pdf"], a[href*="/research/files/"][href$=".pdf"]').each((_, el) => {
       const href = $(el).attr("href") ?? "";
       if (!href || href.includes("student") || href.includes("handbook")) return;
       const fullUrl = href.startsWith("http") ? href : `https://www.jsums.edu${href}`;
