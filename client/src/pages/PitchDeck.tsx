@@ -573,6 +573,62 @@ function SolutionSlide({ colors }: { colors: Colors }) {
 }
 
 /* ═══════════════════════ SLIDE 4 — THREE PORTALS ═══════════════════════ */
+function PortalMockup({ color, type }: { color: string; type: "discovery" | "lab" | "radar" }) {
+  const bar = (w: string, opacity = 0.5) => (
+    <div className="h-1.5 rounded-full" style={{ width: w, background: color, opacity }} />
+  );
+  if (type === "discovery") return (
+    <div className="rounded-lg p-2.5 mt-3 hidden sm:block" style={{ background: `${color}10`, border: `1px solid ${color}22` }}>
+      <div className="flex items-center gap-1.5 mb-2">
+        <div className="w-2 h-2 rounded-full" style={{ background: color, opacity: 0.8 }} />
+        <div className="h-1.5 rounded w-20" style={{ background: color, opacity: 0.25 }} />
+        <div className="ml-auto text-[8px] font-bold px-1.5 py-0.5 rounded" style={{ background: `${color}25`, color }}>Score: 87</div>
+      </div>
+      <div className="space-y-1.5 mb-2">
+        {bar("85%", 0.45)} {bar("62%", 0.3)} {bar("40%", 0.2)}
+      </div>
+      <div className="flex gap-1">
+        {["Oncology","CRISPR","Phase I"].map(t => (
+          <span key={t} className="text-[7px] px-1 py-0.5 rounded" style={{ background: `${color}18`, color, border: `1px solid ${color}30` }}>{t}</span>
+        ))}
+      </div>
+    </div>
+  );
+  if (type === "lab") return (
+    <div className="rounded-lg p-2.5 mt-3 hidden sm:block" style={{ background: `${color}10`, border: `1px solid ${color}22` }}>
+      <div className="grid grid-cols-3 gap-1 mb-2">
+        {["PubMed","bioRxiv","ClinicalT."].map(src => (
+          <div key={src} className="rounded p-1 text-center" style={{ background: `${color}15` }}>
+            <div className="text-[7px] font-bold" style={{ color }}>{src}</div>
+            <div className="text-[8px] mt-0.5" style={{ color, opacity: 0.6 }}>✓</div>
+          </div>
+        ))}
+      </div>
+      <div className="space-y-1">
+        {bar("100%", 0.35)} {bar("75%", 0.25)} {bar("55%", 0.18)}
+      </div>
+      <div className="mt-1.5 text-[7px] font-semibold" style={{ color, opacity: 0.7 }}>11-section canvas · 40+ sources</div>
+    </div>
+  );
+  return (
+    <div className="rounded-lg p-2.5 mt-3 hidden sm:block" style={{ background: `${color}10`, border: `1px solid ${color}22` }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[7px] font-bold uppercase tracking-wider" style={{ color, opacity: 0.7 }}>Live Assets</span>
+        <span className="text-[8px] font-bold" style={{ color }}>200+ TTOs</span>
+      </div>
+      <div className="space-y-1 mb-1.5">
+        {[["mRNA delivery vector","94"], ["CRISPR off-target","88"], ["ADC linker tech","81"]].map(([name, score]) => (
+          <div key={name} className="flex items-center justify-between">
+            <div className="h-1 rounded flex-1 mr-2" style={{ background: color, opacity: 0.2 }} />
+            <span className="text-[7px] font-bold" style={{ color }}>{score}</span>
+          </div>
+        ))}
+      </div>
+      <div className="text-[7px]" style={{ color, opacity: 0.6 }}>AI-scored · Real-time convergence</div>
+    </div>
+  );
+}
+
 function PortalsSlide({ colors }: { colors: Colors }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInView = useInView(gridRef, { once: false, amount: 0.2 });
@@ -580,83 +636,143 @@ function PortalsSlide({ colors }: { colors: Colors }) {
   const skip = !!reducedMotion;
   const portals = [
     {
-      title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
+      title: "EdenDiscovery", accent: "Discovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, type: "discovery" as const,
       items: ["Submit hypotheses before research begins", "AI credibility scoring (0 to 100)", "Discovered by collaborators and funders"],
     },
     {
-      title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
+      title: "EdenLab", accent: "Lab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, type: "lab" as const,
       items: ["Literature search across 40+ data sources", "Intuitive tools with AI synthesis and evidence extraction", "Structured 11-section project canvas"],
     },
     {
-      title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
+      title: "EdenRadar", accent: "Radar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout, type: "radar" as const,
       items: ["200+ Tech Transfer Offices monitored continuously", "AI-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
     },
   ];
   return (
     <Slide index={4} section="Three Portals" accent={colors.green} colors={colors}>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-7" style={{ color: colors.text }}>
-        Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
-      </h2>
-      <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-        {portals.map((p, i) => (
-          <motion.div
-            key={p.title}
-            className="rounded-xl p-3 sm:p-6 flex flex-col"
-            style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}
-            initial={skip ? false : { opacity: 0, x: -12 }}
-            animate={skip || gridInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }}
-            transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
-          >
-            <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: p.color }}>
-                <p.icon className="w-4 h-4" style={{ color: "#fff" }} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
-                <h3 className="text-sm sm:text-base font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
-              </div>
-            </div>
-            <p className="text-[10px] sm:text-xs mb-2 sm:mb-4 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
-            <ul className="space-y-1 sm:space-y-2 mt-auto">
-              {p.items.map((item) => (
-                <li key={item} className="flex items-start gap-1.5 sm:gap-2 text-[10px] sm:text-xs" style={{ color: colors.text }}>
-                  <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 mt-0.5 shrink-0" style={{ color: p.color }} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </motion.div>
-        ))}
-      </div>
-
       <style>{`
         @media (prefers-reduced-motion: no-preference) {
-          .pipeline-dash { animation: dash-flow 1.8s linear infinite; }
+          .portal-dash { animation: dash-flow 1.8s linear infinite; }
+          .portal-pulse { animation: portal-pulse-kf 2.4s ease-in-out infinite; }
         }
-        @keyframes dash-flow {
-          0% { stroke-dashoffset: 20; }
-          100% { stroke-dashoffset: 0; }
-        }
+        @keyframes dash-flow { 0% { stroke-dashoffset: 20; } 100% { stroke-dashoffset: 0; } }
+        @keyframes portal-pulse-kf { 0%,100% { opacity:.5; transform:scale(1); } 50% { opacity:1; transform:scale(1.35); } }
       `}</style>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-6" style={{ color: colors.text }}>
+        Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
+      </h2>
+
+      {/* Card grid with bisecting gradient line */}
+      <div className="relative" ref={gridRef}>
+        {/*
+          Gradient bisector: top = border-top(3px) + padding-top(20px) + half-icon(20px) = 43px.
+          This is the center of the icon row on desktop (sm:p-5, sm:w-10/h-10).
+          z-index 1 keeps it behind the cards (grid is z-10).
+        */}
+        <div
+          className="absolute left-0 right-0 h-px pointer-events-none hidden sm:block"
+          style={{
+            top: "43px",
+            background: `linear-gradient(to right, ${colors.amber}, ${colors.violet}, ${colors.green})`,
+            opacity: 0.35,
+            zIndex: 1,
+          }}
+        />
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-5 relative z-10">
+          {portals.map((p, i) => (
+            <motion.div
+              key={p.title}
+              className="rounded-xl p-3 sm:p-5 flex flex-col relative"
+              style={{
+                background: p.dim,
+                border: `1px solid ${p.color}44`,
+                borderTop: `3px solid ${p.color}`,
+                boxShadow: `0 4px 24px ${p.color}14`,
+              }}
+              initial={skip ? false : { opacity: 0, x: -12 }}
+              animate={skip || gridInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }}
+              transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
+            >
+              {/* Large faint tier number — decorative */}
+              <span
+                className="absolute top-2 right-3 text-5xl font-black pointer-events-none select-none hidden sm:block"
+                style={{ color: p.color, opacity: 0.06, lineHeight: 1 }}
+              >0{i + 1}</span>
+
+              {/*
+                Arrow connector — sibling to icon-row (not nested inside it) so it
+                positions relative to the card, not the row div.
+                top: 43px matches the bisector line exactly (same derivation).
+              */}
+              {i < 2 && (
+                <ArrowRight
+                  className="absolute hidden sm:block z-20 w-[22px] h-[22px]"
+                  style={{
+                    color: portals[i + 1].color,
+                    right: "-11px",
+                    top: "43px",
+                    transform: "translateY(-50%)",
+                  }}
+                />
+              )}
+
+              {/* Icon + title row — sits at the bisection line height */}
+              <div className="flex items-center gap-2.5 mb-2">
+                <div
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0 relative z-10"
+                  style={{ background: p.color, boxShadow: `0 0 0 4px ${p.color}28` }}
+                >
+                  <p.icon className="w-4 h-4 sm:w-5 sm:h-5" style={{ color: "#fff" }} />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
+                  <h3 className="text-sm sm:text-base font-bold leading-tight" style={{ color: colors.text }}>
+                    Eden<span style={{ color: p.color }}>{p.accent}</span>
+                  </h3>
+                </div>
+              </div>
+
+              <p className="text-[10px] sm:text-xs mb-2 sm:mb-3 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
+
+              <ul className="space-y-1 sm:space-y-1.5">
+                {p.items.map((item) => (
+                  <li key={item} className="flex items-start gap-1.5 text-[10px] sm:text-xs" style={{ color: colors.text }}>
+                    <ArrowRight className="w-2.5 h-2.5 mt-0.5 shrink-0" style={{ color: p.color }} />
+                    {item}
+                  </li>
+                ))}
+              </ul>
+
+              {/* Stylized UX mockup preview */}
+              <PortalMockup color={p.color} type={p.type} />
+            </motion.div>
+          ))}
+        </div>
+      </div>
+
+      {/* Animated pipeline connector — desktop only */}
       <div className="hidden sm:flex items-center justify-center mt-5 gap-0">
         {portals.map((p, i) => (
           <Fragment key={p.title}>
             <div className="flex flex-col items-center gap-1.5">
-              <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: `${p.color}22`, border: `2px solid ${p.color}` }}>
-                <p.icon className="w-3.5 h-3.5" style={{ color: p.color }} />
+              <div className="w-7 h-7 rounded-full flex items-center justify-center relative" style={{ background: `${p.color}20`, border: `2px solid ${p.color}` }}>
+                <p.icon className="w-3 h-3" style={{ color: p.color }} />
+                <span className="portal-pulse absolute inset-0 rounded-full" style={{ border: `2px solid ${p.color}`, borderRadius: "9999px" }} />
               </div>
-              <span className="text-[9px] font-bold tracking-wider uppercase" style={{ color: p.color }}>{p.title.replace("Eden", "")}</span>
+              <span className="text-[9px] font-bold tracking-wider uppercase" style={{ color: p.color }}>{p.accent}</span>
             </div>
             {i < 2 && (
               <svg width="80" height="12" viewBox="0 0 80 12" className="mx-2 mb-4" aria-hidden>
                 <line x1="0" y1="6" x2="65" y2="6" stroke={`${portals[i + 1].color}33`} strokeWidth="2" strokeLinecap="round" />
-                <line x1="0" y1="6" x2="65" y2="6" stroke={portals[i + 1].color} strokeWidth="2" strokeLinecap="round" strokeDasharray="12 8" strokeOpacity="0.6" className="pipeline-dash" />
-                <polygon points="68,1.5 78,6 68,10.5" fill={portals[i + 1].color} fillOpacity="0.45" />
+                <line x1="0" y1="6" x2="65" y2="6" stroke={portals[i + 1].color} strokeWidth="2" strokeLinecap="round" strokeDasharray="12 8" strokeOpacity="0.6" className="portal-dash" />
+                <polygon points="68,1.5 78,6 68,10.5" fill={portals[i + 1].color} fillOpacity="0.5" />
               </svg>
             )}
           </Fragment>
         ))}
       </div>
+
       <p className="sm:hidden mt-3 text-center text-[9px] font-bold uppercase tracking-widest" style={{ color: colors.textMuted }}>
         Discovery → Lab → Radar
       </p>
