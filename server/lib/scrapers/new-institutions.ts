@@ -1038,29 +1038,39 @@ export const ukyScraper = createFlintboxScraper(
 export const boiseStateScraper: InstitutionScraper = {
   institution: "Boise State University",
   async scrape(): Promise<ScrapedListing[]> {
-    const url = "https://www.boisestate.edu/research-ott/available-technologies/";
-    const $ = await fetchHtml(url, 15000);
+    const pageUrl = "https://www.boisestate.edu/research-ott/available-technologies/";
+    const $ = await fetchHtml(pageUrl, 15000);
     if (!$) return [];
     const results: ScrapedListing[] = [];
-    const seenUrls = new Set<string>();
-    $("table.tablepress tbody tr").each((_, row) => {
-      const cols = $(row).find("td");
-      if (cols.length < 3) return;
-      const bsuFile = cleanText($(cols[0]).text());
-      const inventors = cleanText($(cols[1]).text());
-      const linkEl = $(cols[2]).find("a");
-      const patentUrl = linkEl.attr("href") ?? "";
-      const linkText = cleanText(linkEl.text());
-      if (!patentUrl || seenUrls.has(patentUrl)) return;
-      seenUrls.add(patentUrl);
-      const title = linkText.replace(/^BSU\s*\d+\s*/i, "").trim() || `BSU ${bsuFile}`;
-      results.push({
-        title: title.length > 3 ? title : `BSU ${bsuFile} — ${inventors}`,
-        description: "",
-        url: patentUrl,
-        institution: "Boise State University",
-        inventors: inventors ? inventors.split(/,\s*/).filter(Boolean) : undefined,
-        technologyId: bsuFile ? `BSU-${bsuFile}` : undefined,
+    const seenBsu = new Set<string>();
+    let currentCategory = "";
+    $("h2.wp-block-heading, table.tablepress").each((_, el) => {
+      const tag = $(el).prop("tagName");
+      if (tag === "H2") {
+        currentCategory = cleanText($(el).text());
+        return;
+      }
+      $(el).find("tbody tr").each((__, row) => {
+        const cols = $(row).find("td");
+        if (cols.length < 3) return;
+        const bsuFile = cleanText($(cols[0]).text());
+        const inventors = cleanText($(cols[1]).text());
+        const linkEl = $(cols[2]).find("a");
+        const patentUrl = linkEl.attr("href") ?? "";
+        if (!bsuFile || seenBsu.has(bsuFile)) return;
+        seenBsu.add(bsuFile);
+        const title = currentCategory
+          ? `BSU-${bsuFile}: ${currentCategory} (${inventors})`
+          : `BSU-${bsuFile}: ${inventors}`;
+        results.push({
+          title,
+          description: "",
+          url: patentUrl || pageUrl,
+          institution: "Boise State University",
+          inventors: inventors ? inventors.split(/,\s*/).filter(Boolean) : undefined,
+          technologyId: `BSU-${bsuFile}`,
+          categories: currentCategory ? [currentCategory] : undefined,
+        });
       });
     });
     console.log(`[scraper] Boise State University: ${results.length} listings (tablepress)`);
@@ -1076,7 +1086,7 @@ export const nauScraper: InstitutionScraper = {
       "other", "research-tools", "software-hardware",
     ];
     const results: ScrapedListing[] = [];
-    const seenTitles = new Set<string>();
+    const seenUrls = new Set<string>();
     for (const cat of categories) {
       const catUrl = `https://in.nau.edu/research/innovations/available-technologies/${cat}/`;
       const $ = await fetchHtml(catUrl, 15000);
@@ -1089,15 +1099,21 @@ export const nauScraper: InstitutionScraper = {
           return;
         }
         $(el).find("li").each((__, li) => {
+          const link = $(li).find("a").first();
           const title = cleanText($(li).text());
           if (!title || title.length < 10 || title.length > 200) return;
-          const lower = title.toLowerCase();
-          if (seenTitles.has(lower)) return;
-          seenTitles.add(lower);
+          const href = link.attr("href") ?? "";
+          const detailUrl = href.startsWith("http")
+            ? href
+            : href
+              ? `https://in.nau.edu${href}`
+              : catUrl;
+          if (seenUrls.has(detailUrl)) return;
+          seenUrls.add(detailUrl);
           results.push({
             title,
             description: "",
-            url: catUrl,
+            url: detailUrl,
             institution: "Northern Arizona University",
             categories: [cat, currentSubHeading].filter(Boolean),
           });
