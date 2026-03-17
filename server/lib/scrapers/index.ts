@@ -207,6 +207,8 @@ import {
   bostonCollegeScraper,
   // Task #104 — Bespoke Scrapers Batch 2A
   // Task #105 — Bespoke Scrapers Batch 2B
+  csusScraper,
+  loyolaChicagoScraper,
   ohioScraper,
   umkcScraper,
   famuScraper,
@@ -478,6 +480,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   umbcScraper,
   bostonCollegeScraper,
   // ── Bespoke scrapers batch 2A (Task #104) + 2B (Task #105, March 2026) ────
+  csusScraper,
+  loyolaChicagoScraper,
   ohioScraper,
   umkcScraper,
   famuScraper,

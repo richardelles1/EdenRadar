@@ -1223,7 +1223,61 @@ export const morganStateScraper = createStubScraper(
 
 // ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
 
-// 1. Ohio University
+// 1a. Sacramento State (CSUS)
+// The TTO page serves navigation boilerplate only — no enumerable tech listing in static HTML.
+// Scraper attempts link/heading harvest; returns empty when page has no licensed-technology entries.
+export const csusScraper: InstitutionScraper = {
+  institution: "Sacramento State (CSUS)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const urls = [
+      "https://www.csus.edu/research/research-technology-engagement/industry-partnerships-technology/",
+      "https://www.csus.edu/research/",
+    ];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    for (const url of urls) {
+      const $ = await fetchHtml(url, 12000);
+      if (!$) continue;
+      $("h2, h3, h4").each((_, el) => {
+        const title = cleanText($(el).text());
+        if (!title || title.length < 15 || title.length > 250) return;
+        if (/^(research|technology|innovation|office|services|about|contact|sacstate|sacramento|faculty|student|news|event)/i.test(title)) return;
+        if (seen.has(title.toLowerCase())) return;
+        seen.add(title.toLowerCase());
+        results.push({ title, description: "", url, institution: "Sacramento State (CSUS)" });
+      });
+      if (results.length > 0) break;
+    }
+    console.log(`[scraper] Sacramento State (CSUS): ${results.length} listings`);
+    return results;
+  },
+};
+
+// 1b. Loyola University Chicago
+// TTO licensing page returns a WAF-protected shell with no enumerable tech listings.
+// Scraper attempts heading/link harvest; returns empty when page has no licensed-technology entries.
+export const loyolaChicagoScraper: InstitutionScraper = {
+  institution: "Loyola University Chicago",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.luc.edu/ors/tt_licensing.shtml";
+    const $ = await fetchHtml(url, 12000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $("h2, h3, h4").each((_, el) => {
+      const title = cleanText($(el).text());
+      if (!title || title.length < 15 || title.length > 250) return;
+      if (/^(technology|licensing|office|research|about|contact|loyola|available|intellectual|campus|resources|quick|links|news|events|apply|give|mylu)/i.test(title)) return;
+      if (seen.has(title.toLowerCase())) return;
+      seen.add(title.toLowerCase());
+      results.push({ title, description: "", url, institution: "Loyola University Chicago" });
+    });
+    console.log(`[scraper] Loyola University Chicago: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 2. Ohio University
 export const ohioScraper: InstitutionScraper = {
   institution: "Ohio University",
   async scrape(): Promise<ScrapedListing[]> {
@@ -1418,7 +1472,9 @@ export const memphisScraper: InstitutionScraper = {
         const href = pdfLink.attr("href") ?? "";
         pdfUrl = href.startsWith("http") ? href : `${base}${href}`;
       }
-      results.push({ title, description: "", url: pdfUrl, institution: "University of Memphis" });
+      // Capture any description text (typically a patent reference) from sibling content
+      const descText = cleanText(nextSibling.text()).replace(/\(PDF\)/gi, "").trim().slice(0, 300);
+      results.push({ title, description: descText, url: pdfUrl, institution: "University of Memphis" });
     });
     console.log(`[scraper] University of Memphis: ${results.length} listings`);
     return results;
