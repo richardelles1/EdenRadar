@@ -267,6 +267,12 @@ import {
   stellenboschScraper,
   macquarieScraper,
   edinburghInnovationsScraper,
+  // Task #115 — FRIS Belgium (pivoted: FRIS Akamai-blocked; 5 in-part alternatives)
+  nagoyaScraper,
+  oistScraper,
+  hokkaidoScraper,
+  stAndrewsScraper,
+  salfordScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -591,6 +597,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   stellenboschScraper,            // Stellenbosch University — in-part "sun" — 76 techs
   macquarieScraper,               // Macquarie University — in-part "mq" — 11 techs
   edinburghInnovationsScraper,    // Edinburgh Innovations — Playwright, Elucid3 — 50+ techs
+  // ── FRIS Belgium pivot (Task #115): FRIS Akamai-blocked; 5 in-part alternatives ──
+  nagoyaScraper,                  // Nagoya University (Japan) — in-part "nagoya" — ~72 techs
+  oistScraper,                    // OIST (Japan) — in-part "oist" — ~68 techs
+  hokkaidoScraper,                // Hokkaido University (Japan) — in-part "hokkaido" — ~31 techs
+  stAndrewsScraper,               // University of St Andrews (UK) — in-part "st-andrews" — 20 techs
+  salfordScraper,                 // University of Salford (UK) — in-part "salford" — ~5 techs
 ];
 
 async function runWithConcurrency<T>(

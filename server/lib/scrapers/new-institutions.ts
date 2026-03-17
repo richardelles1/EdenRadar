@@ -4380,3 +4380,31 @@ export const edinburghInnovationsScraper: InstitutionScraper = {
 // University of Zurich Innovation Hub (innovation.uzh.ch)
 //   innovation.uzh.ch/en/technologies.html returns 404; hub is entrepreneurship-
 //   focused and has no publicly enumerable technology licensing catalog.
+
+// ── FRIS Belgium Platform Expansion (Task #115) ────────────────────────────
+// FRIS (researchportal.be) is comprehensively Akamai-blocked from Replit egress:
+//   - HTTP curl: 403 (Akamai Bot Manager)
+//   - Playwright stealth: bodyText contains "Access Denied" even with full UA/timezone/locale spoofing
+// All five confirmed alternatives below were validated via the in-part API
+// (app.in-part.com/api/v3/public/opportunities?portalSubdomain=SLUG&page=1&limit=1)
+// returning pagination.last > 0 with real technology titles in results.
+//
+// Blocked FRIS targets (documented; implement if Replit egress IP changes):
+//   KU Leuven, University of Antwerp, VUB, Hasselt, IMEC — all Akamai 403
+//
+// Alternative institutions confirmed accessible (5 total, 252 → 257 scrapers):
+
+// ── 1. Nagoya University (Japan) — in-part "nagoya" — ~72 techs ─────────────
+export const nagoyaScraper = createInPartScraper("nagoya", "Nagoya University");
+
+// ── 2. Okinawa Institute of Science and Technology (Japan) — "oist" — ~68 techs
+export const oistScraper = createInPartScraper("oist", "Okinawa Institute of Science and Technology");
+
+// ── 3. Hokkaido University (Japan) — in-part "hokkaido" — ~31 techs ─────────
+export const hokkaidoScraper = createInPartScraper("hokkaido", "Hokkaido University");
+
+// ── 4. University of St Andrews (UK) — in-part "st-andrews" — 20 techs ──────
+export const stAndrewsScraper = createInPartScraper("st-andrews", "University of St Andrews");
+
+// ── 5. University of Salford (UK) — in-part "salford" — ~5 techs ─────────────
+export const salfordScraper = createInPartScraper("salford", "University of Salford");
