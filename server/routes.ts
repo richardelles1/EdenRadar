@@ -993,7 +993,7 @@ export async function registerRoutes(
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const hours = Math.min(parseInt(String(req.query.hours ?? "24"), 10) || 24, 168);
+      const hours = Math.max(1, Math.min(parseInt(String(req.query.hours ?? "24"), 10) || 24, 168));
       const groups = await storage.getNewArrivals(hours);
       const totalAssets = groups.reduce((s, g) => s + g.count, 0);
       const totalIndexed = groups.reduce((s, g) => s + g.indexedCount, 0);
@@ -1009,7 +1009,7 @@ export async function registerRoutes(
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const body = req.body as { hours?: unknown; institution?: unknown };
-      const hours = Math.min(parseInt(String(body.hours ?? "24"), 10) || 24, 168);
+      const hours = Math.max(1, Math.min(parseInt(String(body.hours ?? "24"), 10) || 24, 168));
       const institution: string | undefined = typeof body.institution === "string" ? body.institution : undefined;
       const since = new Date(Date.now() - hours * 60 * 60 * 1000);
       const result = await storage.pushNewArrivals(since, institution);
