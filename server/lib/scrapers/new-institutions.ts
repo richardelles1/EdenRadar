@@ -1272,13 +1272,7 @@ export const umkcScraper: InstitutionScraper = {
   },
 };
 
-// 3. Sac State (CSUS) — stub: page serves navigation only; no enumerable tech listing in HTML
-export const csusScraper = createStubScraper(
-  "Sacramento State (CSUS)",
-  "Available-licensing page renders navigation only — no enumerable tech listing found in HTML; content may be managed separately or require a form request"
-);
-
-// 4. FAMU
+// 3. FAMU
 export const famuScraper: InstitutionScraper = {
   institution: "Florida A&M University (FAMU)",
   async scrape(): Promise<ScrapedListing[]> {
@@ -1305,13 +1299,7 @@ export const famuScraper: InstitutionScraper = {
   },
 };
 
-// 5. Loyola Chicago — stub: page returns empty HTML shell (39 bytes body)
-export const loyolaChicagoScraper = createStubScraper(
-  "Loyola University Chicago",
-  "TTO licensing page (luc.edu/ors/tt_licensing.shtml) returns an empty HTML shell — no technology listings are served"
-);
-
-// 6. UNeTech (University of Nebraska)
+// 4. UNeTech (University of Nebraska)
 export const unetechScraper: InstitutionScraper = {
   institution: "University of Nebraska (UNeTech)",
   async scrape(): Promise<ScrapedListing[]> {
@@ -1481,6 +1469,50 @@ export const southAlabamaScraper = createTechPublisherScraper(
   "southalabama",
   "University of South Alabama"
 );
+
+// ── Batch 2B (Task #105, March 2026) ────────────────────────────────────────
+
+// UWM Research Foundation (UWMRF) — University of Wisconsin–Milwaukee
+// WordPress portfolio with OTT-numbered tech cards; all listings on one page
+export const uwmrfScraper: InstitutionScraper = {
+  institution: "UWM Research Foundation (UWMRF)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://uwmrf.org";
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    const cheerioLib = await import("cheerio");
+    for (let pg = 1; pg <= 5; pg++) {
+      const pageUrl = pg === 1 ? `${base}/technologies/` : `${base}/technologies/page/${pg}/`;
+      try {
+        const res = await fetch(pageUrl, {
+          signal: AbortSignal.timeout(15000),
+          headers: { "User-Agent": "Mozilla/5.0", "Accept": "text/html,*/*" },
+        });
+        if (!res.ok) break;
+        const $ = cheerioLib.load(await res.text());
+        let found = 0;
+        $("article").each((_, art) => {
+          // URL from image/title link
+          const href = $(art).find('a[href*="/technology/"]').first().attr("href") ?? "";
+          if (!href || seen.has(href)) return;
+          // Title is in .tech-info-text p before the <br> (inventor follows after <br>)
+          const pHtml = $(art).find(".tech-info-text p").first().html() ?? "";
+          const titlePart = pHtml.split(/<br\s*\/?>/i)[0];
+          const title = cleanText(cheerioLib.load(titlePart).text());
+          if (!title) return;
+          seen.add(href);
+          found++;
+          results.push({ title, description: "", url: href, institution: "UWM Research Foundation (UWMRF)" });
+        });
+        if (found === 0) break;
+      } catch {
+        break;
+      }
+    }
+    console.log(`[scraper] UWMRF: ${results.length} listings`);
+    return results;
+  },
+};
 
 // Flintbox portals
 export const umbcScraper = createFlintboxScraper(
