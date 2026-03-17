@@ -4408,3 +4408,147 @@ export const stAndrewsScraper = createInPartScraper("st-andrews", "University of
 
 // ── 5. University of Salford (UK) — in-part "salford" — ~5 techs ─────────────
 export const salfordScraper = createInPartScraper("salford", "University of Salford");
+
+// ── International Scrapers — Batch C (Task #118) ────────────────────────────
+//
+// Probe results (all confirmed from Replit egress IPs):
+//
+// CONFIRMED accessible (implemented below):
+//   UNSW (unsw.technologypublisher.com)       — 200, 54 sitemap tech entries
+//   Loughborough (lboro.technologypublisher.com) — 200, 36 sitemap tech entries
+//   Ottawa (uottawa.technologypublisher.com)   — 200, 53 sitemap tech entries
+//   Surrey (surrey.technologypublisher.com)    — 200, 45 sitemap tech entries
+//   La Trobe (latrobe.technologypublisher.com) — 200, 9 sitemap tech entries
+//   Vanderbilt (vanderbilt.technologypublisher.com) — 200, 213 sitemap tech entries
+//   Queen's University Belfast (qub.technologypublisher.com) — 200, listings confirmed
+//   UCL / XIP (xip.uclb.com) — 200, Elucid3/XIP SPA, 34 product category pages (Playwright)
+//
+// BLOCKED / inaccessible (not implemented):
+//   in-part platform: HTTP 000 (connection refused) from ALL Replit egress IPs —
+//     affects all target in-part slugs: imperial, ucl, birmingham, warwick, dtu
+//   flintbox platform: HTTP 000 (connection refused) from all Replit egress IPs —
+//     affects uq.flintbox.com, tau.flintbox.com, technion.flintbox.com
+//   NUS (nus.edu.sg/ilo/technologies): 200 but no enumerable tech listing (JS-rendered, no public API)
+//   NTU (ntu.edu.sg): redirects to 404
+//   KAIST: 404 on TTO URL; main site 200 but Korean-only, no enumerable listing
+//   POSTECH: TCP refused (000)
+//   University of Tokyo (ducr.u-tokyo.ac.jp): TCP refused (000)
+//   Seoul National University (tlo.snu.ac.kr): TCP refused (000)
+//   University of Queensland (uq.edu.au): redirects to research.uq.edu.au (200) but no
+//     enumerable TTO listing; flintbox.com portal TCP refused
+//   University of Sydney (sydney.edu.au): 404 on TTO path
+//   University of Melbourne (unimelb.edu.au): 403 on TTO path
+//   ANU: 404 on TTO path
+//   Eindhoven TU/e: 404 on tue.nl TTO path; tue.technologypublisher.com: 404
+//   Delft TU: 404 on tudelft.nl TTO path
+//   Imperial College London (imperialcollegeaccount.tech-transfer.com): TCP refused (000)
+//   Total scrapers: 257 → 265 (+8)
+
+// ── 1. University of New South Wales (UNSW) — TechPublisher "unsw" ───────────
+// NewSouth Innovations Pty Ltd — 54 sitemap tech entries confirmed; RSS active
+export const unswScraper = createTechPublisherScraper("unsw", "University of New South Wales");
+
+// ── 2. Loughborough University — TechPublisher "lboro" ───────────────────────
+// 36 sitemap tech entries confirmed; engineering + biotech mix
+export const loughboroughScraper = createTechPublisherScraper("lboro", "Loughborough University");
+
+// ── 3. University of Ottawa — TechPublisher "uottawa" ────────────────────────
+// 53 sitemap tech entries confirmed; health sciences prominent
+export const uottawaScraper = createTechPublisherScraper("uottawa", "University of Ottawa");
+
+// ── 4. University of Surrey — TechPublisher "surrey" ─────────────────────────
+// 45 sitemap tech entries confirmed; strong biotech and sensing portfolio
+export const surreyScraper = createTechPublisherScraper("surrey", "University of Surrey");
+
+// ── 5. La Trobe University — TechPublisher "latrobe" ─────────────────────────
+// 9 sitemap tech entries confirmed; small but legitimate public listing
+export const latrobeScraper = createTechPublisherScraper("latrobe", "La Trobe University");
+
+// ── 6. Vanderbilt University — TechPublisher "vanderbilt" ────────────────────
+// 213 sitemap tech entries confirmed; large, strong biomedical R&D portfolio
+export const vanderbiltScraper = createTechPublisherScraper("vanderbilt", "Vanderbilt University");
+
+// ── 7. Queen's University Belfast — TechPublisher "qub" ──────────────────────
+// Confirmed 200 with tech listings; Northern Ireland's flagship research university
+export const queensBelfastScraper = createTechPublisherScraper("qub", "Queen's University Belfast");
+
+// ── 8. UCL Business / XIP — Elucid3 SPA, Playwright ─────────────────────────
+// xip.uclb.com is University College London's public technology licensing storefront,
+// powered by the Elucid3/XIP platform (same engine as Edinburgh Innovations).
+// The page is a React SPA — all product cards are client-side rendered.
+// Confirmed 200, 34+ product category pages discovered.
+// Approach: Playwright visits /products, then each /products/* category page,
+// harvesting a[href*='/product/'] links with their text labels.
+export const uclBusinessScraper: InstitutionScraper = {
+  institution: "UCL Business",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "UCL Business";
+    const BASE = "https://xip.uclb.com";
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Referer: "https://www.google.com/",
+        "Accept-Language": "en-US,en;q=0.9",
+      });
+
+      const allProducts = new Map<string, string>();
+
+      const collectProducts = async () => {
+        const links = await page.$$eval("a[href*='/product/']", (els) =>
+          els.map((el) => ({
+            href: (el as HTMLAnchorElement).href ?? "",
+            text: el.textContent?.trim() ?? "",
+          }))
+        );
+        for (const l of links) {
+          if (!l.href || l.href.includes("/products/") || allProducts.has(l.href)) continue;
+          const title = l.text.replace(/\s+/g, " ").trim();
+          if (title.length < 5) continue;
+          allProducts.set(l.href, title);
+        }
+      };
+
+      await page.goto(`${BASE}/products`, { timeout: 30_000, waitUntil: "networkidle" });
+      await collectProducts();
+
+      const categoryUrls = await page.$$eval("a[href*='/products/']", (els) =>
+        Array.from(
+          new Set(
+            els
+              .map((el) => (el as HTMLAnchorElement).href ?? "")
+              .filter((h) => h.includes("/products/"))
+          )
+        )
+      );
+
+      for (const catUrl of categoryUrls.slice(0, 40)) {
+        try {
+          await page.goto(catUrl, { timeout: 25_000, waitUntil: "networkidle" });
+          await collectProducts();
+        } catch {
+          continue;
+        }
+      }
+
+      const results: ScrapedListing[] = Array.from(allProducts.entries()).map(
+        ([url, title]) => ({ title, description: "", url, institution: INST })
+      );
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
+    }
+  },
+};

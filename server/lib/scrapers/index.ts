@@ -40,6 +40,17 @@ import { emoryScraper } from "./emory";
 import { mayoScraper } from "./mayo";
 import { osuScraper } from "./osu";
 import {
+  unswScraper,
+  loughboroughScraper,
+  uottawaScraper,
+  surreyScraper,
+  latrobeScraper,
+  vanderbiltScraper,
+  queensBelfastScraper,
+  uclBusinessScraper,
+} from "./new-institutions";
+
+import {
   // TechPublisher – verified working
   princetonScraper,
   uclaScraper,
@@ -603,6 +614,15 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   hokkaidoScraper,                // Hokkaido University (Japan) — in-part "hokkaido" — ~31 techs
   stAndrewsScraper,               // University of St Andrews (UK) — in-part "st-andrews" — 20 techs
   salfordScraper,                 // University of Salford (UK) — in-part "salford" — ~5 techs
+  // ── International Scrapers — Batch C (Task #118) ─────────────────────────
+  unswScraper,                    // Univ. of New South Wales — TechPublisher "unsw" — 54 sitemap techs
+  loughboroughScraper,            // Loughborough University — TechPublisher "lboro" — 36 sitemap techs
+  uottawaScraper,                 // University of Ottawa — TechPublisher "uottawa" — 53 sitemap techs
+  surreyScraper,                  // University of Surrey — TechPublisher "surrey" — 45 sitemap techs
+  latrobeScraper,                 // La Trobe University — TechPublisher "latrobe" — 9 sitemap techs
+  vanderbiltScraper,              // Vanderbilt University — TechPublisher "vanderbilt" — 213 sitemap techs
+  queensBelfastScraper,           // Queen's Univ. Belfast — TechPublisher "qub" — listings confirmed
+  uclBusinessScraper,             // UCL Business (xip.uclb.com) — Playwright/Elucid3 SPA — 34+ categories
 ];
 
 async function runWithConcurrency<T>(
