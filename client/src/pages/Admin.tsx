@@ -1037,7 +1037,6 @@ function DataHealth({ pw }: { pw: string }) {
               { key: "never",    label: "Never synced", activeClass: "bg-muted text-foreground border-border" },
             ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
               const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
-              if (key !== "all" && count === 0) return null;
               return (
                 <button
                   key={key}
