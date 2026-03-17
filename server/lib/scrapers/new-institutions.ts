@@ -1285,21 +1285,40 @@ export const ohioScraper: InstitutionScraper = {
     const listUrl = `${base}/research/tto/technologies`;
     const $ = await fetchHtml(listUrl, 15000);
     if (!$) return [];
-    const results: ScrapedListing[] = [];
+    const stubs: Array<{ title: string; url: string }> = [];
     const seen = new Set<string>();
     $('a[href*="/technologies/"]').each((_, el) => {
       const href = $(el).attr("href") ?? "";
       const title = cleanText($(el).text());
       if (!title || title.length < 8 || title.length > 200) return;
-      // Skip category index pages and navigation-style links
       if (/^(engineering|environmental|life.science|technologies)$/i.test(title)) return;
       const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
       if (seen.has(fullUrl) || fullUrl.endsWith("/technologies/") || fullUrl.endsWith("/technologies")) return;
       seen.add(fullUrl);
-      results.push({ title, description: "", url: fullUrl, institution: "Ohio University" });
+      stubs.push({ title, url: fullUrl });
     });
-    console.log(`[scraper] Ohio University: ${results.length} listings`);
-    return results;
+    // Fetch detail pages concurrently (limit 5) for descriptions via meta description
+    const CONC = 5;
+    const results: ScrapedListing[] = [];
+    for (let i = 0; i < stubs.length; i += CONC) {
+      const batch = stubs.slice(i, i + CONC);
+      const settled = await Promise.allSettled(
+        batch.map(async (s) => {
+          const detail = await fetchHtml(s.url, 10000);
+          const description = detail
+            ? cleanText(detail('meta[name="description"]').attr("content") ?? detail("main p, .content p").first().text()).slice(0, 400)
+            : "";
+          return { ...s, description, institution: "Ohio University" };
+        })
+      );
+      settled.forEach((r) => {
+        if (r.status === "fulfilled") results.push(r.value);
+        else results.push({ title: "", description: "", url: "", institution: "Ohio University" });
+      });
+    }
+    const final = results.filter(r => r.title.length > 0);
+    console.log(`[scraper] Ohio University: ${final.length} listings`);
+    return final;
   },
 };
 
@@ -1380,15 +1399,33 @@ export const unetechScraper: InstitutionScraper = {
 };
 
 // 7. Nebraska Med (UNEMED)
+// Primary source: unemed.com/unmc-technologies — a nav page listing technology category links.
+// Scraper discovers category links dynamically from the primary source, then crawls each category.
 export const uneMedScraper: InstitutionScraper = {
   institution: "University of Nebraska Medical Center (UNEMED)",
   async scrape(): Promise<ScrapedListing[]> {
     const base = "https://www.unemed.com";
-    const categories = ["cancer", "cardio", "covid-19", "delivery", "devices", "infectious", "metabolic", "neuro", "research"];
+    const primaryUrl = `${base}/unmc-technologies`;
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
-    for (const cat of categories) {
-      const catUrl = `${base}/product-category/${cat}`;
+    // Step 1: fetch primary source and discover category URLs
+    const navPage = await fetchHtml(primaryUrl, 12000);
+    const categoryUrls: string[] = [];
+    if (navPage) {
+      navPage('a[href*="/product-category/"]').each((_, el) => {
+        const href = navPage(el).attr("href") ?? "";
+        const catUrl = href.startsWith("http") ? href : `${base}${href}`;
+        if (!categoryUrls.includes(catUrl)) categoryUrls.push(catUrl);
+      });
+    }
+    // Fallback: known categories if primary source nav changes
+    if (categoryUrls.length === 0) {
+      ["cancer", "cardio", "covid-19", "delivery", "devices", "infectious", "metabolic", "neuro", "research"].forEach(cat =>
+        categoryUrls.push(`${base}/product-category/${cat}`)
+      );
+    }
+    // Step 2: crawl each category page for individual product links
+    for (const catUrl of categoryUrls) {
       const $ = await fetchHtml(catUrl, 12000);
       if (!$) continue;
       $('a[href*="/product/"]').each((_, el) => {
@@ -1401,7 +1438,7 @@ export const uneMedScraper: InstitutionScraper = {
         results.push({ title, description: "", url: fullUrl, institution: "University of Nebraska Medical Center (UNEMED)" });
       });
     }
-    console.log(`[scraper] UNEMED: ${results.length} listings`);
+    console.log(`[scraper] UNEMED: ${results.length} listings from ${categoryUrls.length} categories`);
     return results;
   },
 };
@@ -1489,23 +1526,50 @@ export const utrgvScraper: InstitutionScraper = {
     const listUrl = `${base}/index.htm`;
     const $ = await fetchHtml(listUrl, 15000);
     if (!$) return [];
-    const results: ScrapedListing[] = [];
+    const stubs: Array<{ title: string; url: string }> = [];
     const seen = new Set<string>();
     // "Learn more about X" links point to relative sub-directory index pages
     $('a').each((_, el) => {
       const href = $(el).attr("href") ?? "";
       const text = cleanText($(el).text());
-      // Only pick up relative links that are sub-paths (not navigating up with ../)
       if (!href || href.startsWith("http") || href.startsWith("../") || href.startsWith("#") || href.startsWith("mailto")) return;
       const title = text.replace(/^Learn more about\s*/i, "").trim();
       if (!title || title.length < 8) return;
-      const fullUrl = `${base}/${href.replace(/^\/+/, "")}`;
+      const fullUrl = href.startsWith("/")
+        ? `https://www.utrgv.edu${href}`
+        : `${base}/${href}`;
       if (seen.has(fullUrl)) return;
       seen.add(fullUrl);
-      results.push({ title, description: "", url: fullUrl, institution: "University of Texas Rio Grande Valley (UTRGV)" });
+      stubs.push({ title, url: fullUrl });
     });
-    console.log(`[scraper] UTRGV: ${results.length} listings`);
-    return results;
+    // Fetch detail pages concurrently (limit 4) for description text
+    const CONC = 4;
+    const results: ScrapedListing[] = [];
+    for (let i = 0; i < stubs.length; i += CONC) {
+      const batch = stubs.slice(i, i + CONC);
+      const settled = await Promise.allSettled(
+        batch.map(async (s) => {
+          const detail = await fetchHtml(s.url, 10000);
+          let description = "";
+          if (detail) {
+            // Try meta description, then first meaningful paragraph not in nav
+            const metaDesc = cleanText(detail('meta[name="description"]').attr("content") ?? "");
+            const bodyP = detail("main p, article p, .utrgv-content p, td p").filter((_: any, el: any) => {
+              const t = detail(el).text().trim();
+              return t.length > 40 && !/streamlining|division of research|analytics hub/i.test(t);
+            }).first().text().trim();
+            description = (metaDesc || cleanText(bodyP)).slice(0, 400);
+          }
+          return { ...s, description, institution: "University of Texas Rio Grande Valley (UTRGV)" };
+        })
+      );
+      settled.forEach((r) => {
+        if (r.status === "fulfilled") results.push(r.value);
+      });
+    }
+    const final = results.filter(r => r.title.length > 0);
+    console.log(`[scraper] UTRGV: ${final.length} listings`);
+    return final;
   },
 };
 
