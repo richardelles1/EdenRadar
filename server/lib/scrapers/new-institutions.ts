@@ -1221,6 +1221,250 @@ export const morganStateScraper = createStubScraper(
   "IPD Executive Summaries page says 'Coming Soon' — no listings available yet"
 );
 
+// ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
+
+// 1. Ohio University
+export const ohioScraper: InstitutionScraper = {
+  institution: "Ohio University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.ohio.edu";
+    const listUrl = `${base}/research/tto/technologies`;
+    const $ = await fetchHtml(listUrl, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $('a[href*="/technologies/"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      const title = cleanText($(el).text());
+      if (!title || title.length < 8 || title.length > 200) return;
+      // Skip category index pages and navigation-style links
+      if (/^(engineering|environmental|life.science|technologies)$/i.test(title)) return;
+      const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+      if (seen.has(fullUrl) || fullUrl.endsWith("/technologies/") || fullUrl.endsWith("/technologies")) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "Ohio University" });
+    });
+    console.log(`[scraper] Ohio University: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 2. UMKC
+export const umkcScraper: InstitutionScraper = {
+  institution: "University of Missouri – Kansas City (UMKC)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://ori.umkc.edu/facilities-compliance-and-commercialization/commercialization/technologies.html";
+    const $ = await fetchHtml(url, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $("h3").each((_, el) => {
+      const title = cleanText($(el).text());
+      if (!title || title.length < 10 || title.length > 250) return;
+      if (seen.has(title.toLowerCase())) return;
+      seen.add(title.toLowerCase());
+      // Try to grab a description from the next sibling paragraph
+      const desc = cleanText($(el).next("p, h4").text()).slice(0, 300);
+      results.push({ title, description: desc, url, institution: "University of Missouri – Kansas City (UMKC)" });
+    });
+    console.log(`[scraper] UMKC: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 3. Sac State (CSUS) — stub: page serves navigation only; no enumerable tech listing in HTML
+export const csusScraper = createStubScraper(
+  "Sacramento State (CSUS)",
+  "Available-licensing page renders navigation only — no enumerable tech listing found in HTML; content may be managed separately or require a form request"
+);
+
+// 4. FAMU
+export const famuScraper: InstitutionScraper = {
+  institution: "Florida A&M University (FAMU)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const url = "https://www.famu.edu/administration/research/office-of-technology-transfer-and-export-control/technologies-available-for-licensing.php";
+    const $ = await fetchHtml(url, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    // Page is a 3-column table: [docket/date link → archive PDF] | [inventors] | [tech title (plain text)]
+    $("tr").each((_, row) => {
+      const cells = $(row).find("td");
+      if (cells.length < 3) return;
+      const pdfLink = $(cells[0]).find('a[href*="archive.famu.edu"]').first();
+      if (!pdfLink.length) return;
+      const pdfUrl = pdfLink.attr("href") ?? url;
+      const title = cleanText($(cells[2]).text());
+      if (!title || title.length < 10 || title.length > 300) return;
+      if (seen.has(title.toLowerCase())) return;
+      seen.add(title.toLowerCase());
+      results.push({ title, description: "", url: pdfUrl, institution: "Florida A&M University (FAMU)" });
+    });
+    console.log(`[scraper] FAMU: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 5. Loyola Chicago — stub: page returns empty HTML shell (39 bytes body)
+export const loyolaChicagoScraper = createStubScraper(
+  "Loyola University Chicago",
+  "TTO licensing page (luc.edu/ors/tt_licensing.shtml) returns an empty HTML shell — no technology listings are served"
+);
+
+// 6. UNeTech (University of Nebraska)
+export const unetechScraper: InstitutionScraper = {
+  institution: "University of Nebraska (UNeTech)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.unetech.org";
+    const listUrl = `${base}/portfolio/`;
+    const $ = await fetchHtml(listUrl, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    $('a[href*="/portfolio/"]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      const title = cleanText($(el).text());
+      if (!title || title.length < 5) return;
+      const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+      // Exclude the listing page itself and non-tech pages
+      if (fullUrl === listUrl || seen.has(fullUrl)) return;
+      if (/summit|investor|corps|steam|event/i.test(fullUrl)) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "University of Nebraska (UNeTech)" });
+    });
+    console.log(`[scraper] UNeTech: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 7. Nebraska Med (UNEMED)
+export const uneMedScraper: InstitutionScraper = {
+  institution: "University of Nebraska Medical Center (UNEMED)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.unemed.com";
+    const categories = ["cancer", "cardio", "covid-19", "delivery", "devices", "infectious", "metabolic", "neuro", "research"];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    for (const cat of categories) {
+      const catUrl = `${base}/product-category/${cat}`;
+      const $ = await fetchHtml(catUrl, 12000);
+      if (!$) continue;
+      $('a[href*="/product/"]').each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const title = cleanText($(el).text());
+        if (!title || title.length < 5 || /read.more/i.test(title)) return;
+        const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        results.push({ title, description: "", url: fullUrl, institution: "University of Nebraska Medical Center (UNEMED)" });
+      });
+    }
+    console.log(`[scraper] UNEMED: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 8. UMVentures (University of Maryland)
+// Note: site returns 403 to the standard fetchHtml user-agent; use minimal direct fetch
+export const umventuresScraper: InstitutionScraper = {
+  institution: "University of Maryland (UMVentures)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.umventures.org";
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    const cheerio = await import("cheerio");
+    for (let pg = 0; pg <= 10; pg++) {
+      const pageUrl = pg === 0
+        ? `${base}/technologies?sort=created+DESC`
+        : `${base}/technologies?sort=created%20DESC&page=${pg}`;
+      try {
+        const res = await fetch(pageUrl, {
+          signal: AbortSignal.timeout(15000),
+          headers: { "User-Agent": "Mozilla/5.0", "Accept": "text/html,*/*" },
+        });
+        if (!res.ok) break;
+        const $ = cheerio.load(await res.text());
+        let found = 0;
+        $('a[href*="/technologies/"]').each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const title = cleanText($(el).text());
+          if (!title || title.length < 8) return;
+          const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+          if (seen.has(fullUrl) || fullUrl.endsWith("/technologies") || fullUrl.endsWith("/technologies/")) return;
+          seen.add(fullUrl);
+          found++;
+          results.push({ title, description: "", url: fullUrl, institution: "University of Maryland (UMVentures)" });
+        });
+        if (found === 0) break;
+      } catch {
+        break;
+      }
+    }
+    console.log(`[scraper] UMVentures: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 9. University of Memphis
+export const memphisScraper: InstitutionScraper = {
+  institution: "University of Memphis",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.memphis.edu";
+    const listUrl = `${base}/fedex/ott/available_technologies.php`;
+    const $ = await fetchHtml(listUrl, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    // Tech titles are h2/h3 not matching nav boilerplate; each has a nearby PDF link
+    $("h2, h3").each((_, el) => {
+      const title = cleanText($(el).text());
+      if (!title || title.length < 15 || title.length > 250) return;
+      if (/^(FedEx|Office|Available|About|Technology Transfer)/i.test(title)) return;
+      if (seen.has(title.toLowerCase())) return;
+      seen.add(title.toLowerCase());
+      // Find nearest PDF link in following sibling content
+      let pdfUrl = listUrl;
+      const nextSibling = $(el).nextAll("p, div, ul").first();
+      const pdfLink = nextSibling.find('a[href*=".pdf"]').first();
+      if (pdfLink.length) {
+        const href = pdfLink.attr("href") ?? "";
+        pdfUrl = href.startsWith("http") ? href : `${base}${href}`;
+      }
+      results.push({ title, description: "", url: pdfUrl, institution: "University of Memphis" });
+    });
+    console.log(`[scraper] University of Memphis: ${results.length} listings`);
+    return results;
+  },
+};
+
+// 10. UTRGV
+export const utrgvScraper: InstitutionScraper = {
+  institution: "University of Texas Rio Grande Valley (UTRGV)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const base = "https://www.utrgv.edu/research/departments/research-operations/otc/utrgv-technologies";
+    const listUrl = `${base}/index.htm`;
+    const $ = await fetchHtml(listUrl, 15000);
+    if (!$) return [];
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+    // "Learn more about X" links point to relative sub-directory index pages
+    $('a').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      const text = cleanText($(el).text());
+      // Only pick up relative links that are sub-paths (not navigating up with ../)
+      if (!href || href.startsWith("http") || href.startsWith("../") || href.startsWith("#") || href.startsWith("mailto")) return;
+      const title = text.replace(/^Learn more about\s*/i, "").trim();
+      if (!title || title.length < 8) return;
+      const fullUrl = `${base}/${href.replace(/^\/+/, "")}`;
+      if (seen.has(fullUrl)) return;
+      seen.add(fullUrl);
+      results.push({ title, description: "", url: fullUrl, institution: "University of Texas Rio Grande Valley (UTRGV)" });
+    });
+    console.log(`[scraper] UTRGV: ${results.length} listings`);
+    return results;
+  },
+};
+
 // ── Task #103: Platform Scrapers Batch 2 (March 2026) ─────────────────────────
 
 // In-Part portals

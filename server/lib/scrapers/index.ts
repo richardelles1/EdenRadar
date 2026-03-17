@@ -205,6 +205,17 @@ import {
   southAlabamaScraper,
   umbcScraper,
   bostonCollegeScraper,
+  // Task #104 — Bespoke Scrapers Batch 2A
+  ohioScraper,
+  umkcScraper,
+  csusScraper,
+  famuScraper,
+  loyolaChicagoScraper,
+  unetechScraper,
+  uneMedScraper,
+  umventuresScraper,
+  memphisScraper,
+  utrgvScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -466,6 +477,17 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   southAlabamaScraper,
   umbcScraper,
   bostonCollegeScraper,
+  // ── Bespoke scrapers batch 2A (Task #104, March 2026) ─────────────────────
+  ohioScraper,
+  umkcScraper,
+  csusScraper,
+  famuScraper,
+  loyolaChicagoScraper,
+  unetechScraper,
+  uneMedScraper,
+  umventuresScraper,
+  memphisScraper,
+  utrgvScraper,
 ];
 
 async function runWithConcurrency<T>(
