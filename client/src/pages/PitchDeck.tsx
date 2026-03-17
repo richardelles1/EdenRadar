@@ -605,12 +605,13 @@ function PortalsSlide({ colors }: { colors: Colors }) {
         {portals.map((p, i) => (
           <motion.div
             key={p.title}
-            className="rounded-xl p-3 sm:p-6 flex flex-col"
+            className="rounded-xl p-3 sm:p-6 flex flex-col relative"
             style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}
             initial={skip ? false : { opacity: 0, x: -12 }}
             animate={skip || gridInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }}
             transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
           >
+            {i < 2 && <ArrowRight className="absolute -right-3 top-1/2 -translate-y-1/2 w-5 h-5 hidden sm:block z-10" style={{ color: colors.textMuted }} />}
             <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
               <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: p.color }}>
                 <p.icon className="w-4 h-4" style={{ color: "#fff" }} />
