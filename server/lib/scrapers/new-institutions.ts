@@ -1000,3 +1000,35 @@ export const ufScraper = createTechPublisherScraper(
 );
 
 export const utepScraper = createStubScraper("University of Texas El Paso", "tradespacemarket.com — React SPA, no public API found");
+
+// ── New platform-based scrapers (Task #100, March 2026) ─────────────────────
+
+// In-Part scrapers
+export const ucMercedScraper = createInPartScraper("ucmerced", "UC Merced");
+export const sdsuScraper = createInPartScraper("sdsu", "San Diego State University");
+export const southernMissScraper = createInPartScraper("mrc", "University of Southern Mississippi");
+
+// TechPublisher scraper
+export const michiganStateScraper = createTechPublisherScraper(
+  "msut",
+  "Michigan State University",
+  { maxPg: 50 }
+);
+
+// Flintbox scrapers
+export const denverScraper = createFlintboxScraper(
+  { slug: "du", orgId: 53, accessKey: "efe8f8a7-f085-4c9e-905d-3435c5fc9393" },
+  "University of Denver"
+);
+export const kansasScraper = createFlintboxScraper(
+  { slug: "ku", orgId: 33, accessKey: "409f7eb2-4324-4a1a-9858-80459ce84ce2" },
+  "University of Kansas"
+);
+export const siuScraper = createFlintboxScraper(
+  { slug: "siusystem", orgId: 164, accessKey: "194bb68e-7abe-4dd1-9b4b-9efd6de59c6c" },
+  "Southern Illinois University System"
+);
+export const ukyScraper = createFlintboxScraper(
+  { slug: "uky", orgId: 78, accessKey: "38378c10-972e-4f49-b91f-a7eb0d8c7f31" },
+  "University of Kentucky"
+);
