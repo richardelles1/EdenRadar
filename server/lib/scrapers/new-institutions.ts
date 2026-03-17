@@ -3863,13 +3863,7 @@ export const nusScraper: InstitutionScraper = {
   },
 };
 
-// ── University of Nottingham Enterprise ──────────────────────────────────────
-// Nottingham uses Contensis CMS. No public technology licensing catalog URL found.
-// /business/ links to Business School; /enterprise/ 404s. No TTO tech listing accessible.
-export const nottinghamScraper: InstitutionScraper = createStubScraper(
-  "University of Nottingham",
-  "No public technology catalog — Contensis CMS site has no enumerable TTO listing URL"
-);
+// University of Nottingham — implemented via TechPublisher factory below (Task #113)
 
 // ── University of Sheffield ───────────────────────────────────────────────────
 // All /research/enterprise/ paths redirect to homepage (sheffield.ac.uk/).
@@ -3949,6 +3943,251 @@ export const yissumScraper: InstitutionScraper = {
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
+    }
+  },
+};
+
+// ── University of Nottingham — TechPublisher (Task #113) ──────────────────────
+// uon.technologypublisher.com — robots.txt permits scraping; factory handles
+// sitemap + RSS + paginated search-results automatically.
+export const nottinghamScraper = createTechPublisherScraper(
+  "uon",
+  "University of Nottingham",
+  { maxPg: 80 }
+);
+
+// ── TechLink (DoD Technology Transfer) — Playwright (Task #113) ───────────────
+// techlinkcenter.org/technologies — React SPA, no bot protection.
+// robots.txt: /technologies not disallowed. Legal: DoD Partnership Intermediary
+// under 15 U.S.C. § 3715; purpose is public discovery and licensing.
+// Pattern mirrors gatech.ts Playwright scraper.
+export const techLinkScraper: InstitutionScraper = {
+  institution: "TechLink (DoD Technology Transfer)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "TechLink (DoD Technology Transfer)";
+    const BASE = "https://techlinkcenter.org";
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+      });
+
+      await page.goto(`${BASE}/technologies`, {
+        timeout: 60_000,
+        waitUntil: "networkidle",
+      });
+
+      // Wait for tech cards — TechLink renders cards with links to /technologies/{slug}/{uuid}
+      await page.waitForSelector('a[href*="/technologies/"]', {
+        state: "visible",
+        timeout: 40_000,
+      });
+
+      const allLinks = new Map<string, string>();
+
+      const collectPage = async () => {
+        const cards = await page.$$eval('a[href*="/technologies/"]', (els) =>
+          els
+            .filter((el) => {
+              const href = el.getAttribute("href") ?? "";
+              // Exclude the listing page itself (/technologies without a slug)
+              return /\/technologies\/[^/]+/.test(href);
+            })
+            .map((el) => {
+              const href = el.getAttribute("href") ?? "";
+              // Prefer h2 > h3 > first meaningful text
+              const heading =
+                el.querySelector("h2,h3,h4") ??
+                el.querySelector('[class*="title"],[class*="Title"]');
+              const title = heading
+                ? (heading.textContent?.trim() ?? "")
+                : (el.textContent?.trim().split("\n")[0] ?? "");
+              const paras = Array.from(
+                el.querySelectorAll("p,[class*='description'],[class*='excerpt']")
+              );
+              const desc = paras
+                .map((p) => p.textContent?.trim() ?? "")
+                .filter((s) => s.length > 10)
+                .slice(0, 2)
+                .join(" ");
+              return { href, title, desc };
+            })
+        );
+        for (const c of cards) {
+          if (!c.href || !c.title || c.title.length < 5) continue;
+          if (allLinks.has(c.href)) continue;
+          allLinks.set(c.href, c.title + (c.desc ? "\x00" + c.desc : ""));
+        }
+      };
+
+      await collectPage();
+
+      // Paginate — try Next button, then page numbers, then infinite scroll
+      for (let pg = 2; pg <= 200; pg++) {
+        // Look for a Next / arrow button that isn't disabled
+        const nextBtn = await page.$(
+          'button[aria-label="next page"],button[title="Next"],button[aria-label="Go to next page"],[aria-label="next"],[title="next"]'
+        );
+        if (!nextBtn) break;
+        const disabled = await nextBtn.evaluate(
+          (el) =>
+            el.hasAttribute("disabled") ||
+            el.classList.contains("disabled") ||
+            el.classList.contains("Mui-disabled") ||
+            el.getAttribute("aria-disabled") === "true"
+        );
+        if (disabled) break;
+
+        const prevSize = allLinks.size;
+        await nextBtn.click();
+        await page.waitForTimeout(3_000);
+        await collectPage();
+        if (allLinks.size === prevSize) break; // No new items
+      }
+
+      const results: ScrapedListing[] = [];
+      for (const [href, raw] of Array.from(allLinks.entries())) {
+        const sepIdx = raw.indexOf("\x00");
+        const title = sepIdx >= 0 ? raw.substring(0, sepIdx) : raw;
+        const description = sepIdx >= 0 ? raw.substring(sepIdx + 1) : "";
+        const url = href.startsWith("http") ? href : `${BASE}${href}`;
+        results.push({ title, description, url, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
+    }
+  },
+};
+
+// ── researchportal.be — Ghent University Patents (Task #113) ──────────────────
+// Belgian FRIS research portal filtered to Ghent University patents (1,637).
+// Protected by Akamai Bot Manager — uses real Chromium with stealth headers
+// to attempt bypass. Returns [] gracefully if Akamai blocks.
+// URL: /en/search?f[0]=fris_content_type:patent&f[1]=fris_knowledge_institution:131211
+export const researchPortalGhentScraper: InstitutionScraper = {
+  institution: "Ghent University (researchportal.be)",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Ghent University (researchportal.be)";
+    const BASE = "https://www.researchportal.be";
+    const SEARCH_URL =
+      `${BASE}/en/search` +
+      `?f%5B0%5D=fris_content_type%3Apatent` +
+      `&f%5B1%5D=fris_knowledge_institution%3A131211` +
+      `&sort=search_api_relevance&order=desc`;
+
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-blink-features=AutomationControlled",
+          "--window-size=1280,900",
+        ],
+      });
+      const context = await browser.newContext({
+        userAgent:
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        viewport: { width: 1280, height: 900 },
+        locale: "en-GB",
+        timezoneId: "Europe/Brussels",
+        extraHTTPHeaders: {
+          "Accept-Language": "en-GB,en;q=0.9",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        },
+      });
+
+      // Mask automation signals
+      await context.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
+      });
+
+      const page = await context.newPage();
+
+      await page.goto(SEARCH_URL, { timeout: 60_000, waitUntil: "domcontentloaded" });
+
+      // Check for Akamai block
+      const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+      if (
+        bodyText.includes("Access Denied") ||
+        bodyText.includes("403") ||
+        bodyText.toLowerCase().includes("bot")
+      ) {
+        console.warn(`[scraper] ${INST}: Akamai block detected, returning []`);
+        return [];
+      }
+
+      // Wait for search results
+      await page.waitForSelector(
+        'article,li[class*="result"],.search-result,[class*="patent"]',
+        { state: "visible", timeout: 30_000 }
+      );
+
+      const allItems = new Map<string, string>();
+
+      const collectPage = async () => {
+        const items = await page.$$eval(
+          'article h3 a, li[class*="result"] h3 a, .views-row h3 a, h3.title a, h2.title a, .search-result-title a',
+          (els) =>
+            els.map((el) => ({
+              href: (el as HTMLAnchorElement).href ?? "",
+              title: el.textContent?.trim() ?? "",
+            }))
+        );
+        for (const item of items) {
+          if (!item.href || !item.title || item.title.length < 5) continue;
+          if (allItems.has(item.href)) continue;
+          allItems.set(item.href, item.title);
+        }
+      };
+
+      await collectPage();
+
+      // Paginate through results
+      for (let pg = 2; pg <= 100; pg++) {
+        const nextLink = await page.$(
+          'a[title="Go to next page"],a[rel="next"],li.next a,.pager-next a,a[aria-label="Next page"]'
+        );
+        if (!nextLink) break;
+        const prevSize = allItems.size;
+        await nextLink.click();
+        await page.waitForLoadState("networkidle", { timeout: 20_000 }).catch(() => {});
+        await collectPage();
+        if (allItems.size === prevSize) break;
+      }
+
+      const results: ScrapedListing[] = Array.from(allItems.entries()).map(
+        ([url, title]) => ({ title, description: "", url, institution: INST })
+      );
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
     }
   },
 };

@@ -252,6 +252,9 @@ import {
   oxfordInnovationScraper,
   bristolScraper,
   yissumScraper,
+  nottinghamScraper,
+  techLinkScraper,
+  researchPortalGhentScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -557,13 +560,13 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   stjudeScraper,               // St. Jude Children's Research Hospital — 6 category pages
   nationwideChildrensScraper,  // Nationwide Children's Hospital — bespoke HTML
   nemoursScraper,              // Nemours Children's Health — inline listing ~7 techs
-  // ── International Batch A (Task #113) — confirmed live scrapers only ─────────
-  // Deferred (inaccessible): UCL Business, KU Leuven, Ghent, UniQuest, McGill,
-  //   Leiden, TU Delft, NUS, Nottingham, Sheffield — all exports kept in
-  //   new-institutions.ts for future Playwright / VPN / alternative-URL work.
-  oxfordInnovationScraper,     // Oxford University Innovation — ~200 techs via WP pagination
-  bristolScraper,              // University of Bristol — HTML listing + detail fetch
-  yissumScraper,               // Yissum (Hebrew Univ.) — 234 techs via WP REST API
+  // ── International Batch A (Task #113) ────────────────────────────────────────
+  oxfordInnovationScraper,        // Oxford University Innovation — ~200 techs via WP pagination
+  bristolScraper,                 // University of Bristol — HTML listing + detail fetch
+  yissumScraper,                  // Yissum (Hebrew Univ.) — 234 techs via WP REST API
+  nottinghamScraper,              // University of Nottingham — TechPublisher slug "uon"
+  techLinkScraper,                // TechLink (DoD) — Playwright, React SPA, no bot protection
+  researchPortalGhentScraper,     // Ghent Univ. — Playwright + stealth, Akamai-gated (1637 patents)
 ];
 
 async function runWithConcurrency<T>(
