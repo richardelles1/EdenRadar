@@ -1082,10 +1082,20 @@ export const boiseStateScraper: InstitutionScraper = {
 export const nauScraper: InstitutionScraper = {
   institution: "Northern Arizona University",
   async scrape(): Promise<ScrapedListing[]> {
-    const categories = [
+    const baseUrl = "https://in.nau.edu/research/innovations/available-technologies/";
+    const knownCategories = [
       "biomedical", "cybersecurity", "energy", "environmental",
       "other", "research-tools", "software-hardware",
     ];
+    const $index = await fetchHtml(baseUrl, 15000);
+    const categories = new Set(knownCategories);
+    if ($index) {
+      $index(`a[href*="/available-technologies/"]`).each((_, el) => {
+        const href = $index(el).attr("href") ?? "";
+        const match = href.match(/available-technologies\/([a-z0-9-]+)\/?$/);
+        if (match && match[1] !== "available-technologies") categories.add(match[1]);
+      });
+    }
     const results: ScrapedListing[] = [];
     const seenUrls = new Set<string>();
     for (const cat of categories) {
