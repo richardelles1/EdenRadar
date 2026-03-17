@@ -612,7 +612,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
 type SortKey = "institution" | "health" | "totalInDb" | "biotechRelevant" | "lastSyncAt";
 
 function DataHealth({ pw }: { pw: string }) {
-  const [issuesOnly, setIssuesOnly] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"all" | HealthStatus>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const [schedulerOpen, setSchedulerOpen] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("health");
@@ -812,7 +813,19 @@ function DataHealth({ pw }: { pw: string }) {
     );
   }
 
-  const displayRows = issuesOnly ? sortedRows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never") : sortedRows;
+  const lastScanAt = data.rows.reduce((max: string | null, r) => {
+    if (!r.lastSyncAt) return max;
+    if (!max) return r.lastSyncAt;
+    return new Date(r.lastSyncAt).getTime() > new Date(max).getTime() ? r.lastSyncAt : max;
+  }, null as string | null);
+
+  const displayRows = sortedRows.filter((r) => {
+    if (statusFilter !== "all" && r.health !== statusFilter) return false;
+    if (searchQuery.trim()) {
+      return r.institution.toLowerCase().includes(searchQuery.toLowerCase().trim());
+    }
+    return true;
+  });
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -862,8 +875,18 @@ function DataHealth({ pw }: { pw: string }) {
   return (
     <>
       <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Health</h2>
-        <p className="text-sm text-muted-foreground mt-1">Monitor collector status, run institution syncs, and manage the sync scheduler</p>
+        <div className="flex items-start justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Health</h2>
+            <p className="text-sm text-muted-foreground mt-1">Monitor collector status, run institution syncs, and manage the sync scheduler</p>
+          </div>
+          {lastScanAt && (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 border border-border rounded-full px-3 py-1.5 shrink-0" data-testid="badge-last-scan">
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              Last full scan: <span className="font-medium text-foreground">{relativeTime(lastScanAt)}</span>
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="border border-border rounded-xl bg-card overflow-hidden">
@@ -1003,25 +1026,47 @@ function DataHealth({ pw }: { pw: string }) {
           )}
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <div className="flex items-center gap-3">
-            {data.issueCount > 0 && (
-              <Button
-                variant={issuesOnly ? "default" : "outline"}
-                size="sm"
-                className="h-7 text-xs"
-                onClick={() => setIssuesOnly((v) => !v)}
-                data-testid="button-issues-filter"
-              >
-                <AlertTriangle className="h-3 w-3 mr-1" />
-                {issuesOnly ? "Show All" : `${data.issueCount} Issues`}
-              </Button>
-            )}
+        <div className="flex flex-col gap-2 px-4 py-3 border-b border-border">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(([
+              { key: "all",      label: "All",          activeClass: "bg-primary text-primary-foreground border-primary" },
+              { key: "ok",       label: "Working",      activeClass: "bg-emerald-600 text-white border-emerald-600" },
+              { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
+              { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
+              { key: "failing",  label: "Failing",      activeClass: "bg-red-600 text-white border-red-600" },
+              { key: "never",    label: "Never synced", activeClass: "bg-muted text-foreground border-border" },
+            ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
+              const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
+              if (key !== "all" && count === 0) return null;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(key)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                    statusFilter === key
+                      ? activeClass
+                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                  data-testid={`filter-status-${key}`}
+                >
+                  {label} ({count})
+                </button>
+              );
+            }))}
           </div>
-          <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
-            <Download className="h-3.5 w-3.5 mr-1.5" />
-            Export CSV
-          </Button>
+          <div className="flex items-center justify-between gap-3">
+            <Input
+              placeholder="Search institutions…"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="h-7 text-xs max-w-[220px]"
+              data-testid="input-institution-search"
+            />
+            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
+              <Download className="h-3.5 w-3.5 mr-1.5" />
+              Export CSV
+            </Button>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -2489,12 +2534,12 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
         </div>
       </header>
 
-      <div className="max-w-screen-2xl mx-auto flex">
-        <aside className="w-56 border-r border-border min-h-[calc(100vh-57px)] p-4 shrink-0">
-          <nav className="space-y-1">
+      <div className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row">
+        <aside className="shrink-0 border-b lg:border-b-0 lg:w-56 lg:border-r border-border lg:min-h-[calc(100vh-57px)]">
+          <nav className="flex flex-row overflow-x-auto gap-1 p-2 lg:flex-col lg:overflow-x-visible lg:space-y-1 lg:p-4 lg:gap-0">
             <button
               onClick={() => setActiveTab("new-arrivals")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "new-arrivals"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2506,7 +2551,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </button>
             <button
               onClick={() => setActiveTab("data-health")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "data-health"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2518,7 +2563,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </button>
             <button
               onClick={() => setActiveTab("enrichment")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "enrichment"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2530,7 +2575,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </button>
             <button
               onClick={() => setActiveTab("pipeline-review")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "pipeline-review"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2542,7 +2587,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </button>
             <button
               onClick={() => setActiveTab("research-queue")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "research-queue"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2559,7 +2604,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </button>
             <button
               onClick={() => setActiveTab("concept-queue")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "concept-queue"
                   ? "bg-amber-500/10 text-amber-600"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -2570,11 +2615,11 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Concept Queue
             </button>
 
-            <div className="border-t border-border my-2" />
+            <div className="hidden lg:block border-t border-border my-2" />
 
             <button
               onClick={() => setActiveTab("account-center")}
-              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "account-center"
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted"
