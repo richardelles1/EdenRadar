@@ -989,6 +989,35 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/new-arrivals", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const hours = Math.min(parseInt(String(req.query.hours ?? "24"), 10) || 24, 168);
+      const groups = await storage.getNewArrivals(hours);
+      const totalAssets = groups.reduce((s, g) => s + g.count, 0);
+      const totalIndexed = groups.reduce((s, g) => s + g.indexedCount, 0);
+      const totalInstitutions = groups.length;
+      res.json({ hours, totalAssets, totalIndexed, totalInstitutions, groups });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch new arrivals" });
+    }
+  });
+
+  app.post("/api/admin/new-arrivals/push", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const hours = Math.min(parseInt(String((req.body as any)?.hours ?? "24"), 10) || 24, 168);
+      const institution: string | undefined = (req.body as any)?.institution;
+      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+      const result = await storage.pushNewArrivals(since, institution);
+      res.json({ updated: result.updated, message: `Marked ${result.updated} asset${result.updated !== 1 ? "s" : ""} as indexed` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Push failed" });
+    }
+  });
+
   app.get("/api/ingest/sync/sessions", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

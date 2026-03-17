@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus } from "lucide-react";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import { Button } from "@/components/ui/button";
@@ -2171,6 +2171,254 @@ function AccountCenter({ pw }: { pw: string }) {
   );
 }
 
+// ── New Arrivals ─────────────────────────────────────────────────────────────
+
+type NewArrivalAsset = {
+  id: number;
+  assetName: string;
+  firstSeenAt: string;
+  relevant: boolean;
+  sourceUrl: string | null;
+};
+
+type NewArrivalGroup = {
+  institution: string;
+  count: number;
+  indexedCount: number;
+  assets: NewArrivalAsset[];
+};
+
+type NewArrivalsData = {
+  hours: number;
+  totalAssets: number;
+  totalIndexed: number;
+  totalInstitutions: number;
+  groups: NewArrivalGroup[];
+};
+
+function NewArrivals({ pw }: { pw: string }) {
+  const [hours, setHours] = useState(24);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { toast } = useToast();
+
+  const { data, isLoading } = useQuery<NewArrivalsData>({
+    queryKey: ["/api/admin/new-arrivals", hours],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/new-arrivals?hours=${hours}`, {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 30000,
+    enabled: !!pw,
+  });
+
+  const pushMutation = useMutation({
+    mutationFn: async ({ institution }: { institution?: string }) => {
+      const res = await fetch("/api/admin/new-arrivals/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ hours, institution }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Push failed");
+      return res.json() as Promise<{ updated: number; message: string }>;
+    },
+    onSuccess: (result) => {
+      toast({ title: result.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/new-arrivals"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Push failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const toggleExpand = (institution: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(institution)) {
+        next.delete(institution);
+      } else {
+        next.add(institution);
+      }
+      return next;
+    });
+  };
+
+  const windowOptions = [
+    { label: "Last 24h", value: 24 },
+    { label: "Last 48h", value: 48 },
+    { label: "Last 7d", value: 168 },
+  ];
+
+  const pendingCount = (data?.totalAssets ?? 0) - (data?.totalIndexed ?? 0);
+
+  return (
+    <div className="space-y-6" data-testid="new-arrivals-panel">
+      {/* Header row */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-2">
+          {windowOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setHours(opt.value)}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                hours === opt.value
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid={`button-window-${opt.value}`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <Button
+          size="sm"
+          onClick={() => pushMutation.mutate({})}
+          disabled={pushMutation.isPending || pendingCount === 0}
+          data-testid="button-push-all-new"
+        >
+          {pushMutation.isPending ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <PackagePlus className="h-4 w-4 mr-2" />
+          )}
+          Push all new
+        </Button>
+      </div>
+
+      {/* Summary banner */}
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-muted-foreground text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-total-assets">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">New assets</p>
+            <p className="text-3xl font-bold text-foreground mt-1">{data?.totalAssets ?? 0}</p>
+          </div>
+          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-indexed">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Already indexed</p>
+            <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">{data?.totalIndexed ?? 0}</p>
+          </div>
+          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-pending">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending push</p>
+            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingCount}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Institution rows */}
+      {!isLoading && data && (
+        data.groups.length === 0 ? (
+          <div className="text-center py-16 text-muted-foreground" data-testid="text-no-arrivals">
+            <Inbox className="h-10 w-10 mx-auto mb-3 opacity-30" />
+            <p className="text-sm">No new assets in the last {hours === 168 ? "7 days" : `${hours} hours`}.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {data.groups.map((group) => {
+              const isOpen = expanded.has(group.institution);
+              const pending = group.count - group.indexedCount;
+              return (
+                <div
+                  key={group.institution}
+                  className="border border-border rounded-lg bg-card overflow-hidden"
+                  data-testid={`card-institution-${group.institution}`}
+                >
+                  {/* Institution header */}
+                  <div className="flex items-center justify-between px-4 py-3 gap-3">
+                    <button
+                      className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                      onClick={() => toggleExpand(group.institution)}
+                      data-testid={`button-expand-${group.institution}`}
+                    >
+                      {isOpen ? (
+                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="font-medium text-sm text-foreground truncate">{group.institution}</span>
+                    </button>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-muted-foreground">
+                        {group.count} asset{group.count !== 1 ? "s" : ""}
+                        {group.indexedCount > 0 && `, ${group.indexedCount} indexed`}
+                      </span>
+                      {pending > 0 && (
+                        <span className="text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5" data-testid={`badge-pending-${group.institution}`}>
+                          {pending} pending
+                        </span>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => pushMutation.mutate({ institution: group.institution })}
+                        disabled={pushMutation.isPending || pending === 0}
+                        className="h-7 text-xs"
+                        data-testid={`button-push-${group.institution}`}
+                      >
+                        {pushMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Push all"}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Asset list */}
+                  {isOpen && (
+                    <div className="border-t border-border divide-y divide-border">
+                      {group.assets.map((asset) => (
+                        <div
+                          key={asset.id}
+                          className="flex items-start justify-between px-4 py-2.5 gap-3"
+                          data-testid={`row-asset-${asset.id}`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            {asset.sourceUrl ? (
+                              <a
+                                href={asset.sourceUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-sm text-foreground hover:text-primary hover:underline line-clamp-1"
+                                data-testid={`link-asset-${asset.id}`}
+                              >
+                                {asset.assetName}
+                              </a>
+                            ) : (
+                              <span className="text-sm text-foreground line-clamp-1">{asset.assetName}</span>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <Clock className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">{formatDate(asset.firstSeenAt)}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0">
+                            {asset.relevant ? (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full" data-testid={`badge-indexed-${asset.id}`}>
+                                <CheckCircle2 className="h-3 w-3" /> Indexed
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full" data-testid={`badge-pending-asset-${asset.id}`}>
+                                <AlertCircle className="h-3 w-3" /> Pending
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("data-health");
@@ -2240,6 +2488,18 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
       <div className="max-w-screen-2xl mx-auto flex">
         <aside className="w-56 border-r border-border min-h-[calc(100vh-57px)] p-4 shrink-0">
           <nav className="space-y-1">
+            <button
+              onClick={() => setActiveTab("new-arrivals")}
+              className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "new-arrivals"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-new-arrivals"
+            >
+              <Inbox className="h-4 w-4" />
+              New Arrivals
+            </button>
             <button
               onClick={() => setActiveTab("data-health")}
               className={`w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
@@ -2324,6 +2584,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
         </aside>
 
         <main className="flex-1 p-6 overflow-hidden">
+          {activeTab === "new-arrivals" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">New Arrivals</h2>
+                <p className="text-sm text-muted-foreground mt-1">Assets ingested since the last scan, grouped by institution. Use Push to make them visible in Scout.</p>
+              </div>
+              <NewArrivals pw={pw} />
+            </>
+          )}
+
           {activeTab === "data-health" && (
             <DataHealth pw={pw} />
           )}

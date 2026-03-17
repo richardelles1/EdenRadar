@@ -114,6 +114,14 @@ export interface IStorage {
   createSavedGrant(data: InsertSavedGrant): Promise<SavedGrant>;
   updateSavedGrant(id: number, userId: string, data: Partial<InsertSavedGrant>): Promise<SavedGrant>;
   deleteSavedGrant(id: number, userId: string): Promise<void>;
+
+  getNewArrivals(hours: number): Promise<Array<{
+    institution: string;
+    count: number;
+    indexedCount: number;
+    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+  }>>;
+  pushNewArrivals(since: Date, institution?: string): Promise<{ updated: number }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -755,6 +763,73 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavedGrant(id: number, userId: string): Promise<void> {
     await db.delete(savedGrants).where(and(eq(savedGrants.id, id), eq(savedGrants.userId, userId)));
+  }
+
+  async getNewArrivals(hours: number): Promise<Array<{
+    institution: string;
+    count: number;
+    indexedCount: number;
+    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+  }>> {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+        relevant: ingestedAssets.relevant,
+        sourceUrl: ingestedAssets.sourceUrl,
+      })
+      .from(ingestedAssets)
+      .where(
+        and(
+          gte(ingestedAssets.firstSeenAt, since),
+          eq(ingestedAssets.sourceType, "tech_transfer"),
+        )
+      )
+      .orderBy(desc(ingestedAssets.firstSeenAt));
+
+    const grouped = new Map<string, {
+      institution: string;
+      count: number;
+      indexedCount: number;
+      assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+    }>();
+
+    for (const row of rows) {
+      if (!grouped.has(row.institution)) {
+        grouped.set(row.institution, { institution: row.institution, count: 0, indexedCount: 0, assets: [] });
+      }
+      const entry = grouped.get(row.institution)!;
+      entry.count += 1;
+      if (row.relevant) entry.indexedCount += 1;
+      entry.assets.push({
+        id: row.id,
+        assetName: row.assetName,
+        firstSeenAt: row.firstSeenAt,
+        relevant: row.relevant,
+        sourceUrl: row.sourceUrl,
+      });
+    }
+
+    return Array.from(grouped.values()).sort((a, b) => b.count - a.count);
+  }
+
+  async pushNewArrivals(since: Date, institution?: string): Promise<{ updated: number }> {
+    const conditions = [
+      gte(ingestedAssets.firstSeenAt, since),
+      eq(ingestedAssets.relevant, false),
+      eq(ingestedAssets.sourceType, "tech_transfer"),
+    ];
+    if (institution) {
+      conditions.push(eq(ingestedAssets.institution, institution));
+    }
+    const result = await db
+      .update(ingestedAssets)
+      .set({ relevant: true })
+      .where(and(...conditions));
+    return { updated: (result as any).rowCount ?? 0 };
   }
 }
 
