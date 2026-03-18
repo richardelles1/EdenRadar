@@ -2571,7 +2571,6 @@ type PipelinesResponse = { pipelines: PipelineWithCount[]; uncategorisedCount: n
 function CitationCard({ asset, index, savedIngestedIds }: {
   asset: ChatAsset;
   index: number;
-  adminPassword?: string;
   savedIngestedIds: Set<number>;
 }) {
   const { label, cls } = relevanceLabel(asset.similarity);
@@ -3168,7 +3167,7 @@ function EdenTab({ pw }: { pw: string }) {
                                       key={a.id}
                                       style={{ animation: "em-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 55}ms` }}
                                     >
-                                      <CitationCard asset={a} index={ci} adminPassword={pw} savedIngestedIds={savedIngestedIds} />
+                                      <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
                                     </div>
                                   ))}
                                 </div>
