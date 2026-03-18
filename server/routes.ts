@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, isConversational } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1655,12 +1655,29 @@ export async function registerRoutes(
 
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
-      const queryEmbedding = await embedQuery(message.trim());
-      const retrieved = await storage.semanticSearch(queryEmbedding, 15);
+      const chat = isConversational(message.trim());
 
-      sendEvent("context", {
-        sessionId: sid,
-        assets: retrieved.map((a) => ({
+      if (chat) {
+        sendEvent("context", { sessionId: sid, assets: [] });
+
+        let fullResponse = "";
+        for await (const token of directQuery(message.trim(), history)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+
+        await storage.appendEdenMessage(sid, {
+          role: "assistant",
+          content: fullResponse,
+          assetIds: [],
+          assets: [],
+        });
+      } else {
+        const queryEmbedding = await embedQuery(message.trim());
+        const allRetrieved = await storage.semanticSearch(queryEmbedding, 15);
+        const retrieved = allRetrieved.filter((a) => a.similarity >= 0.42);
+
+        const assetPayload = retrieved.map((a) => ({
           id: a.id,
           assetName: a.assetName,
           institution: a.institution,
@@ -1671,32 +1688,23 @@ export async function registerRoutes(
           sourceName: a.sourceName,
           sourceUrl: a.sourceUrl,
           similarity: Math.round(a.similarity * 100) / 100,
-        })),
-      });
+        }));
 
-      let fullResponse = "";
-      for await (const token of ragQuery(message.trim(), retrieved, history)) {
-        fullResponse += token;
-        sendEvent("token", { text: token });
+        sendEvent("context", { sessionId: sid, assets: assetPayload });
+
+        let fullResponse = "";
+        for await (const token of ragQuery(message.trim(), retrieved, history)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+
+        await storage.appendEdenMessage(sid, {
+          role: "assistant",
+          content: fullResponse,
+          assetIds: retrieved.map((a) => a.id),
+          assets: assetPayload,
+        });
       }
-
-      await storage.appendEdenMessage(sid, {
-        role: "assistant",
-        content: fullResponse,
-        assetIds: retrieved.map((a) => a.id),
-        assets: retrieved.map((a) => ({
-          id: a.id,
-          assetName: a.assetName,
-          institution: a.institution,
-          indication: a.indication,
-          modality: a.modality,
-          developmentStage: a.developmentStage,
-          ipType: a.ipType,
-          sourceName: a.sourceName,
-          sourceUrl: a.sourceUrl,
-          similarity: Math.round(a.similarity * 100) / 100,
-        })),
-      });
 
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {

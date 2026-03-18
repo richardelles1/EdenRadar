@@ -14,6 +14,27 @@ export async function embedQuery(query: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
+const BIOTECH_SIGNALS = [
+  "target", "mechanism", "moa", "modality", "antibody", "therapeutic", "biologic",
+  "gene", "protein", "receptor", "kinase", "inhibitor", "agonist", "antagonist",
+  "drug", "compound", "molecule", "rna", "dna", "mrna", "sirna", "crispr",
+  "oncology", "cancer", "tumor", "tumour", "indication", "disease", "preclinical",
+  "clinical", "trial", "fda", "license", "licensing", "patent", "asset",
+  "portfolio", "pipeline", "stage", "biotech", "biopharma", "pharma",
+  "institution", "university", "research", "vaccine", "immunotherapy",
+  "stem", "diagnostic", "assay", "platform", "tto", "transfer", "technology",
+  "find", "show", "list", "search", "available", "which", "what", "where",
+  "how many", "gpl", "glp", "cnc", "cns", "hiv", "covid", "autoimmune",
+  "inflammation", "cardiac", "neuro", "stanford", "mit", "harvard", "columbia",
+];
+
+export function isConversational(query: string): boolean {
+  const words = query.trim().split(/\s+/);
+  if (words.length > 8) return false;
+  const lower = query.toLowerCase();
+  return !BIOTECH_SIGNALS.some((kw) => lower.includes(kw));
+}
+
 function buildContext(assets: RetrievedAsset[]): string {
   return assets
     .map((a, i) => {
@@ -39,18 +60,19 @@ function buildContext(assets: RetrievedAsset[]): string {
     .join("\n\n");
 }
 
-const SYSTEM_PROMPT = `You are EDEN, an expert AI biotech analyst embedded in EdenRadar — a platform with 40,000+ live technology transfer assets from 220+ universities and research institutions.
+const SYSTEM_PROMPT = `You are EDEN — an AI intelligence embedded in EdenRadar, with access to 40,000+ live technology transfer assets from 220+ research universities and institutions worldwide.
 
-Your job is to answer questions about the TTO asset corpus using semantically retrieved context. You are speaking with pharma BD professionals.
+You're a knowledgeable, warm colleague who genuinely enjoys helping people discover remarkable science. You speak naturally and thoughtfully — not like a database.
 
-Guidelines:
-- Be precise and analytically rigorous.
-- When citing assets in your response, reference them by name and institution using the format **Asset Name** (Institution).
-- If the retrieved assets don't fully answer the question, acknowledge the limitation.
-- Never hallucinate data. Only use what's in the context.
-- For licensing questions, focus on licensing readiness and IP type.
-- Keep responses concise but substantive. Use markdown formatting where helpful.
-- Do NOT include a Sources section in your response body — sources are appended automatically.`;
+When someone greets you or asks a casual question, respond warmly and briefly, then invite them to explore. Keep it human and short.
+
+For research queries, be precise and analytically rigorous:
+- Cite assets by name and institution: **Asset Name** (Institution)
+- Focus on what makes each asset commercially interesting: mechanism, stage, innovation, licensing status
+- If retrieved assets don't fully address the question, say so clearly — don't stretch
+- Never fabricate data — only use what's in the provided context
+- Use markdown formatting for structured responses
+- Do NOT include a Sources section — citations are shown automatically`;
 
 export async function* ragQuery(
   question: string,
@@ -64,7 +86,9 @@ export async function* ragQuery(
     ...conversationHistory.slice(-6),
     {
       role: "user",
-      content: `Based on the following retrieved TTO assets, answer the question.\n\nRETRIEVED ASSETS:\n${context}\n\nQUESTION: ${question}`,
+      content: assets.length > 0
+        ? `Based on the following retrieved TTO assets, answer the question.\n\nRETRIEVED ASSETS:\n${context}\n\nQUESTION: ${question}`
+        : question,
     },
   ];
 
@@ -74,6 +98,30 @@ export async function* ragQuery(
     stream: true,
     temperature: 0.3,
     max_tokens: 1200,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
+export async function* directQuery(
+  question: string,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = []
+): AsyncGenerator<string> {
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...conversationHistory.slice(-6),
+    { role: "user", content: question },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    stream: true,
+    temperature: 0.7,
+    max_tokens: 350,
   });
 
   for await (const chunk of stream) {

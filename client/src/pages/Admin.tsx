@@ -2621,72 +2621,114 @@ function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; s
   );
 }
 
-const CONSTELLATION_NODES = [
-  { x: 100, y: 100, r: 6, label: "EDEN" },
-  { x: 162, y: 66, r: 3.5 },  { x: 195, y: 118, r: 3 },
-  { x: 178, y: 168, r: 3.5 }, { x: 135, y: 188, r: 3 },
-  { x: 80, y: 178, r: 3.5 },  { x: 42, y: 138, r: 3 },
-  { x: 36, y: 80, r: 3.5 },   { x: 70, y: 40, r: 3 },
-  { x: 128, y: 28, r: 3 },    { x: 192, y: 50, r: 2.5 },
-  { x: 210, y: 155, r: 2.5 }, { x: 62, y: 32, r: 2.5 },
-];
-const CONSTELLATION_EDGES = [
-  [0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
-  [1,2],[1,9],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[2,11],[6,12],
-];
+function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
+  const cx = 100, cy = 108;
+  const OR = { rx: 80, ry: 27 };
+  const MR = { rx: 54, ry: 18 };
+  const IR = { rx: 32, ry: 11 };
 
-function EdenConstellation({ isThinking = false }: { isThinking?: boolean }) {
+  const outerPts = Array.from({ length: 24 }, (_, i) => {
+    const t = (i / 24) * Math.PI * 2;
+    const depth = (Math.sin(t) + 1) / 2;
+    return {
+      x: cx + OR.rx * Math.cos(t),
+      y: cy + OR.ry * Math.sin(t),
+      r: 0.9 + 2.5 * depth,
+      op: 0.14 + 0.72 * depth,
+      dur: isThinking ? 0.7 + (i % 4) * 0.18 : 1.8 + (i % 6) * 0.28,
+      delay: (i / 24) * (isThinking ? 1.1 : 3.0),
+    };
+  });
+
+  const midPts = Array.from({ length: 14 }, (_, i) => {
+    const t = (i / 14) * Math.PI * 2 + 0.35;
+    const depth = (Math.sin(t) + 1) / 2;
+    return {
+      x: cx + MR.rx * Math.cos(t),
+      y: cy + MR.ry * Math.sin(t),
+      r: 0.5 + 1.6 * depth,
+      op: 0.08 + 0.46 * depth,
+      dur: isThinking ? 0.6 + (i % 3) * 0.18 : 1.5 + (i % 5) * 0.28,
+      delay: (i / 14) * (isThinking ? 0.9 : 2.4) + 0.4,
+    };
+  });
+
+  const os = isThinking ? "1.9s" : "7s";
+  const ms = isThinking ? "1.4s" : "4.8s";
+  const op = `M ${cx + OR.rx},${cy} A ${OR.rx},${OR.ry} 0 1,0 ${cx - OR.rx},${cy} A ${OR.rx},${OR.ry} 0 1,0 ${cx + OR.rx},${cy} Z`;
+  const mp = `M ${cx + MR.rx},${cy} A ${MR.rx},${MR.ry} 0 1,1 ${cx - MR.rx},${cy} A ${MR.rx},${MR.ry} 0 1,1 ${cx + MR.rx},${cy} Z`;
+
   return (
-    <svg width={200} height={200} viewBox="0 0 240 220" fill="none" aria-hidden="true" className="mx-auto">
-      <style>{`
-        @keyframes ec-pulse { 0%,100%{opacity:.12} 50%{opacity:.28} }
-        @keyframes ec-node { 0%,100%{opacity:.5;r:3px} 50%{opacity:.9;r:3.8px} }
-        @keyframes ec-core { 0%,100%{opacity:.7} 50%{opacity:1} }
-        @keyframes ec-ring { 0%,100%{r:11px;opacity:.15} 50%{r:14px;opacity:.3} }
-        @keyframes ec-fast-pulse { 0%,100%{opacity:.22} 50%{opacity:.5} }
-        @keyframes ec-fast-node { 0%,100%{opacity:.6;r:3px} 50%{opacity:1;r:4px} }
-        @keyframes ec-fast-ring { 0%,100%{r:11px;opacity:.25} 50%{r:15px;opacity:.45} }
-      `}</style>
-      {CONSTELLATION_EDGES.map(([a, b], i) => {
-        const na = CONSTELLATION_NODES[a];
-        const nb = CONSTELLATION_NODES[b];
-        if (!na || !nb) return null;
-        return (
-          <line key={i} x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
-            stroke="#10b981" strokeWidth={a === 0 || b === 0 ? 0.8 : 0.5}
-            style={{ animation: `${isThinking ? "ec-fast-pulse" : "ec-pulse"} ${1.8 + (i % 5) * 0.4}s ease-in-out infinite`, animationDelay: `${(i * 0.15) % 1.5}s` }} />
-        );
-      })}
-      {CONSTELLATION_NODES.map((n, i) => (
-        <g key={i}>
-          {i === 0 && (
-            <>
-              <circle cx={n.x} cy={n.y} style={{ animation: `${isThinking ? "ec-fast-ring" : "ec-ring"} 2s ease-in-out infinite` }} fill="none" stroke="#10b981" strokeWidth="1" />
-              <circle cx={n.x} cy={n.y} r={n.r * 1.6} fill="#10b981" fillOpacity="0.1" />
-            </>
-          )}
-          <circle cx={n.x} cy={n.y} fill="#10b981" fillOpacity={i === 0 ? 1 : 0.7}
-            style={{
-              animation: i === 0
-                ? `${isThinking ? "ec-fast-node" : "ec-core"} ${isThinking ? "0.8s" : "2s"} ease-in-out infinite`
-                : `${isThinking ? "ec-fast-node" : "ec-node"} ${2 + (i * 0.3) % 2}s ease-in-out infinite`,
-              animationDelay: `${(i * 0.2) % 1.6}s`,
-            }}
-            r={n.r}
-          />
-        </g>
+    <svg width={200} height={220} viewBox="0 0 200 220" fill="none" aria-hidden="true" className="mx-auto">
+      <defs>
+        <filter id="eo-glow" x="-80%" y="-80%" width="260%" height="260%">
+          <feGaussianBlur stdDeviation="1.8" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <filter id="eo-halo" x="-150%" y="-150%" width="400%" height="400%">
+          <feGaussianBlur stdDeviation="4" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <radialGradient id="eo-bg" cx="50%" cy="52%" r="50%">
+          <stop offset="0%" stopColor="#10b981" stopOpacity="0.09"/>
+          <stop offset="65%" stopColor="#10b981" stopOpacity="0.02"/>
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+        </radialGradient>
+      </defs>
+
+      <ellipse cx={cx} cy={cy} rx="94" ry="94" fill="url(#eo-bg)"/>
+
+      <ellipse cx={cx} cy={cy} rx={OR.rx} ry={OR.ry} stroke="#10b981" strokeWidth="0.6" strokeOpacity="0.18" strokeDasharray="5 9" fill="none"/>
+      <ellipse cx={cx} cy={cy} rx={MR.rx} ry={MR.ry} stroke="#10b981" strokeWidth="0.4" strokeOpacity="0.11" strokeDasharray="4 7" fill="none"/>
+      <ellipse cx={cx} cy={cy} rx={IR.rx} ry={IR.ry} stroke="#10b981" strokeWidth="0.3" strokeOpacity="0.07" strokeDasharray="3 5" fill="none"/>
+
+      {outerPts.map((p, i) => (
+        <circle key={`oe${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op} filter="url(#eo-glow)">
+          <animate attributeName="opacity" values={`${p.op * 0.4};${p.op};${p.op * 0.4}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+        </circle>
       ))}
+
+      {midPts.map((p, i) => (
+        <circle key={`me${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op}>
+          <animate attributeName="opacity" values={`${p.op * 0.3};${p.op};${p.op * 0.3}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+        </circle>
+      ))}
+
+      {[0, 1, 2, 3].map((n) => (
+        <circle key={`orb${n}`} r={isThinking ? 2.8 : 2.2} fill="#10b981" fillOpacity="0.9" filter="url(#eo-halo)">
+          <animateMotion dur={os} begin={`${-n * parseFloat(os) / 4}s`} repeatCount="indefinite" path={op}/>
+        </circle>
+      ))}
+
+      {[0, 1].map((n) => (
+        <circle key={`morb${n}`} r={isThinking ? 2 : 1.4} fill="#6ee7b7" fillOpacity="0.65">
+          <animateMotion dur={ms} begin={`${-n * parseFloat(ms) / 2}s`} repeatCount="indefinite" path={mp}/>
+        </circle>
+      ))}
+
+      <circle cx={cx} cy={cy} r="16" fill="#10b981" fillOpacity="0.04"/>
+      <circle cx={cx} cy={cy} r={isThinking ? 5 : 4} fill="#10b981" filter="url(#eo-glow)">
+        <animate attributeName="r" values={isThinking ? "4;7;4" : "3;5.5;3"} dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
+        <animate attributeName="fill-opacity" values={isThinking ? "0.55;1;0.55" : "0.22;0.55;0.22"} dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
+      </circle>
+      <circle cx={cx} cy={cy} r="2" fill="#ecfdf5" fillOpacity="0.85"/>
     </svg>
   );
 }
 
+function relevanceLabel(similarity: number): { label: string; cls: string } {
+  if (similarity >= 0.70) return { label: "Strong", cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" };
+  if (similarity >= 0.55) return { label: "Good", cls: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800" };
+  return { label: "Relevant", cls: "bg-muted text-muted-foreground border-border" };
+}
+
 function CitationCard({ asset, index }: { asset: ChatAsset; index: number }) {
-  const similarity = Math.round(asset.similarity * 100);
+  const { label, cls } = relevanceLabel(asset.similarity);
   return (
     <div className="rounded-lg border border-border bg-background p-3 flex flex-col gap-1.5" data-testid={`citation-card-${index}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2 flex-1">{asset.assetName}</p>
-        <span className="shrink-0 text-[10px] font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5 tabular-nums">{similarity}%</span>
+        <span className={`shrink-0 text-[10px] font-medium border rounded px-1.5 py-0.5 ${cls}`}>{label}</span>
       </div>
       <p className="text-[11px] text-muted-foreground truncate">{asset.institution}</p>
       <div className="flex flex-wrap gap-1 mt-0.5">
@@ -2976,13 +3018,10 @@ function EdenTab({ pw }: { pw: string }) {
               {/* Empty state with starter chips */}
               {chatMessages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center gap-0" data-testid="chat-empty">
-                  <div className="relative mb-1">
-                    <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(ellipse at center, rgba(16,185,129,0.10) 0%, transparent 70%)", width: 220, height: 220, left: "50%", top: "50%", transform: "translate(-50%,-50%)" }} />
-                    <EdenConstellation isThinking={chatStreaming} />
-                  </div>
-                  <p className="text-sm font-semibold text-foreground mb-1">Ask EDEN anything</p>
+                  <EdenOrb isThinking={chatStreaming} />
+                  <p className="text-base font-semibold text-foreground mb-1 -mt-1">Ask EDEN anything</p>
                   <p className="text-xs text-muted-foreground mb-5 text-center max-w-xs leading-relaxed">
-                    Semantic search over {emb?.totalEmbedded?.toLocaleString()} embedded TTO assets from {institutionCount} research institutions.
+                    Your AI analyst for {emb?.totalEmbedded?.toLocaleString()} TTO assets across {institutionCount} research institutions.
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg" data-testid="starter-chips">
                     {STARTER_QUESTIONS.map((q) => (
@@ -3012,7 +3051,7 @@ function EdenTab({ pw }: { pw: string }) {
                       <EdenAvatar isThinking={!!(msg.isStreaming)} size={24} />
                     </div>
                   )}
-                  <div className={`max-w-[78%] ${msg.role === "user" ? "" : "flex-1"}`}>
+                  <div className={`max-w-[78%] ${msg.role === "user" ? "" : (msg.isStreaming && !msg.content ? "w-auto" : "flex-1")}`}>
                     <div className={`rounded-2xl px-4 py-3 ${
                       msg.role === "user"
                         ? "bg-gradient-to-br from-emerald-600 to-emerald-700 text-white text-sm ml-auto w-fit shadow-sm"
@@ -3039,7 +3078,7 @@ function EdenTab({ pw }: { pw: string }) {
                     {/* Citation cards */}
                     {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                       <div className="mt-2" data-testid={`chat-citations-${i}`}>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 pl-0.5">Retrieved context</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 pl-0.5">Top matches</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {(expandedCitations[i] ? msg.assets : msg.assets.slice(0, 3)).map((a, ci) => (
                             <div
