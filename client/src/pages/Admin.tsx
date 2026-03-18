@@ -2959,11 +2959,11 @@ function EdenTab({ pw }: { pw: string }) {
           <>
             <style>{`
               @keyframes em-slide-user {
-                from { opacity: 0; transform: translateX(14px); }
+                from { opacity: 0; transform: translateX(12px); }
                 to   { opacity: 1; transform: translateX(0); }
               }
-              @keyframes em-slide-asst {
-                from { opacity: 0; transform: translateX(-14px); }
+              @keyframes em-slide-assistant {
+                from { opacity: 0; transform: translateX(-12px); }
                 to   { opacity: 1; transform: translateX(0); }
               }
               @keyframes em-fade-in {
@@ -2989,7 +2989,7 @@ function EdenTab({ pw }: { pw: string }) {
                       <button
                         key={q}
                         onClick={() => sendChatMessage(q)}
-                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors duration-150 hover:scale-[1.02] text-left"
+                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors transition-transform duration-150 hover:scale-[1.02] text-left"
                         data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
                       >
                         {q}
@@ -3004,7 +3004,7 @@ function EdenTab({ pw }: { pw: string }) {
                 <div
                   key={i}
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  style={{ animation: msg.role === "user" ? "em-slide-user 220ms ease-out both" : "em-slide-asst 220ms ease-out both" }}
+                  style={{ animation: msg.role === "user" ? "em-slide-user 220ms ease-out both" : "em-slide-assistant 220ms ease-out both" }}
                   data-testid={`chat-msg-${i}`}
                 >
                   {msg.role === "assistant" && (

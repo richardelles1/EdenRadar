@@ -74,7 +74,7 @@ app.use((req, res, next) => {
       ALTER TABLE ingested_assets
       ADD COLUMN IF NOT EXISTS source_name TEXT NOT NULL DEFAULT 'tech_transfer'
     `);
-    log("[startup] pgvector extension, embedding column, and source_name column ready", "startup");
+    log("[startup] ingested_assets source_name column ready", "startup");
   } catch (err: any) {
     log(`[startup] pgvector migration skipped or failed: ${err?.message}`, "startup");
   }
