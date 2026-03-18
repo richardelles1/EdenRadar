@@ -2552,19 +2552,43 @@ export const losAlamosScraper: InstitutionScraper = {
       return [];
     }
 
-    // Attempt to load archived (Wayback) versions of detail pages for descriptions
+    // Validate discovered URLs against the live site — only keep listings that respond.
+    // lanl.gov currently blocks Replit IPs so all live checks will likely fail;
+    // in that case return [] gracefully rather than emitting stale/unresolvable listings.
     const toTitle = (u: string) =>
       (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 
-    const results: ScrapedListing[] = techUrls.map((u) => ({
-      title: toTitle(u),
-      description: "",
-      url: `https://web.archive.org/web/${u}`,
-      institution: INST,
-    }));
+    const liveResults: ScrapedListing[] = [];
+    const CHECK_TIMEOUT = 8_000;
+    const BATCH = 10; // Concurrent HEAD requests
 
-    console.log(`[scraper] ${INST}: ${results.length} listings (CDX archived)`);
-    return results;
+    for (let i = 0; i < techUrls.length; i += BATCH) {
+      const batch = techUrls.slice(i, i + BATCH);
+      const checks = await Promise.allSettled(
+        batch.map(async (u) => {
+          const res = await fetch(u, {
+            method: "HEAD",
+            signal: AbortSignal.timeout(CHECK_TIMEOUT),
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+            redirect: "follow",
+          });
+          return res.ok ? u : null;
+        })
+      );
+      for (const r of checks) {
+        const url = r.status === "fulfilled" ? r.value : null;
+        if (!url) continue;
+        liveResults.push({ title: toTitle(url), description: "", url, institution: INST });
+      }
+    }
+
+    if (liveResults.length === 0) {
+      console.log(`[scraper] ${INST}: CDX found ${techUrls.length} historical URLs but none are live (lanl.gov blocks Replit IPs)`);
+      return [];
+    }
+
+    console.log(`[scraper] ${INST}: ${liveResults.length} live listings`);
+    return liveResults;
   },
 };
 
@@ -4131,20 +4155,92 @@ export const nottinghamScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
-// ── TechLink (DoD Technology Transfer) — Playwright (Task #136) ───────────────
+// ── TechLink (DoD Technology Transfer) — API-first + Playwright fallback (Task #136) ─
 // techlinkcenter.org/technologies — React SPA backed by CloudFront CDN.
 // robots.txt: /technologies not disallowed. Legal: DoD Partnership Intermediary
 // under 15 U.S.C. § 3715; purpose is public discovery and licensing.
-// The public REST API at cloudfront.net/api/public/v1/tech returns 404 server-side
-// (CORS-restricted; only reachable from the browser Origin). Must use Playwright.
-// Fix (Task #136): use domcontentloaded + explicit delay instead of networkidle
-// (networkidle times out on SPAs that poll continuously); wrap waitForSelector
-// in .catch() so a slow render doesn't throw and abort the whole run.
+//
+// Strategy:
+//   1. REST API (server-side) — CloudFront CDN exposes a public /api/public/v1/tech
+//      endpoint. Attempt paginated JSON fetch first; if it returns valid data, use it.
+//   2. Playwright — fallback if the API returns 404 or empty data. Uses
+//      domcontentloaded + 5 s explicit wait (networkidle times out on SPAs that poll).
+//      waitForSelector wrapped in .catch() so timeout does not abort the run.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "TechLink (DoD Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
+    const API_BASE = "https://d2vrpothuwvesb.cloudfront.net/api/public/v1/tech";
+
+    // ── Strategy 1: REST API ─────────────────────────────────────────────────
+    const apiResults: ScrapedListing[] = [];
+    try {
+      // Try common paged formats: offset/limit, page/size, page/pageSize
+      const PAGE_SIZE = 100;
+      let page = 1;
+      let morePages = true;
+
+      while (morePages && page <= 50) {
+        let resp: Response | null = null;
+        // Try multiple query-string conventions until one succeeds
+        for (const qs of [
+          `?page=${page}&limit=${PAGE_SIZE}`,
+          `?page=${page}&pageSize=${PAGE_SIZE}`,
+          `?offset=${(page - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}`,
+          `?page=${page}&per_page=${PAGE_SIZE}`,
+        ]) {
+          try {
+            const r = await fetch(`${API_BASE}${qs}`, {
+              signal: AbortSignal.timeout(15_000),
+              headers: {
+                "Accept": "application/json",
+                "Origin": BASE,
+                "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)",
+              },
+            });
+            if (r.ok) { resp = r; break; }
+          } catch { /* try next format */ }
+        }
+        if (!resp) { morePages = false; break; }
+
+        let body: unknown;
+        try { body = await resp.json(); } catch { morePages = false; break; }
+
+        // Normalise response shapes: { data: [...] }, { results: [...] }, or bare []
+        const items: unknown[] = Array.isArray(body)
+          ? body
+          : Array.isArray((body as Record<string, unknown>)?.data)
+            ? (body as Record<string, unknown[]>).data
+            : Array.isArray((body as Record<string, unknown>)?.results)
+              ? (body as Record<string, unknown[]>).results
+              : [];
+
+        if (items.length === 0) { morePages = false; break; }
+
+        for (const item of items) {
+          const r = item as Record<string, unknown>;
+          const title = String(r.title ?? r.name ?? r.techName ?? "").trim();
+          if (!title || title.length < 4) continue;
+          const slug = String(r.slug ?? r.id ?? r.uuid ?? r.techId ?? "").toString().trim();
+          const url = slug ? `${BASE}/technologies/${slug}` : BASE;
+          const description = String(r.description ?? r.summary ?? r.abstract ?? "").slice(0, 1000);
+          apiResults.push({ title, description, url, institution: INST });
+        }
+
+        page++;
+        if (items.length < PAGE_SIZE) morePages = false;
+      }
+    } catch {
+      // API unavailable — fall through to Playwright
+    }
+
+    if (apiResults.length > 0) {
+      console.log(`[scraper] ${INST}: ${apiResults.length} listings (REST API)`);
+      return apiResults;
+    }
+
+    // ── Strategy 2: Playwright ───────────────────────────────────────────────
     let browser: import("playwright").Browser | null = null;
     try {
       const { chromium } = await import("playwright");
@@ -4964,14 +5060,16 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
         return added;
       };
 
-      // Navigate with retry — Cloudflare challenge may delay first load by ~5–8 s
+      // Navigate with retry — Cloudflare challenge may delay first load by ~5–8 s.
+      // Use networkidle: Cloudflare's JS challenge fires network activity that must
+      // settle before the real page loads; networkidle waits for that to complete.
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          await page.goto(LISTING, { timeout: 60_000, waitUntil: "domcontentloaded" });
+          await page.goto(LISTING, { timeout: 75_000, waitUntil: "networkidle" });
 
-          // Wait long enough for Cloudflare challenge to complete (5–8 s) + JS render
-          await page.waitForTimeout(10_000);
+          // Extra 5 s for any remaining async JS rendering after network goes idle
+          await page.waitForTimeout(5_000);
 
           // Scroll to trigger any lazy-loaded items
           await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
@@ -5001,12 +5099,13 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
 
           await collectLinks();
 
-          // Follow ?page=N pagination — confirmed from user-provided URL ?page=3
+          // Follow ?page=N pagination — confirmed from user-provided URL ?page=3.
+          // Use networkidle on each page to allow Cloudflare + JS to fully settle.
           for (let pg = 2; pg <= 50; pg++) {
             const pageUrl = `${LISTING}?page=${pg}`;
             try {
-              await page.goto(pageUrl, { timeout: 45_000, waitUntil: "domcontentloaded" });
-              await page.waitForTimeout(5_000);
+              await page.goto(pageUrl, { timeout: 60_000, waitUntil: "networkidle" });
+              await page.waitForTimeout(3_000);
               await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
               await page.waitForTimeout(1_500);
               const added = await collectLinks();
