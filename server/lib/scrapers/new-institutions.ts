@@ -4721,37 +4721,28 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
   },
 };
 
-// ── International Scrapers — Batch E (Task #120) ─────────────────────────────
+// ── International Scrapers — Batch E (Task #120 → fixed Task #134) ───────────
 //
-// Probe results (confirmed from Replit egress IPs, 2026-03-17):
+// Original in-part scrapers returned 0 results for all 11 institutions.
+// Replaced with correct implementations per Task #134 (2026-03-18):
 //
-// ALL targets use the in-part platform (portals.in-part.com).
-// Landing pages: HTTP 200 confirmed for all 11 subdomains below.
-// in-part API (app.in-part.com/api/v3/public/opportunities): live data confirmed
-// for mcmaster; other portals may be empty or API-gated — createInPartScraper
-// handles this gracefully (API → SSR fallback → returns []).
+// UK targets:
+//   imperialScraper  — Imperial College London  → paginated HTML (imperial.ac.uk/technology-search)
+//   birminghamScraper — University of Birmingham → Flintbox (unibirmingham.flintbox.com)
+//   sheffieldScraper  — University of Sheffield  → HTML listing (sheffield.ac.uk/commercialisation)
+//   exeterScraper     — University of Exeter     → STUB (no usable public TTO portal)
+//   cardiffScraper    — Cardiff University       → STUB (no usable public TTO portal)
+//   dundeeScraper     — University of Dundee     → Flintbox (dundee.flintbox.com)
+//   warwickScraper    — University of Warwick    → STUB (no usable public TTO portal)
 //
-// Note: Batch C recorded in-part as "HTTP 000 from all Replit egress IPs" —
-// that was specific to the app.in-part.com/partners/ Playwright flow used at
-// the time. The portals.in-part.com subdomain + API v3 approach used here
-// is accessible from Replit egress today (2026-03-17).
+// Canada targets:
+//   mcgillScraper    — McGill University          → Flintbox (mcgill.flintbox.com)
+//   waterlooScraper  — University of Waterloo     → HTML catalog (uwaterloo.ca/watco-technologies)
+//   mcmasterScraper  — McMaster University        → HTML listing (research.mcmaster.ca/tech)
+//   calgaryScraper   — University of Calgary      → Flintbox (calgary.flintbox.com)
 //
-// UK targets (7):
-//   imperial   — Imperial College London      (imperial.portals.in-part.com → 200)
-//   birmingham — University of Birmingham     (birmingham.portals.in-part.com → 200)
-//   sheffield  — University of Sheffield      (sheffield.portals.in-part.com → 200)
-//   exeter     — University of Exeter         (exeter.portals.in-part.com → 200)
-//   cardiff    — Cardiff University           (cardiff.portals.in-part.com → 200)
-//   dundee     — University of Dundee         (dundee.portals.in-part.com → 200)
-//   warwick    — University of Warwick        (warwick.portals.in-part.com → 200)
-//
-// Canada targets (4):
-//   mcgill     — McGill University            (mcgill.portals.in-part.com → 200)
-//   waterloo   — University of Waterloo       (waterloo.portals.in-part.com → 200)
-//   mcmaster   — McMaster University          (mcmaster.portals.in-part.com → 200, API data confirmed)
-//   ucalgary   — University of Calgary        (ucalgary.portals.in-part.com → 200)
-//
-// Total: 267 → 278 scrapers
+// Exeter, Cardiff, Warwick stubs are NOT registered in ALL_SCRAPERS (index.ts).
+// Total active: 267 → 275 scrapers (8 UK/Canada active; 3 stubs excluded)
 
 // ── UK ────────────────────────────────────────────────────────────────────────
 
