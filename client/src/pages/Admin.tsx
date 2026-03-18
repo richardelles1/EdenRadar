@@ -3294,7 +3294,7 @@ function EdenTab({ pw }: { pw: string }) {
                           title="Good response"
                           data-testid={`button-feedback-up-${i}`}
                         >
-                          <ThumbsUp className="h-3 w-3" />
+                          <ThumbsUp className="h-3 w-3" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
                         </button>
                         <button
                           onClick={() => handleFeedback(i, "down")}
@@ -3302,7 +3302,7 @@ function EdenTab({ pw }: { pw: string }) {
                           title="Bad response"
                           data-testid={`button-feedback-down-${i}`}
                         >
-                          <ThumbsDown className="h-3 w-3" />
+                          <ThumbsDown className="h-3 w-3" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
                         </button>
                       </div>
                     )}

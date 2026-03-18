@@ -106,6 +106,22 @@ app.use((req, res, next) => {
     log(`[startup] eden_sessions migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Ensure eden_message_feedback table exists ─────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS eden_message_feedback (
+        id serial PRIMARY KEY,
+        session_id text NOT NULL,
+        message_index integer NOT NULL,
+        sentiment text NOT NULL,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] eden_message_feedback table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"
