@@ -2963,7 +2963,7 @@ function EdenTab({ pw }: { pw: string }) {
               {/* Empty state with starter chips */}
               {chatMessages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center" data-testid="chat-empty">
-                  <EdenConstellation isThinking={false} />
+                  <EdenConstellation isThinking={chatStreaming} />
                   <p className="text-sm font-semibold text-foreground mb-1 -mt-2">Ask EDEN anything</p>
                   <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
                     Semantic search over {emb?.totalEmbedded?.toLocaleString()} embedded TTO assets from {institutionCount} research institutions.
