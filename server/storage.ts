@@ -106,6 +106,11 @@ export interface IStorage {
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
   }): Promise<void>;
+  bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
+    id: number; target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+  }>): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
@@ -739,7 +744,17 @@ export class DatabaseStorage implements IStorage {
         abstract: ingestedAssets.abstract,
       })
       .from(ingestedAssets)
-      .where(and(eq(ingestedAssets.relevant, true), isNull(ingestedAssets.mechanismOfAction)));
+      .where(
+        and(
+          eq(ingestedAssets.relevant, true),
+          or(
+            isNull(ingestedAssets.mechanismOfAction),
+            isNull(ingestedAssets.innovationClaim),
+            isNull(ingestedAssets.unmetNeed),
+            isNull(ingestedAssets.comparableDrugs),
+          ),
+        ),
+      );
   }
 
   async updateIngestedAssetDeepEnrichment(id: number, data: {
@@ -764,6 +779,43 @@ export class DatabaseStorage implements IStorage {
       completenessScore: data.completenessScore,
       enrichedAt: new Date(),
     }).where(eq(ingestedAssets.id, id));
+  }
+
+  async bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
+    id: number; target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+  }>): Promise<number> {
+    if (batch.length === 0) return 0;
+    const now = new Date();
+    let written = 0;
+    await db.transaction(async (tx) => {
+      for (const data of batch) {
+        try {
+          await tx.update(ingestedAssets).set({
+            target: data.target,
+            modality: data.modality,
+            indication: data.indication,
+            developmentStage: data.developmentStage,
+            relevant: data.biotechRelevant,
+            categories: data.categories,
+            categoryConfidence: data.categoryConfidence,
+            innovationClaim: data.innovationClaim || null,
+            mechanismOfAction: data.mechanismOfAction || null,
+            ipType: data.ipType,
+            unmetNeed: data.unmetNeed || null,
+            comparableDrugs: data.comparableDrugs || null,
+            licensingReadiness: data.licensingReadiness,
+            completenessScore: data.completenessScore,
+            enrichedAt: now,
+          }).where(eq(ingestedAssets.id, data.id));
+          written++;
+        } catch (e) {
+          console.error(`[bulkUpdate] failed for asset ${data.id}:`, e);
+        }
+      }
+    });
+    return written;
   }
 
   async createDeepEnrichmentJob(total: number): Promise<EnrichmentJob> {

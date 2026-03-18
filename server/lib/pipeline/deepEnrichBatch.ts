@@ -49,28 +49,90 @@ export interface DeepEnrichAssetInput {
   abstract: string | null;
 }
 
+export interface DeepEnrichBatchResult {
+  results: Map<number, DeepEnrichResult>;
+  succeeded: number;
+  failed: number;
+}
+
+const FLUSH_SIZE = 50;
+const MAX_RETRIES = 4;
+const BASE_DELAY_MS = 1000;
+
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function withRetry<T>(fn: () => Promise<T>, assetId: number): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (e: any) {
+      lastErr = e;
+      const status: number | undefined = e?.status ?? e?.response?.status;
+      const isRetryable = status === 429 || (status != null && status >= 500);
+      if (!isRetryable || attempt === MAX_RETRIES) break;
+
+      let waitMs: number;
+      if (status === 429) {
+        const retryAfter = Number(e?.headers?.["retry-after"] ?? e?.response?.headers?.["retry-after"]);
+        waitMs = isFinite(retryAfter) && retryAfter > 0
+          ? retryAfter * 1000
+          : BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+      } else {
+        waitMs = BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 300;
+      }
+      console.warn(`[deepEnrich] asset ${assetId} attempt ${attempt + 1} failed (${status}), retrying in ${Math.round(waitMs)}ms`);
+      await sleep(waitMs);
+    }
+  }
+  throw lastErr;
+}
+
 export async function deepEnrichBatch(
   assets: DeepEnrichAssetInput[],
   concurrency = 20,
-  onEach?: (id: number, result: DeepEnrichResult) => Promise<void>,
-  onProgress?: (processed: number, total: number) => void,
-): Promise<Map<number, DeepEnrichResult>> {
-  const results = new Map<number, DeepEnrichResult>();
+  onFlush: (results: DeepEnrichResult[]) => Promise<number>,
+  onProgress?: (processed: number, total: number, succeeded: number, failed: number) => void,
+): Promise<DeepEnrichBatchResult> {
+  const allResults = new Map<number, DeepEnrichResult>();
   let idx = 0;
   let processed = 0;
+  let totalSucceeded = 0;
+  let totalFailed = 0;
   const total = assets.length;
+  const buffer: DeepEnrichResult[] = [];
+  let flushLock = false;
+
+  async function flushBuffer(force = false) {
+    if (flushLock) return;
+    if (!force && buffer.length < FLUSH_SIZE) return;
+    if (buffer.length === 0) return;
+    flushLock = true;
+    const chunk = buffer.splice(0, buffer.length);
+    try {
+      const written = await onFlush(chunk);
+      totalSucceeded += written;
+    } catch (e) {
+      console.error("[deepEnrich] flush error:", e);
+    } finally {
+      flushLock = false;
+    }
+  }
 
   async function worker() {
-    while (idx < assets.length) {
-      const asset = assets[idx++];
+    while (true) {
+      let asset: DeepEnrichAssetInput | undefined;
+      if (idx >= assets.length) break;
+      asset = assets[idx++];
       if (!asset) continue;
 
+      let succeeded = false;
       try {
-        const classification = await classifyAsset(
-          asset.assetName,
-          asset.summary,
-          asset.abstract ?? undefined,
-          "gpt-4o",
+        const classification = await withRetry(
+          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o"),
+          asset.id,
         );
 
         const completenessScore = computeCompletenessScore({
@@ -103,20 +165,26 @@ export async function deepEnrichBatch(
           completenessScore,
         };
 
-        results.set(asset.id, result);
-        if (onEach) {
-          try { await onEach(asset.id, result); } catch {}
+        allResults.set(asset.id, result);
+        buffer.push(result);
+        succeeded = true;
+
+        if (buffer.length >= FLUSH_SIZE && !flushLock) {
+          await flushBuffer();
         }
       } catch (e) {
-        console.error(`[deepEnrich] failed for asset ${asset.id}:`, e);
+        console.error(`[deepEnrich] permanently failed for asset ${asset.id}:`, e);
       }
 
+      if (!succeeded) totalFailed++;
       processed++;
-      onProgress?.(processed, total);
+      onProgress?.(processed, total, totalSucceeded, totalFailed);
     }
   }
 
   const workers = Array.from({ length: Math.min(concurrency, assets.length || 1) }, worker);
   await Promise.all(workers);
-  return results;
+  await flushBuffer(true);
+
+  return { results: allResults, succeeded: totalSucceeded, failed: totalFailed };
 }

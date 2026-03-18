@@ -1421,6 +1421,8 @@ export async function registerRoutes(
   let edenRunning = false;
   let edenProcessed = 0;
   let edenTotal = 0;
+  let edenImproved = 0;
+  let edenFailed = 0;
 
   app.get("/api/admin/eden/stats", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
@@ -1446,6 +1448,9 @@ export async function registerRoutes(
       edenProcessed = 0;
       edenRunning = true;
 
+      edenImproved = 0;
+      edenFailed = 0;
+
       const job = await storage.createDeepEnrichmentJob(assets.length);
       edenJobId = job.id;
 
@@ -1454,25 +1459,34 @@ export async function registerRoutes(
       deepEnrichBatch(
         assets,
         20,
-        async (id, result) => {
-          await storage.updateIngestedAssetDeepEnrichment(id, result);
+        async (batch) => {
+          return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch);
         },
-        async (processed, total) => {
+        (processed, _total, succeeded, failed) => {
           edenProcessed = processed;
+          edenImproved = succeeded;
+          edenFailed = failed;
           if (edenJobId !== null) {
-            await storage.updateEnrichmentJob(edenJobId, { processed }).catch(() => {});
+            storage.updateEnrichmentJob(edenJobId, { processed, improved: succeeded }).catch(() => {});
           }
         },
-      ).then(async () => {
+      ).then(async (batchResult) => {
         edenRunning = false;
+        edenImproved = batchResult.succeeded;
+        edenFailed = batchResult.failed;
         if (edenJobId !== null) {
-          await storage.updateEnrichmentJob(edenJobId, { status: "done", completedAt: new Date(), processed: edenTotal, improved: edenTotal }).catch(() => {});
+          await storage.updateEnrichmentJob(edenJobId, {
+            status: "done",
+            completedAt: new Date(),
+            processed: batchResult.succeeded + batchResult.failed,
+            improved: batchResult.succeeded,
+          }).catch(() => {});
         }
-        console.log(`[EDEN] Deep enrichment complete: ${edenTotal} assets processed`);
+        console.log(`[EDEN] Deep enrichment complete: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
       }).catch(async (e) => {
         edenRunning = false;
         if (edenJobId !== null) {
-          await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date() }).catch(() => {});
+          await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date(), processed: edenProcessed, improved: edenImproved }).catch(() => {});
         }
         console.error("[EDEN] Deep enrichment failed:", e);
       });
@@ -1491,6 +1505,8 @@ export async function registerRoutes(
         running: edenRunning,
         processed: edenProcessed,
         total: edenTotal,
+        succeeded: edenImproved,
+        failed: edenFailed,
         job: latest ?? null,
       });
     } catch (err: any) {

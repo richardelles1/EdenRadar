@@ -2489,7 +2489,9 @@ type EdenStatusResponse = {
   running: boolean;
   processed: number;
   total: number;
-  job: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
+  succeeded: number;
+  failed: number;
+  job: { id: number; total: number; processed: number; improved: number; status: string; startedAt: string; completedAt: string | null } | null;
 };
 
 function EdenTab({ pw }: { pw: string }) {
@@ -2542,7 +2544,7 @@ function EdenTab({ pw }: { pw: string }) {
   });
 
   const cov = stats?.coverage;
-  const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total } : null;
+  const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total, succeeded: 0, failed: 0 } : null;
   const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
   const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
   const remaining = cov ? cov.totalRelevant - cov.deepEnriched : 0;
@@ -2603,11 +2605,15 @@ function EdenTab({ pw }: { pw: string }) {
           <div className="flex items-center gap-2 mb-3">
             <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
             <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-              Deep enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()} assets
+              Deep enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()} processed
             </span>
             <span className="ml-auto text-sm font-bold text-emerald-600">{pct}%</span>
           </div>
-          <Progress value={pct ?? 0} className="h-2" />
+          <Progress value={pct ?? 0} className="h-2 mb-3" />
+          <div className="flex gap-4 text-xs text-muted-foreground">
+            <span><span className="font-semibold text-emerald-600">{(live.succeeded ?? 0).toLocaleString()}</span> written</span>
+            {(live.failed ?? 0) > 0 && <span><span className="font-semibold text-red-500">{live.failed.toLocaleString()}</span> failed</span>}
+          </div>
         </div>
       )}
 
