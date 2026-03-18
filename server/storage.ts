@@ -1157,7 +1157,7 @@ export class DatabaseStorage implements IStorage {
         summary, categories,
         0.85 AS similarity
       FROM ingested_assets
-      WHERE relevant = true AND LOWER(institution) LIKE ${pattern}
+      WHERE relevant = true AND source_type = 'tech_transfer' AND LOWER(institution) LIKE ${pattern}
       ORDER BY last_seen_at DESC
       LIMIT ${limit}
     `);
@@ -1185,7 +1185,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void> {
-    await db.insert(edenMessageFeedback).values({ sessionId, messageIndex, sentiment });
+    await db.execute(sql`
+      INSERT INTO eden_message_feedback (session_id, message_index, sentiment)
+      VALUES (${sessionId}, ${messageIndex}, ${sentiment})
+      ON CONFLICT (session_id, message_index) DO UPDATE SET sentiment = EXCLUDED.sentiment
+    `);
   }
 
   async getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>> {

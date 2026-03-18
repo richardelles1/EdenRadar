@@ -117,6 +117,10 @@ app.use((req, res, next) => {
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`
+      CREATE UNIQUE INDEX IF NOT EXISTS eden_message_feedback_session_msg_uidx
+      ON eden_message_feedback(session_id, message_index)
+    `);
     log("[startup] eden_message_feedback table ready", "startup");
   } catch (err: any) {
     log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
