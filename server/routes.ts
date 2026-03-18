@@ -1765,6 +1765,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/eden/feedback/:sessionId", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const data = await storage.getEdenFeedbackForSession(req.params.sessionId);
+      return res.json(data);
+    } catch (err) {
+      console.error("[EDEN feedback GET]", err);
+      return res.status(500).json({ error: "Failed" });
+    }
+  });
+
   app.post("/api/eden/feedback", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });

@@ -186,6 +186,7 @@ export interface IStorage {
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
   listEdenSessions(limit?: number): Promise<EdenSession[]>;
   createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
+  getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1185,6 +1186,15 @@ export class DatabaseStorage implements IStorage {
 
   async createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void> {
     await db.insert(edenMessageFeedback).values({ sessionId, messageIndex, sentiment });
+  }
+
+  async getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>> {
+    const rows = await db
+      .select({ messageIndex: edenMessageFeedback.messageIndex, sentiment: edenMessageFeedback.sentiment })
+      .from(edenMessageFeedback)
+      .where(eq(edenMessageFeedback.sessionId, sessionId))
+      .orderBy(edenMessageFeedback.messageIndex);
+    return rows;
   }
 
   async getOrCreateEdenSession(sessionId: string): Promise<EdenSession> {

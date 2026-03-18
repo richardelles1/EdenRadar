@@ -3047,19 +3047,39 @@ function EdenTab({ pw }: { pw: string }) {
     if (messageFeedback[msgIndex]) return;
     setMessageFeedback((prev) => ({ ...prev, [msgIndex]: sentiment }));
     try {
-      await fetch("/api/eden/feedback", {
+      const res = await fetch("/api/eden/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
         body: JSON.stringify({ sessionId: chatSessionId, messageIndex: msgIndex, sentiment }),
       });
+      if (!res.ok) throw new Error("server error");
+      toast({ title: "Feedback noted — thanks!", duration: 2000 });
     } catch {
       setMessageFeedback((prev) => { const n = { ...prev }; delete n[msgIndex]; return n; });
+      toast({ title: "Couldn't save feedback", variant: "destructive" });
     }
   }
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
+
+  useEffect(() => {
+    if (!chatSessionId) return;
+    fetch(`/api/eden/feedback/${chatSessionId}`, { headers: { "x-admin-password": pw } })
+      .then((r) => r.ok ? r.json() : [])
+      .then((data: Array<{ messageIndex: number; sentiment: string }>) => {
+        if (!Array.isArray(data)) return;
+        const map: Record<number, "up" | "down"> = {};
+        for (const item of data) {
+          if (item.sentiment === "up" || item.sentiment === "down") {
+            map[item.messageIndex] = item.sentiment as "up" | "down";
+          }
+        }
+        setMessageFeedback(map);
+      })
+      .catch(() => {});
+  }, [chatSessionId]);
 
   const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
     (transcript) => setChatInput(chatInput ? `${chatInput} ${transcript}` : transcript)
