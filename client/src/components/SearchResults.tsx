@@ -9,7 +9,7 @@ type SearchResultsProps = {
   hasSearched: boolean;
   query?: string;
   savedAssetIds: Set<string>;
-  onSave: (asset: ScoredAsset) => void;
+  onSave?: (asset: ScoredAsset) => void;
   onUnsave: (id: string, assetName?: string) => void;
 };
 

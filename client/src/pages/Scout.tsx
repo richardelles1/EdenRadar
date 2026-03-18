@@ -309,33 +309,6 @@ export default function Scout() {
     },
   });
 
-  const saveMutation = useMutation({
-    mutationFn: async (asset: ScoredAsset) => {
-      const res = await apiRequest("POST", "/api/saved-assets", {
-        asset_name: asset.asset_name,
-        target: asset.target,
-        modality: asset.modality,
-        development_stage: asset.development_stage,
-        disease_indication: asset.indication,
-        summary: asset.summary,
-        source_title: asset.signals?.[0]?.title ?? asset.asset_name,
-        source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-        publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-        source_name: asset.source_types?.[0] ?? "unknown",
-        source_url: asset.source_urls?.[0] ?? undefined,
-        pmid: asset.id,
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      toast({ title: "Asset saved", description: "Added to your pipeline." });
-    },
-    onError: (err: any) => {
-      toast({ title: "Save failed", description: err.message, variant: "destructive" });
-    },
-  });
-
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       await apiRequest("DELETE", `/api/saved-assets/${id}`);
@@ -634,7 +607,6 @@ export default function Scout() {
                 hasSearched={hasSearched}
                 query={currentQuery}
                 savedAssetIds={savedAssetIds}
-                onSave={() => {}}
                 onUnsave={handleUnsave}
               />
             )}
