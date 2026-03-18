@@ -43,7 +43,7 @@ function pickBest<T extends string | undefined>(vals: (T | undefined)[], prefer?
       if (found) return found;
     }
   }
-  const longest = nonUnknown.reduce((a, b) => (a.length >= b.length ? a : b));
+  const longest = nonUnknown.reduce((a, b) => ((a ?? "").length >= (b ?? "").length ? a : b));
   return longest;
 }
 

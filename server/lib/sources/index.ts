@@ -138,7 +138,7 @@ async function searchLabDiscoveries(query: string): Promise<RawSignal[]> {
     institution_or_sponsor: c.institution,
     date: c.createdAt.toISOString().slice(0, 10),
     stage_hint: c.developmentStage,
-    url: c.publicationLink ?? c.patentLink ?? undefined,
+    url: c.publicationLink ?? c.patentLink ?? "",
     metadata: {
       researchArea: c.researchArea,
       technologyType: c.technologyType,

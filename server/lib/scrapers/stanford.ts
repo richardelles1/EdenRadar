@@ -33,7 +33,7 @@ export const stanfordScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: detected ${lastPage + 1} pages (pages 0–${lastPage})`);
 
       // Extract listings from a parsed page
-      function extractListings($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void {
+      const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void => {
         $("a[href]").each((_, el) => {
           const href = $(el).attr("href") ?? "";
           if (!href.startsWith("/technology/")) return;

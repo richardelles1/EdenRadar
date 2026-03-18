@@ -187,40 +187,52 @@ export function hasMeaningfulFilters(filters: QueryFilters): boolean {
 
 // ── Session focus management ──────────────────────────────────────────────
 
-const RESET_PATTERNS = [
-  /\b(?:start fresh|start over|reset|clear filters?|new search|forget(?: that)?|remove filter|broaden|show everything|all assets?|no filter)\b/i,
-  /\b(?:scratch that|never ?mind|actually let'?s|let'?s try something different)\b/i,
+const PURE_RESET_PATTERNS = [
+  /\b(?:start fresh|start over|reset|clear filters?|new search|forget that|remove filter|show everything|all assets?|no filter|broaden)\b/i,
+  /\b(?:never ?mind|ignore (?:that|the filter))\b/i,
 ];
 
-function shouldResetFocus(message: string): boolean {
-  return RESET_PATTERNS.some((r) => r.test(message));
-}
+const PIVOT_PATTERNS = [
+  /\b(?:actually|scratch that|let'?s try something different|instead let'?s)\b/i,
+];
 
-function extractFocusUpdates(message: string, current: SessionFocusContext): SessionFocusContext {
-  if (shouldResetFocus(message)) return {};
-
-  const updated = { ...current };
-
+function extractRawFilters(message: string): SessionFocusContext {
+  const filters: SessionFocusContext = {};
   const modality = detectModality(message);
-  if (modality) updated.modality = modality;
-
+  if (modality) filters.modality = modality;
   const geography = detectGeography(message);
-  if (geography) updated.geography = geography;
-
+  if (geography) filters.geography = geography;
   const stage = detectStage(message);
-  if (stage) updated.stage = stage;
-
+  if (stage) filters.stage = stage;
   const indication = detectIndication(message);
-  if (indication) updated.indication = indication;
-
+  if (indication) filters.indication = indication;
   const instMatch = message.match(
     /(?:from|at|by)\s+([\w\s]+?(?:university|institute|college|hospital|MIT|Stanford|Harvard|Yale|Columbia|Duke|Cornell|Johns Hopkins)[\w\s]*)/i
   );
-  if (instMatch?.[1]) {
-    updated.institution = instMatch[1].trim();
+  if (instMatch?.[1]) filters.institution = instMatch[1].trim();
+  return filters;
+}
+
+function extractFocusUpdates(message: string, current: SessionFocusContext): SessionFocusContext {
+  // Pure reset — no new intent: "start fresh", "clear filters", "never mind"
+  if (PURE_RESET_PATTERNS.some((r) => r.test(message))) {
+    const newFilters = extractRawFilters(message);
+    // If accompanied by new filters (e.g. "start fresh with gene therapy"), apply those
+    return Object.keys(newFilters).length > 0 ? newFilters : {};
   }
 
-  return updated;
+  // Pivot — "actually, let's focus on X" → discard old context, apply only new filters
+  if (PIVOT_PATTERNS.some((r) => r.test(message))) {
+    const newFilters = extractRawFilters(message);
+    // If pivot comes with meaningful new filters, replace context (not merge)
+    if (Object.keys(newFilters).length > 0) return newFilters;
+    // Bare pivot with no new content ("actually, never mind") → clear
+    return {};
+  }
+
+  // Normal accumulation — merge new filters on top of existing context
+  const newFilters = extractRawFilters(message);
+  return { ...current, ...newFilters };
 }
 
 export function getOrUpdateSessionFocus(sessionId: string, message: string): SessionFocusContext {
@@ -518,7 +530,44 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     return `There are **${total} relevant assets** in total. The most active institutions: ${top5}.`;
   }
 
+  // ── Institution-count intent: "how many institutions", "how many US universities" ──
+  if (/how many\s+(?:\w+\s+)?(?:institutions?|universities|ttlos?|tech transfer offices?|schools?)/i.test(lower)) {
+    const geoHint = detectGeographyFromText(lower);
+    const geoRxStr = geoHint ? GEO_INSTITUTION_REGEX[geoHint] : undefined;
+    const countResult = await db.execute(
+      geoRxStr
+        ? sql`SELECT COUNT(DISTINCT institution)::int AS count FROM ingested_assets WHERE relevant = true AND institution ~* ${geoRxStr}`
+        : sql`SELECT COUNT(DISTINCT institution)::int AS count FROM ingested_assets WHERE relevant = true`
+    );
+    const count = Number((countResult.rows[0] as Record<string, unknown>)?.count ?? 0);
+    if (!count) return null;
+    const geoLabel = geoHint ? ` ${geoHint.toUpperCase()}` : "";
+    return `There are **${count} distinct${geoLabel} institutions** with relevant assets indexed in the portfolio.`;
+  }
+
+  // ── Generic count/total fallback — handles "what's the total", "give me a count", etc. ──
+  if (/what'?s\s+the\s+total|give\s+me\s+(?:a\s+)?count|total\s+count|overall\s+count|how\s+many\s+do\s+you\s+have|how\s+many\s+are\s+there|how\s+large\s+is|size\s+of\s+the/i.test(lower)) {
+    const totalResult = await db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`);
+    const total = Number((totalResult.rows[0] as Record<string, unknown>)?.total ?? 0);
+    if (!total) return null;
+    return `Total relevant assets indexed in the portfolio: **${total.toLocaleString()}**`;
+  }
+
   return null;
+}
+
+function detectGeographyFromText(text: string): GeoKey | undefined {
+  const padded = ` ${text.toLowerCase()} `;
+  const GEO_MAP: Record<string, GeoKey> = {
+    "american": "us", " us ": "us", "u.s.": "us", "united states": "us",
+    "european": "eu", " eu ": "eu", "europe ": "eu",
+    "british": "uk", " uk ": "uk", "united kingdom": "uk",
+    "asian": "asia",
+  };
+  for (const [pat, geo] of Object.entries(GEO_MAP)) {
+    if (padded.includes(pat)) return geo;
+  }
+  return undefined;
 }
 
 export { resolveAggregationQuery };

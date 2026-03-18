@@ -2490,7 +2490,7 @@ export async function registerRoutes(
   app.post("/api/research/projects/:id/files", uploadMiddleware.single("file"), async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     const section = (req.query.section as string) || "general";
     const allowedSections = ["section4", "section5", "section8", "general"];
@@ -2632,7 +2632,7 @@ export async function registerRoutes(
   app.post("/api/research/discoveries/:id/files", uploadMiddleware.single("file"), async (req, res) => {
     const researcherId = req.headers["x-researcher-id"] as string;
     if (!researcherId) return res.status(400).json({ error: "Missing x-researcher-id header" });
-    const id = parseInt(req.params.id);
+    const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     const file = req.file;
     if (!file) return res.status(400).json({ error: "No file provided" });
@@ -2897,7 +2897,7 @@ Be specific and evidence-grounded. Do not speculate beyond what the results show
       let idx = 0;
       const queue = [...selected];
 
-      async function worker() {
+      const worker = async () => {
         while (idx < queue.length) {
           const ref = queue[idx++];
           if (!ref) continue;
@@ -3422,8 +3422,9 @@ If a field cannot be determined, use "N/A".`
       const attachedFiles = attachedFileSchema.parse(req.body.attachedFiles ?? []);
       const [concept] = await db
         .insert(conceptCards)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .values({
-          ...parsed,
+          ...(parsed as any),
           submitterEmail: conceptEmail,
           credibilityScore: aiScore,
           credibilityRationale: aiRationale,
@@ -3439,7 +3440,7 @@ If a field cannot be determined, use "N/A".`
 
   app.delete("/api/discovery/concepts/:id", verifyConceptAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const conceptUserId = req.headers["x-concept-user-id"] as string;
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
@@ -3483,7 +3484,7 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/discovery/concepts/:id/interest", verifyAnyAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const type = (req.body?.type as string) || "collaborating";
       if (!["collaborating", "funding", "advising"].includes(type)) {
@@ -3556,7 +3557,7 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/discovery/concepts/:id/my-interest", verifyAnyAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const userId = req.headers["x-user-id"] as string;
       const rows = await db
@@ -3577,7 +3578,7 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/discovery/concepts/:id/interests", verifyConceptAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const conceptUserId = req.headers["x-concept-user-id"] as string;
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
@@ -3601,7 +3602,7 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/discovery/concepts/:id/contact", verifyAnyAuth, async (req, res) => {
     try {
-      const id = parseInt(req.params.id);
+      const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const userId = req.headers["x-user-id"] as string;
 

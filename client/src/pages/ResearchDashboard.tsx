@@ -299,7 +299,7 @@ export default function ResearchDashboard() {
                 <div className="flex items-start justify-between gap-3">
                   <h3 className="text-sm font-semibold text-foreground leading-snug line-clamp-2">{g.title}</h3>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    {g.metadata?.source_label && (
+                    {!!g.metadata?.source_label && (
                       <Badge variant="secondary" className="text-[9px] bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
                         {g.metadata.source_label as string}
                       </Badge>

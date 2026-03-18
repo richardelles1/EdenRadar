@@ -966,13 +966,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createResearchProject(data: InsertResearchProject): Promise<ResearchProject> {
-    const [row] = await db.insert(researchProjects).values(data).returning();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [row] = await db.insert(researchProjects).values(data as any).returning();
     return row;
   }
 
   async updateResearchProject(id: number, researcherId: string, data: Partial<InsertResearchProject>): Promise<ResearchProject | undefined> {
     const [row] = await db.update(researchProjects)
-      .set({ ...data, lastEditedAt: new Date() })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set({ ...data, lastEditedAt: new Date() } as any)
       .where(and(eq(researchProjects.id, id), eq(researchProjects.researcherId, researcherId)))
       .returning();
     return row;
@@ -1003,7 +1005,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createDiscoveryCard(data: InsertDiscoveryCard): Promise<DiscoveryCard> {
-    const [row] = await db.insert(discoveryCards).values(data).returning();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const [row] = await db.insert(discoveryCards).values(data as any).returning();
     return row;
   }
 
@@ -1017,7 +1020,8 @@ export class DatabaseStorage implements IStorage {
 
   async updateDiscoveryCard(id: number, researcherId: string, data: Partial<InsertDiscoveryCard>): Promise<DiscoveryCard | undefined> {
     const [row] = await db.update(discoveryCards)
-      .set(data)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set(data as any)
       .where(and(eq(discoveryCards.id, id), eq(discoveryCards.researcherId, researcherId)))
       .returning();
     return row;
