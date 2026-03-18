@@ -106,5 +106,7 @@ export function useSpeechRecognition(onTranscript: (text: string) => void) {
     }
   }, [state, start, stop]);
 
-  return { state, isSupported, toggle, stop };
+  const isListening = state === "listening";
+
+  return { state, isListening, isSupported, start, stop, toggle };
 }

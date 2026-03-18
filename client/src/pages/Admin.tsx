@@ -2840,10 +2840,9 @@ function EdenTab({ pw }: { pw: string }) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  const { state: speechState, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
+  const { isListening, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
     (transcript) => setChatInput(chatInput ? `${chatInput} ${transcript}` : transcript)
   );
-  const isListening = speechState === "listening";
 
   const cov = stats?.coverage;
   const emb = stats?.embeddingCoverage;
