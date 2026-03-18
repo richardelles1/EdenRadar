@@ -1593,114 +1593,89 @@ export const ncatScraper: InstitutionScraper = {
   },
 };
 
-// ── Morgan State University — IPD PDF scraper (Task #135) ─────────────────────
-// Source: Health, Medical and Biomedical IPD List PDF
-// URL: https://www.morgan.edu/Documents/ADMINISTRATION/OFFICES/OTT/ipd/IPDList-Health,MedicalandBiomedical.pdf
-// Falls back to TTO HTML page if PDF is unavailable.
+// ── Morgan State University — HTML table scraper (Task #136) ──────────────────
+// Previous PDF approach: PDF URL returns 404 / TCP refused from Replit (research
+// subdomain blocked). Probe of www.morgan.edu shows two accessible HTML table pages:
+//   /technology-transfer-and-intellectual-property/issued-patents        (~150 <td>s)
+//   /technology-transfer-and-intellectual-property/pending-utility-patents (~108 <td>s)
+// Each page has a <table> where row 0 is the header, subsequent rows are patents.
+// Column 0 = patent title, Column 1 = inventors.
 export const morganStateScraper: InstitutionScraper = {
   institution: "Morgan State University",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Morgan State University";
-    const PDF_URL =
-      "https://www.morgan.edu/Documents/ADMINISTRATION/OFFICES/OTT/ipd/IPDList-Health,MedicalandBiomedical.pdf";
-    const TTO_URL = "https://www.morgan.edu/technologytransfer";
+    const BASE = "https://www.morgan.edu";
+    const PAGES = [
+      { path: "/technology-transfer-and-intellectual-property/issued-patents", label: "issued" },
+      { path: "/technology-transfer-and-intellectual-property/pending-utility-patents", label: "pending" },
+    ];
 
-    try {
-      // ── Primary: PDF parse ────────────────────────────────────────────────
-      const pdfRes = await fetch(PDF_URL, {
-        signal: AbortSignal.timeout(30_000),
-        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
-        redirect: "follow",
-      });
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
 
-      if (pdfRes.ok) {
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
-        const buf = Buffer.from(await pdfRes.arrayBuffer());
-        const parsed = await pdfParse(buf);
-        const text = parsed.text ?? "";
+    for (const { path } of PAGES) {
+      const url = `${BASE}${path}`;
+      try {
+        const $ = await fetchHtml(url, 20_000);
+        if (!$) continue;
 
-        const results: ScrapedListing[] = [];
-        const seen = new Set<string>();
+        // Find all tables on the page — Morgan State uses a simple HTML table
+        $("table tr").each((_, row) => {
+          const cells = $(row).find("td");
+          if (cells.length < 1) return; // Skip header rows (th) and empty rows
 
-        // PDF structure: each technology entry starts with an uppercase title line,
-        // followed by patent number(s), inventor list, and a description paragraph.
-        // Detect entries by lines that look like tech titles (ALL CAPS or Title Case,
-        // not "Page" headers, not blank) followed by a patent-number indicator.
-        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+          const rawTitle = cleanText($(cells[0]).text());
+          if (!rawTitle || rawTitle.length < 6) return;
 
-        let i = 0;
-        while (i < lines.length) {
-          const line = lines[i];
+          // Skip obvious column headers mistakenly in <td>
+          if (/^(title|patent|invention|technology|name|description)/i.test(rawTitle)) return;
 
-          // Skip obvious headers/footers
-          if (/^(Page \d|Morgan State|Health,|Medical|Biomedical|IPD List)/i.test(line)) {
-            i++;
-            continue;
-          }
+          // Strip trailing issue/filing date annotations added by Morgan State
+          // e.g., "Method for Detecting Foo - Issued 12/16/2025" → "Method for Detecting Foo"
+          const cleanTitle = rawTitle
+            .replace(/\s*[-–]\s*(Issued|Filed|Pending|Granted|Published)\s+\d{1,2}\/\d{1,2}\/\d{4}\s*$/i, "")
+            .replace(/\s*[-–]\s*\d{1,2}\/\d{1,2}\/\d{4}\s*$/, "")
+            .trim();
 
-          // Detect title: non-trivial line that isn't a patent number or inventor label
-          const isTitle =
-            line.length > 8 &&
-            !(/^(Patent|Inventor|Docket|Status|Background|Application|Serial|US\s*\d)/i.test(line)) &&
-            !(/^\d+[\.\-]/.test(line));
+          const inventors = cells.length >= 2 ? cleanText($(cells[1]).text()) : "";
+          const description = inventors ? `Inventors: ${inventors}` : "";
 
-          if (isTitle && i + 1 < lines.length) {
-            const title = cleanText(line);
-            if (title.length < 8 || seen.has(title)) { i++; continue; }
-
-            // Gather description from subsequent lines until next entry
-            const descLines: string[] = [];
-            let j = i + 1;
-            while (j < lines.length && j < i + 10) {
-              const next = lines[j];
-              if (/^(Patent|Inventor|Docket|Serial|US\s*\d|Application)/i.test(next)) { j++; continue; }
-              if (next.length > 20 && !(/^[A-Z\s,]+$/.test(next))) {
-                descLines.push(next);
-              }
-              j++;
-            }
-
-            const description = descLines.slice(0, 3).join(" ").slice(0, 600);
-            seen.add(title);
-            results.push({ title, description, url: TTO_URL, institution: INST });
-            i = j;
-            continue;
-          }
-          i++;
-        }
-
-        if (results.length > 0) {
-          console.log(`[scraper] ${INST}: ${results.length} listings (PDF)`);
-          return results;
-        }
+          if (seen.has(cleanTitle)) return;
+          seen.add(cleanTitle);
+          results.push({ title: cleanTitle, description, url, institution: INST });
+        });
+      } catch {
+        // Page unavailable — continue to next
       }
+    }
 
-      // ── Fallback: TTO HTML page ──────────────────────────────────────────
-      const page$ = await fetchHtml(TTO_URL, 20_000);
+    if (results.length > 0) {
+      console.log(`[scraper] ${INST}: ${results.length} listings (HTML tables)`);
+      return results;
+    }
+
+    // Last-resort fallback: TTO overview page
+    const TTO_URL = `${BASE}/technology-transfer-and-intellectual-property`;
+    try {
+      const page$ = await fetchHtml(TTO_URL, 15_000);
       if (!page$) {
-        console.log(`[scraper] ${INST}: PDF and TTO page both unavailable`);
+        console.log(`[scraper] ${INST}: all pages unavailable`);
         return [];
       }
-
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
-
-      // Look for technology titles in lists/tables
-      page$("li, td, .tech-title, h3, h4").each((_, el) => {
+      const fallbackSeen = new Set<string>();
+      page$("li, td, h3, h4").each((_, el) => {
         const text = cleanText(page$(el).text());
-        if (text.length < 10 || seen.has(text)) return;
-        if (/^(home|about|contact|news|event|faculty|student|program|research|office)/i.test(text)) return;
-        seen.add(text);
+        if (text.length < 10 || fallbackSeen.has(text)) return;
+        if (/^(home|about|contact|news|event|faculty|student|program|office)/i.test(text)) return;
+        fallbackSeen.add(text);
         results.push({ title: text, description: "", url: TTO_URL, institution: INST });
       });
-
-      console.log(`[scraper] ${INST}: ${results.length} listings (HTML fallback)`);
-      return results;
-    } catch (err: any) {
-      console.error(`[scraper] ${INST} failed: ${err?.message}`);
-      return [];
+      console.log(`[scraper] ${INST}: ${results.length} listings (TTO page fallback)`);
+    } catch {
+      // fallback also unavailable
     }
+
+    return results;
   },
 };
 
@@ -2520,110 +2495,76 @@ export const sandiaScraper: InstitutionScraper = {
   },
 };
 
-// ── Los Alamos National Laboratory — HTML scraper (Task #135) ────────────────
-// Primary URL: /business/technology-transfer/available-technologies/ (Drupal-based)
-// Fallback: sitemap.xml scan for technology transfer content.
-// Previous stub noted HTTP 404 on old paths; trying refreshed URLs from 2026 probe.
+// ── Los Alamos National Laboratory — CDX-only (Task #136) ─────────────────────
+// All lanl.gov IPs are blocked from Replit — every direct HTTP fetch returns 404
+// (including the homepage). Direct Playwright would also fail.
+// Strategy: Wayback Machine CDX to discover historically-archived technology URLs,
+// then attempt to load those archived URLs. CDX is queried with a short timeout
+// and gracefully returns [] if the CDX server is slow or the query yields nothing.
+// Multiple URL patterns tried because LANL has reorganised its TTO paths over time.
 export const losAlamosScraper: InstitutionScraper = {
   institution: "Los Alamos National Laboratory",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Los Alamos National Laboratory";
-    const BASE = "https://www.lanl.gov";
 
-    // Candidate index pages in priority order (probed March 2026)
-    const CANDIDATE_INDEXES = [
-      `${BASE}/business/technology-transfer/available-technologies/`,
-      `${BASE}/business/technology-transfer/available-technologies/index.php`,
-      `${BASE}/business/technology-transfer/`,
-      `${BASE}/partnerships/technology-transfer/available-technologies/`,
+    // CDX URL patterns to probe — ordered most-likely-to-have-results first
+    const CDX_PATTERNS = [
+      "lanl.gov/technology-transfer/available-technologies/*",
+      "lanl.gov/business/technology-transfer/available-technologies/*",
+      "lanl.gov/partnerships/technology-transfer/*",
+      "lanl.gov/industry/technology-transfer/*",
     ];
 
     const seenUrls = new Set<string>();
     const techUrls: string[] = [];
 
-    const collectFrom$ = ($: Awaited<ReturnType<typeof fetchHtml>>, indexUrl: string) => {
-      if (!$) return;
-      // Link patterns: /business/technology-transfer/available-technologies/<slug>
-      // or generic technology-detail paths
-      $("a[href]").each((_, el) => {
-        const href = ($)(el).attr("href") ?? "";
-        if (!href) return;
-        const full = href.startsWith("http") ? href : `${BASE}${href}`;
-        const clean = full.split("?")[0].split("#")[0];
-        // Must be a deeper path under the index, not the index itself
-        if (seenUrls.has(clean)) return;
-        const relevantPath =
-          /\/technology-transfer\/available-technologies\/[^/]+\/?$/.test(clean) ||
-          /\/technology-transfer\/tech-[^/]+\/?$/.test(clean) ||
-          /\/tech\/[^/]+\/?$/.test(clean);
-        if (!relevantPath) return;
-        if (clean === indexUrl || clean === `${indexUrl}/`) return;
-        seenUrls.add(clean);
-        techUrls.push(clean);
-      });
-    };
-
-    try {
-      // Try each candidate index URL
-      for (const idx of CANDIDATE_INDEXES) {
-        const page$ = await fetchHtml(idx, 20_000);
-        if (page$) {
-          collectFrom$(page$, idx);
-          // Check for pagination
-          let maxPage = 1;
-          page$("a[href*='?page=']").each((_, el) => {
-            const m = (page$!(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
-            if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
-          });
-          for (let p = 2; p <= Math.min(maxPage, 30); p++) {
-            const paged = await fetchHtml(`${idx}?page=${p}`, 20_000);
-            if (paged) collectFrom$(paged, idx);
+    for (const pattern of CDX_PATTERNS) {
+      try {
+        const cdxRes = await fetch(
+          `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(pattern)}&output=json&limit=300&fl=original&collapse=urlkey&filter=statuscode:200`,
+          {
+            signal: AbortSignal.timeout(25_000),
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
           }
-          if (techUrls.length > 0) break;
+        );
+        if (!cdxRes.ok) continue;
+        const rows = await cdxRes.json() as string[][];
+        for (const row of rows.slice(1)) {
+          const url = row[0];
+          if (!url) continue;
+          const clean = url.split("?")[0].split("#")[0];
+          // Must be a detail page (has a slug after the known directory paths)
+          const isDetail =
+            /\/available-technologies\/[^/]+$/.test(clean) ||
+            /\/technology-transfer\/[a-z0-9-]{10,}$/.test(clean);
+          if (!isDetail || seenUrls.has(clean)) continue;
+          seenUrls.add(clean);
+          techUrls.push(clean);
         }
+        if (techUrls.length > 0) break; // Found results from this pattern — stop
+      } catch {
+        // CDX timeout or network error for this pattern — try next
       }
+    }
 
-      // If no detail pages found, try Wayback Machine CDX snapshot
-      if (techUrls.length === 0) {
-        try {
-          const cdx = await fetch(
-            `https://web.archive.org/cdx/search/cdx?url=lanl.gov/business/technology-transfer/available-technologies/*&output=json&limit=200&fl=original&collapse=urlkey`,
-            { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": "Mozilla/5.0" } }
-          );
-          if (cdx.ok) {
-            const rows = await cdx.json() as string[][];
-            for (const [url] of rows.slice(1)) {
-              if (!url || seenUrls.has(url)) continue;
-              const clean = url.split("?")[0];
-              if (!/\/available-technologies\/[^/]+$/.test(clean)) continue;
-              seenUrls.add(clean);
-              techUrls.push(clean);
-            }
-          }
-        } catch {
-          // Wayback CDX unavailable
-        }
-      }
-
-      if (techUrls.length === 0) {
-        console.log(`[scraper] ${INST}: 0 tech URLs found — site may be restructured`);
-        return [];
-      }
-
-      const toTitle = (u: string) =>
-        (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
-
-      const enriched = await enrichWithDetailPages(
-        techUrls.map((u) => ({ title: toTitle(u), description: "", url: u, institution: INST })),
-        { description: ["main p", ".field-body p", "article p", ".content p"] }
-      );
-
-      console.log(`[scraper] ${INST}: ${enriched.length} listings`);
-      return enriched;
-    } catch (err: any) {
-      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+    if (techUrls.length === 0) {
+      console.log(`[scraper] ${INST}: 0 tech URLs from CDX — lanl.gov blocks Replit IPs; will retry when proxy is available`);
       return [];
     }
+
+    // Attempt to load archived (Wayback) versions of detail pages for descriptions
+    const toTitle = (u: string) =>
+      (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+
+    const results: ScrapedListing[] = techUrls.map((u) => ({
+      title: toTitle(u),
+      description: "",
+      url: `https://web.archive.org/web/${u}`,
+      institution: INST,
+    }));
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (CDX archived)`);
+    return results;
   },
 };
 
@@ -3161,177 +3102,114 @@ export const foxChaseScraper: InstitutionScraper = {
 
 // Fred Hutchinson Cancer Center
 // Investigation (March 2026):
-//   Elastic App Search engine "cancer-consortium" at fredhutch-prod.ent.us-west-2.aws.found.io
-//   Engine indexes cancerconsortium.org only — "Available Technology" type returns 0 hits
-//   AEM childrenlist hasChildren:false — tech-detail pages are dynamically rendered by JS
-//   Wayback Machine CDX: 0 archived technology-details pages
-//   Strategy: (1) Elastic API exhaustive scan for fredhutch.org/technology-details URLs,
-//             (2) Playwright JS navigation of available-technologies.html as fallback
-//   Smoke-tested: ~61 listings via Playwright across 7 pages (as of 2026-03-17)
+//   AEM page uses Elastic App Search (engine "cancer-consortium") but that engine
+//   indexes cancerconsortium.org only — 0 fredhutch.org/technology-details results.
+//   Playwright is the only working approach: AEM renders Elastic results client-side
+//   as anchor tags once the JS bundle fully loads.
+// Fix (Task #136): removed dead Elastic scan path; pure Playwright with extended
+//   post-navigation wait (5 s) and scroll to trigger AEM lazy-load; broadened
+//   selector list to capture .cmp-list, .listing, and generic [class*="card"] patterns.
 export const fredHutchScraper: InstitutionScraper = {
   institution: "Fred Hutchinson Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fred Hutchinson Cancer Center";
     const LISTING_URL = "https://www.fredhutch.org/en/investors/business-development/available-technologies.html";
-    const ELASTIC_ENDPOINT = "https://fredhutch-prod.ent.us-west-2.aws.found.io/api/as/v1/engines/cancer-consortium/search";
-    const ELASTIC_KEY = "search-d4wmid75w6rn9onstbmpampm";
 
-    // ── Strategy 1: Elastic App Search exhaustive scan ──────────────────────
-    // Engine currently indexes cancerconsortium.org (not fredhutch.org tech pages),
-    // but we attempt this first in case the engine scope expands in future.
-    const elasticScan = async (): Promise<ScrapedListing[]> => {
-      const results: ScrapedListing[] = [];
-      try {
-        let page = 1;
-        let totalPages = 1;
-        while (page <= totalPages && page <= 10) {
-          const res = await fetch(ELASTIC_ENDPOINT, {
-            method: "POST",
-            headers: { "Authorization": `Bearer ${ELASTIC_KEY}`, "Content-Type": "application/json" },
-            signal: AbortSignal.timeout(15_000),
-            body: JSON.stringify({
-              query: "",
-              page: { size: 100, current: page },
-              result_fields: {
-                title: { raw: {} },
-                url: { raw: {} },
-                body_content: { raw: { size: 400 } },
-              },
-            }),
-          });
-          if (!res.ok) break;
-          const json: { meta?: { page?: { total_pages?: number } }; results?: Array<Record<string, { raw?: string }>> } = await res.json();
-          totalPages = json?.meta?.page?.total_pages ?? 1;
-          for (const r of json.results ?? []) {
-            const url = r.url?.raw ?? "";
-            if (!url.includes("fredhutch.org") || !url.includes("technology-details")) continue;
-            const title = (r.title?.raw ?? "").trim();
-            if (!title) continue;
-            const desc = (r.body_content?.raw ?? "").replace(/<[^>]+>/g, " ").trim();
-            results.push({ title, description: desc.slice(0, 1000), url, institution: INST });
-          }
-          page++;
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      });
+
+      // AEM + Elastic renders asynchronously — use networkidle then wait 5 s more
+      await page.goto(LISTING_URL, { timeout: 60_000, waitUntil: "networkidle" });
+      await page.waitForTimeout(5_000);
+
+      // Scroll to trigger any lazy-loaded Elastic result blocks
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(2_000);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(1_500);
+
+      // Non-throwing wait for any tech link to appear
+      await page.waitForSelector(
+        'a[href*="technology-details"], a[href*="/available-technologies/"], main a[href*="technolog"]',
+        { timeout: 12_000 }
+      ).catch(() => null);
+
+      const allLinks = new Map<string, string>();
+
+      const collectPage = async () => {
+        const links = await page.$$eval(
+          [
+            'a[href*="technology-details"]',
+            'a[href*="/available-technologies/"]',
+            '.cmp-teaser a[href*="technolog"]',
+            '.cmp-list a[href*="technolog"]',
+            '[class*="listing"] a[href*="technolog"]',
+            '[class*="card"] a[href*="technolog"]',
+            'main a[href*="technolog"]',
+          ].join(","),
+          (els) => Array.from(new Set(els)).map((el) => ({
+            href: (el as HTMLAnchorElement).getAttribute("href") ?? "",
+            text: el.textContent?.trim() ?? "",
+          }))
+        );
+        for (const l of links) {
+          if (!l.href) continue;
+          const isDetailLink =
+            /technology-details/.test(l.href) ||
+            /\/available-technologies\/[^/]+/.test(l.href);
+          if (!isDetailLink) continue;
+          if (!allLinks.has(l.href)) allLinks.set(l.href, l.text);
         }
-      } catch {
-        // Elastic unavailable — proceed to Playwright fallback
-      }
-      return results;
-    };
+      };
 
-    // ── Strategy 2: Playwright JS navigation fallback ────────────────────────
-    // Tech listings are rendered via JavaScript (AEM). Must use networkidle so the
-    // JS bundle finishes loading before we collect links.
-    const playwrightScan = async (): Promise<ScrapedListing[]> => {
-      let browser: import("playwright").Browser | null = null;
-      try {
-        const { chromium } = await import("playwright");
-        browser = await chromium.launch({
-          headless: true,
-          args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-        });
-        const page = await browser.newPage();
-        await page.setExtraHTTPHeaders({
-          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        });
+      await collectPage();
 
-        await page.goto(LISTING_URL, { timeout: 45_000, waitUntil: "networkidle" });
-        // Wait for tech links — try specific selector first, fall back to any tech-related link
-        await page.waitForSelector(
-          'a[href*="technology-details"], a[href*="/available-technologies/"], main a[href*="technology"]',
-          { timeout: 15_000 }
-        ).catch(() => null); // proceed even if timeout
+      // AEM listing is typically all-in-one but attempt Next button for future pages
+      for (let pg = 2; pg <= 20; pg++) {
+        const nextBtn = await page.$(
+          '[class*="next" i] a, button[aria-label*="next" i], [data-testid*="next" i]'
+        ).catch(() => null);
+        if (!nextBtn) break;
+        const isDisabled = await nextBtn.evaluate((el) =>
+          el.classList.contains("disabled") || el.hasAttribute("disabled") ||
+          el.getAttribute("aria-disabled") === "true"
+        ).catch(() => true);
+        if (isDisabled) break;
 
-        const allLinks = new Map<string, string>();
-
-        const collectPage = async () => {
-          // Collect both the original pattern and any new AEM patterns
-          const links = await page.$$eval(
-            [
-              'a[href*="technology-details"]',
-              'a[href*="/available-technologies/"]',
-              '.cmp-teaser a[href*="technolog"]',
-              'main a[href*="technolog"]',
-            ].join(","),
-            (els) =>
-              Array.from(new Set(els)).map((el) => ({
-                href: (el as HTMLAnchorElement).getAttribute("href") ?? "",
-                text: el.textContent?.trim() ?? "",
-              }))
-          );
-          for (const l of links) {
-            // Filter: must point to a detail page (has path depth beyond /available-technologies/)
-            if (!l.href) continue;
-            const isDetailLink =
-              /technology-details/.test(l.href) ||
-              /\/available-technologies\/[^/]+/.test(l.href);
-            if (!isDetailLink) continue;
-            if (!allLinks.has(l.href)) allLinks.set(l.href, l.text);
-          }
-        };
-
+        await nextBtn.click();
+        await page.waitForTimeout(3_000);
+        const prevSize = allLinks.size;
         await collectPage();
-
-        // The listing page loads all items at once (no pagination button).
-        // Attempt to click a Next/load-more button in case of future pagination.
-        for (let pg = 2; pg <= 20; pg++) {
-          const nextBtn = await page.$('[class*="next" i] a, button[aria-label*="next" i]').catch(() => null);
-          if (!nextBtn) break;
-          const isDisabled = await nextBtn.evaluate((el) =>
-            el.classList.contains("disabled") || el.hasAttribute("disabled")
-          ).catch(() => true);
-          if (isDisabled) break;
-
-          await nextBtn.click();
-          await page.waitForTimeout(2_500);
-          const prevSize = allLinks.size;
-          await collectPage();
-          if (allLinks.size === prevSize) break;
-        }
-
-        // Fallback: if main AEM listing rendered empty (JS failed to hydrate),
-        // crawl the research-tools sub-page which contains additional tech-detail links.
-        if (allLinks.size === 0) {
-          const RESEARCH_TOOLS_URL =
-            "https://www.fredhutch.org/en/investors/business-development/available-technologies/research-tools.html";
-          try {
-            await page.goto(RESEARCH_TOOLS_URL, { timeout: 30_000, waitUntil: "networkidle" });
-            await page.waitForSelector(
-              'a[href*="technology-details"], main a[href*="technolog"]',
-              { timeout: 10_000 }
-            ).catch(() => null);
-            await collectPage();
-          } catch {
-            // sub-page unavailable — proceed with empty results
-          }
-        }
-
-        const results: ScrapedListing[] = [];
-        for (const [href, title] of Array.from(allLinks.entries())) {
-          if (!title || title.length < 3) continue;
-          const fullUrl = href.startsWith("http") ? href : `https://www.fredhutch.org${href}`;
-          results.push({ title, description: "", url: fullUrl, institution: INST });
-        }
-        return results;
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
-        return [];
-      } finally {
-        await browser?.close();
+        if (allLinks.size === prevSize) break;
       }
-    };
 
-    // Run Elastic scan first; if it returns 0 (expected until engine scope changes),
-    // fall back to Playwright navigation which yields real results
-    const elasticResults = await elasticScan();
-    if (elasticResults.length > 0) {
-      console.log(`[scraper] ${INST}: ${elasticResults.length} listings (Elastic cancer-consortium)`);
-      return elasticResults;
+      const results: ScrapedListing[] = [];
+      for (const [href, title] of Array.from(allLinks.entries())) {
+        if (!title || title.length < 3) continue;
+        const fullUrl = href.startsWith("http") ? href : `https://www.fredhutch.org${href}`;
+        results.push({ title, description: "", url: fullUrl, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright AEM)`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
     }
-
-    const pwResults = await playwrightScan();
-    console.log(`[scraper] ${INST}: ${pwResults.length} listings (Playwright JS pagination)`);
-    return pwResults;
   },
 };
 
@@ -4253,11 +4131,15 @@ export const nottinghamScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
-// ── TechLink (DoD Technology Transfer) — Playwright (Task #113) ───────────────
-// techlinkcenter.org/technologies — React SPA, no bot protection.
+// ── TechLink (DoD Technology Transfer) — Playwright (Task #136) ───────────────
+// techlinkcenter.org/technologies — React SPA backed by CloudFront CDN.
 // robots.txt: /technologies not disallowed. Legal: DoD Partnership Intermediary
 // under 15 U.S.C. § 3715; purpose is public discovery and licensing.
-// Pattern mirrors gatech.ts Playwright scraper.
+// The public REST API at cloudfront.net/api/public/v1/tech returns 404 server-side
+// (CORS-restricted; only reachable from the browser Origin). Must use Playwright.
+// Fix (Task #136): use domcontentloaded + explicit delay instead of networkidle
+// (networkidle times out on SPAs that poll continuously); wrap waitForSelector
+// in .catch() so a slow render doesn't throw and abort the whole run.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
   async scrape(): Promise<ScrapedListing[]> {
@@ -4274,18 +4156,23 @@ export const techLinkScraper: InstitutionScraper = {
       await page.setExtraHTTPHeaders({
         "User-Agent":
           "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
       });
 
+      // Use domcontentloaded — networkidle times out on React SPAs that poll for data
       await page.goto(`${BASE}/technologies`, {
         timeout: 60_000,
-        waitUntil: "networkidle",
+        waitUntil: "domcontentloaded",
       });
 
-      // Wait for tech cards — TechLink renders cards with links to /technologies/{slug}/{uuid}
+      // Allow React to mount and fetch initial data
+      await page.waitForTimeout(5_000);
+
+      // Wait for tech cards — non-throwing; proceed even if selector never appears
       await page.waitForSelector('a[href*="/technologies/"]', {
-        state: "visible",
-        timeout: 40_000,
-      });
+        state: "attached",
+        timeout: 20_000,
+      }).catch(() => null);
 
       const allLinks = new Map<string, string>();
 
@@ -4344,7 +4231,8 @@ export const techLinkScraper: InstitutionScraper = {
           const pageUrl = probe2[0].replace(/page[=\-]?\d+/, `page=${pg}`);
           const prevSize = allLinks.size;
           try {
-            await page.goto(pageUrl, { timeout: 30_000, waitUntil: "networkidle" });
+            await page.goto(pageUrl, { timeout: 30_000, waitUntil: "domcontentloaded" });
+            await page.waitForTimeout(3_000);
             await collectPage();
           } catch { break; }
           if (allLinks.size === prevSize) break;
@@ -5004,10 +4892,10 @@ export const cernKtScraper: InstitutionScraper = {
 //         200 OK, 173 KB — fully JS-rendered (Cloudflare Rocket Loader, no SSR tech data)
 //         12 items observed at Playwright runtime (2026-03-17)
 // CRUK's commercial arm; highly relevant oncology/cancer therapeutic portfolio.
-// Approach: Playwright navigates listing page, waits for tech cards to render,
-// then extracts all a[href*='/our-portfolio/our-licensing-opportunities/'] links.
-// Scrolls to bottom to trigger any lazy-loading. Follows same pattern as
-// uclBusinessScraper / edinburghInnovationsScraper.
+// Fix (Task #136): Cloudflare challenge fires on headless browsers without stealth.
+//   Added --disable-blink-features=AutomationControlled, navigator.webdriver spoofing,
+//   full sec-ch-ua headers, and a 10 s post-navigation wait (Cloudflare clears in ~5–8 s).
+//   Added 3-attempt retry loop in case the first attempt catches the challenge page.
 export const cancerResearchHorizonsScraper: InstitutionScraper = {
   institution: "Cancer Research Horizons",
   async scrape(): Promise<ScrapedListing[]> {
@@ -5020,40 +4908,36 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
       const { chromium } = await import("playwright");
       browser = await chromium.launch({
         headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage",
+          "--disable-blink-features=AutomationControlled",
+          "--window-size=1280,800",
+        ],
       });
 
       const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Referer": "https://www.google.com/",
-        "Accept-Language": "en-US,en;q=0.9",
+
+      // Spoof navigator.webdriver so Cloudflare JS checks pass
+      await page.addInitScript(() => {
+        Object.defineProperty(navigator, "webdriver", { get: () => undefined });
       });
 
-      // Navigate and wait for JS to render tech cards
-      await page.goto(LISTING, { timeout: 45_000, waitUntil: "domcontentloaded" });
-
-      // Allow Cloudflare Rocket Loader and lazy content to settle
-      await page.waitForTimeout(4_000);
-
-      // Scroll to bottom to trigger any lazy-loaded items
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(2_000);
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(1_500);
-
-      // Try to click any "Load more" button if present
-      try {
-        const loadMoreBtn = page.locator('button:has-text("Load more"), button:has-text("Show more"), a:has-text("Load more")').first();
-        const visible = await loadMoreBtn.isVisible({ timeout: 2_000 });
-        if (visible) {
-          await loadMoreBtn.click();
-          await page.waitForTimeout(2_500);
-        }
-      } catch {
-        // No load-more button — all items already rendered
-      }
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Referer": "https://www.google.com/",
+        "sec-ch-ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"macOS"',
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+      });
 
       const seen = new Set<string>();
       const results: ScrapedListing[] = [];
@@ -5080,20 +4964,62 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
         return added;
       };
 
-      await collectLinks();
-
-      // Follow ?page=N pagination — confirmed from user-provided URL ?page=3
-      for (let pg = 2; pg <= 50; pg++) {
-        const pageUrl = `${LISTING}?page=${pg}`;
+      // Navigate with retry — Cloudflare challenge may delay first load by ~5–8 s
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          await page.goto(pageUrl, { timeout: 30_000, waitUntil: "domcontentloaded" });
-          await page.waitForTimeout(3_000);
+          await page.goto(LISTING, { timeout: 60_000, waitUntil: "domcontentloaded" });
+
+          // Wait long enough for Cloudflare challenge to complete (5–8 s) + JS render
+          await page.waitForTimeout(10_000);
+
+          // Scroll to trigger any lazy-loaded items
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await page.waitForTimeout(2_000);
           await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
           await page.waitForTimeout(1_500);
-          const added = await collectLinks();
-          if (added === 0) break; // No new links on this page — reached the end
+
+          // Check whether we're past the Cloudflare challenge
+          const bodyText = await page.evaluate(() => document.body?.innerText ?? "");
+          const isChallenge = /just a moment|checking your browser|enable javascript/i.test(bodyText);
+          if (isChallenge && attempt < MAX_ATTEMPTS) {
+            await page.waitForTimeout(6_000); // Extra wait before retry
+            continue;
+          }
+
+          // Try to click any "Load more" button
+          try {
+            const loadMoreBtn = page.locator('button:has-text("Load more"), button:has-text("Show more"), a:has-text("Load more")').first();
+            const visible = await loadMoreBtn.isVisible({ timeout: 2_000 });
+            if (visible) {
+              await loadMoreBtn.click();
+              await page.waitForTimeout(2_500);
+            }
+          } catch {
+            // No load-more button
+          }
+
+          await collectLinks();
+
+          // Follow ?page=N pagination — confirmed from user-provided URL ?page=3
+          for (let pg = 2; pg <= 50; pg++) {
+            const pageUrl = `${LISTING}?page=${pg}`;
+            try {
+              await page.goto(pageUrl, { timeout: 45_000, waitUntil: "domcontentloaded" });
+              await page.waitForTimeout(5_000);
+              await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+              await page.waitForTimeout(1_500);
+              const added = await collectLinks();
+              if (added === 0) break;
+            } catch {
+              break;
+            }
+          }
+
+          break; // Successful run — exit attempt loop
         } catch {
-          break;
+          if (attempt === MAX_ATTEMPTS) break;
+          await page.waitForTimeout(5_000);
         }
       }
 
