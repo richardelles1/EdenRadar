@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, type UserContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, type UserContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1821,7 +1821,10 @@ export async function registerRoutes(
     };
 
     try {
-      const session = await storage.getOrCreateEdenSession(sid);
+      const [session, portfolioStats] = await Promise.all([
+        storage.getOrCreateEdenSession(sid),
+        fetchPortfolioStats().catch(() => undefined),
+      ]);
       const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
@@ -1832,7 +1835,7 @@ export async function registerRoutes(
         sendEvent("context", { sessionId: sid, assets: [] });
 
         let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history, ctx)) {
+        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1849,7 +1852,7 @@ export async function registerRoutes(
         if (queryResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx)) {
+          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -1883,7 +1886,7 @@ export async function registerRoutes(
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx)) {
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1921,7 +1924,7 @@ export async function registerRoutes(
         sendEvent("context", { sessionId: sid, assets: assetPayload });
 
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx)) {
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
