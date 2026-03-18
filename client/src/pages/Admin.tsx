@@ -2769,12 +2769,15 @@ function CitationCard({ asset, index, adminPassword, savedIngestedIds }: {
       if (!res.ok) throw new Error("Failed to save asset");
       return res.json();
     },
-    onSuccess: () => {
+    onMutate: () => {
       setSavedLocally(true);
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       toast({ title: "Asset saved", description: asset.assetName });
     },
     onError: () => {
+      setSavedLocally(false);
       toast({ title: "Failed to save", description: "Please try again", variant: "destructive" });
     },
   });
