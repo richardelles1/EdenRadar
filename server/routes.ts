@@ -222,6 +222,7 @@ const dossierBodySchema = z.object({
 
 const saveAssetBodySchema = z.object({
   ingested_asset_id: z.number().int().optional(),
+  pipeline_list_id: z.number().int().optional().nullable(),
   asset_name: z.string(),
   target: z.string(),
   modality: z.string(),
@@ -560,9 +561,16 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/saved-assets", async (_req, res) => {
+  app.get("/api/saved-assets", async (req, res) => {
     try {
-      const assets = await storage.getSavedAssets();
+      const rawPl = req.query.pipelineListId;
+      let pipelineListId: number | null | undefined = undefined;
+      if (rawPl === "null") pipelineListId = null;
+      else if (rawPl !== undefined) {
+        const parsed = parseInt(rawPl as string, 10);
+        if (!isNaN(parsed)) pipelineListId = parsed;
+      }
+      const assets = await storage.getSavedAssets(pipelineListId);
       res.json({ assets });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch saved assets" });
@@ -574,6 +582,7 @@ export async function registerRoutes(
       const body = saveAssetBodySchema.parse(req.body);
       const asset = await storage.createSavedAsset({
         ingestedAssetId: body.ingested_asset_id ?? null,
+        pipelineListId: body.pipeline_list_id ?? null,
         assetName: body.asset_name,
         target: body.target,
         modality: body.modality,
@@ -593,6 +602,19 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/saved-assets/:id/pipeline", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const { pipeline_list_id } = z.object({ pipeline_list_id: z.number().int().nullable() }).parse(req.body);
+      const asset = await storage.updateSavedAssetPipeline(id, pipeline_list_id);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      res.json({ asset });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
+    }
+  });
+
   app.delete("/api/saved-assets/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -601,6 +623,56 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
+    }
+  });
+
+  app.get("/api/pipelines", async (_req, res) => {
+    try {
+      const lists = await storage.getPipelineLists();
+      const all = await storage.getSavedAssets();
+      const counts: Record<number, number> = {};
+      let uncategorised = 0;
+      for (const a of all) {
+        if (a.pipelineListId == null) uncategorised++;
+        else counts[a.pipelineListId] = (counts[a.pipelineListId] ?? 0) + 1;
+      }
+      res.json({ pipelines: lists.map((l) => ({ ...l, assetCount: counts[l.id] ?? 0 })), uncategorisedCount: uncategorised });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch pipelines" });
+    }
+  });
+
+  app.post("/api/pipelines", async (req, res) => {
+    try {
+      const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+      const list = await storage.createPipelineList({ name });
+      res.status(201).json({ pipeline: { ...list, assetCount: 0 } });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to create pipeline" });
+    }
+  });
+
+  app.patch("/api/pipelines/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+      const list = await storage.updatePipelineList(id, name);
+      if (!list) return res.status(404).json({ error: "Pipeline not found" });
+      res.json({ pipeline: list });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
+    }
+  });
+
+  app.delete("/api/pipelines/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      await storage.deletePipelineList(id);
+      res.status(204).send();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to delete pipeline" });
     }
   });
 

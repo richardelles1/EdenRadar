@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Search,
-  Bookmark,
+  Layers,
   FileText,
   Bell,
   Building2,
@@ -24,7 +24,7 @@ type SavedAssetsResponse = { assets: SavedAsset[] };
 
 const NAV_ITEMS = [
   { href: "/scout", label: "Scout", icon: Search },
-  { href: "/assets", label: "Assets", icon: Bookmark },
+  { href: "/assets", label: "Pipelines", icon: Layers },
   { href: "/reports", label: "Reports", icon: FileText },
   { href: "/alerts", label: "Alerts", icon: Bell },
   { href: "/institutions", label: "Institutions", icon: Building2 },
@@ -91,7 +91,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{label}</span>
-                {label === "Assets" && savedCount > 0 && (
+                {label === "Pipelines" && savedCount > 0 && (
                   <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-none">
                     {savedCount}
                   </span>

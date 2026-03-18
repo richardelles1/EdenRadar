@@ -3,12 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
-  Bookmark, BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
+  BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
   FlaskConical, FileText, Building2, Key, ArrowRight, CalendarDays,
   Microscope,
 } from "lucide-react";
 import { ScoreBadge } from "./ScoreBadge";
 import { SourceBadge } from "./SourceBadge";
+import { PipelinePicker } from "./PipelinePicker";
 import type { ScoredAsset } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
 import { useLocation } from "wouter";
@@ -112,20 +113,18 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="sm" />
-            <Button
-              variant="ghost"
-              size="icon"
-              className="w-8 h-8 hover:bg-primary/10"
-              onClick={() => isSaved ? onUnsave?.(asset.id, asset.asset_name) : onSave?.(asset)}
-              data-testid={`button-save-${asset.id}`}
-              title={isSaved ? "Remove from saved" : "Save asset"}
-            >
-              {isSaved ? (
-                <BookmarkCheck className="w-4 h-4 text-primary" />
-              ) : (
-                <Bookmark className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
-              )}
-            </Button>
+            {isSaved ? (
+              <button
+                onClick={() => onUnsave?.(asset.id, asset.asset_name)}
+                className="w-7 h-7 rounded flex items-center justify-center text-primary bg-primary/10 border border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-150"
+                data-testid={`button-unsave-${asset.id}`}
+                title="Remove from saved"
+              >
+                <BookmarkCheck className="w-3.5 h-3.5" />
+              </button>
+            ) : (
+              <PipelinePicker asset={asset} variant="icon" />
+            )}
           </div>
         </div>
 

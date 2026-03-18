@@ -2,6 +2,7 @@ import {
   users, type User, type InsertUser,
   searchHistory, type SearchHistory, type InsertSearchHistory,
   savedAssets, type SavedAsset, type InsertSavedAsset,
+  pipelineLists, type PipelineList, type InsertPipelineList,
   ingestionRuns, type IngestionRun, type InsertIngestionRun,
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
   scanInstitutionCounts,
@@ -49,10 +50,17 @@ export interface IStorage {
   getSearchHistory(limit?: number): Promise<SearchHistory[]>;
   createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory>;
 
-  getSavedAssets(): Promise<SavedAsset[]>;
+  getSavedAssets(pipelineListId?: number | null): Promise<SavedAsset[]>;
   getSavedAsset(id: number): Promise<SavedAsset | undefined>;
   createSavedAsset(asset: InsertSavedAsset): Promise<SavedAsset>;
+  updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
   deleteSavedAsset(id: number): Promise<void>;
+
+  getPipelineLists(): Promise<PipelineList[]>;
+  getPipelineList(id: number): Promise<PipelineList | undefined>;
+  createPipelineList(data: InsertPipelineList): Promise<PipelineList>;
+  updatePipelineList(id: number, name: string): Promise<PipelineList | undefined>;
+  deletePipelineList(id: number): Promise<void>;
 
   createIngestionRun(): Promise<IngestionRun>;
   updateIngestionRun(id: number, data: Partial<InsertIngestionRun>): Promise<IngestionRun>;
@@ -215,7 +223,13 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getSavedAssets(): Promise<SavedAsset[]> {
+  async getSavedAssets(pipelineListId?: number | null): Promise<SavedAsset[]> {
+    if (pipelineListId === null) {
+      return db.select().from(savedAssets).where(isNull(savedAssets.pipelineListId)).orderBy(desc(savedAssets.savedAt));
+    }
+    if (pipelineListId !== undefined) {
+      return db.select().from(savedAssets).where(eq(savedAssets.pipelineListId, pipelineListId)).orderBy(desc(savedAssets.savedAt));
+    }
     return db.select().from(savedAssets).orderBy(desc(savedAssets.savedAt));
   }
 
@@ -229,8 +243,37 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined> {
+    const [row] = await db.update(savedAssets).set({ pipelineListId }).where(eq(savedAssets.id, id)).returning();
+    return row;
+  }
+
   async deleteSavedAsset(id: number): Promise<void> {
     await db.delete(savedAssets).where(eq(savedAssets.id, id));
+  }
+
+  async getPipelineLists(): Promise<PipelineList[]> {
+    return db.select().from(pipelineLists).orderBy(pipelineLists.createdAt);
+  }
+
+  async getPipelineList(id: number): Promise<PipelineList | undefined> {
+    const [row] = await db.select().from(pipelineLists).where(eq(pipelineLists.id, id));
+    return row;
+  }
+
+  async createPipelineList(data: InsertPipelineList): Promise<PipelineList> {
+    const [row] = await db.insert(pipelineLists).values(data).returning();
+    return row;
+  }
+
+  async updatePipelineList(id: number, name: string): Promise<PipelineList | undefined> {
+    const [row] = await db.update(pipelineLists).set({ name, updatedAt: new Date() }).where(eq(pipelineLists.id, id)).returning();
+    return row;
+  }
+
+  async deletePipelineList(id: number): Promise<void> {
+    await db.update(savedAssets).set({ pipelineListId: null }).where(eq(savedAssets.pipelineListId, id));
+    await db.delete(pipelineLists).where(eq(pipelineLists.id, id));
   }
 
   async createIngestionRun(): Promise<IngestionRun> {

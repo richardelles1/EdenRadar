@@ -634,7 +634,7 @@ export default function Scout() {
                 hasSearched={hasSearched}
                 query={currentQuery}
                 savedAssetIds={savedAssetIds}
-                onSave={(asset) => saveMutation.mutate(asset)}
+                onSave={() => {}}
                 onUnsave={handleUnsave}
               />
             )}

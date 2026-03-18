@@ -38,9 +38,25 @@ export const insertSearchHistorySchema = createInsertSchema(searchHistory).omit(
 export type InsertSearchHistory = z.infer<typeof insertSearchHistorySchema>;
 export type SearchHistory = typeof searchHistory.$inferSelect;
 
+export const pipelineLists = pgTable("pipeline_lists", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertPipelineListSchema = createInsertSchema(pipelineLists).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertPipelineList = z.infer<typeof insertPipelineListSchema>;
+export type PipelineList = typeof pipelineLists.$inferSelect;
+
 export const savedAssets = pgTable("saved_assets", {
   id: serial("id").primaryKey(),
   ingestedAssetId: integer("ingested_asset_id"),
+  pipelineListId: integer("pipeline_list_id"),
   assetName: text("asset_name").notNull(),
   target: text("target").notNull(),
   modality: text("modality").notNull(),
