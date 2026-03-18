@@ -2516,7 +2516,7 @@ const STARTER_QUESTIONS = [
   "Find CNS assets with defined mechanism of action from top universities",
   "What antibody-based therapeutics are available for autoimmune indications?",
   "Show me RNA therapy assets with innovation claims and licensing readiness",
-  "Which MIT or Stanford oncology assets have completeness scores above 70?",
+  "Which universities are licensing cardiovascular or metabolic assets right now?",
 ];
 
 function renderMdInline(text: string): (string | JSX.Element)[] {
@@ -2630,101 +2630,157 @@ function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; s
 }
 
 function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
-  const cx = 100, cy = 108;
-  const OR = { rx: 80, ry: 27 };
-  const MR = { rx: 54, ry: 18 };
-  const IR = { rx: 32, ry: 11 };
+  const W = 560, H = 520;
+  const cx = W / 2, cy = H / 2 + 10;
 
-  const outerPts = Array.from({ length: 24 }, (_, i) => {
-    const t = (i / 24) * Math.PI * 2;
-    const depth = (Math.sin(t) + 1) / 2;
-    return {
-      x: cx + OR.rx * Math.cos(t),
-      y: cy + OR.ry * Math.sin(t),
-      r: 0.9 + 2.5 * depth,
-      op: 0.14 + 0.72 * depth,
-      dur: isThinking ? 0.7 + (i % 4) * 0.18 : 1.8 + (i % 6) * 0.28,
-      delay: (i / 24) * (isThinking ? 1.1 : 3.0),
-    };
-  });
+  const HAL = { rx: 248, ry: 84 };
+  const R1  = { rx: 210, ry: 71 };
+  const R2  = { rx: 160, ry: 54 };
+  const R3  = { rx: 112, ry: 38 };
+  const R4  = { rx: 68,  ry: 23 };
+  const R5  = { rx: 34,  ry: 11 };
 
-  const midPts = Array.from({ length: 14 }, (_, i) => {
-    const t = (i / 14) * Math.PI * 2 + 0.35;
-    const depth = (Math.sin(t) + 1) / 2;
-    return {
-      x: cx + MR.rx * Math.cos(t),
-      y: cy + MR.ry * Math.sin(t),
-      r: 0.5 + 1.6 * depth,
-      op: 0.08 + 0.46 * depth,
-      dur: isThinking ? 0.6 + (i % 3) * 0.18 : 1.5 + (i % 5) * 0.28,
-      delay: (i / 14) * (isThinking ? 0.9 : 2.4) + 0.4,
-    };
-  });
+  function makePts(count: number, ring: { rx: number; ry: number }, offset = 0, think = isThinking) {
+    return Array.from({ length: count }, (_, i) => {
+      const t = (i / count) * Math.PI * 2 + offset;
+      const depth = (Math.sin(t) + 1) / 2;
+      return {
+        x: cx + ring.rx * Math.cos(t),
+        y: cy + ring.ry * Math.sin(t),
+        r: 0.8 + 3.4 * depth,
+        op: 0.09 + 0.76 * depth,
+        dur: think ? 0.55 + (i % 4) * 0.14 : 1.6 + (i % 6) * 0.32,
+        delay: (i / count) * (think ? 1.1 : 3.2),
+      };
+    });
+  }
 
-  const os = isThinking ? "1.9s" : "7s";
-  const ms = isThinking ? "1.4s" : "4.8s";
-  const op = `M ${cx + OR.rx},${cy} A ${OR.rx},${OR.ry} 0 1,0 ${cx - OR.rx},${cy} A ${OR.rx},${OR.ry} 0 1,0 ${cx + OR.rx},${cy} Z`;
-  const mp = `M ${cx + MR.rx},${cy} A ${MR.rx},${MR.ry} 0 1,1 ${cx - MR.rx},${cy} A ${MR.rx},${MR.ry} 0 1,1 ${cx + MR.rx},${cy} Z`;
+  const outerPts = makePts(48, R1, 0);
+  const midPts   = makePts(22, R2, 0.28);
+  const innerPts = makePts(12, R3, 0.55);
+
+  const rotDur = isThinking ? "8s"  : "22s";
+  const revDur = isThinking ? "14s" : "36s";
+  const orbDur = isThinking ? "2s"  : "7s";
+  const midDur = isThinking ? "3s"  : "9s";
+  const halDur = isThinking ? "5s"  : "14s";
+
+  const makePath = (ring: { rx: number; ry: number }, sweep: 0 | 1) =>
+    `M ${cx + ring.rx},${cy} A ${ring.rx},${ring.ry} 0 1,${sweep} ${cx - ring.rx},${cy} A ${ring.rx},${ring.ry} 0 1,${sweep} ${cx + ring.rx},${cy} Z`;
+
+  const p1 = makePath(R1, 0);
+  const p2 = makePath(R2, 1);
+  const p3 = makePath(HAL, 1);
 
   return (
-    <svg width={200} height={220} viewBox="0 0 200 220" fill="none" aria-hidden="true" className="mx-auto">
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden="true"
+      className="mx-auto w-full max-w-[420px]">
       <defs>
-        <filter id="eo-glow" x="-80%" y="-80%" width="260%" height="260%">
-          <feGaussianBlur stdDeviation="1.8" result="blur"/>
+        <filter id="eo-glow" x="-120%" y="-120%" width="340%" height="340%">
+          <feGaussianBlur stdDeviation="2.8" result="blur"/>
           <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <filter id="eo-halo" x="-150%" y="-150%" width="400%" height="400%">
-          <feGaussianBlur stdDeviation="4" result="blur"/>
+        <filter id="eo-halo" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="7" result="blur"/>
           <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
         </filter>
-        <radialGradient id="eo-bg" cx="50%" cy="52%" r="50%">
-          <stop offset="0%" stopColor="#10b981" stopOpacity="0.09"/>
-          <stop offset="65%" stopColor="#10b981" stopOpacity="0.02"/>
+        <filter id="eo-ambient" x="-200%" y="-200%" width="500%" height="500%">
+          <feGaussianBlur stdDeviation="28"/>
+        </filter>
+        <radialGradient id="eo-bg1" cx="50%" cy="52%" r="44%">
+          <stop offset="0%"   stopColor="#10b981" stopOpacity="0.13"/>
+          <stop offset="60%"  stopColor="#10b981" stopOpacity="0.04"/>
           <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
+        </radialGradient>
+        <radialGradient id="eo-bg2" cx="50%" cy="54%" r="26%">
+          <stop offset="0%"   stopColor="#6ee7b7" stopOpacity="0.09"/>
+          <stop offset="100%" stopColor="#6ee7b7" stopOpacity="0"/>
         </radialGradient>
       </defs>
       <style>{`
-        @keyframes eden-orb-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes eden-orb-rotate  { from { transform: rotate(0deg);    } to { transform: rotate(360deg);   } }
+        @keyframes eden-orb-counter { from { transform: rotate(0deg);    } to { transform: rotate(-360deg);  } }
       `}</style>
 
-      <ellipse cx={cx} cy={cy} rx="94" ry="94" fill="url(#eo-bg)"/>
+      {/* Ambient background glow */}
+      <ellipse cx={cx} cy={cy} rx="240" ry="240" fill="url(#eo-bg1)"/>
+      <ellipse cx={cx} cy={cy} rx="140" ry="140" fill="url(#eo-bg2)"/>
+      <circle  cx={cx} cy={cy + 30} r="100" fill="#10b981" fillOpacity="0.03" filter="url(#eo-ambient)"/>
+      <circle  cx={cx} cy={cy - 15} r="64"  fill="#6ee7b7" fillOpacity="0.04" filter="url(#eo-ambient)"/>
 
-      <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-rotate ${isThinking ? "8s" : "20s"} linear infinite` }}>
-        <ellipse cx={cx} cy={cy} rx={OR.rx} ry={OR.ry} stroke="#10b981" strokeWidth="0.6" strokeOpacity="0.18" strokeDasharray="5 9" fill="none"/>
-        <ellipse cx={cx} cy={cy} rx={MR.rx} ry={MR.ry} stroke="#10b981" strokeWidth="0.4" strokeOpacity="0.11" strokeDasharray="4 7" fill="none"/>
-        <ellipse cx={cx} cy={cy} rx={IR.rx} ry={IR.ry} stroke="#10b981" strokeWidth="0.3" strokeOpacity="0.07" strokeDasharray="3 5" fill="none"/>
-
-        {outerPts.map((p, i) => (
-          <circle key={`oe${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op} filter="url(#eo-glow)">
-            <animate attributeName="opacity" values={`${p.op * 0.4};${p.op};${p.op * 0.4}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
-          </circle>
-        ))}
-
-        {midPts.map((p, i) => (
-          <circle key={`me${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op}>
-            <animate attributeName="opacity" values={`${p.op * 0.3};${p.op};${p.op * 0.3}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
-          </circle>
-        ))}
-
-        {[0, 1, 2, 3].map((n) => (
-          <circle key={`orb${n}`} r={isThinking ? 2.8 : 2.2} fill="#10b981" fillOpacity="0.9" filter="url(#eo-halo)">
-            <animateMotion dur={os} begin={`${-n * parseFloat(os) / 4}s`} repeatCount="indefinite" path={op}/>
-          </circle>
-        ))}
-
-        {[0, 1].map((n) => (
-          <circle key={`morb${n}`} r={isThinking ? 2 : 1.4} fill="#6ee7b7" fillOpacity="0.65">
-            <animateMotion dur={ms} begin={`${-n * parseFloat(ms) / 2}s`} repeatCount="indefinite" path={mp}/>
+      {/* Counter-rotating outer halo */}
+      <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-counter ${revDur} linear infinite` }}>
+        <ellipse cx={cx} cy={cy} rx={HAL.rx} ry={HAL.ry}
+          stroke="#10b981" strokeWidth="0.55" strokeOpacity="0.08" strokeDasharray="9 20" fill="none"/>
+        {[0, 1, 2].map((n) => (
+          <circle key={`hal${n}`} r={isThinking ? 2.4 : 1.8} fill="#10b981" fillOpacity="0.4" filter="url(#eo-glow)">
+            <animateMotion dur={halDur} begin={`${-n * parseFloat(halDur) / 3}s`} repeatCount="indefinite" path={p3}/>
           </circle>
         ))}
       </g>
 
-      <circle cx={cx} cy={cy} r="16" fill="#10b981" fillOpacity="0.04"/>
-      <circle cx={cx} cy={cy} r={isThinking ? 5 : 4} fill="#10b981" filter="url(#eo-glow)">
-        <animate attributeName="r" values={isThinking ? "4;7;4" : "3;5.5;3"} dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
-        <animate attributeName="fill-opacity" values={isThinking ? "0.55;1;0.55" : "0.22;0.55;0.22"} dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
+      {/* Main rotating group */}
+      <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-rotate ${rotDur} linear infinite` }}>
+        <ellipse cx={cx} cy={cy} rx={R1.rx} ry={R1.ry} stroke="#10b981" strokeWidth="0.85" strokeOpacity="0.22" strokeDasharray="7 14" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={R2.rx} ry={R2.ry} stroke="#10b981" strokeWidth="0.65" strokeOpacity="0.16" strokeDasharray="6 11" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={R3.rx} ry={R3.ry} stroke="#10b981" strokeWidth="0.50" strokeOpacity="0.11" strokeDasharray="4  8" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={R4.rx} ry={R4.ry} stroke="#10b981" strokeWidth="0.35" strokeOpacity="0.07" strokeDasharray="3  6" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={R5.rx} ry={R5.ry} stroke="#10b981" strokeWidth="0.25" strokeOpacity="0.05" strokeDasharray="2  4" fill="none"/>
+
+        {/* Outer particle field — 48 depth-shaded particles */}
+        {outerPts.map((p, i) => (
+          <circle key={`oe${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op} filter="url(#eo-glow)">
+            <animate attributeName="opacity"
+              values={`${p.op * 0.35};${p.op};${p.op * 0.35}`}
+              dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
+
+        {/* Mid particle field — 22 particles */}
+        {midPts.map((p, i) => (
+          <circle key={`me${i}`} cx={p.x} cy={p.y} r={p.r * 0.72} fill="#10b981" fillOpacity={p.op * 0.78}>
+            <animate attributeName="opacity"
+              values={`${p.op * 0.25};${p.op * 0.78};${p.op * 0.25}`}
+              dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
+
+        {/* Inner particle field — 12 particles */}
+        {innerPts.map((p, i) => (
+          <circle key={`ie${i}`} cx={p.x} cy={p.y} r={p.r * 0.5} fill="#6ee7b7" fillOpacity={p.op * 0.58}>
+            <animate attributeName="opacity"
+              values={`${p.op * 0.18};${p.op * 0.58};${p.op * 0.18}`}
+              dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
+
+        {/* 4 fast orbital dots on outer ring */}
+        {[0, 1, 2, 3].map((n) => (
+          <circle key={`orb${n}`} r={isThinking ? 3.6 : 2.8} fill="#10b981" fillOpacity="0.92" filter="url(#eo-halo)">
+            <animateMotion dur={orbDur} begin={`${-n * parseFloat(orbDur) / 4}s`} repeatCount="indefinite" path={p1}/>
+          </circle>
+        ))}
+
+        {/* 3 orbital dots on mid ring (opposite sweep) */}
+        {[0, 1, 2].map((n) => (
+          <circle key={`morb${n}`} r={isThinking ? 2.4 : 1.9} fill="#6ee7b7" fillOpacity="0.72" filter="url(#eo-glow)">
+            <animateMotion dur={midDur} begin={`${-n * parseFloat(midDur) / 3}s`} repeatCount="indefinite" path={p2}/>
+          </circle>
+        ))}
+      </g>
+
+      {/* Core nucleus */}
+      <circle cx={cx} cy={cy} r="30" fill="#10b981" fillOpacity="0.04"/>
+      <circle cx={cx} cy={cy} r={isThinking ? 13 : 10} fill="#10b981" filter="url(#eo-halo)">
+        <animate attributeName="r"
+          values={isThinking ? "10;16;10" : "8;13;8"}
+          dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
+        <animate attributeName="fill-opacity"
+          values={isThinking ? "0.6;1;0.6" : "0.22;0.55;0.22"}
+          dur={isThinking ? "0.75s" : "2.4s"} repeatCount="indefinite"/>
       </circle>
-      <circle cx={cx} cy={cy} r="2" fill="#ecfdf5" fillOpacity="0.85"/>
+      <circle cx={cx} cy={cy} r="5"   fill="#ecfdf5" fillOpacity="0.9"/>
+      <circle cx={cx} cy={cy} r="2.5" fill="white"   fillOpacity="0.96"/>
     </svg>
   );
 }
@@ -3089,16 +3145,20 @@ function EdenTab({ pw }: { pw: string }) {
           <>
             <style>{`
               @keyframes em-slide-user {
-                from { opacity: 0; transform: translateX(12px); }
-                to   { opacity: 1; transform: translateX(0); }
+                from { opacity: 0; transform: translateX(20px) translateY(4px); }
+                to   { opacity: 1; transform: translateX(0) translateY(0); }
               }
               @keyframes em-slide-assistant {
-                from { opacity: 0; transform: translateX(-12px); }
-                to   { opacity: 1; transform: translateX(0); }
+                from { opacity: 0; transform: translateX(-20px) translateY(4px); }
+                to   { opacity: 1; transform: translateX(0) translateY(0); }
               }
               @keyframes em-fade-in {
-                from { opacity: 0; transform: scale(0.97); }
-                to   { opacity: 1; transform: scale(1); }
+                from { opacity: 0; transform: translateY(8px) scale(0.97); }
+                to   { opacity: 1; transform: translateY(0) scale(1); }
+              }
+              @keyframes em-fade-up {
+                from { opacity: 0; transform: translateY(12px); }
+                to   { opacity: 1; transform: translateY(0); }
               }
             `}</style>
             <div className="h-[520px] overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
@@ -3107,16 +3167,23 @@ function EdenTab({ pw }: { pw: string }) {
               {chatMessages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center gap-0" data-testid="chat-empty">
                   <EdenOrb isThinking={chatStreaming} />
-                  <p className="text-base font-semibold text-foreground mb-1 -mt-1">Ask EDEN anything</p>
-                  <p className="text-xs text-muted-foreground mb-5 text-center max-w-xs leading-relaxed">
+                  <p
+                    className="text-base font-semibold text-foreground mb-1 -mt-1"
+                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "60ms" }}
+                  >Ask EDEN anything</p>
+                  <p
+                    className="text-xs text-muted-foreground mb-5 text-center max-w-xs leading-relaxed"
+                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
+                  >
                     Your AI analyst for {emb?.totalEmbedded?.toLocaleString()} TTO assets across {institutionCount} research institutions.
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg" data-testid="starter-chips">
-                    {STARTER_QUESTIONS.map((q) => (
+                    {STARTER_QUESTIONS.map((q, qi) => (
                       <button
                         key={q}
                         onClick={() => sendChatMessage(q)}
                         className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors transition-transform duration-150 hover:scale-[1.02] text-left"
+                        style={{ animation: "em-fade-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${180 + qi * 40}ms` }}
                         data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
                       >
                         {q}
@@ -3131,7 +3198,7 @@ function EdenTab({ pw }: { pw: string }) {
                 <div
                   key={i}
                   className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  style={{ animation: msg.role === "user" ? "em-slide-user 220ms ease-out both" : "em-slide-assistant 220ms ease-out both" }}
+                  style={{ animation: msg.role === "user" ? "em-slide-user 340ms cubic-bezier(0.16, 1, 0.3, 1) both" : "em-slide-assistant 340ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
                   data-testid={`chat-msg-${i}`}
                 >
                   {msg.role === "assistant" && (
@@ -3189,7 +3256,7 @@ function EdenTab({ pw }: { pw: string }) {
                               {msg.assets.map((a, ci) => (
                                 <div
                                   key={a.id}
-                                  style={{ animation: "em-fade-in 200ms ease-out both", animationDelay: `${ci * 60}ms` }}
+                                  style={{ animation: "em-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 55}ms` }}
                                 >
                                   <CitationCard asset={a} index={ci} adminPassword={pw} savedIngestedIds={savedIngestedIds} />
                                 </div>
@@ -3264,9 +3331,17 @@ function EdenTab({ pw }: { pw: string }) {
           <div className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
-            <span className="text-xs text-muted-foreground ml-1">
-              {embPct}% embedded · {deepPct}% enriched
-            </span>
+            {embPct >= 100 && deepPct >= 90 ? (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 ml-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block"/>
+                Active
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[11px] text-muted-foreground ml-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block"/>
+                Indexing
+              </span>
+            )}
           </div>
           {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
         </button>
