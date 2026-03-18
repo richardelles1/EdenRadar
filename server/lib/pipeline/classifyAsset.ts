@@ -40,7 +40,8 @@ export async function classifyAsset(
   title: string,
   description: string,
   abstract?: string,
-  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini"
+  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini",
+  throwOnError = false,
 ): Promise<AssetClassification> {
   const inputText = [
     `Title: ${title}`,
@@ -95,7 +96,8 @@ Fields:
       comparableDrugs: (parsed.comparableDrugs ?? "").trim(),
       licensingReadiness: sanitize(parsed.licensingReadiness, LICENSING_READINESS, "unknown"),
     };
-  } catch {
+  } catch (e) {
+    if (throwOnError) throw e;
     return {
       biotechRelevant: false,
       target: "unknown",

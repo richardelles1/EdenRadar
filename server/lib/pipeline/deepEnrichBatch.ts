@@ -131,7 +131,7 @@ export async function deepEnrichBatch(
       let succeeded = false;
       try {
         const classification = await withRetry(
-          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o"),
+          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o", true),
           asset.id,
         );
 
