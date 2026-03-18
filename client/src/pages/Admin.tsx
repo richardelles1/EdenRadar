@@ -2957,14 +2957,31 @@ function EdenTab({ pw }: { pw: string }) {
         {/* Chat area */}
         {chatReady && (
           <>
-            <div className="h-[520px] overflow-y-auto p-5 space-y-5" data-testid="chat-messages">
+            <style>{`
+              @keyframes em-slide-user {
+                from { opacity: 0; transform: translateX(14px); }
+                to   { opacity: 1; transform: translateX(0); }
+              }
+              @keyframes em-slide-asst {
+                from { opacity: 0; transform: translateX(-14px); }
+                to   { opacity: 1; transform: translateX(0); }
+              }
+              @keyframes em-fade-in {
+                from { opacity: 0; transform: scale(0.97); }
+                to   { opacity: 1; transform: scale(1); }
+              }
+            `}</style>
+            <div className="h-[520px] overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
 
               {/* Empty state with starter chips */}
               {chatMessages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center" data-testid="chat-empty">
-                  <EdenConstellation isThinking={chatStreaming} />
-                  <p className="text-sm font-semibold text-foreground mb-1 -mt-2">Ask EDEN anything</p>
-                  <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
+                <div className="h-full flex flex-col items-center justify-center gap-0" data-testid="chat-empty">
+                  <div className="relative mb-1">
+                    <div className="absolute inset-0 rounded-full" style={{ background: "radial-gradient(ellipse at center, rgba(16,185,129,0.10) 0%, transparent 70%)", width: 220, height: 220, left: "50%", top: "50%", transform: "translate(-50%,-50%)" }} />
+                    <EdenConstellation isThinking={chatStreaming} />
+                  </div>
+                  <p className="text-sm font-semibold text-foreground mb-1">Ask EDEN anything</p>
+                  <p className="text-xs text-muted-foreground mb-5 text-center max-w-xs leading-relaxed">
                     Semantic search over {emb?.totalEmbedded?.toLocaleString()} embedded TTO assets from {institutionCount} research institutions.
                   </p>
                   <div className="flex flex-wrap gap-2 justify-center max-w-lg" data-testid="starter-chips">
@@ -2972,7 +2989,7 @@ function EdenTab({ pw }: { pw: string }) {
                       <button
                         key={q}
                         onClick={() => sendChatMessage(q)}
-                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors text-left"
+                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors duration-150 hover:scale-[1.02] text-left"
                         data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
                       >
                         {q}
@@ -2984,26 +3001,38 @@ function EdenTab({ pw }: { pw: string }) {
 
               {/* Message thread */}
               {chatMessages.map((msg, i) => (
-                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`chat-msg-${i}`}>
+                <div
+                  key={i}
+                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  style={{ animation: msg.role === "user" ? "em-slide-user 220ms ease-out both" : "em-slide-asst 220ms ease-out both" }}
+                  data-testid={`chat-msg-${i}`}
+                >
                   {msg.role === "assistant" && (
                     <div className="shrink-0 mt-1 mr-2">
                       <EdenAvatar isThinking={!!(msg.isStreaming)} size={24} />
                     </div>
                   )}
                   <div className={`max-w-[78%] ${msg.role === "user" ? "" : "flex-1"}`}>
-                    <div className={`rounded-xl px-4 py-3 ${
+                    <div className={`rounded-2xl px-4 py-3 ${
                       msg.role === "user"
-                        ? "bg-primary text-primary-foreground text-sm ml-auto w-fit"
-                        : "bg-muted border border-border text-foreground"
+                        ? "bg-gradient-to-br from-emerald-600 to-emerald-700 text-white text-sm ml-auto w-fit shadow-sm"
+                        : "bg-muted/60 border border-border border-l-2 border-l-emerald-500/40 text-foreground"
                     }`}>
                       {msg.role === "assistant" && msg.isStreaming && !msg.content && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                        <div className="flex gap-1 items-center py-0.5">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "120ms" }} />
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "240ms" }} />
+                        </div>
                       )}
                       {msg.role === "user" && (
                         <p className="text-sm leading-relaxed">{msg.content}</p>
                       )}
                       {msg.role === "assistant" && msg.content && (
-                        <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
+                        <>
+                          <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
+                          {msg.isStreaming && <span className="animate-pulse text-emerald-400 font-light ml-0.5 select-none">|</span>}
+                        </>
                       )}
                     </div>
 
@@ -3013,7 +3042,12 @@ function EdenTab({ pw }: { pw: string }) {
                         <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 pl-0.5">Retrieved context</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {(expandedCitations[i] ? msg.assets : msg.assets.slice(0, 3)).map((a, ci) => (
-                            <CitationCard key={a.id} asset={a} index={ci} />
+                            <div
+                              key={a.id}
+                              style={{ animation: "em-fade-in 200ms ease-out both", animationDelay: `${ci * 60}ms` }}
+                            >
+                              <CitationCard asset={a} index={ci} />
+                            </div>
                           ))}
                         </div>
                         {msg.assets.length > 3 && (
