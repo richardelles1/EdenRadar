@@ -1514,6 +1514,54 @@ export async function registerRoutes(
     }
   });
 
+  (async () => {
+    try {
+      const staleDeepJob = await storage.getRunningDeepEnrichmentJob();
+      if (staleDeepJob) {
+        const remaining = await storage.getAssetsNeedingDeepEnrich();
+        if (remaining.length > 0) {
+          console.log(`[EDEN] Resuming deep enrichment job ${staleDeepJob.id}: ${remaining.length} assets remaining`);
+          edenTotal = remaining.length;
+          edenProcessed = staleDeepJob.processed ?? 0;
+          edenImproved = staleDeepJob.improved ?? 0;
+          edenFailed = 0;
+          edenRunning = true;
+          edenJobId = staleDeepJob.id;
+
+          deepEnrichBatch(
+            remaining,
+            20,
+            async (batch) => storage.bulkUpdateIngestedAssetsDeepEnrichment(batch),
+            (processed, _total, succeeded, failed) => {
+              edenProcessed = (staleDeepJob.processed ?? 0) + processed;
+              edenImproved = (staleDeepJob.improved ?? 0) + succeeded;
+              edenFailed = failed;
+              storage.updateEnrichmentJob(staleDeepJob.id, { processed: edenProcessed, improved: edenImproved }).catch(() => {});
+            },
+          ).then(async (batchResult) => {
+            edenRunning = false;
+            await storage.updateEnrichmentJob(staleDeepJob.id, {
+              status: "done",
+              completedAt: new Date(),
+              processed: (staleDeepJob.processed ?? 0) + batchResult.succeeded + batchResult.failed,
+              improved: (staleDeepJob.improved ?? 0) + batchResult.succeeded,
+            }).catch(() => {});
+            console.log(`[EDEN] Resumed job complete: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
+          }).catch(async (e) => {
+            edenRunning = false;
+            await storage.updateEnrichmentJob(staleDeepJob.id, { status: "failed", completedAt: new Date(), processed: edenProcessed, improved: edenImproved }).catch(() => {});
+            console.error("[EDEN] Resumed job failed:", e);
+          });
+        } else {
+          await storage.updateEnrichmentJob(staleDeepJob.id, { status: "done", completedAt: new Date() });
+          console.log(`[EDEN] Stale deep job ${staleDeepJob.id} had no remaining work — marked done`);
+        }
+      }
+    } catch (e) {
+      console.error("[EDEN] Failed to check for resumable deep enrichment jobs:", e);
+    }
+  })();
+
   // ── Researcher portal routes ──────────────────────────────────────────────
 
   // Public: admin-approved discovery cards (used by industry Scout)

@@ -748,10 +748,13 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ingestedAssets.relevant, true),
           or(
-            isNull(ingestedAssets.mechanismOfAction),
-            isNull(ingestedAssets.innovationClaim),
-            isNull(ingestedAssets.unmetNeed),
-            isNull(ingestedAssets.comparableDrugs),
+            isNull(ingestedAssets.completenessScore),
+            sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
+            sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
+            sql`(${ingestedAssets.unmetNeed} IS NULL OR ${ingestedAssets.unmetNeed} = '')`,
+            sql`(${ingestedAssets.comparableDrugs} IS NULL OR ${ingestedAssets.comparableDrugs} = '')`,
+            sql`(${ingestedAssets.ipType} IS NULL OR ${ingestedAssets.ipType} = 'unknown')`,
+            sql`(${ingestedAssets.licensingReadiness} IS NULL OR ${ingestedAssets.licensingReadiness} = 'unknown')`,
           ),
         ),
       );
