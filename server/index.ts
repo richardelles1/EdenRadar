@@ -5,6 +5,8 @@ import { createServer } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { existsSync } from "fs";
+import { execSync } from "child_process";
 
 const app = express();
 const httpServer = createServer(app);
@@ -63,6 +65,25 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // ── Ensure Playwright Chromium browser binary is present ─────────────────
+  // The binary lives in .cache/ms-playwright inside the workspace. If it ever
+  // disappears (container rebuild, first boot) scrapers silently return 0
+  // results. We detect and auto-recover here so the problem is always visible
+  // in the startup log rather than discovered mid-scrape.
+  try {
+    const { chromium } = await import("playwright");
+    const executablePath = chromium.executablePath();
+    if (!existsSync(executablePath)) {
+      log("[startup] Playwright Chromium binary missing — installing…", "startup");
+      execSync("npx playwright install chromium", { stdio: "inherit", timeout: 120_000 });
+      log("[startup] Playwright Chromium installed OK", "startup");
+    } else {
+      log("[startup] Playwright Chromium binary present ✓", "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Playwright check failed: ${err?.message}`, "startup");
+  }
+
   // ── Startup migrations: ensure pgvector + embedding column ───────────────
   try {
     await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);

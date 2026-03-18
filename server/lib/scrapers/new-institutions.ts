@@ -4215,167 +4215,73 @@ export const techLinkScraper: InstitutionScraper = {
       });
       await page.waitForTimeout(8_000); // wait for React mount + first XHR
 
-      // ── Try bulk replay via browser-context fetch ──────────────────────────
-      // The ES URL contains ?source=<JSON-encoded-query>. We decode the JSON,
-      // change `from` and `size`, and replay with the same Authorization header
-      // the React app uses (a public client key embedded in its bundle).
-      // credentials:"omit" is required — the ES endpoint uses CORS allow-origin:*
-      // which is incompatible with credentials:"include".
-      let usedXhrReplay = false;
+      // ── Close browser — Node.js handles all bulk requests directly ─────────
+      // We captured the ES URL and Authorization header from the first XHR.
+      // All subsequent pagination is done via Node.js fetch (no page.evaluate)
+      // so there is no Playwright evaluation timeout to hit.
+      await browser.close();
+      browser = null;
+
+      // ── Bulk replay via Node.js fetch with captured auth header ────────────
+      // The Authorization header is a public client credential embedded in the
+      // TechLink React app bundle (DoD public search tool, intentionally browser-
+      // readable). Fetching directly from Node.js is identical to what the browser
+      // does — same host, same header — and avoids any CORS/credentials issue.
       if (esRequestUrl && esAuthHeader && esTotal > 10) {
-        const replayed = await page.evaluate(
-          async ({
-            baseUrl,
-            authHeader,
-            total,
-          }: {
-            baseUrl: string;
-            authHeader: string;
-            total: number;
-          }): Promise<unknown[] | null> => {
+        const urlObj = new URL(esRequestUrl);
+        const rawSource = urlObj.searchParams.get("source");
+        if (rawSource) {
+          const baseQuery = JSON.parse(rawSource) as Record<string, unknown>;
+          const PAGE_SIZE = 100;
+          const totalPages = Math.ceil(esTotal / PAGE_SIZE);
+          let errors = 0;
+
+          for (let pg = 0; pg < Math.min(totalPages, 70); pg++) {
+            const newQuery = { ...baseQuery, from: pg * PAGE_SIZE, size: PAGE_SIZE };
+            const newUrlObj = new URL(esRequestUrl);
+            newUrlObj.searchParams.set("source", JSON.stringify(newQuery));
+            newUrlObj.searchParams.set("source_content_type", "application/json");
+
             try {
-              const urlObj = new URL(baseUrl);
-              const rawSource = urlObj.searchParams.get("source");
-              if (!rawSource) return null;
-
-              const baseQuery = JSON.parse(rawSource) as Record<string, unknown>;
-              const PAGE_SIZE = 100;
-              const totalPages = Math.ceil(total / PAGE_SIZE);
-              const allHits: unknown[] = [];
-              let errors = 0;
-
-              for (let pg = 0; pg < Math.min(totalPages, 70); pg++) {
-                const newQuery = { ...baseQuery, from: pg * PAGE_SIZE, size: PAGE_SIZE };
-                const newUrlObj = new URL(baseUrl);
-                newUrlObj.searchParams.set("source", JSON.stringify(newQuery));
-                newUrlObj.searchParams.set("source_content_type", "application/json");
-
-                const r = await fetch(newUrlObj.toString(), {
-                  method: "GET",
-                  credentials: "omit",
-                  headers: {
-                    "Accept": "application/json, text/plain, */*",
-                    "Authorization": authHeader,
-                  },
-                });
-                if (!r.ok) {
-                  errors++;
-                  if (errors > 2) break;
-                  continue;
-                }
-                const data = (await r.json()) as Record<string, unknown>;
-                const hits = (
-                  (data.hits as Record<string, unknown>)?.hits ?? []
-                ) as unknown[];
-                if (hits.length === 0) break;
-                allHits.push(...hits);
-                if (hits.length < PAGE_SIZE) break; // last page
+              const r = await fetch(newUrlObj.toString(), {
+                headers: {
+                  "Accept": "application/json, text/plain, */*",
+                  "Authorization": esAuthHeader,
+                },
+                signal: AbortSignal.timeout(15_000),
+              });
+              if (!r.ok) {
+                errors++;
+                if (errors > 2) break;
+                continue;
               }
-              return allHits.length > 0 ? allHits : null;
+              const data = (await r.json()) as Record<string, unknown>;
+              const hits = (
+                (data.hits as Record<string, unknown>)?.hits ?? []
+              ) as unknown[];
+              extractHits(hits);
+              if (hits.length < PAGE_SIZE) break; // last page reached
             } catch {
-              return null;
+              errors++;
+              if (errors > 2) break;
             }
-          },
-          { baseUrl: esRequestUrl, authHeader: esAuthHeader, total: esTotal }
-        ).catch(() => null);
-
-        if (replayed && Array.isArray(replayed) && replayed.length > 0) {
-          extractHits(replayed as unknown[]);
-          usedXhrReplay = true;
+          }
         }
       }
 
-      if (usedXhrReplay && xhrItems.size > 50) {
+      if (xhrItems.size > 0) {
         const results = Array.from(xhrItems.values()).map((item) => ({
           ...item,
           institution: INST,
         }));
-        console.log(`[scraper] ${INST}: ${results.length} listings (ES XHR bulk replay)`);
+        console.log(`[scraper] ${INST}: ${results.length} listings (ES Node.js bulk fetch)`);
         return results;
       }
 
-      // ── Fallback: Next-button DOM pagination + XHR collection ─────────────
-      // Clicks up to MAX_BTN_PAGES Next buttons; each click triggers a new XHR
-      // which the interceptor above automatically collects from.
-      await page.waitForSelector('a[href*="/technologies/"]', {
-        state: "attached",
-        timeout: 20_000,
-      }).catch(() => null);
-
-      const domLinks = new Map<string, string>();
-
-      const collectDomPage = async () => {
-        const cards = await page.$$eval('a[href*="/technologies/"]', (els) =>
-          els
-            .filter((el) => /\/technologies\/[^/]+/.test(el.getAttribute("href") ?? ""))
-            .map((el) => {
-              const href = el.getAttribute("href") ?? "";
-              const heading =
-                el.querySelector("h2,h3,h4") ??
-                el.querySelector('[class*="title"],[class*="Title"]');
-              const title = heading
-                ? (heading.textContent?.trim() ?? "")
-                : (el.textContent?.trim().split("\n")[0] ?? "");
-              return { href, title };
-            })
-        );
-        for (const c of cards) {
-          if (!c.href || !c.title || c.title.length < 5) continue;
-          if (!domLinks.has(c.href)) domLinks.set(c.href, c.title);
-        }
-      };
-
-      await collectDomPage();
-
-      for (let pg = 2; pg <= MAX_BTN_PAGES; pg++) {
-        const nextBtn = await page.$(
-          [
-            'button[aria-label*="Next Page" i]',
-            'button[aria-label*="next" i]',
-            'button[title*="next" i]',
-            'li[class*="next" i] button',
-            'a[rel="next"]',
-          ].join(",")
-        ).catch(() => null);
-        if (!nextBtn) break;
-
-        const disabled = await nextBtn.evaluate(
-          (el) =>
-            el.hasAttribute("disabled") ||
-            el.classList.contains("disabled") ||
-            el.classList.contains("Mui-disabled") ||
-            el.getAttribute("aria-disabled") === "true"
-        ).catch(() => true);
-        if (disabled) break;
-
-        const prevSize = domLinks.size;
-        try {
-          await nextBtn.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => null);
-          await nextBtn.click({ timeout: 10_000 });
-          await page.waitForTimeout(2_500);
-          await collectDomPage();
-        } catch {
-          break;
-        }
-        if (domLinks.size === prevSize) break;
-      }
-
-      // Merge DOM links with anything collected from XHR intercept
-      for (const [href, title] of Array.from(domLinks.entries())) {
-        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
-        if (!xhrItems.has(fullUrl)) {
-          xhrItems.set(fullUrl, { title, description: "", url: fullUrl });
-        }
-      }
-
-      const results = Array.from(xhrItems.values()).map((item) => ({
-        ...item,
-        institution: INST,
-      }));
-      console.log(
-        `[scraper] ${INST}: ${results.length} listings (DOM+XHR, ${usedXhrReplay ? "replay" : "btn-paginated"})`
-      );
-      return results;
+      // No results — return empty (fallback Next-button approach removed;
+      // if the ES endpoint changes, a failed run will be obvious from count=0)
+      console.log(`[scraper] ${INST}: 0 listings — ES auth capture failed`);
+      return [];
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
