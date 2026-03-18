@@ -2479,8 +2479,14 @@ type EdenCoverage = {
   avgCompletenessScore: number | null;
 };
 
+type EdenEmbeddingCoverage = {
+  totalRelevant: number;
+  totalEmbedded: number;
+};
+
 type EdenStatsResponse = {
   coverage: EdenCoverage;
+  embeddingCoverage: EdenEmbeddingCoverage;
   latestJob: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
   live: { processed: number; total: number } | null;
 };
@@ -2494,9 +2500,31 @@ type EdenStatusResponse = {
   job: { id: number; total: number; processed: number; improved: number; status: string; startedAt: string; completedAt: string | null } | null;
 };
 
+type EdenEmbedStatusResponse = {
+  running: boolean;
+  processed: number;
+  total: number;
+  succeeded: number;
+  failed: number;
+};
+
+type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  assets?: Array<{ id: number; assetName: string; institution: string; indication: string; modality: string; similarity: number }>;
+  isStreaming?: boolean;
+};
+
 function EdenTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [confirming, setConfirming] = useState(false);
+  const [embedConfirming, setEmbedConfirming] = useState(false);
+
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatStreaming, setChatStreaming] = useState(false);
+  const [chatSessionId, setChatSessionId] = useState<string>("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
     queryKey: ["/api/admin/eden/stats"],
@@ -2513,6 +2541,16 @@ function EdenTab({ pw }: { pw: string }) {
     queryFn: async () => {
       const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
       if (!res.ok) throw new Error("Failed to load status");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
+    queryKey: ["/api/admin/eden/embed/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/embed/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load embed status");
       return res.json();
     },
     refetchInterval: 3000,
@@ -2543,17 +2581,134 @@ function EdenTab({ pw }: { pw: string }) {
     },
   });
 
+  const embedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/embed", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminPassword: pw }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error ?? "Failed to start embedding");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setEmbedConfirming(false);
+      toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` });
+      refetchStats();
+    },
+    onError: (e: any) => {
+      setEmbedConfirming(false);
+      toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" });
+    },
+  });
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
+  async function sendChatMessage() {
+    if (!chatInput.trim() || chatStreaming) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    setChatMessages((prev) => [
+      ...prev,
+      { role: "user", content: msg },
+      { role: "assistant", content: "", assets: [], isStreaming: true },
+    ]);
+    setChatStreaming(true);
+
+    try {
+      const response = await fetch("/api/eden/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ message: msg, sessionId: chatSessionId || undefined }),
+      });
+      if (!response.ok || !response.body) {
+        const err = await response.json().catch(() => ({ error: "Chat failed" }));
+        throw new Error(err.error ?? "Chat failed");
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const blocks = buf.split("\n\n");
+        buf = blocks.pop() ?? "";
+        for (const block of blocks) {
+          const evtMatch = block.match(/^event: (\w+)/m);
+          const dataMatch = block.match(/^data: (.+)/m);
+          if (!evtMatch || !dataMatch) continue;
+          const evt = evtMatch[1];
+          let data: any;
+          try { data = JSON.parse(dataMatch[1]); } catch { continue; }
+
+          if (evt === "context") {
+            if (data.sessionId) setChatSessionId(data.sessionId);
+            setChatMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, assets: data.assets ?? [] };
+              return upd;
+            });
+          } else if (evt === "token") {
+            setChatMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, content: last.content + data.text };
+              return upd;
+            });
+          } else if (evt === "done") {
+            if (data.sessionId) setChatSessionId(data.sessionId);
+            setChatMessages((prev) => {
+              const upd = [...prev];
+              const last = upd[upd.length - 1];
+              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, isStreaming: false };
+              return upd;
+            });
+          } else if (evt === "error") {
+            throw new Error(data.message ?? "Chat error");
+          }
+        }
+      }
+    } catch (e: any) {
+      setChatMessages((prev) => {
+        const upd = [...prev];
+        const last = upd[upd.length - 1];
+        if (last?.role === "assistant" && last.isStreaming) {
+          upd[upd.length - 1] = { ...last, content: `Error: ${e.message}`, isStreaming: false };
+        }
+        return upd;
+      });
+    } finally {
+      setChatStreaming(false);
+    }
+  }
+
   const cov = stats?.coverage;
+  const emb = stats?.embeddingCoverage;
   const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total, succeeded: 0, failed: 0 } : null;
   const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
   const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
   const remaining = cov ? cov.totalRelevant - cov.deepEnriched : 0;
-  const estCostUsd = remaining > 0 ? ((remaining * 0.0012)).toFixed(0) : "0";
+  const estCostUsd = remaining > 0 ? (remaining * 0.0012).toFixed(0) : "0";
+  const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
+  const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
+  const embEstCost = embRemaining > 0 ? ((embRemaining * 0.00002)).toFixed(2) : "0.00";
+  const embedLive = embedStatus?.running ? embedStatus : null;
+  const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
+  const chatReady = emb && emb.totalEmbedded > 0;
 
   return (
     <div className="space-y-6" data-testid="eden-tab">
-      {/* Coverage cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {/* Coverage cards — 5 columns on md+ */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-total">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Relevant Assets</p>
           <p className="text-2xl font-bold text-foreground mt-1">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
@@ -2563,6 +2718,11 @@ function EdenTab({ pw }: { pw: string }) {
           <p className="text-xs text-muted-foreground uppercase tracking-wide">Deep Enriched</p>
           <p className="text-2xl font-bold text-emerald-600 mt-1">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{deepPct}% complete</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-embedded">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Embedded</p>
+          <p className="text-2xl font-bold text-violet-600 mt-1">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{embPct}% vectorized</p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-moa">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">With MoA</p>
@@ -2587,19 +2747,13 @@ function EdenTab({ pw }: { pw: string }) {
         </div>
         <Progress value={deepPct} className="h-2 mb-3" />
         <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
-          <div>
-            <span className="font-medium text-foreground">{cov?.withInnovationClaim?.toLocaleString() ?? "—"}</span> with Innovation Claim
-          </div>
-          <div>
-            <span className="font-medium text-foreground">{cov?.withUnmetNeed?.toLocaleString() ?? "—"}</span> with Unmet Need
-          </div>
-          <div>
-            <span className="font-medium text-foreground">{cov?.withComparableDrugs?.toLocaleString() ?? "—"}</span> with Comparable Drugs
-          </div>
+          <div><span className="font-medium text-foreground">{cov?.withInnovationClaim?.toLocaleString() ?? "—"}</span> with Innovation Claim</div>
+          <div><span className="font-medium text-foreground">{cov?.withUnmetNeed?.toLocaleString() ?? "—"}</span> with Unmet Need</div>
+          <div><span className="font-medium text-foreground">{cov?.withComparableDrugs?.toLocaleString() ?? "—"}</span> with Comparable Drugs</div>
         </div>
       </div>
 
-      {/* Live progress bar (shown when running) */}
+      {/* Live enrichment progress */}
       {live && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5" data-testid="card-eden-live">
           <div className="flex items-center gap-2 mb-3">
@@ -2617,7 +2771,7 @@ function EdenTab({ pw }: { pw: string }) {
         </div>
       )}
 
-      {/* Run button */}
+      {/* Run enrichment button */}
       <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-run">
         <h3 className="text-sm font-semibold text-foreground mb-1">Run Deep Enrichment Blitz</h3>
         <p className="text-xs text-muted-foreground mb-4">
@@ -2625,43 +2779,153 @@ function EdenTab({ pw }: { pw: string }) {
           Estimated cost: <span className="font-semibold text-foreground">${estCostUsd}</span> (~$0.0012/asset).
           Runs at 20 concurrent threads. Resumes automatically on restart.
         </p>
-
         {!confirming ? (
-          <Button
-            onClick={() => setConfirming(true)}
-            disabled={live != null || remaining === 0}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            data-testid="button-eden-run"
-          >
+          <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-eden-run">
             <PlayCircle className="h-4 w-4 mr-2" />
             {remaining === 0 ? "All Assets Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
           </Button>
         ) : (
           <div className="flex items-center gap-3">
             <p className="text-sm font-semibold text-amber-600">This will consume ~${estCostUsd} of OpenAI credits. Confirm?</p>
-            <Button
-              onClick={() => startMutation.mutate()}
-              disabled={startMutation.isPending}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-              data-testid="button-eden-confirm"
-            >
+            <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-eden-confirm">
               {startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
               Yes, Run It
             </Button>
-            <Button variant="outline" onClick={() => setConfirming(false)} data-testid="button-eden-cancel">
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={() => setConfirming(false)} data-testid="button-eden-cancel">Cancel</Button>
           </div>
         )}
       </div>
 
-      {/* Chat placeholder */}
-      <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center" data-testid="card-eden-chat-placeholder">
-        <BrainCircuit className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-        <h3 className="text-sm font-semibold text-foreground mb-1">EDEN Chat — Coming Soon</h3>
-        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-          Once deep enrichment and vector embeddings are complete, EDEN will let you query the 20K asset corpus in natural language. ("What novel CDK inhibitors from MIT have a completeness score above 70?")
+      {/* Vector Embeddings section */}
+      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-embeddings">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-violet-500" />
+            Vector Embeddings
+          </h3>
+          <span className="text-sm text-muted-foreground">{embPct}%</span>
+        </div>
+        <Progress value={embPct} className="h-2 mb-3" />
+        <p className="text-xs text-muted-foreground mb-4">
+          {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} relevant assets embedded with <span className="font-medium text-foreground">text-embedding-3-small</span>.
+          {embRemaining > 0 && <> Estimated cost for remaining: <span className="font-semibold text-foreground">${embEstCost}</span> (~$0.00002/asset).</>}
         </p>
+
+        {/* Live embedding progress */}
+        {embedLive && (
+          <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4 mb-4" data-testid="card-embed-live">
+            <div className="flex items-center gap-2 mb-2">
+              <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
+              <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                Embedding running — {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
+              </span>
+              <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
+            </div>
+            <Progress value={embedPct ?? 0} className="h-1.5" />
+            <div className="flex gap-4 text-xs text-muted-foreground mt-2">
+              <span><span className="font-semibold text-violet-600">{(embedLive.succeeded ?? 0).toLocaleString()}</span> done</span>
+              {(embedLive.failed ?? 0) > 0 && <span><span className="font-semibold text-red-500">{embedLive.failed.toLocaleString()}</span> failed</span>}
+            </div>
+          </div>
+        )}
+
+        {!embedConfirming ? (
+          <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-embed-run">
+            <Sparkles className="h-4 w-4 mr-2" />
+            {embRemaining === 0 ? "All Assets Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
+          </Button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})? Confirm?</p>
+            <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-embed-confirm">
+              {embedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Yes, Embed
+            </Button>
+            <Button variant="outline" onClick={() => setEmbedConfirming(false)} data-testid="button-embed-cancel">Cancel</Button>
+          </div>
+        )}
+      </div>
+
+      {/* EDEN Chat */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-chat">
+        <div className="px-5 py-4 border-b border-border flex items-center gap-3">
+          <BrainCircuit className="h-5 w-5 text-emerald-500" />
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">EDEN Chat</h3>
+            <p className="text-xs text-muted-foreground">
+              {chatReady
+                ? `RAG over ${emb?.totalEmbedded?.toLocaleString()} embedded assets · GPT-4o`
+                : "Generate embeddings first to enable semantic search"}
+            </p>
+          </div>
+          {chatMessages.length > 0 && (
+            <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => { setChatMessages([]); setChatSessionId(""); }} data-testid="button-chat-clear">
+              Clear
+            </Button>
+          )}
+        </div>
+
+        {!chatReady && (
+          <div className="p-8 text-center" data-testid="chat-not-ready">
+            <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
+            <p className="text-xs text-muted-foreground">No embeddings yet. Run "Embed Assets" above to enable EDEN Chat.</p>
+          </div>
+        )}
+
+        {chatReady && (
+          <>
+            <div className="h-96 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
+              {chatMessages.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-center" data-testid="chat-empty">
+                  <BrainCircuit className="h-8 w-8 text-muted-foreground/30 mb-2" />
+                  <p className="text-xs text-muted-foreground">Ask EDEN anything about the TTO corpus.</p>
+                  <p className="text-xs text-muted-foreground/60 mt-1">e.g. "What CDK inhibitors from MIT have a completeness score above 70?"</p>
+                </div>
+              )}
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`chat-msg-${i}`}>
+                  <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
+                    msg.role === "user"
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted border border-border text-foreground"
+                  }`}>
+                    {msg.role === "assistant" && msg.isStreaming && !msg.content && (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    )}
+                    {msg.content && (
+                      <div className="whitespace-pre-wrap leading-relaxed">{msg.content}{msg.isStreaming && <span className="animate-pulse">▌</span>}</div>
+                    )}
+                    {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
+                      <div className="mt-3 pt-2 border-t border-border/50 flex flex-wrap gap-1.5" data-testid={`chat-assets-${i}`}>
+                        {msg.assets.slice(0, 5).map((a) => (
+                          <span key={a.id} className="text-[10px] px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground" title={`${a.institution} · ${a.indication}`}>
+                            {a.assetName.slice(0, 28)}{a.assetName.length > 28 ? "…" : ""}
+                          </span>
+                        ))}
+                        {msg.assets.length > 5 && <span className="text-[10px] text-muted-foreground/60">+{msg.assets.length - 5} more</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <div className="px-4 py-3 border-t border-border flex gap-2" data-testid="chat-input-area">
+              <input
+                className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground"
+                placeholder="Ask about targets, indications, institutions, licensing…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                disabled={chatStreaming}
+                data-testid="input-chat"
+              />
+              <Button onClick={sendChatMessage} disabled={chatStreaming || !chatInput.trim()} size="sm" className="shrink-0" data-testid="button-chat-send">
+                {chatStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

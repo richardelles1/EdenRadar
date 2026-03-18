@@ -13,6 +13,7 @@ import {
   savedReferences, type SavedReference, type InsertSavedReference,
   savedGrants, type SavedGrant, type InsertSavedGrant,
   reviewQueue,
+  edenSessions, type EdenSession,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or } from "drizzle-orm";
@@ -146,6 +147,18 @@ export interface IStorage {
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
   }>>;
   pushNewArrivals(since: Date, institution?: string): Promise<{ updated: number }>;
+
+  getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
+  getAssetsNeedingEmbedding(): Promise<Array<{
+    id: number; assetName: string; target: string; modality: string; indication: string;
+    developmentStage: string; institution: string; summary: string;
+    mechanismOfAction: string | null; innovationClaim: string | null;
+    unmetNeed: string | null; comparableDrugs: string | null;
+  }>>;
+
+  getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
+  appendEdenTurn(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
+  getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1023,6 +1036,79 @@ export class DatabaseStorage implements IStorage {
       .where(and(...conditions))
       .returning({ id: ingestedAssets.id });
     return { updated: updated.length };
+  }
+
+  async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE relevant = true) AS total_relevant,
+        COUNT(*) FILTER (WHERE relevant = true AND embedding IS NOT NULL) AS total_embedded
+      FROM ingested_assets
+    `);
+    const row = result.rows[0] as any;
+    return {
+      totalRelevant: parseInt(row.total_relevant ?? "0"),
+      totalEmbedded: parseInt(row.total_embedded ?? "0"),
+    };
+  }
+
+  async getAssetsNeedingEmbedding(): Promise<Array<{
+    id: number; assetName: string; target: string; modality: string; indication: string;
+    developmentStage: string; institution: string; summary: string;
+    mechanismOfAction: string | null; innovationClaim: string | null;
+    unmetNeed: string | null; comparableDrugs: string | null;
+  }>> {
+    const result = await db.execute(sql`
+      SELECT id, asset_name, target, modality, indication, development_stage, institution,
+             summary, mechanism_of_action, innovation_claim, unmet_need, comparable_drugs
+      FROM ingested_assets
+      WHERE relevant = true AND embedding IS NULL
+      ORDER BY completeness_score DESC NULLS LAST
+    `);
+    return (result.rows as any[]).map((r) => ({
+      id: r.id,
+      assetName: r.asset_name,
+      target: r.target,
+      modality: r.modality,
+      indication: r.indication,
+      developmentStage: r.development_stage,
+      institution: r.institution,
+      summary: r.summary,
+      mechanismOfAction: r.mechanism_of_action ?? null,
+      innovationClaim: r.innovation_claim ?? null,
+      unmetNeed: r.unmet_need ?? null,
+      comparableDrugs: r.comparable_drugs ?? null,
+    }));
+  }
+
+  async getOrCreateEdenSession(sessionId: string): Promise<EdenSession> {
+    const [existing] = await db.select().from(edenSessions).where(eq(edenSessions.sessionId, sessionId));
+    if (existing) return existing;
+    const [created] = await db
+      .insert(edenSessions)
+      .values({ sessionId, turns: [] })
+      .returning();
+    return created;
+  }
+
+  async appendEdenTurn(
+    sessionId: string,
+    turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }
+  ): Promise<EdenSession> {
+    const session = await this.getOrCreateEdenSession(sessionId);
+    const newTurn = { ...turn, ts: new Date().toISOString() };
+    const updatedTurns = [...(session.turns ?? []), newTurn];
+    const [updated] = await db
+      .update(edenSessions)
+      .set({ turns: updatedTurns, updatedAt: new Date() })
+      .where(eq(edenSessions.sessionId, sessionId))
+      .returning();
+    return updated;
+  }
+
+  async getEdenSession(sessionId: string): Promise<EdenSession | undefined> {
+    const [session] = await db.select().from(edenSessions).where(eq(edenSessions.sessionId, sessionId));
+    return session;
   }
 }
 

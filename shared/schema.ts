@@ -470,3 +470,12 @@ export const conceptInterests = pgTable("concept_interests", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type ConceptInterest = typeof conceptInterests.$inferSelect;
+
+export const edenSessions = pgTable("eden_sessions", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull().unique(),
+  turns: jsonb("turns").$type<Array<{ role: "user" | "assistant"; content: string; assetIds?: number[]; ts: string }>>().notNull().default(sql`'[]'::jsonb`),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EdenSession = typeof edenSessions.$inferSelect;

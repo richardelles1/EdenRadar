@@ -19,6 +19,8 @@ import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDel
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
+import { embedAssets } from "./lib/pipeline/embedAssets";
+import { embedQuery, semanticSearch, ragQuery } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1428,9 +1430,17 @@ export async function registerRoutes(
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
-      const coverage = await storage.getDeepEnrichmentCoverage();
-      const latest = await storage.getLatestDeepEnrichmentJob();
-      res.json({ coverage, latestJob: latest ?? null, live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null });
+      const [coverage, embeddingCoverage, latest] = await Promise.all([
+        storage.getDeepEnrichmentCoverage(),
+        storage.getEmbeddingCoverage(),
+        storage.getLatestDeepEnrichmentJob(),
+      ]);
+      res.json({
+        coverage,
+        embeddingCoverage,
+        latestJob: latest ?? null,
+        live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -1561,6 +1571,137 @@ export async function registerRoutes(
       console.error("[EDEN] Failed to check for resumable deep enrichment jobs:", e);
     }
   })();
+
+  // ── EDEN embedding routes ────────────────────────────────────────────────
+
+  let embedRunning = false;
+  let embedProcessed = 0;
+  let embedTotal = 0;
+  let embedSucceeded = 0;
+  let embedFailed = 0;
+
+  app.post("/api/admin/eden/embed", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (embedRunning) return res.status(409).json({ error: "Embedding already running" });
+    try {
+      const assets = await storage.getAssetsNeedingEmbedding();
+      if (assets.length === 0) return res.json({ message: "All relevant assets already embedded", total: 0 });
+
+      embedTotal = assets.length;
+      embedProcessed = 0;
+      embedSucceeded = 0;
+      embedFailed = 0;
+      embedRunning = true;
+
+      res.json({ message: "Embedding started", total: assets.length });
+
+      embedAssets(assets, (processed, _total, succeeded, failed) => {
+        embedProcessed = processed;
+        embedSucceeded = succeeded;
+        embedFailed = failed;
+      }).then((result) => {
+        embedRunning = false;
+        embedSucceeded = result.succeeded;
+        embedFailed = result.failed;
+        console.log(`[EDEN] Embedding complete: ${result.succeeded} succeeded, ${result.failed} failed`);
+      }).catch((e) => {
+        embedRunning = false;
+        console.error("[EDEN] Embedding failed:", e);
+      });
+    } catch (err: any) {
+      embedRunning = false;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/eden/embed/status", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    res.json({
+      running: embedRunning,
+      processed: embedProcessed,
+      total: embedTotal,
+      succeeded: embedSucceeded,
+      failed: embedFailed,
+    });
+  });
+
+  // ── EDEN chat routes ──────────────────────────────────────────────────────
+
+  app.post("/api/eden/chat", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+    const { message, sessionId } = req.body ?? {};
+    if (!message || typeof message !== "string" || !message.trim()) {
+      return res.status(400).json({ error: "message is required" });
+    }
+
+    const sid = (typeof sessionId === "string" && sessionId) || `eden-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
+    const sendEvent = (event: string, data: unknown) => {
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+
+    try {
+      const session = await storage.getOrCreateEdenSession(sid);
+      const history = (session.turns ?? []).map((t) => ({ role: t.role, content: t.content }));
+
+      await storage.appendEdenTurn(sid, { role: "user", content: message.trim() });
+
+      const queryEmbedding = await embedQuery(message.trim());
+      const retrieved = await semanticSearch(queryEmbedding, 8);
+
+      sendEvent("context", {
+        sessionId: sid,
+        assets: retrieved.map((a) => ({
+          id: a.id,
+          assetName: a.assetName,
+          institution: a.institution,
+          indication: a.indication,
+          modality: a.modality,
+          similarity: Math.round(a.similarity * 100) / 100,
+        })),
+      });
+
+      let fullResponse = "";
+      for await (const token of ragQuery(message.trim(), retrieved, history)) {
+        fullResponse += token;
+        sendEvent("token", { text: token });
+      }
+
+      await storage.appendEdenTurn(sid, {
+        role: "assistant",
+        content: fullResponse,
+        assetIds: retrieved.map((a) => a.id),
+      });
+
+      sendEvent("done", { sessionId: sid });
+    } catch (err: any) {
+      console.error("[EDEN chat] Error:", err);
+      sendEvent("error", { message: err.message ?? "Chat failed" });
+    } finally {
+      res.end();
+    }
+  });
+
+  app.get("/api/eden/sessions/:sessionId", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const session = await storage.getEdenSession(req.params.sessionId);
+      if (!session) return res.status(404).json({ error: "Session not found" });
+      res.json(session);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ── Researcher portal routes ──────────────────────────────────────────────
 
