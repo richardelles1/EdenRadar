@@ -32,7 +32,10 @@ export function isConversational(query: string): boolean {
   const words = query.trim().split(/\s+/);
   if (words.length > 8) return false;
   const lower = query.toLowerCase();
-  return !BIOTECH_SIGNALS.some((kw) => lower.includes(kw));
+  return !BIOTECH_SIGNALS.some((kw) => {
+    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
+    return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i").test(lower);
+  });
 }
 
 function buildContext(assets: RetrievedAsset[]): string {

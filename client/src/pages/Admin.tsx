@@ -2600,8 +2600,16 @@ function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; s
   const innerR = r * 0.52;
   const ring1R = r * 0.72;
   const ring2R = r * 0.92;
+  const gradId = `ea-grad-${size}`;
   return (
     <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" className="shrink-0" aria-hidden="true">
+      <defs>
+        <radialGradient id={gradId} cx="50%" cy="38%" r="62%">
+          <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.55"/>
+          <stop offset="55%" stopColor="#10b981" stopOpacity="0.22"/>
+          <stop offset="100%" stopColor="#10b981" stopOpacity="0.04"/>
+        </radialGradient>
+      </defs>
       <style>{`
         @keyframes eden-ring1 { 0%,100%{opacity:.18;r:${ring1R}px} 50%{opacity:.38;r:${ring1R * 1.06}px} }
         @keyframes eden-ring2 { 0%,100%{opacity:.08;r:${ring2R}px} 50%{opacity:.22;r:${ring2R * 1.04}px} }
@@ -2613,7 +2621,7 @@ function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; s
         style={{ animation: isThinking ? `eden-think2 1s ease-in-out infinite` : `eden-ring2 2.8s ease-in-out infinite` }} />
       <circle cx={r} cy={r} r={ring1R} fill="none" stroke="#10b981" strokeWidth="1.2"
         style={{ animation: isThinking ? `eden-think1 0.8s ease-in-out infinite` : `eden-ring1 2.2s ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={innerR} fill="#10b981" fillOpacity="0.12" />
+      <circle cx={r} cy={r} r={innerR} fill={`url(#${gradId})`} />
       <circle cx={r} cy={r} r={innerR * 0.6} fill="#10b981"
         style={{ animation: `eden-core ${isThinking ? "0.7s" : "2s"} ease-in-out infinite` }} />
       <circle cx={r} cy={r} r={innerR * 0.28} fill="#ecfdf5" />
@@ -2675,36 +2683,41 @@ function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
           <stop offset="100%" stopColor="#10b981" stopOpacity="0"/>
         </radialGradient>
       </defs>
+      <style>{`
+        @keyframes eden-orb-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
 
       <ellipse cx={cx} cy={cy} rx="94" ry="94" fill="url(#eo-bg)"/>
 
-      <ellipse cx={cx} cy={cy} rx={OR.rx} ry={OR.ry} stroke="#10b981" strokeWidth="0.6" strokeOpacity="0.18" strokeDasharray="5 9" fill="none"/>
-      <ellipse cx={cx} cy={cy} rx={MR.rx} ry={MR.ry} stroke="#10b981" strokeWidth="0.4" strokeOpacity="0.11" strokeDasharray="4 7" fill="none"/>
-      <ellipse cx={cx} cy={cy} rx={IR.rx} ry={IR.ry} stroke="#10b981" strokeWidth="0.3" strokeOpacity="0.07" strokeDasharray="3 5" fill="none"/>
+      <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-rotate ${isThinking ? "8s" : "20s"} linear infinite` }}>
+        <ellipse cx={cx} cy={cy} rx={OR.rx} ry={OR.ry} stroke="#10b981" strokeWidth="0.6" strokeOpacity="0.18" strokeDasharray="5 9" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={MR.rx} ry={MR.ry} stroke="#10b981" strokeWidth="0.4" strokeOpacity="0.11" strokeDasharray="4 7" fill="none"/>
+        <ellipse cx={cx} cy={cy} rx={IR.rx} ry={IR.ry} stroke="#10b981" strokeWidth="0.3" strokeOpacity="0.07" strokeDasharray="3 5" fill="none"/>
 
-      {outerPts.map((p, i) => (
-        <circle key={`oe${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op} filter="url(#eo-glow)">
-          <animate attributeName="opacity" values={`${p.op * 0.4};${p.op};${p.op * 0.4}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
-        </circle>
-      ))}
+        {outerPts.map((p, i) => (
+          <circle key={`oe${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op} filter="url(#eo-glow)">
+            <animate attributeName="opacity" values={`${p.op * 0.4};${p.op};${p.op * 0.4}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
 
-      {midPts.map((p, i) => (
-        <circle key={`me${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op}>
-          <animate attributeName="opacity" values={`${p.op * 0.3};${p.op};${p.op * 0.3}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
-        </circle>
-      ))}
+        {midPts.map((p, i) => (
+          <circle key={`me${i}`} cx={p.x} cy={p.y} r={p.r} fill="#10b981" fillOpacity={p.op}>
+            <animate attributeName="opacity" values={`${p.op * 0.3};${p.op};${p.op * 0.3}`} dur={`${p.dur}s`} begin={`${p.delay}s`} repeatCount="indefinite"/>
+          </circle>
+        ))}
 
-      {[0, 1, 2, 3].map((n) => (
-        <circle key={`orb${n}`} r={isThinking ? 2.8 : 2.2} fill="#10b981" fillOpacity="0.9" filter="url(#eo-halo)">
-          <animateMotion dur={os} begin={`${-n * parseFloat(os) / 4}s`} repeatCount="indefinite" path={op}/>
-        </circle>
-      ))}
+        {[0, 1, 2, 3].map((n) => (
+          <circle key={`orb${n}`} r={isThinking ? 2.8 : 2.2} fill="#10b981" fillOpacity="0.9" filter="url(#eo-halo)">
+            <animateMotion dur={os} begin={`${-n * parseFloat(os) / 4}s`} repeatCount="indefinite" path={op}/>
+          </circle>
+        ))}
 
-      {[0, 1].map((n) => (
-        <circle key={`morb${n}`} r={isThinking ? 2 : 1.4} fill="#6ee7b7" fillOpacity="0.65">
-          <animateMotion dur={ms} begin={`${-n * parseFloat(ms) / 2}s`} repeatCount="indefinite" path={mp}/>
-        </circle>
-      ))}
+        {[0, 1].map((n) => (
+          <circle key={`morb${n}`} r={isThinking ? 2 : 1.4} fill="#6ee7b7" fillOpacity="0.65">
+            <animateMotion dur={ms} begin={`${-n * parseFloat(ms) / 2}s`} repeatCount="indefinite" path={mp}/>
+          </circle>
+        ))}
+      </g>
 
       <circle cx={cx} cy={cy} r="16" fill="#10b981" fillOpacity="0.04"/>
       <circle cx={cx} cy={cy} r={isThinking ? 5 : 4} fill="#10b981" filter="url(#eo-glow)">
