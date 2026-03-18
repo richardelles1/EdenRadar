@@ -3088,28 +3088,39 @@ function EdenTab({ pw }: { pw: string }) {
                       )}
                     </div>
 
-                    {/* Citation cards */}
+                    {/* Citation cards — deferred behind toggle */}
                     {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                       <div className="mt-2" data-testid={`chat-citations-${i}`}>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 pl-0.5">Top matches</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {(expandedCitations[i] ? msg.assets : msg.assets.slice(0, 3)).map((a, ci) => (
-                            <div
-                              key={a.id}
-                              style={{ animation: "em-fade-in 200ms ease-out both", animationDelay: `${ci * 60}ms` }}
-                            >
-                              <CitationCard asset={a} index={ci} />
-                            </div>
-                          ))}
-                        </div>
-                        {msg.assets.length > 3 && (
+                        {!expandedCitations[i] ? (
                           <button
-                            className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground underline"
-                            onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: !prev[i] }))}
-                            data-testid={`button-expand-citations-${i}`}
+                            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
+                            onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
+                            data-testid={`button-show-citations-${i}`}
                           >
-                            {expandedCitations[i] ? "Show fewer" : `Show ${msg.assets.length - 3} more`}
+                            <ChevronDown className="h-3 w-3 shrink-0 group-hover:text-foreground transition-colors" />
+                            Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
                           </button>
+                        ) : (
+                          <>
+                            <button
+                              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-1.5 group"
+                              onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
+                              data-testid={`button-hide-citations-${i}`}
+                            >
+                              <ChevronDown className="h-3 w-3 shrink-0 rotate-180 group-hover:text-foreground transition-colors" />
+                              Hide assets
+                            </button>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                              {msg.assets.map((a, ci) => (
+                                <div
+                                  key={a.id}
+                                  style={{ animation: "em-fade-in 200ms ease-out both", animationDelay: `${ci * 60}ms` }}
+                                >
+                                  <CitationCard asset={a} index={ci} />
+                                </div>
+                              ))}
+                            </div>
+                          </>
                         )}
                       </div>
                     )}
