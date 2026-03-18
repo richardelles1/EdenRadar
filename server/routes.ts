@@ -1691,6 +1691,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/eden/sessions", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
+      const sessions = await storage.listEdenSessions(limit);
+      res.json(sessions);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/eden/sessions/:sessionId", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });

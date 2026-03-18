@@ -159,6 +159,7 @@ export interface IStorage {
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
   appendEdenTurn(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
+  listEdenSessions(limit?: number): Promise<EdenSession[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1045,10 +1046,10 @@ export class DatabaseStorage implements IStorage {
         COUNT(*) FILTER (WHERE relevant = true AND embedding IS NOT NULL) AS total_embedded
       FROM ingested_assets
     `);
-    const row = result.rows[0] as any;
+    const row = result.rows[0] as Record<string, unknown>;
     return {
-      totalRelevant: parseInt(row.total_relevant ?? "0"),
-      totalEmbedded: parseInt(row.total_embedded ?? "0"),
+      totalRelevant: parseInt(String(row.total_relevant ?? "0"), 10),
+      totalEmbedded: parseInt(String(row.total_embedded ?? "0"), 10),
     };
   }
 
@@ -1065,19 +1066,19 @@ export class DatabaseStorage implements IStorage {
       WHERE relevant = true AND embedding IS NULL
       ORDER BY completeness_score DESC NULLS LAST
     `);
-    return (result.rows as any[]).map((r) => ({
-      id: r.id,
-      assetName: r.asset_name,
-      target: r.target,
-      modality: r.modality,
-      indication: r.indication,
-      developmentStage: r.development_stage,
-      institution: r.institution,
-      summary: r.summary,
-      mechanismOfAction: r.mechanism_of_action ?? null,
-      innovationClaim: r.innovation_claim ?? null,
-      unmetNeed: r.unmet_need ?? null,
-      comparableDrugs: r.comparable_drugs ?? null,
+    return (result.rows as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      assetName: String(r.asset_name ?? ""),
+      target: String(r.target ?? ""),
+      modality: String(r.modality ?? ""),
+      indication: String(r.indication ?? ""),
+      developmentStage: String(r.development_stage ?? ""),
+      institution: String(r.institution ?? ""),
+      summary: String(r.summary ?? ""),
+      mechanismOfAction: typeof r.mechanism_of_action === "string" ? r.mechanism_of_action : null,
+      innovationClaim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
+      unmetNeed: typeof r.unmet_need === "string" ? r.unmet_need : null,
+      comparableDrugs: typeof r.comparable_drugs === "string" ? r.comparable_drugs : null,
     }));
   }
 
@@ -1109,6 +1110,14 @@ export class DatabaseStorage implements IStorage {
   async getEdenSession(sessionId: string): Promise<EdenSession | undefined> {
     const [session] = await db.select().from(edenSessions).where(eq(edenSessions.sessionId, sessionId));
     return session;
+  }
+
+  async listEdenSessions(limit = 50): Promise<EdenSession[]> {
+    return db
+      .select()
+      .from(edenSessions)
+      .orderBy(desc(edenSessions.updatedAt))
+      .limit(limit);
   }
 }
 

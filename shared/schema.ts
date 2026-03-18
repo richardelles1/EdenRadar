@@ -1,7 +1,13 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
+
+const vector1536 = customType<{ data: number[]; driverData: string }>({
+  dataType() { return "vector(1536)"; },
+  fromDriver(v: string): number[] { return v.slice(1, -1).split(",").map(Number); },
+  toDriver(v: number[]): string { return `[${v.join(",")}]`; },
+});
 
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -125,6 +131,9 @@ export const ingestedAssets = pgTable("ingested_assets", {
   contactEmail: text("contact_email"),
   technologyId: text("technology_id"),
   abstract: text("abstract"),
+  // NOTE: embedding column is managed via startup migration (CREATE EXTENSION vector + ADD COLUMN IF NOT EXISTS)
+  // This declaration provides TypeScript type safety; actual column creation is handled at server startup.
+  embedding: vector1536("embedding"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets).omit({

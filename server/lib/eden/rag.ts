@@ -23,6 +23,28 @@ export type RetrievedAsset = {
   similarity: number;
 };
 
+type EmbeddingRow = {
+  id: unknown;
+  asset_name: unknown;
+  target: unknown;
+  modality: unknown;
+  indication: unknown;
+  development_stage: unknown;
+  institution: unknown;
+  mechanism_of_action: unknown;
+  innovation_claim: unknown;
+  unmet_need: unknown;
+  comparable_drugs: unknown;
+  completeness_score: unknown;
+  licensing_readiness: unknown;
+  source_url: unknown;
+  similarity: unknown;
+};
+
+function toStr(v: unknown): string { return typeof v === "string" ? v : String(v ?? ""); }
+function toStrNull(v: unknown): string | null { return typeof v === "string" && v ? v : null; }
+function toNumNull(v: unknown): number | null { return v != null ? parseFloat(String(v)) : null; }
+
 export async function embedQuery(query: string): Promise<number[]> {
   const response = await client.embeddings.create({
     model: EMBED_MODEL,
@@ -31,7 +53,7 @@ export async function embedQuery(query: string): Promise<number[]> {
   return response.data[0].embedding;
 }
 
-export async function semanticSearch(queryEmbedding: number[], limit = 8): Promise<RetrievedAsset[]> {
+export async function semanticSearch(queryEmbedding: number[], limit = 15): Promise<RetrievedAsset[]> {
   const vectorStr = `[${queryEmbedding.join(",")}]`;
   const result = await db.execute(sql`
     SELECT
@@ -45,22 +67,22 @@ export async function semanticSearch(queryEmbedding: number[], limit = 8): Promi
     LIMIT ${limit}
   `);
 
-  return (result.rows as any[]).map((r) => ({
-    id: r.id,
-    assetName: r.asset_name,
-    target: r.target,
-    modality: r.modality,
-    indication: r.indication,
-    developmentStage: r.development_stage,
-    institution: r.institution,
-    mechanismOfAction: r.mechanism_of_action ?? null,
-    innovationClaim: r.innovation_claim ?? null,
-    unmetNeed: r.unmet_need ?? null,
-    comparableDrugs: r.comparable_drugs ?? null,
-    completenessScore: r.completeness_score != null ? parseFloat(r.completeness_score) : null,
-    licensingReadiness: r.licensing_readiness ?? null,
-    sourceUrl: r.source_url ?? null,
-    similarity: parseFloat(r.similarity),
+  return (result.rows as EmbeddingRow[]).map((r) => ({
+    id: Number(r.id),
+    assetName: toStr(r.asset_name),
+    target: toStr(r.target),
+    modality: toStr(r.modality),
+    indication: toStr(r.indication),
+    developmentStage: toStr(r.development_stage),
+    institution: toStr(r.institution),
+    mechanismOfAction: toStrNull(r.mechanism_of_action),
+    innovationClaim: toStrNull(r.innovation_claim),
+    unmetNeed: toStrNull(r.unmet_need),
+    comparableDrugs: toStrNull(r.comparable_drugs),
+    completenessScore: toNumNull(r.completeness_score),
+    licensingReadiness: toStrNull(r.licensing_readiness),
+    sourceUrl: toStrNull(r.source_url),
+    similarity: parseFloat(String(r.similarity ?? 0)),
   }));
 }
 
@@ -93,11 +115,12 @@ Your job is to answer questions about the TTO asset corpus using semantically re
 
 Guidelines:
 - Be precise and analytically rigorous.
-- When citing assets, reference them by name and institution.
+- When citing assets in your response, reference them by name and institution using the format **Asset Name** (Institution).
 - If the retrieved assets don't fully answer the question, acknowledge the limitation.
 - Never hallucinate data. Only use what's in the context.
 - For licensing questions, focus on licensing readiness and IP type.
-- Keep responses concise but substantive. Use markdown formatting where helpful.`;
+- Keep responses concise but substantive. Use markdown formatting where helpful.
+- At the end of your response, you MUST include a "## Sources" section listing each asset you cited with its name, institution, and URL (if available).`;
 
 export async function* ragQuery(
   question: string,
@@ -120,7 +143,7 @@ export async function* ragQuery(
     messages,
     stream: true,
     temperature: 0.3,
-    max_tokens: 1000,
+    max_tokens: 1200,
   });
 
   for await (const chunk of stream) {
