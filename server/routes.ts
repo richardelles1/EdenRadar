@@ -18,6 +18,7 @@ import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapin
 import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
+import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1413,6 +1414,89 @@ export async function registerRoutes(
       console.error("[enrichment] Failed to check for resumable jobs:", e);
     }
   })();
+
+  // ── EDEN routes ──────────────────────────────────────────────────────────
+
+  let edenJobId: number | null = null;
+  let edenRunning = false;
+  let edenProcessed = 0;
+  let edenTotal = 0;
+
+  app.get("/api/admin/eden/stats", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const coverage = await storage.getDeepEnrichmentCoverage();
+      const latest = await storage.getLatestDeepEnrichmentJob();
+      res.json({ coverage, latestJob: latest ?? null, live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/eden/enrich", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
+    try {
+      const assets = await storage.getAssetsNeedingDeepEnrich();
+      if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0 });
+
+      edenTotal = assets.length;
+      edenProcessed = 0;
+      edenRunning = true;
+
+      const job = await storage.createDeepEnrichmentJob(assets.length);
+      edenJobId = job.id;
+
+      res.json({ message: "Deep enrichment started", jobId: job.id, total: assets.length });
+
+      deepEnrichBatch(
+        assets,
+        20,
+        async (id, result) => {
+          await storage.updateIngestedAssetDeepEnrichment(id, result);
+        },
+        async (processed, total) => {
+          edenProcessed = processed;
+          if (edenJobId !== null) {
+            await storage.updateEnrichmentJob(edenJobId, { processed }).catch(() => {});
+          }
+        },
+      ).then(async () => {
+        edenRunning = false;
+        if (edenJobId !== null) {
+          await storage.updateEnrichmentJob(edenJobId, { status: "done", completedAt: new Date(), processed: edenTotal, improved: edenTotal }).catch(() => {});
+        }
+        console.log(`[EDEN] Deep enrichment complete: ${edenTotal} assets processed`);
+      }).catch(async (e) => {
+        edenRunning = false;
+        if (edenJobId !== null) {
+          await storage.updateEnrichmentJob(edenJobId, { status: "failed", completedAt: new Date() }).catch(() => {});
+        }
+        console.error("[EDEN] Deep enrichment failed:", e);
+      });
+    } catch (err: any) {
+      edenRunning = false;
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/eden/enrich/status", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const latest = await storage.getLatestDeepEnrichmentJob();
+      res.json({
+        running: edenRunning,
+        processed: edenProcessed,
+        total: edenTotal,
+        job: latest ?? null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ── Researcher portal routes ──────────────────────────────────────────────
 

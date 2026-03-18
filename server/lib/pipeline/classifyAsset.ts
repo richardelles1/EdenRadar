@@ -1,9 +1,8 @@
 import OpenAI from "openai";
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY ?? process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
-  timeout: 10000,
+  apiKey: process.env.OPENAI_API_KEY,
+  timeout: 30000,
   maxRetries: 1,
 });
 
@@ -40,7 +39,8 @@ function sanitize(val: string, allowed: Set<string>, fallback: string): string {
 export async function classifyAsset(
   title: string,
   description: string,
-  abstract?: string
+  abstract?: string,
+  model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini"
 ): Promise<AssetClassification> {
   const inputText = [
     `Title: ${title}`,
@@ -50,7 +50,7 @@ export async function classifyAsset(
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model,
       temperature: 0,
       max_tokens: 400,
       messages: [

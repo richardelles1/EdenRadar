@@ -15,7 +15,7 @@ import {
   reviewQueue,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and, inArray, lt, isNull, or } from "drizzle-orm";
+import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -90,6 +90,25 @@ export interface IStorage {
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   stampEnrichedAt(assetId: number): Promise<void>;
+
+  getDeepEnrichmentCoverage(): Promise<{
+    totalRelevant: number;
+    deepEnriched: number;
+    withMoa: number;
+    withInnovationClaim: number;
+    withUnmetNeed: number;
+    withComparableDrugs: number;
+    avgCompletenessScore: number | null;
+  }>;
+  getAssetsNeedingDeepEnrich(): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null }>>;
+  updateIngestedAssetDeepEnrichment(id: number, data: {
+    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+  }): Promise<void>;
+  createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
+  getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
+  getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
 
   getResearchProject(id: number, researcherId: string): Promise<ResearchProject | undefined>;
   getResearchProjects(researcherId: string): Promise<ResearchProject[]>;
@@ -652,6 +671,124 @@ export class DatabaseStorage implements IStorage {
 
   async stampEnrichedAt(assetId: number): Promise<void> {
     await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
+  }
+
+  async getDeepEnrichmentCoverage(): Promise<{
+    totalRelevant: number;
+    deepEnriched: number;
+    withMoa: number;
+    withInnovationClaim: number;
+    withUnmetNeed: number;
+    withComparableDrugs: number;
+    avgCompletenessScore: number | null;
+  }> {
+    const [totalRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.relevant, true));
+    const totalRelevant = totalRow?.count ?? 0;
+
+    const [deepRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), isNotNull(ingestedAssets.mechanismOfAction)));
+    const deepEnriched = deepRow?.count ?? 0;
+
+    const [moaRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.mechanismOfAction} IS NOT NULL AND length(${ingestedAssets.mechanismOfAction}) > 5`));
+
+    const [claimRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.innovationClaim} IS NOT NULL AND length(${ingestedAssets.innovationClaim}) > 5`));
+
+    const [needRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.unmetNeed} IS NOT NULL AND length(${ingestedAssets.unmetNeed}) > 5`));
+
+    const [drugsRow] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), sql`${ingestedAssets.comparableDrugs} IS NOT NULL AND length(${ingestedAssets.comparableDrugs}) > 2`));
+
+    const [avgRow] = await db
+      .select({ avg: sql<number>`round(avg(${ingestedAssets.completenessScore})::numeric, 1)` })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), isNotNull(ingestedAssets.completenessScore)));
+
+    return {
+      totalRelevant,
+      deepEnriched,
+      withMoa: moaRow?.count ?? 0,
+      withInnovationClaim: claimRow?.count ?? 0,
+      withUnmetNeed: needRow?.count ?? 0,
+      withComparableDrugs: drugsRow?.count ?? 0,
+      avgCompletenessScore: avgRow?.avg ?? null,
+    };
+  }
+
+  async getAssetsNeedingDeepEnrich(): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null }>> {
+    return db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        summary: ingestedAssets.summary,
+        abstract: ingestedAssets.abstract,
+      })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), isNull(ingestedAssets.mechanismOfAction)));
+  }
+
+  async updateIngestedAssetDeepEnrichment(id: number, data: {
+    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
+    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+  }): Promise<void> {
+    await db.update(ingestedAssets).set({
+      target: data.target,
+      modality: data.modality,
+      indication: data.indication,
+      developmentStage: data.developmentStage,
+      relevant: data.biotechRelevant,
+      categories: data.categories,
+      categoryConfidence: data.categoryConfidence,
+      innovationClaim: data.innovationClaim || null,
+      mechanismOfAction: data.mechanismOfAction || null,
+      ipType: data.ipType,
+      unmetNeed: data.unmetNeed || null,
+      comparableDrugs: data.comparableDrugs || null,
+      licensingReadiness: data.licensingReadiness,
+      completenessScore: data.completenessScore,
+      enrichedAt: new Date(),
+    }).where(eq(ingestedAssets.id, id));
+  }
+
+  async createDeepEnrichmentJob(total: number): Promise<EnrichmentJob> {
+    const [row] = await db.insert(enrichmentJobs).values({ total, status: "running", model: "gpt-4o" }).returning();
+    return row;
+  }
+
+  async getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined> {
+    const [row] = await db
+      .select()
+      .from(enrichmentJobs)
+      .where(and(eq(enrichmentJobs.status, "running"), eq(enrichmentJobs.model, "gpt-4o")))
+      .orderBy(desc(enrichmentJobs.startedAt))
+      .limit(1);
+    return row;
+  }
+
+  async getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined> {
+    const [row] = await db
+      .select()
+      .from(enrichmentJobs)
+      .where(eq(enrichmentJobs.model, "gpt-4o"))
+      .orderBy(desc(enrichmentJobs.startedAt))
+      .limit(1);
+    return row;
   }
 
   async getResearchProject(id: number, researcherId: string): Promise<ResearchProject | undefined> {

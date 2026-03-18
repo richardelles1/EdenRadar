@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3 } from "lucide-react";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import { Button } from "@/components/ui/button";
@@ -2467,6 +2467,200 @@ function NewArrivals({ pw }: { pw: string }) {
   );
 }
 
+// ── EDEN Tab ────────────────────────────────────────────────────────────────
+
+type EdenCoverage = {
+  totalRelevant: number;
+  deepEnriched: number;
+  withMoa: number;
+  withInnovationClaim: number;
+  withUnmetNeed: number;
+  withComparableDrugs: number;
+  avgCompletenessScore: number | null;
+};
+
+type EdenStatsResponse = {
+  coverage: EdenCoverage;
+  latestJob: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
+  live: { processed: number; total: number } | null;
+};
+
+type EdenStatusResponse = {
+  running: boolean;
+  processed: number;
+  total: number;
+  job: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
+};
+
+function EdenTab({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [confirming, setConfirming] = useState(false);
+
+  const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
+    queryKey: ["/api/admin/eden/stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/stats", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load EDEN stats");
+      return res.json();
+    },
+    refetchInterval: 5000,
+  });
+
+  const { data: status, refetch: refetchStatus } = useQuery<EdenStatusResponse>({
+    queryKey: ["/api/admin/eden/enrich/status"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load status");
+      return res.json();
+    },
+    refetchInterval: 3000,
+  });
+
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminPassword: pw }),
+      });
+      if (!res.ok) {
+        const e = await res.json();
+        throw new Error(e.error ?? "Failed to start");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setConfirming(false);
+      toast({ title: "EDEN Deep Enrichment started", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
+      refetchStats();
+      refetchStatus();
+    },
+    onError: (e: any) => {
+      setConfirming(false);
+      toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" });
+    },
+  });
+
+  const cov = stats?.coverage;
+  const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total } : null;
+  const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
+  const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
+  const remaining = cov ? cov.totalRelevant - cov.deepEnriched : 0;
+  const estCostUsd = remaining > 0 ? ((remaining * 0.0012)).toFixed(0) : "0";
+
+  return (
+    <div className="space-y-6" data-testid="eden-tab">
+      {/* Coverage cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-total">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Relevant Assets</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">EDEN corpus</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-enriched">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Deep Enriched</p>
+          <p className="text-2xl font-bold text-emerald-600 mt-1">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{deepPct}% complete</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-moa">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">With MoA</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Mechanism of Action</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-score">
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg Completeness</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}/100` : "—"}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">out of 100 pts</p>
+        </div>
+      </div>
+
+      {/* Coverage progress */}
+      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-progress">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-emerald-500" />
+            Deep Enrichment Coverage
+          </h3>
+          <span className="text-sm text-muted-foreground">{deepPct}%</span>
+        </div>
+        <Progress value={deepPct} className="h-2 mb-3" />
+        <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
+          <div>
+            <span className="font-medium text-foreground">{cov?.withInnovationClaim?.toLocaleString() ?? "—"}</span> with Innovation Claim
+          </div>
+          <div>
+            <span className="font-medium text-foreground">{cov?.withUnmetNeed?.toLocaleString() ?? "—"}</span> with Unmet Need
+          </div>
+          <div>
+            <span className="font-medium text-foreground">{cov?.withComparableDrugs?.toLocaleString() ?? "—"}</span> with Comparable Drugs
+          </div>
+        </div>
+      </div>
+
+      {/* Live progress bar (shown when running) */}
+      {live && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5" data-testid="card-eden-live">
+          <div className="flex items-center gap-2 mb-3">
+            <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
+            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+              Deep enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()} assets
+            </span>
+            <span className="ml-auto text-sm font-bold text-emerald-600">{pct}%</span>
+          </div>
+          <Progress value={pct ?? 0} className="h-2" />
+        </div>
+      )}
+
+      {/* Run button */}
+      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-run">
+        <h3 className="text-sm font-semibold text-foreground mb-1">Run Deep Enrichment Blitz</h3>
+        <p className="text-xs text-muted-foreground mb-4">
+          Uses GPT-4o to extract Mechanism of Action, Innovation Claim, Unmet Need, Comparable Drugs, and Licensing Readiness for all {remaining.toLocaleString()} un-enriched relevant assets.
+          Estimated cost: <span className="font-semibold text-foreground">${estCostUsd}</span> (~$0.0012/asset).
+          Runs at 20 concurrent threads. Resumes automatically on restart.
+        </p>
+
+        {!confirming ? (
+          <Button
+            onClick={() => setConfirming(true)}
+            disabled={live != null || remaining === 0}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            data-testid="button-eden-run"
+          >
+            <PlayCircle className="h-4 w-4 mr-2" />
+            {remaining === 0 ? "All Assets Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
+          </Button>
+        ) : (
+          <div className="flex items-center gap-3">
+            <p className="text-sm font-semibold text-amber-600">This will consume ~${estCostUsd} of OpenAI credits. Confirm?</p>
+            <Button
+              onClick={() => startMutation.mutate()}
+              disabled={startMutation.isPending}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              data-testid="button-eden-confirm"
+            >
+              {startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+              Yes, Run It
+            </Button>
+            <Button variant="outline" onClick={() => setConfirming(false)} data-testid="button-eden-cancel">
+              Cancel
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {/* Chat placeholder */}
+      <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center" data-testid="card-eden-chat-placeholder">
+        <BrainCircuit className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
+        <h3 className="text-sm font-semibold text-foreground mb-1">EDEN Chat — Coming Soon</h3>
+        <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+          Once deep enrichment and vector embeddings are complete, EDEN will let you query the 20K asset corpus in natural language. ("What novel CDK inhibitors from MIT have a completeness score above 70?")
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function Admin() {
   const [authed, setAuthed] = useState(false);
   const [activeTab, setActiveTab] = useState("data-health");
@@ -2614,6 +2808,19 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Concept Queue
             </button>
 
+            <button
+              onClick={() => setActiveTab("eden")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "eden"
+                  ? "bg-emerald-500/10 text-emerald-600"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-eden"
+            >
+              <BrainCircuit className="h-4 w-4" />
+              EDEN
+            </button>
+
             <div className="hidden lg:block border-t border-border my-2" />
 
             <button
@@ -2693,6 +2900,19 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">Manage user accounts, assign portal roles, and invite new users to the platform.</p>
               </div>
               <AccountCenter pw={pw} />
+            </>
+          )}
+
+          {activeTab === "eden" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
+                  <BrainCircuit className="h-6 w-6 text-emerald-500" />
+                  EDEN — AI Analyst
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">Eden Radar Novel Innovation Experience. Deep-enriches the 20K relevant TTO assets using GPT-4o for RAG-powered analysis.</p>
+              </div>
+              <EdenTab pw={pw} />
             </>
           )}
 
