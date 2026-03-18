@@ -49,7 +49,7 @@ interface IndustryDeltaResponse {
   };
   newProjects: {
     total: number;
-    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string }>;
+    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string; projectUrl?: string | null }>;
   };
   windowHours: number;
 }
@@ -286,11 +286,25 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
                         {proj.discoverySummary || proj.description}
                       </p>
                     )}
-                    <div className="flex items-center gap-2 mt-1.5">
-                      {proj.researchArea && (
-                        <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <div className="flex items-center gap-2">
+                        {proj.researchArea && (
+                          <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
+                      </div>
+                      {proj.projectUrl && (
+                        <a
+                          href={proj.projectUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="text-[10px] text-primary hover:underline shrink-0"
+                          data-testid={`alert-project-source-${proj.id}`}
+                        >
+                          Source →
+                        </a>
                       )}
-                      <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
                     </div>
                   </div>
                 </Link>

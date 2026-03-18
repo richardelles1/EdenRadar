@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FlaskConical, Search, Handshake, Building2 } from "lucide-react";
+import { FlaskConical, Search, Handshake, Building2, ExternalLink } from "lucide-react";
 import type { ResearchProject } from "@shared/schema";
 
 type ProjectsResponse = {
@@ -102,12 +102,28 @@ function ProjectCard({ project }: { project: ResearchProject }) {
         </div>
       )}
 
-      {getProjectInstitution(project) && (
-        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground border-t border-border/60 pt-1.5">
-          <Building2 className="w-3 h-3 shrink-0" />
-          <span className="truncate">{getProjectInstitution(project)}</span>
+      <div className="flex items-center justify-between border-t border-border/60 pt-1.5">
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground min-w-0">
+          {getProjectInstitution(project) && (
+            <>
+              <Building2 className="w-3 h-3 shrink-0" />
+              <span className="truncate">{getProjectInstitution(project)}</span>
+            </>
+          )}
         </div>
-      )}
+        {project.projectUrl && (
+          <a
+            href={project.projectUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 hover:underline shrink-0 ml-2"
+            data-testid={`project-source-link-${project.id}`}
+          >
+            Source <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
     </div>
   );
 }

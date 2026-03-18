@@ -2845,6 +2845,49 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.get("/api/admin/industry-projects", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const results = await db
+        .select({
+          id: researchProjects.id,
+          title: researchProjects.title,
+          discoveryTitle: researchProjects.discoveryTitle,
+          researchArea: researchProjects.researchArea,
+          status: researchProjects.status,
+          adminStatus: researchProjects.adminStatus,
+          publishToIndustry: researchProjects.publishToIndustry,
+          discoverySummary: researchProjects.discoverySummary,
+          projectUrl: researchProjects.projectUrl,
+          lastEditedAt: researchProjects.lastEditedAt,
+        })
+        .from(researchProjects)
+        .where(eq(researchProjects.publishToIndustry, true))
+        .orderBy(desc(researchProjects.lastEditedAt));
+      res.json({ projects: results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/industry-projects/:id/status", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const { id } = req.params;
+      const schema = z.object({ adminStatus: z.enum(["pending", "published", "rejected"]) });
+      const { adminStatus } = schema.parse(req.body);
+      await db
+        .update(researchProjects)
+        .set({ adminStatus })
+        .where(eq(researchProjects.id, Number(id)));
+      res.json({ ok: true, id: Number(id), adminStatus });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
 
@@ -3368,7 +3411,12 @@ If a field cannot be determined, use "N/A".`
       const projects = await db
         .select()
         .from(researchProjects)
-        .where(eq(researchProjects.publishToIndustry, true))
+        .where(
+          and(
+            eq(researchProjects.publishToIndustry, true),
+            eq(researchProjects.adminStatus, "published"),
+          ),
+        )
         .orderBy(desc(researchProjects.lastEditedAt));
       res.json({ projects });
     } catch (err: any) {
@@ -3418,11 +3466,13 @@ If a field cannot be determined, use "N/A".`
             status: researchProjects.status,
             discoverySummary: researchProjects.discoverySummary,
             description: researchProjects.description,
+            projectUrl: researchProjects.projectUrl,
           })
           .from(researchProjects)
           .where(
             and(
               eq(researchProjects.publishToIndustry, true),
+              eq(researchProjects.adminStatus, "published"),
               sql`${researchProjects.lastEditedAt} >= ${since}`,
             ),
           )
