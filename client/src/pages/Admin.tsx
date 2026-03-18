@@ -3611,8 +3611,8 @@ function EdenTab({ pw }: { pw: string }) {
             <div data-testid="card-eden-run">
               <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
               <p className="text-xs text-muted-foreground mb-3">
-                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs &amp; Licensing Readiness for {remaining.toLocaleString()} un-enriched assets.
-                Estimated cost: <span className="font-semibold text-foreground">${estCostUsd}</span>.
+                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs &amp; Licensing Readiness for {remaining.toLocaleString()} assets with incomplete deep-enrichment fields.
+                Estimated cost: <span className="font-semibold text-foreground">~${estCostUsd}</span>.
               </p>
               {!confirming ? (
                 <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">

@@ -54,6 +54,7 @@ export async function classifyAsset(
       model,
       temperature: 0,
       max_tokens: 400,
+      response_format: { type: "json_object" },
       messages: [
         {
           role: "system",
