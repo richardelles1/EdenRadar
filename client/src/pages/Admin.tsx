@@ -2508,17 +2508,168 @@ type EdenEmbedStatusResponse = {
   failed: number;
 };
 
+type ChatAsset = {
+  id: number;
+  assetName: string;
+  institution: string;
+  indication: string;
+  modality: string;
+  developmentStage?: string;
+  ipType?: string;
+  sourceName?: string;
+  sourceUrl?: string | null;
+  similarity: number;
+};
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
-  assets?: Array<{ id: number; assetName: string; institution: string; indication: string; modality: string; similarity: number }>;
+  assets?: ChatAsset[];
   isStreaming?: boolean;
 };
+
+type EdenSessionSummary = {
+  id: number;
+  sessionId: string;
+  messages: Array<{ role: "user" | "assistant"; content: string; ts: string }>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const STARTER_QUESTIONS = [
+  "What oncology assets at preclinical stage are available for licensing right now?",
+  "Which institutions have the most GLP-1 related technologies?",
+  "Find CNS assets with defined mechanism of action from top universities",
+  "What antibody-based therapeutics are available for autoimmune indications?",
+  "Show me RNA therapy assets with innovation claims and licensing readiness",
+  "Which MIT or Stanford oncology assets have completeness scores above 70?",
+];
+
+function renderMdInline(text: string): (string | JSX.Element)[] {
+  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]*\]\([^)]+\)|`[^`]+`)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
+    }
+    const link = part.match(/^\[([^\]]*)\]\(([^)]+)\)$/);
+    if (link) {
+      return <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80">{link[1]}</a>;
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return <code key={i} className="font-mono text-[11px] bg-muted px-1 rounded">{part.slice(1, -1)}</code>;
+    }
+    return part;
+  });
+}
+
+function MarkdownContent({ text, isStreaming }: { text: string; isStreaming?: boolean }) {
+  const lines = text.split("\n");
+  const nodes: JSX.Element[] = [];
+  lines.forEach((line, i) => {
+    if (line.startsWith("## ")) {
+      nodes.push(<h2 key={i} className="font-bold text-sm mt-3 mb-0.5 text-foreground">{renderMdInline(line.slice(3))}</h2>);
+    } else if (line.startsWith("### ")) {
+      nodes.push(<h3 key={i} className="font-semibold text-sm mt-2 mb-0.5 text-foreground">{renderMdInline(line.slice(4))}</h3>);
+    } else if (line.startsWith("- ") || line.startsWith("* ")) {
+      nodes.push(
+        <div key={i} className="flex gap-1.5 text-sm leading-relaxed">
+          <span className="mt-0.5 shrink-0 text-muted-foreground">•</span>
+          <span>{renderMdInline(line.slice(2))}</span>
+        </div>
+      );
+    } else if (/^\d+\.\s/.test(line)) {
+      const match = line.match(/^(\d+)\.\s(.*)$/);
+      if (match) {
+        nodes.push(
+          <div key={i} className="flex gap-1.5 text-sm leading-relaxed">
+            <span className="shrink-0 text-muted-foreground">{match[1]}.</span>
+            <span>{renderMdInline(match[2])}</span>
+          </div>
+        );
+      }
+    } else if (line.trim() === "") {
+      nodes.push(<div key={i} className="h-1.5" />);
+    } else {
+      nodes.push(<p key={i} className="text-sm leading-relaxed">{renderMdInline(line)}</p>);
+    }
+  });
+  return (
+    <div className="space-y-0.5">
+      {nodes}
+      {isStreaming && <span className="animate-pulse text-muted-foreground">▌</span>}
+    </div>
+  );
+}
+
+function devStageBadgeClass(stage?: string): string {
+  if (!stage) return "bg-muted text-muted-foreground border-border";
+  const s = stage.toLowerCase();
+  if (s.includes("clinical") || s.includes("phase")) return "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20";
+  if (s.includes("preclinical") || s.includes("pre-clinical")) return "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20";
+  if (s.includes("research") || s.includes("discovery")) return "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20";
+  if (s.includes("approved") || s.includes("commercial")) return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20";
+  return "bg-muted text-muted-foreground border-border";
+}
+
+function modalityBadgeClass(modality?: string): string {
+  if (!modality) return "bg-muted text-muted-foreground border-border";
+  const m = modality.toLowerCase();
+  if (m.includes("antibody") || m.includes("biologic")) return "bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 border-cyan-500/20";
+  if (m.includes("small molecule") || m.includes("compound")) return "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20";
+  if (m.includes("gene") || m.includes("cell") || m.includes("rna") || m.includes("mrna")) return "bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/20";
+  if (m.includes("platform") || m.includes("diagnostic") || m.includes("device")) return "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20";
+  return "bg-muted text-muted-foreground border-border";
+}
+
+function CitationCard({ asset, index }: { asset: ChatAsset; index: number }) {
+  const similarity = Math.round(asset.similarity * 100);
+  return (
+    <div className="rounded-lg border border-border bg-background p-3 flex flex-col gap-1.5" data-testid={`citation-card-${index}`}>
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2 flex-1">{asset.assetName}</p>
+        <span className="shrink-0 text-[10px] font-medium text-muted-foreground bg-muted rounded px-1.5 py-0.5 tabular-nums">{similarity}%</span>
+      </div>
+      <p className="text-[11px] text-muted-foreground truncate">{asset.institution}</p>
+      <div className="flex flex-wrap gap-1 mt-0.5">
+        {asset.modality && asset.modality !== "unknown" && (
+          <span className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${modalityBadgeClass(asset.modality)}`}>
+            {asset.modality.length > 22 ? asset.modality.slice(0, 22) + "…" : asset.modality}
+          </span>
+        )}
+        {asset.developmentStage && asset.developmentStage !== "unknown" && (
+          <span className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${devStageBadgeClass(asset.developmentStage)}`}>
+            {asset.developmentStage.length > 18 ? asset.developmentStage.slice(0, 18) + "…" : asset.developmentStage}
+          </span>
+        )}
+        {asset.ipType && (
+          <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-muted text-muted-foreground border-border">
+            {asset.ipType}
+          </span>
+        )}
+      </div>
+      {asset.sourceUrl && (
+        <a
+          href={asset.sourceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] text-primary hover:underline flex items-center gap-1 mt-0.5"
+          data-testid={`citation-link-${index}`}
+        >
+          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
+          View source
+        </a>
+      )}
+    </div>
+  );
+}
 
 function EdenTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [confirming, setConfirming] = useState(false);
   const [embedConfirming, setEmbedConfirming] = useState(false);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
 
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -2605,13 +2756,36 @@ function EdenTab({ pw }: { pw: string }) {
     },
   });
 
+  const { data: sessionsData, refetch: refetchSessions } = useQuery<EdenSessionSummary[]>({
+    queryKey: ["/api/eden/sessions"],
+    queryFn: async () => {
+      const res = await fetch("/api/eden/sessions?limit=25", { headers: { "x-admin-password": pw } });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: historyOpen,
+    staleTime: 10000,
+  });
+
+  async function loadSession(s: EdenSessionSummary) {
+    setChatMessages(
+      (s.messages ?? []).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+    );
+    setChatSessionId(s.sessionId);
+    setHistoryOpen(false);
+  }
+
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  async function sendChatMessage() {
-    if (!chatInput.trim() || chatStreaming) return;
-    const msg = chatInput.trim();
+  async function sendChatMessage(overrideMsg?: string) {
+    const raw = overrideMsg ?? chatInput;
+    if (!raw.trim() || chatStreaming) return;
+    const msg = raw.trim();
     setChatInput("");
     setChatMessages((prev) => [
       ...prev,
@@ -2700,209 +2874,180 @@ function EdenTab({ pw }: { pw: string }) {
   const estCostUsd = remaining > 0 ? (remaining * 0.0012).toFixed(0) : "0";
   const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
   const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
-  const embEstCost = embRemaining > 0 ? ((embRemaining * 0.00002)).toFixed(2) : "0.00";
+  const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
   const embedLive = embedStatus?.running ? embedStatus : null;
   const embedPct = embedLive && embedLive.total > 0 ? Math.round((embedLive.processed / embedLive.total) * 100) : null;
   const chatReady = emb && emb.totalEmbedded > 0;
+  const institutionCount = 223;
 
   return (
     <div className="space-y-6" data-testid="eden-tab">
-      {/* Coverage cards — 5 columns on md+ */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-total">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Relevant Assets</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">EDEN corpus</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-enriched">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Deep Enriched</p>
-          <p className="text-2xl font-bold text-emerald-600 mt-1">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{deepPct}% complete</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-embedded">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Embedded</p>
-          <p className="text-2xl font-bold text-violet-600 mt-1">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{embPct}% vectorized</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-moa">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">With MoA</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">Mechanism of Action</p>
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4" data-testid="card-eden-score">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Avg Completeness</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}/100` : "—"}</p>
-          <p className="text-xs text-muted-foreground mt-0.5">out of 100 pts</p>
-        </div>
-      </div>
 
-      {/* Coverage progress */}
-      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-progress">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <BarChart3 className="h-4 w-4 text-emerald-500" />
-            Deep Enrichment Coverage
-          </h3>
-          <span className="text-sm text-muted-foreground">{deepPct}%</span>
-        </div>
-        <Progress value={deepPct} className="h-2 mb-3" />
-        <div className="grid grid-cols-3 gap-3 text-xs text-muted-foreground">
-          <div><span className="font-medium text-foreground">{cov?.withInnovationClaim?.toLocaleString() ?? "—"}</span> with Innovation Claim</div>
-          <div><span className="font-medium text-foreground">{cov?.withUnmetNeed?.toLocaleString() ?? "—"}</span> with Unmet Need</div>
-          <div><span className="font-medium text-foreground">{cov?.withComparableDrugs?.toLocaleString() ?? "—"}</span> with Comparable Drugs</div>
-        </div>
-      </div>
+      {/* ── EDEN Chat (hero section) ── */}
+      <div className="rounded-xl border border-border bg-card overflow-hidden shadow-sm" data-testid="card-eden-chat">
 
-      {/* Live enrichment progress */}
-      {live && (
-        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-5" data-testid="card-eden-live">
-          <div className="flex items-center gap-2 mb-3">
-            <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
-            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-              Deep enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()} processed
-            </span>
-            <span className="ml-auto text-sm font-bold text-emerald-600">{pct}%</span>
+        {/* Identity header */}
+        <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-emerald-500/5 to-transparent flex items-center gap-3" data-testid="eden-identity-header">
+          <div className="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
+            <BrainCircuit className="h-5 w-5 text-emerald-500" />
           </div>
-          <Progress value={pct ?? 0} className="h-2 mb-3" />
-          <div className="flex gap-4 text-xs text-muted-foreground">
-            <span><span className="font-semibold text-emerald-600">{(live.succeeded ?? 0).toLocaleString()}</span> written</span>
-            {(live.failed ?? 0) > 0 && <span><span className="font-semibold text-red-500">{live.failed.toLocaleString()}</span> failed</span>}
-          </div>
-        </div>
-      )}
-
-      {/* Run enrichment button */}
-      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-run">
-        <h3 className="text-sm font-semibold text-foreground mb-1">Run Deep Enrichment Blitz</h3>
-        <p className="text-xs text-muted-foreground mb-4">
-          Uses GPT-4o to extract Mechanism of Action, Innovation Claim, Unmet Need, Comparable Drugs, and Licensing Readiness for all {remaining.toLocaleString()} un-enriched relevant assets.
-          Estimated cost: <span className="font-semibold text-foreground">${estCostUsd}</span> (~$0.0012/asset).
-          Runs at 20 concurrent threads. Resumes automatically on restart.
-        </p>
-        {!confirming ? (
-          <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-eden-run">
-            <PlayCircle className="h-4 w-4 mr-2" />
-            {remaining === 0 ? "All Assets Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
-          </Button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <p className="text-sm font-semibold text-amber-600">This will consume ~${estCostUsd} of OpenAI credits. Confirm?</p>
-            <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white" data-testid="button-eden-confirm">
-              {startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Yes, Run It
-            </Button>
-            <Button variant="outline" onClick={() => setConfirming(false)} data-testid="button-eden-cancel">Cancel</Button>
-          </div>
-        )}
-      </div>
-
-      {/* Vector Embeddings section */}
-      <div className="rounded-lg border border-border bg-card p-5" data-testid="card-eden-embeddings">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-violet-500" />
-            Vector Embeddings
-          </h3>
-          <span className="text-sm text-muted-foreground">{embPct}%</span>
-        </div>
-        <Progress value={embPct} className="h-2 mb-3" />
-        <p className="text-xs text-muted-foreground mb-4">
-          {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} relevant assets embedded with <span className="font-medium text-foreground">text-embedding-3-small</span>.
-          {embRemaining > 0 && <> Estimated cost for remaining: <span className="font-semibold text-foreground">${embEstCost}</span> (~$0.00002/asset).</>}
-        </p>
-
-        {/* Live embedding progress */}
-        {embedLive && (
-          <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4 mb-4" data-testid="card-embed-live">
-            <div className="flex items-center gap-2 mb-2">
-              <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
-              <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
-                Embedding running — {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
-              </span>
-              <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="text-sm font-bold text-foreground" data-testid="eden-name">EDEN</h3>
+              {chatReady && (
+                <span className="flex items-center gap-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 rounded-full px-2 py-0.5 border border-emerald-500/20">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  live
+                </span>
+              )}
             </div>
-            <Progress value={embedPct ?? 0} className="h-1.5" />
-            <div className="flex gap-4 text-xs text-muted-foreground mt-2">
-              <span><span className="font-semibold text-violet-600">{(embedLive.succeeded ?? 0).toLocaleString()}</span> done</span>
-              {(embedLive.failed ?? 0) > 0 && <span><span className="font-semibold text-red-500">{embedLive.failed.toLocaleString()}</span> failed</span>}
-            </div>
-          </div>
-        )}
-
-        {!embedConfirming ? (
-          <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-embed-run">
-            <Sparkles className="h-4 w-4 mr-2" />
-            {embRemaining === 0 ? "All Assets Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
-          </Button>
-        ) : (
-          <div className="flex items-center gap-3">
-            <p className="text-sm font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})? Confirm?</p>
-            <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white" data-testid="button-embed-confirm">
-              {embedMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-              Yes, Embed
-            </Button>
-            <Button variant="outline" onClick={() => setEmbedConfirming(false)} data-testid="button-embed-cancel">Cancel</Button>
-          </div>
-        )}
-      </div>
-
-      {/* EDEN Chat */}
-      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-chat">
-        <div className="px-5 py-4 border-b border-border flex items-center gap-3">
-          <BrainCircuit className="h-5 w-5 text-emerald-500" />
-          <div>
-            <h3 className="text-sm font-semibold text-foreground">EDEN Chat</h3>
-            <p className="text-xs text-muted-foreground">
-              {chatReady
-                ? `RAG over ${emb?.totalEmbedded?.toLocaleString()} embedded assets · GPT-4o`
-                : "Generate embeddings first to enable semantic search"}
+            <p className="text-[11px] text-muted-foreground mt-0.5" data-testid="eden-descriptor">
+              TTO Intelligence Analyst · {institutionCount} institutions · {emb?.totalEmbedded?.toLocaleString() ?? "—"} assets indexed
             </p>
           </div>
-          {chatMessages.length > 0 && (
-            <Button variant="ghost" size="sm" className="ml-auto text-xs" onClick={() => { setChatMessages([]); setChatSessionId(""); }} data-testid="button-chat-clear">
-              Clear
+          <div className="flex items-center gap-1.5 shrink-0">
+            {chatMessages.length > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 px-2"
+                onClick={() => { setChatMessages([]); setChatSessionId(""); }}
+                data-testid="button-chat-clear"
+              >
+                New chat
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs h-7 px-2 gap-1"
+              onClick={() => { setHistoryOpen((v) => !v); if (!historyOpen) refetchSessions(); }}
+              data-testid="button-chat-history"
+            >
+              <Clock className="h-3.5 w-3.5" />
+              History
             </Button>
-          )}
+          </div>
         </div>
 
-        {!chatReady && (
-          <div className="p-8 text-center" data-testid="chat-not-ready">
-            <Sparkles className="h-8 w-8 text-muted-foreground/40 mx-auto mb-2" />
-            <p className="text-xs text-muted-foreground">No embeddings yet. Run "Embed Assets" above to enable EDEN Chat.</p>
+        {/* Session history dropdown */}
+        {historyOpen && (
+          <div className="border-b border-border bg-muted/30 p-3 max-h-52 overflow-y-auto" data-testid="session-history-panel">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Recent Sessions</p>
+            {!sessionsData && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading…
+              </div>
+            )}
+            {sessionsData && sessionsData.length === 0 && (
+              <p className="text-xs text-muted-foreground">No sessions yet.</p>
+            )}
+            {sessionsData && sessionsData.length > 0 && (
+              <div className="space-y-1">
+                {sessionsData.map((s) => {
+                  const firstQ = s.messages?.find((m) => m.role === "user")?.content ?? "Untitled session";
+                  const date = new Date(s.updatedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  const msgCount = s.messages?.length ?? 0;
+                  return (
+                    <button
+                      key={s.sessionId}
+                      onClick={() => loadSession(s)}
+                      className="w-full text-left rounded-md px-3 py-2 hover:bg-muted transition-colors flex items-center gap-2 group"
+                      data-testid={`session-item-${s.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{firstQ.slice(0, 70)}{firstQ.length > 70 ? "…" : ""}</p>
+                        <p className="text-[10px] text-muted-foreground mt-0.5">{date} · {msgCount} message{msgCount !== 1 ? "s" : ""}</p>
+                      </div>
+                      <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
+        {/* Not-ready gate */}
+        {!chatReady && (
+          <div className="p-10 text-center" data-testid="chat-not-ready">
+            <Sparkles className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+            <p className="text-sm font-medium text-foreground mb-1">EDEN is not yet active</p>
+            <p className="text-xs text-muted-foreground">Generate vector embeddings first using the EDEN Readiness panel below.</p>
+          </div>
+        )}
+
+        {/* Chat area */}
         {chatReady && (
           <>
-            <div className="h-96 overflow-y-auto p-4 space-y-4" data-testid="chat-messages">
+            <div className="h-[520px] overflow-y-auto p-5 space-y-5" data-testid="chat-messages">
+
+              {/* Empty state with starter chips */}
               {chatMessages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-center" data-testid="chat-empty">
-                  <BrainCircuit className="h-8 w-8 text-muted-foreground/30 mb-2" />
-                  <p className="text-xs text-muted-foreground">Ask EDEN anything about the TTO corpus.</p>
-                  <p className="text-xs text-muted-foreground/60 mt-1">e.g. "What CDK inhibitors from MIT have a completeness score above 70?"</p>
+                <div className="h-full flex flex-col items-center justify-center" data-testid="chat-empty">
+                  <BrainCircuit className="h-10 w-10 text-emerald-500/30 mb-3" />
+                  <p className="text-sm font-semibold text-foreground mb-1">Ask EDEN anything</p>
+                  <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
+                    Semantic search over {emb?.totalEmbedded?.toLocaleString()} embedded TTO assets from {institutionCount} research institutions.
+                  </p>
+                  <div className="flex flex-wrap gap-2 justify-center max-w-lg" data-testid="starter-chips">
+                    {STARTER_QUESTIONS.map((q) => (
+                      <button
+                        key={q}
+                        onClick={() => sendChatMessage(q)}
+                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors text-left"
+                        data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
+                      >
+                        {q}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
+
+              {/* Message thread */}
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`chat-msg-${i}`}>
-                  <div className={`max-w-[80%] rounded-xl px-4 py-3 text-sm ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted border border-border text-foreground"
-                  }`}>
-                    {msg.role === "assistant" && msg.isStreaming && !msg.content && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                    )}
-                    {msg.content && (
-                      <div className="whitespace-pre-wrap leading-relaxed">{msg.content}{msg.isStreaming && <span className="animate-pulse">▌</span>}</div>
-                    )}
+                  {msg.role === "assistant" && (
+                    <div className="h-6 w-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-1 mr-2">
+                      <BrainCircuit className="h-3.5 w-3.5 text-emerald-500" />
+                    </div>
+                  )}
+                  <div className={`max-w-[78%] ${msg.role === "user" ? "" : "flex-1"}`}>
+                    <div className={`rounded-xl px-4 py-3 ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground text-sm ml-auto w-fit"
+                        : "bg-muted border border-border text-foreground"
+                    }`}>
+                      {msg.role === "assistant" && msg.isStreaming && !msg.content && (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      )}
+                      {msg.role === "user" && (
+                        <p className="text-sm leading-relaxed">{msg.content}</p>
+                      )}
+                      {msg.role === "assistant" && msg.content && (
+                        <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
+                      )}
+                    </div>
+
+                    {/* Citation cards */}
                     {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
-                      <div className="mt-3 pt-2 border-t border-border/50 flex flex-wrap gap-1.5" data-testid={`chat-assets-${i}`}>
-                        {msg.assets.slice(0, 5).map((a) => (
-                          <span key={a.id} className="text-[10px] px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground" title={`${a.institution} · ${a.indication}`}>
-                            {a.assetName.slice(0, 28)}{a.assetName.length > 28 ? "…" : ""}
-                          </span>
-                        ))}
-                        {msg.assets.length > 5 && <span className="text-[10px] text-muted-foreground/60">+{msg.assets.length - 5} more</span>}
+                      <div className="mt-2" data-testid={`chat-citations-${i}`}>
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-1.5 pl-0.5">Retrieved context</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {(expandedCitations[i] ? msg.assets : msg.assets.slice(0, 3)).map((a, ci) => (
+                            <CitationCard key={a.id} asset={a} index={ci} />
+                          ))}
+                        </div>
+                        {msg.assets.length > 3 && (
+                          <button
+                            className="mt-1.5 text-[11px] text-muted-foreground hover:text-foreground underline"
+                            onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: !prev[i] }))}
+                            data-testid={`button-expand-citations-${i}`}
+                          >
+                            {expandedCitations[i] ? "Show fewer" : `Show ${msg.assets.length - 3} more`}
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2910,21 +3055,172 @@ function EdenTab({ pw }: { pw: string }) {
               ))}
               <div ref={chatEndRef} />
             </div>
-            <div className="px-4 py-3 border-t border-border flex gap-2" data-testid="chat-input-area">
+
+            {/* Input bar */}
+            <div className="px-4 py-3 border-t border-border flex gap-2 bg-card" data-testid="chat-input-area">
               <input
                 className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground"
-                placeholder="Ask about targets, indications, institutions, licensing…"
+                placeholder="Ask about targets, mechanisms, institutions, licensing readiness…"
                 value={chatInput}
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
                 disabled={chatStreaming}
                 data-testid="input-chat"
               />
-              <Button onClick={sendChatMessage} disabled={chatStreaming || !chatInput.trim()} size="sm" className="shrink-0" data-testid="button-chat-send">
+              <Button
+                onClick={() => sendChatMessage()}
+                disabled={chatStreaming || !chatInput.trim()}
+                size="sm"
+                className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                data-testid="button-chat-send"
+              >
                 {chatStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
               </Button>
             </div>
           </>
+        )}
+      </div>
+
+      {/* ── EDEN Readiness (collapsible) ── */}
+      <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="card-eden-readiness">
+        <button
+          className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 transition-colors"
+          onClick={() => setReadinessOpen((v) => !v)}
+          data-testid="button-toggle-readiness"
+        >
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">EDEN Readiness</span>
+            <span className="text-xs text-muted-foreground ml-1">
+              {embPct}% embedded · {deepPct}% enriched
+            </span>
+          </div>
+          {readinessOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {readinessOpen && (
+          <div className="border-t border-border p-5 space-y-6">
+            {/* Coverage stat cards */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-total">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Corpus</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.totalRelevant?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">relevant assets</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-enriched">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Enriched</p>
+                <p className="text-xl font-bold text-emerald-600 mt-0.5">{cov?.deepEnriched?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">{deepPct}% with GPT-4o</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-embedded">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Embedded</p>
+                <p className="text-xl font-bold text-violet-600 mt-0.5">{emb?.totalEmbedded?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">{embPct}% vectorized</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-moa">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">With MoA</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.withMoa?.toLocaleString() ?? "—"}</p>
+                <p className="text-[11px] text-muted-foreground">mechanism of action</p>
+              </div>
+              <div className="rounded-lg border border-border bg-muted/20 p-3" data-testid="card-eden-score">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide">Completeness</p>
+                <p className="text-xl font-bold text-foreground mt-0.5">{cov?.avgCompletenessScore != null ? `${cov.avgCompletenessScore}` : "—"}</p>
+                <p className="text-[11px] text-muted-foreground">avg / 100 pts</p>
+              </div>
+            </div>
+
+            {/* Coverage bars */}
+            <div className="space-y-3">
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Deep Enrichment</span><span>{deepPct}%</span>
+                </div>
+                <Progress value={deepPct} className="h-1.5" />
+              </div>
+              <div>
+                <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <span>Vector Embeddings</span><span>{embPct}%</span>
+                </div>
+                <Progress value={embPct} className="h-1.5" />
+              </div>
+            </div>
+
+            {/* Live enrichment status */}
+            {live && (
+              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
+                  <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    Enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()}
+                  </span>
+                  <span className="ml-auto text-sm font-bold text-emerald-600">{pct}%</span>
+                </div>
+                <Progress value={pct ?? 0} className="h-1.5" />
+              </div>
+            )}
+
+            {/* Live embedding status */}
+            {embedLive && (
+              <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
+                <div className="flex items-center gap-2 mb-2">
+                  <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
+                  <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
+                    Embedding running — {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
+                  </span>
+                  <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
+                </div>
+                <Progress value={embedPct ?? 0} className="h-1.5" />
+              </div>
+            )}
+
+            {/* Run enrichment */}
+            <div data-testid="card-eden-run">
+              <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs &amp; Licensing Readiness for {remaining.toLocaleString()} un-enriched assets.
+                Estimated cost: <span className="font-semibold text-foreground">${estCostUsd}</span>.
+              </p>
+              {!confirming ? (
+                <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
+                  <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
+                  {remaining === 0 ? "All Enriched" : `Enrich ${remaining.toLocaleString()} Assets`}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-semibold text-amber-600">Consume ~${estCostUsd}? Confirm?</p>
+                  <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
+                    {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Yes, Run
+                  </Button>
+                  <Button variant="outline" onClick={() => setConfirming(false)} className="h-8 text-xs" data-testid="button-eden-cancel">Cancel</Button>
+                </div>
+              )}
+            </div>
+
+            {/* Run embeddings */}
+            <div data-testid="card-eden-embeddings">
+              <h4 className="text-xs font-semibold text-foreground mb-1">Vector Embeddings</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                {emb?.totalEmbedded?.toLocaleString() ?? "—"} of {emb?.totalRelevant?.toLocaleString() ?? "—"} assets embedded with text-embedding-3-small.
+                {embRemaining > 0 && <> Remaining cost: <span className="font-semibold text-foreground">${embEstCost}</span>.</>}
+              </p>
+              {!embedConfirming ? (
+                <Button onClick={() => setEmbedConfirming(true)} disabled={embedLive != null || embRemaining === 0} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-run">
+                  <Sparkles className="h-3.5 w-3.5 mr-1.5" />
+                  {embRemaining === 0 ? "All Embedded" : `Embed ${embRemaining.toLocaleString()} Assets`}
+                </Button>
+              ) : (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs font-semibold text-amber-600">Embed {embRemaining.toLocaleString()} assets (~${embEstCost})?</p>
+                  <Button onClick={() => embedMutation.mutate()} disabled={embedMutation.isPending} className="bg-violet-600 hover:bg-violet-700 text-white h-8 text-xs" data-testid="button-embed-confirm">
+                    {embedMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    Yes, Embed
+                  </Button>
+                  <Button variant="outline" onClick={() => setEmbedConfirming(false)} className="h-8 text-xs" data-testid="button-embed-cancel">Cancel</Button>
+                </div>
+              )}
+            </div>
+          </div>
         )}
       </div>
     </div>

@@ -1666,8 +1666,10 @@ export async function registerRoutes(
           institution: a.institution,
           indication: a.indication,
           modality: a.modality,
+          developmentStage: a.developmentStage,
           ipType: a.ipType,
           sourceName: a.sourceName,
+          sourceUrl: a.sourceUrl,
           similarity: Math.round(a.similarity * 100) / 100,
         })),
       });
