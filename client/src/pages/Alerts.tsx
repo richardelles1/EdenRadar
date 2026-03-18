@@ -45,11 +45,11 @@ interface IndustryDeltaResponse {
   };
   newConcepts: {
     total: number;
-    items: Array<{ id: number; title: string; therapeuticArea: string; submitterAffiliation?: string }>;
+    items: Array<{ id: number; title: string; therapeuticArea: string; submitterAffiliation?: string; oneLiner?: string }>;
   };
   newProjects: {
     total: number;
-    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string }>;
+    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string }>;
   };
   windowHours: number;
 }
@@ -220,7 +220,10 @@ function ConceptsSection({ data }: { data: IndustryDeltaResponse["newConcepts"] 
                     data-testid={`alert-concept-${concept.id}`}
                   >
                     <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
+                    {concept.oneLiner && (
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{concept.oneLiner}</p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5">
                       {concept.therapeuticArea && (
                         <span className="text-[10px] text-amber-500">{concept.therapeuticArea}</span>
                       )}
@@ -278,7 +281,12 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
                     <p className="text-xs font-medium text-foreground truncate">
                       {proj.discoveryTitle || proj.title}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
+                    {(proj.discoverySummary || proj.description) && (
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                        {proj.discoverySummary || proj.description}
+                      </p>
+                    )}
+                    <div className="flex items-center gap-2 mt-1.5">
                       {proj.researchArea && (
                         <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
                       )}

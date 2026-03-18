@@ -3397,6 +3397,7 @@ If a field cannot be determined, use "N/A".`
             title: conceptCards.title,
             therapeuticArea: conceptCards.therapeuticArea,
             submitterAffiliation: conceptCards.submitterAffiliation,
+            oneLiner: conceptCards.oneLiner,
           })
           .from(conceptCards)
           .where(
@@ -3415,6 +3416,8 @@ If a field cannot be determined, use "N/A".`
             discoveryTitle: researchProjects.discoveryTitle,
             researchArea: researchProjects.researchArea,
             status: researchProjects.status,
+            discoverySummary: researchProjects.discoverySummary,
+            description: researchProjects.description,
           })
           .from(researchProjects)
           .where(

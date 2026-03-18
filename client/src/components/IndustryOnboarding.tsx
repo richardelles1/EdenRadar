@@ -27,6 +27,19 @@ interface Props {
   onClose: () => void;
 }
 
+const MODALITIES = [
+  "Small Molecule",
+  "Biologic",
+  "Cell Therapy",
+  "Gene Therapy",
+  "RNA/siRNA",
+  "Antibody",
+  "Diagnostic",
+  "Medical Device",
+  "Vaccine",
+  "CRISPR",
+];
+
 export function IndustryOnboarding({ open, onClose }: Props) {
   const saved = getIndustryProfile();
   const [companyName, setCompanyName] = useState(saved.companyName || "");
@@ -34,6 +47,7 @@ export function IndustryOnboarding({ open, onClose }: Props) {
     saved.therapeuticAreas
   );
   const [dealStages, setDealStages] = useState<string[]>(saved.dealStages);
+  const [modalities, setModalities] = useState<string[]>(saved.modalities ?? []);
   const [areaInput, setAreaInput] = useState("");
 
   function addArea() {
@@ -54,11 +68,18 @@ export function IndustryOnboarding({ open, onClose }: Props) {
     );
   }
 
+  function toggleModality(m: string) {
+    setModalities((prev) =>
+      prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m]
+    );
+  }
+
   function handleSave() {
     saveIndustryProfile({
       companyName,
       therapeuticAreas,
       dealStages,
+      modalities,
       onboardingDone: true,
     });
     onClose();
@@ -166,6 +187,31 @@ export function IndustryOnboarding({ open, onClose }: Props) {
                   >
                     {active && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
                     {s}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Modalities of Interest</Label>
+            <div className="flex flex-wrap gap-2">
+              {MODALITIES.map((m) => {
+                const active = modalities.includes(m);
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => toggleModality(m)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                      active
+                        ? "border-blue-500 bg-blue-500/15 text-blue-600 dark:text-blue-400 font-medium"
+                        : "border-card-border text-muted-foreground hover:border-blue-500/40"
+                    }`}
+                    data-testid={`toggle-onboarding-modality-${m.replace(/\s+/g, "-").toLowerCase()}`}
+                  >
+                    {active && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
+                    {m}
                   </button>
                 );
               })}

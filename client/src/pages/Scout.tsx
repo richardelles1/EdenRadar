@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
@@ -193,6 +193,7 @@ export default function Scout() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
+  const searchStr = useSearch();
 
   function ssGet<T>(key: string, fallback: T): T {
     try {
@@ -218,6 +219,19 @@ export default function Scout() {
   const [selectedSources, setSelectedSources] = useState<string[]>(() => ssGet("scout-sources", ALL_SOURCE_KEYS));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [contentType, setContentType] = useState<"assets" | "concepts" | "projects">("assets");
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchStr);
+    const qParam = params.get("q");
+    if (qParam && qParam.trim()) {
+      const q = qParam.trim();
+      setInputQuery(q);
+      setCurrentQuery(q);
+      searchMutation.mutate({ query: q });
+      setLocation("/scout", { replace: true });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     try {

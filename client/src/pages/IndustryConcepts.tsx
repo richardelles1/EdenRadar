@@ -120,7 +120,7 @@ function ConceptCard({ card }: { card: ConceptCard }) {
 export default function IndustryConcepts() {
   const [search, setSearch] = useState("");
   const [areaFilter, setAreaFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   const { data, isLoading } = useQuery<ConceptsResponse>({
     queryKey: ["/api/discovery/concepts"],
@@ -137,6 +137,14 @@ export default function IndustryConcepts() {
       .sort();
   }, [concepts]);
 
+  const statuses = useMemo(() => {
+    const seen = new Set<string>();
+    return concepts
+      .map((c) => c.status)
+      .filter((s): s is string => Boolean(s) && !seen.has(s) && !!seen.add(s))
+      .sort();
+  }, [concepts]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return concepts.filter((c) => {
@@ -147,11 +155,11 @@ export default function IndustryConcepts() {
         (c.therapeuticArea ?? "").toLowerCase().includes(q);
       const areaOk =
         areaFilter === "all" || c.therapeuticArea === areaFilter;
-      const stageOk =
-        stageFilter === "all" || String(c.stage) === stageFilter;
-      return textOk && areaOk && stageOk;
+      const statusOk =
+        statusFilter === "all" || c.status === statusFilter;
+      return textOk && areaOk && statusOk;
     });
-  }, [concepts, search, areaFilter, stageFilter]);
+  }, [concepts, search, areaFilter, statusFilter]);
 
   return (
     <div className="min-h-full bg-background">
@@ -204,21 +212,20 @@ export default function IndustryConcepts() {
             </SelectContent>
           </Select>
           <Select
-            value={stageFilter}
-            onValueChange={setStageFilter}
+            value={statusFilter}
+            onValueChange={setStatusFilter}
           >
             <SelectTrigger
               className="h-9 text-xs w-[140px]"
-              data-testid="select-concepts-stage"
+              data-testid="select-concepts-status"
             >
-              <SelectValue placeholder="All stages" />
+              <SelectValue placeholder="All statuses" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Stages</SelectItem>
-              <SelectItem value="1">Idea</SelectItem>
-              <SelectItem value="2">Hypothesis</SelectItem>
-              <SelectItem value="3">Validation</SelectItem>
-              <SelectItem value="4">Prototype</SelectItem>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {statuses.map((s) => (
+                <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
