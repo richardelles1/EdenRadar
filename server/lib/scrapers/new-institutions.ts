@@ -2,6 +2,7 @@ import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
 import { fetchHtml, fetchHtmlViaProxy, cleanText } from "./utils";
+import { enrichWithDetailPages } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
@@ -1102,7 +1103,6 @@ export const westernScraper = createInPartScraper("western", "Western University
 export const queensuScraper = createInPartScraper("queensu", "Queen's University");
 export const ualbertaScraper = createInPartScraper("ualberta", "University of Alberta");
 export const ubcScraper = createInPartScraper("ubc", "University of British Columbia");
-export const ucalgaryScraper = createStubScraper("University of Calgary", "Flintbox API deprecated, no public alternative found");
 export const umanitobaScraper = createInPartScraper("manitoba", "University of Manitoba");
 export const uvicScraper = createInPartScraper("uvic", "University of Victoria");
 export const sfuScraper: InstitutionScraper = {
@@ -4755,40 +4755,273 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
 
 // ── UK ────────────────────────────────────────────────────────────────────────
 
-// ── 1. Imperial College London — in-part "imperial" ──────────────────────────
-export const imperialScraper = createInPartScraper("imperial", "Imperial College London");
+// ── 1. Imperial College London — paginated HTML ───────────────────────────────
+// https://www.imperial.ac.uk/for-business/commercialisation/imperial-tech/technology-search/
+// Pagination: ?page=N (page=7 confirmed). Detail: .../technology-search/{slug}/
+export const imperialScraper: InstitutionScraper = {
+  institution: "Imperial College London",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Imperial College London";
+    const BASE = "https://www.imperial.ac.uk";
+    const INDEX = `${BASE}/for-business/commercialisation/imperial-tech/technology-search/`;
 
-// ── 2. University of Birmingham — in-part "birmingham" ───────────────────────
-export const birminghamScraper = createInPartScraper("birmingham", "University of Birmingham");
+    // Step 1: fetch page 1, detect last page
+    const page1$ = await fetchHtml(INDEX, 15_000);
+    if (!page1$) { console.warn(`[scraper] ${INST}: could not fetch listing`); return []; }
 
-// ── 3. University of Sheffield — in-part "sheffield" ─────────────────────────
-export const sheffieldScraper = createInPartScraper("sheffield", "University of Sheffield");
+    let maxPage = 1;
+    page1$("a[href*='?page=']").each((_, el) => {
+      const m = (page1$(el).attr("href") ?? "").match(/\?page=(\d+)/);
+      if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+    });
 
-// ── 4. University of Exeter — in-part "exeter" ───────────────────────────────
-export const exeterScraper = createInPartScraper("exeter", "University of Exeter");
+    // Step 2: collect all page URLs (0 = no param, 1..maxPage = ?page=N)
+    const pageUrls: string[] = [INDEX];
+    for (let p = 1; p <= maxPage; p++) pageUrls.push(`${INDEX}?page=${p}`);
 
-// ── 5. Cardiff University — in-part "cardiff" ────────────────────────────────
-export const cardiffScraper = createInPartScraper("cardiff", "Cardiff University");
+    // Step 3: fetch all pages in parallel (batches of 8)
+    const seen = new Set<string>();
+    const results: ScrapedListing[] = [];
 
-// ── 6. University of Dundee — in-part "dundee" ───────────────────────────────
-export const dundeeScraper = createInPartScraper("dundee", "University of Dundee");
+    function extractFromPage($p: ReturnType<typeof page1$>): void {
+      $p("a[href*='/technology-search/']").each((_, el) => {
+        const href = ($p(el).attr("href") ?? "").split("?")[0];
+        if (!href || href.endsWith("/technology-search/") || seen.has(href)) return;
+        const title = cleanText($p(el).text());
+        if (title.length < 5) return;
+        seen.add(href);
+        results.push({
+          title,
+          description: "",
+          url: href.startsWith("http") ? href : `${BASE}${href}`,
+          institution: INST,
+        });
+      });
+    }
 
-// ── 7. University of Warwick — in-part "warwick" ─────────────────────────────
-export const warwickScraper = createInPartScraper("warwick", "University of Warwick");
+    extractFromPage(page1$);
+
+    const remaining = pageUrls.slice(1);
+    const BATCH = 8;
+    for (let i = 0; i < remaining.length; i += BATCH) {
+      const batch = remaining.slice(i, i + BATCH);
+      const pages = await Promise.all(batch.map((u) => fetchHtml(u, 15_000)));
+      for (const $p of pages) { if ($p) extractFromPage($p); }
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (${maxPage + 1} pages), fetching details...`);
+
+    await enrichWithDetailPages(
+      results,
+      {
+        description: [".body-copy p", "article .content p", ".prose p", "main .content p", "main p"],
+        abstract: [".field--name-field-abstract", ".abstract"],
+      },
+      60
+    );
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+    return results;
+  },
+};
+
+// ── 2. University of Birmingham — Flintbox ────────────────────────────────────
+// https://unibirmingham.flintbox.com/technologies
+export const birminghamScraper = createFlintboxScraper("unibirmingham", "University of Birmingham");
+
+// ── 3. University of Sheffield — HTML listing ─────────────────────────────────
+// https://sheffield.ac.uk/commercialisation/current-opportunities/
+// Detail pattern: /commercialisation/current-opportunities/{slug}
+export const sheffieldScraper: InstitutionScraper = {
+  institution: "University of Sheffield",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "University of Sheffield";
+    const BASE = "https://www.sheffield.ac.uk";
+    const INDEX = `${BASE}/commercialisation/current-opportunities`;
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
+
+    async function crawlPage(url: string): Promise<string | null> {
+      const $ = await fetchHtml(url, 15_000);
+      if (!$) return null;
+
+      $("a[href*='/commercialisation/current-opportunities/']").each((_, el) => {
+        const href = ($("a", el).length ? $("a", el).attr("href") : $(el).attr("href")) ?? $(el).attr("href") ?? "";
+        const norm = href.split("?")[0].replace(/\/$/, "");
+        if (!norm || norm.endsWith("/current-opportunities") || seen.has(norm)) return;
+        const title = cleanText($(el).text());
+        if (title.length < 4) return;
+        seen.add(norm);
+        results.push({
+          title,
+          description: "",
+          url: norm.startsWith("http") ? norm : `${BASE}${norm}`,
+          institution: INST,
+        });
+      });
+
+      // look for next-page link
+      const nextHref = $("a[rel='next'], a:contains('Next'), .pager__item--next a").attr("href");
+      return nextHref ? (nextHref.startsWith("http") ? nextHref : `${BASE}${nextHref}`) : null;
+    }
+
+    let nextUrl: string | null = INDEX;
+    while (nextUrl) nextUrl = await crawlPage(nextUrl);
+
+    console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+    await enrichWithDetailPages(
+      results,
+      { description: [".prose p", "main article p", ".field--name-body p", ".content p", "main p"] },
+      80
+    );
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+    return results;
+  },
+};
+
+// ── 4. University of Exeter — no usable public TTO listing ───────────────────
+export const exeterScraper = createStubScraper("University of Exeter", "in-part portal inactive — no public TTO listing found");
+
+// ── 5. Cardiff University — no usable public TTO listing ─────────────────────
+export const cardiffScraper = createStubScraper("Cardiff University", "in-part portal inactive — no public TTO listing found");
+
+// ── 6. University of Dundee — Flintbox ───────────────────────────────────────
+// https://dundee.flintbox.com/technologies
+export const dundeeScraper = createFlintboxScraper("dundee", "University of Dundee");
+
+// ── 7. University of Warwick — no usable public TTO listing ──────────────────
+export const warwickScraper = createStubScraper("University of Warwick", "in-part portal inactive — no public TTO listing found");
 
 // ── Canada ────────────────────────────────────────────────────────────────────
 
-// ── 8. McGill University — in-part "mcgill" ──────────────────────────────────
-export const mcgillScraper = createInPartScraper("mcgill", "McGill University");
+// ── 8. McGill University — Flintbox ──────────────────────────────────────────
+// https://mcgill.flintbox.com/technologies
+export const mcgillScraper = createFlintboxScraper("mcgill", "McGill University");
 
-// ── 9. University of Waterloo — in-part "waterloo" ───────────────────────────
-export const waterlooScraper = createInPartScraper("waterloo", "University of Waterloo");
+// ── 9. University of Waterloo — HTML catalog ─────────────────────────────────
+// https://uwaterloo.ca/research/catalogs/watco-technologies/
+// Category entry: .../category/life-science-and-healthcare
+// Detail pattern: /research/catalogs/watco-technologies/{slug}
+export const waterlooScraper: InstitutionScraper = {
+  institution: "University of Waterloo",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "University of Waterloo";
+    const BASE = "https://uwaterloo.ca";
+    const CATALOG_ROOT = `${BASE}/research/catalogs/watco-technologies`;
+    const CATEGORY_SEED = `${CATALOG_ROOT}/category/life-science-and-healthcare`;
 
-// ── 10. McMaster University — in-part "mcmaster" — API data confirmed ─────────
-export const mcmasterScraper = createInPartScraper("mcmaster", "McMaster University");
+    const seen = new Set<string>();
+    const results: ScrapedListing[] = [];
+    const DETAIL_PAT = /\/research\/catalogs\/watco-technologies\/[^/]+$/;
 
-// ── 11. University of Calgary — in-part "ucalgary" ───────────────────────────
-export const calgaryScraper = createInPartScraper("ucalgary", "University of Calgary");
+    function extractTechLinks(page$: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void {
+      page$("a[href]").each((_, el) => {
+        const href = (page$(el).attr("href") ?? "").split("?")[0].replace(/\/$/, "");
+        if (!DETAIL_PAT.test(href) || seen.has(href)) return;
+        const title = cleanText(page$(el).text());
+        if (title.length < 4) return;
+        seen.add(href);
+        results.push({
+          title,
+          description: "",
+          url: href.startsWith("http") ? href : `${BASE}${href}`,
+          institution: INST,
+        });
+      });
+    }
+
+    // Discover category pages from catalog root
+    const root$ = await fetchHtml(CATALOG_ROOT, 15_000);
+    const categoryUrls: string[] = [CATEGORY_SEED];
+    if (root$) {
+      root$("a[href*='/watco-technologies/category/']").each((_, el) => {
+        const href = root$(el).attr("href") ?? "";
+        const full = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (!categoryUrls.includes(full)) categoryUrls.push(full);
+      });
+      extractTechLinks(root$);
+    }
+
+    // Crawl each category page (with pagination)
+    for (const catUrl of categoryUrls) {
+      let nextUrl: string | null = catUrl;
+      while (nextUrl) {
+        const page$ = await fetchHtml(nextUrl, 15_000);
+        if (!page$) break;
+        extractTechLinks(page$);
+        const nextHref = page$("a[rel='next'], .pager__item--next a").attr("href");
+        nextUrl = nextHref ? (nextHref.startsWith("http") ? nextHref : `${BASE}${nextHref}`) : null;
+      }
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+    await enrichWithDetailPages(
+      results,
+      { description: [".node__content p", ".field--name-body p", "article p", "main p"] },
+      80
+    );
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+    return results;
+  },
+};
+
+// ── 10. McMaster University — HTML listing ────────────────────────────────────
+// https://research.mcmaster.ca/industry-investors/techs-for-licensing/
+// Detail pattern: /industry-investors/tech/{id}/
+export const mcmasterScraper: InstitutionScraper = {
+  institution: "McMaster University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "McMaster University";
+    const BASE = "https://research.mcmaster.ca";
+    const INDEX = `${BASE}/industry-investors/techs-for-licensing/`;
+    const seen = new Set<string>();
+    const results: ScrapedListing[] = [];
+
+    async function crawlPage(url: string): Promise<string | null> {
+      const $ = await fetchHtml(url, 15_000);
+      if (!$) return null;
+
+      $("a[href*='/industry-investors/tech/']").each((_, el) => {
+        const href = ($(el).attr("href") ?? "").split("?")[0].replace(/\/$/, "");
+        if (!href || seen.has(href)) return;
+        const title = cleanText($(el).text());
+        if (title.length < 4) return;
+        seen.add(href);
+        results.push({
+          title,
+          description: "",
+          url: href.startsWith("http") ? href : `${BASE}${href}`,
+          institution: INST,
+        });
+      });
+
+      const nextHref = $("a[rel='next'], .pager__item--next a, a:contains('Next page')").attr("href");
+      return nextHref ? (nextHref.startsWith("http") ? nextHref : `${BASE}${nextHref}`) : null;
+    }
+
+    let nextUrl: string | null = INDEX;
+    while (nextUrl) nextUrl = await crawlPage(nextUrl);
+
+    console.log(`[scraper] ${INST}: ${results.length} listings, fetching details...`);
+
+    await enrichWithDetailPages(
+      results,
+      { description: [".entry-content p", ".technology-description", ".field--name-body p", "main p"] },
+      100
+    );
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+    return results;
+  },
+};
+
+// ── 11. University of Calgary — Flintbox ──────────────────────────────────────
+// https://calgary.flintbox.com/technologies
+export const calgaryScraper = createFlintboxScraper("calgary", "University of Calgary");
 
 // ── DOE National Labs — Proxy-Routed Scrapers (Task #121) ────────────────────
 //
