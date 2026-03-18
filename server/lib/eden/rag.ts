@@ -25,6 +25,7 @@ const AGG_PATTERNS = [
   /how much\s+(?:work|research)/i,
   /top\s+(?:\d+\s+)?institutions?/i,
   /which institutions?\s+(?:has|have|lead|are)/i,
+  /who(?:'s|\s+is|\s+are)?\s+(?:doing|most active|leading|working on)/i,
   /number\s+of\s+(?:assets?|technologies?)/i,
   /breakdown\s+(?:of|by)\s+(?:institution|modality|stage)/i,
   /(?:modality|stage)\s+breakdown/i,
@@ -81,6 +82,30 @@ async function runCountByStage(): Promise<AggResult> {
   return rows as AggResult;
 }
 
+// Count assets for a SPECIFIC institution (with optional therapy-area filter)
+async function runCountForInstitution(
+  institution: string,
+  area?: string
+): Promise<{ name: string; count: number } | null> {
+  const instPattern = "%" + institution.toLowerCase() + "%";
+  const rows = await db
+    .select({ institution: ingestedAssets.institution, count: sql<number>`count(*)::int` })
+    .from(ingestedAssets)
+    .where(
+      area && area.length > 2
+        ? sql`${ingestedAssets.relevant} = true
+            AND lower(${ingestedAssets.institution}) LIKE ${instPattern}
+            AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"}
+              OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
+        : sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${instPattern}`
+    )
+    .groupBy(ingestedAssets.institution)
+    .orderBy(sql`count(*) DESC`)
+    .limit(1);
+  if (!rows.length || !(rows[0].count as number)) return null;
+  return { name: String(rows[0].institution), count: rows[0].count as number };
+}
+
 async function runNewestByInstitution(institution: string): Promise<AggResult> {
   const rows = await db
     .select({
@@ -127,8 +152,8 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     return `**Most recent assets from ${inst.replace(/\b\w/g, (c) => c.toUpperCase())}** in the database:\n${lines}`;
   }
 
-  // Top institutions in an area
-  const areaMatch = lower.match(/(?:top\s+institutions?|who(?:'s|\s+is|\s+are)?\s+(?:most active|leading|doing the most)|which institutions?)\s+(?:in|for|working on)\s+(.+?)(?:\?|$)/i);
+  // Top institutions in an area: "who is doing the most work in gene therapy" / "top institutions in oncology"
+  const areaMatch = lower.match(/(?:top\s+institutions?|who(?:'s|\s+is|\s+are)?\s+(?:most active|leading|doing the most(?:\s+work)?)|which institutions?)\s+(?:in|for|working on)\s+(.+?)(?:\?|$)/i);
   if (areaMatch?.[1]) {
     const area = areaMatch[1].trim().replace(/\?$/, "");
     const rows = await runCountByInstitution(area);
@@ -137,13 +162,17 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     return `**Top institutions** in ${area}:\n${lines}`;
   }
 
-  // General institution count or "how many" per institution
-  if (/how many.*(?:does|from|at)\s+([A-Za-z]+)(?:\s+tto|\s+university|\s+institute)?/i.test(query)) {
-    const m = query.match(/how many.*(?:does|from|at)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
-    if (m?.[1]) {
-      const rows = await runCountByInstitution(m[1].trim());
-      const match = rows.find((r) => String(r["institution"]).toLowerCase().includes(m[1].toLowerCase()));
-      if (match) return `**${match["institution"]}** has **${match["count"]} assets** in the database.`;
+  // Institution-specific count: "how many assets does Stanford TTO have?" / "how many oncology assets does Stanford have?"
+  const instCountRx = /how many\s+([\w\s]+?)\s*(?:assets?|technologies?|programs?)?\s*(?:does|from|at|by)\s+([\w\s]+?)(?:\s+(?:tto|university|institute|college|tech transfer))?(?:\s+have|\?|$)/i;
+  const icm = instCountRx.exec(query);
+  if (icm) {
+    const areaRaw = icm[1].trim().replace(/^(?:the|all|total)\s+/i, "");
+    const instHint = icm[2].trim();
+    const isGeneric = /^(?:assets?|technologies?|programs?|compounds?|the)$/i.test(areaRaw) || areaRaw.length < 2;
+    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw);
+    if (result) {
+      const label = isGeneric ? "" : `${areaRaw} `;
+      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio.`;
     }
   }
 

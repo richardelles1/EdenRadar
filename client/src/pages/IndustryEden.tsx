@@ -664,8 +664,7 @@ export default function IndustryEden() {
             {messages.length > 0 && (
               <div className="px-4 sm:px-6 py-5 space-y-5 max-w-3xl w-full mx-auto">
                 {messages.map((msg, i) => {
-                  const isLast = i === messages.length - 1;
-                  const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content && isLast
+                  const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
                     ? getFollowUpPills(msg.content)
                     : [];
 
