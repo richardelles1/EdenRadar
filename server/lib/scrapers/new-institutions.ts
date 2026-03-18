@@ -4142,14 +4142,14 @@ export const nottinghamScraper = createTechPublisherScraper(
 //      with modified from/size to bulk-retrieve all results in batches of 100.
 //      This avoids clicking 663 Next buttons (~33 min).
 //   2. Next-button fallback — if XHR replay fails (e.g. auth rejected for direct replay),
-//      fall back to clicking up to MAX_BTN_PAGES (200) pages via the Next button,
+//      fall back to clicking up to MAX_BTN_PAGES (100) pages via the Next button,
 //      collecting data from both the DOM and intercepted XHR responses.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "TechLink (DoD Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
-    const MAX_BTN_PAGES = 200; // fallback cap: ~2,000 listings at 10/page
+    const MAX_BTN_PAGES = 100; // fallback cap: ~1,000 listings at 10/page
 
     let browser: import("playwright").Browser | null = null;
     try {
@@ -4985,6 +4985,8 @@ export const cernKtScraper: InstitutionScraper = {
 // Probe: 2026-03-17 — https://www.cancerresearchhorizons.com/our-portfolio/our-licensing-opportunities
 //         200 OK, 173 KB — fully JS-rendered (Cloudflare Rocket Loader, no SSR tech data)
 //         12 items observed at Playwright runtime (2026-03-17)
+// Verified (Task #137): Live run 2026-03-18 confirmed 12 listings — no code change required.
+//   ECLIPSE, Novel Apelin receptor antagonist, Trimeric cell-penetrating peptides, …
 // CRUK's commercial arm; highly relevant oncology/cancer therapeutic portfolio.
 // Fix (Task #136): Cloudflare challenge fires on headless browsers without stealth.
 //   Added --disable-blink-features=AutomationControlled, navigator.webdriver spoofing,
