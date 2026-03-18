@@ -1155,7 +1155,23 @@ export class DatabaseStorage implements IStorage {
 
   async appendEdenMessage(
     sessionId: string,
-    turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }
+    turn: {
+      role: "user" | "assistant";
+      content: string;
+      assetIds?: number[];
+      assets?: Array<{
+        id: number;
+        assetName: string;
+        institution: string;
+        indication: string;
+        modality: string;
+        developmentStage?: string;
+        ipType?: string | null;
+        sourceName?: string | null;
+        sourceUrl?: string | null;
+        similarity: number;
+      }>;
+    }
   ): Promise<EdenSession> {
     const session = await this.getOrCreateEdenSession(sessionId);
     const newTurn = { ...turn, ts: new Date().toISOString() };

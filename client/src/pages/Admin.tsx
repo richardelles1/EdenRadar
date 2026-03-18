@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3 } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff } from "lucide-react";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
+import { useEdenChat, type ChatAsset, type ChatMessage, type EdenSessionSummary } from "@/hooks/useEdenChat";
 
 const ADMIN_KEY = "eden-admin-pw";
 
@@ -2508,34 +2510,6 @@ type EdenEmbedStatusResponse = {
   failed: number;
 };
 
-type ChatAsset = {
-  id: number;
-  assetName: string;
-  institution: string;
-  indication: string;
-  modality: string;
-  developmentStage?: string;
-  ipType?: string;
-  sourceName?: string;
-  sourceUrl?: string | null;
-  similarity: number;
-};
-
-type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-  assets?: ChatAsset[];
-  isStreaming?: boolean;
-};
-
-type EdenSessionSummary = {
-  id: number;
-  sessionId: string;
-  messages: Array<{ role: "user" | "assistant"; content: string; ts: string }>;
-  createdAt: string;
-  updatedAt: string;
-};
-
 const STARTER_QUESTIONS = [
   "What oncology assets at preclinical stage are available for licensing right now?",
   "Which institutions have the most GLP-1 related technologies?",
@@ -2621,6 +2595,91 @@ function modalityBadgeClass(modality?: string): string {
   return "bg-muted text-muted-foreground border-border";
 }
 
+function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
+  const r = size / 2;
+  const innerR = r * 0.52;
+  const ring1R = r * 0.72;
+  const ring2R = r * 0.92;
+  return (
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" className="shrink-0" aria-hidden="true">
+      <style>{`
+        @keyframes eden-ring1 { 0%,100%{opacity:.18;r:${ring1R}px} 50%{opacity:.38;r:${ring1R * 1.06}px} }
+        @keyframes eden-ring2 { 0%,100%{opacity:.08;r:${ring2R}px} 50%{opacity:.22;r:${ring2R * 1.04}px} }
+        @keyframes eden-think1 { 0%,100%{opacity:.35;r:${ring1R}px} 50%{opacity:.6;r:${ring1R * 1.1}px} }
+        @keyframes eden-think2 { 0%,100%{opacity:.18;r:${ring2R}px} 50%{opacity:.4;r:${ring2R * 1.07}px} }
+        @keyframes eden-core { 0%,100%{opacity:.85} 50%{opacity:1} }
+      `}</style>
+      <circle cx={r} cy={r} r={ring2R} fill="none" stroke="#10b981"
+        style={{ animation: isThinking ? `eden-think2 1s ease-in-out infinite` : `eden-ring2 2.8s ease-in-out infinite` }} />
+      <circle cx={r} cy={r} r={ring1R} fill="none" stroke="#10b981" strokeWidth="1.2"
+        style={{ animation: isThinking ? `eden-think1 0.8s ease-in-out infinite` : `eden-ring1 2.2s ease-in-out infinite` }} />
+      <circle cx={r} cy={r} r={innerR} fill="#10b981" fillOpacity="0.12" />
+      <circle cx={r} cy={r} r={innerR * 0.6} fill="#10b981"
+        style={{ animation: `eden-core ${isThinking ? "0.7s" : "2s"} ease-in-out infinite` }} />
+      <circle cx={r} cy={r} r={innerR * 0.28} fill="#ecfdf5" />
+    </svg>
+  );
+}
+
+const CONSTELLATION_NODES = [
+  { x: 100, y: 100, r: 6, label: "EDEN" },
+  { x: 162, y: 66, r: 3.5 },  { x: 195, y: 118, r: 3 },
+  { x: 178, y: 168, r: 3.5 }, { x: 135, y: 188, r: 3 },
+  { x: 80, y: 178, r: 3.5 },  { x: 42, y: 138, r: 3 },
+  { x: 36, y: 80, r: 3.5 },   { x: 70, y: 40, r: 3 },
+  { x: 128, y: 28, r: 3 },    { x: 192, y: 50, r: 2.5 },
+  { x: 210, y: 155, r: 2.5 }, { x: 62, y: 32, r: 2.5 },
+];
+const CONSTELLATION_EDGES = [
+  [0,1],[0,2],[0,3],[0,4],[0,5],[0,6],[0,7],[0,8],
+  [1,2],[1,9],[2,3],[3,4],[4,5],[5,6],[6,7],[7,8],[8,9],[9,10],[2,11],[6,12],
+];
+
+function EdenConstellation({ isThinking = false }: { isThinking?: boolean }) {
+  return (
+    <svg width={200} height={200} viewBox="0 0 240 220" fill="none" aria-hidden="true" className="mx-auto">
+      <style>{`
+        @keyframes ec-pulse { 0%,100%{opacity:.12} 50%{opacity:.28} }
+        @keyframes ec-node { 0%,100%{opacity:.5;r:3px} 50%{opacity:.9;r:3.8px} }
+        @keyframes ec-core { 0%,100%{opacity:.7} 50%{opacity:1} }
+        @keyframes ec-ring { 0%,100%{r:11px;opacity:.15} 50%{r:14px;opacity:.3} }
+        @keyframes ec-fast-pulse { 0%,100%{opacity:.22} 50%{opacity:.5} }
+        @keyframes ec-fast-node { 0%,100%{opacity:.6;r:3px} 50%{opacity:1;r:4px} }
+        @keyframes ec-fast-ring { 0%,100%{r:11px;opacity:.25} 50%{r:15px;opacity:.45} }
+      `}</style>
+      {CONSTELLATION_EDGES.map(([a, b], i) => {
+        const na = CONSTELLATION_NODES[a];
+        const nb = CONSTELLATION_NODES[b];
+        if (!na || !nb) return null;
+        return (
+          <line key={i} x1={na.x} y1={na.y} x2={nb.x} y2={nb.y}
+            stroke="#10b981" strokeWidth={a === 0 || b === 0 ? 0.8 : 0.5}
+            style={{ animation: `${isThinking ? "ec-fast-pulse" : "ec-pulse"} ${1.8 + (i % 5) * 0.4}s ease-in-out infinite`, animationDelay: `${(i * 0.15) % 1.5}s` }} />
+        );
+      })}
+      {CONSTELLATION_NODES.map((n, i) => (
+        <g key={i}>
+          {i === 0 && (
+            <>
+              <circle cx={n.x} cy={n.y} style={{ animation: `${isThinking ? "ec-fast-ring" : "ec-ring"} 2s ease-in-out infinite` }} fill="none" stroke="#10b981" strokeWidth="1" />
+              <circle cx={n.x} cy={n.y} r={n.r * 1.6} fill="#10b981" fillOpacity="0.1" />
+            </>
+          )}
+          <circle cx={n.x} cy={n.y} fill="#10b981" fillOpacity={i === 0 ? 1 : 0.7}
+            style={{
+              animation: i === 0
+                ? `${isThinking ? "ec-fast-node" : "ec-core"} ${isThinking ? "0.8s" : "2s"} ease-in-out infinite`
+                : `${isThinking ? "ec-fast-node" : "ec-node"} ${2 + (i * 0.3) % 2}s ease-in-out infinite`,
+              animationDelay: `${(i * 0.2) % 1.6}s`,
+            }}
+            r={n.r}
+          />
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 function CitationCard({ asset, index }: { asset: ChatAsset; index: number }) {
   const similarity = Math.round(asset.similarity * 100);
   return (
@@ -2671,10 +2730,15 @@ function EdenTab({ pw }: { pw: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
 
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState("");
-  const [chatStreaming, setChatStreaming] = useState(false);
-  const [chatSessionId, setChatSessionId] = useState<string>("");
+  const {
+    messages: chatMessages,
+    input: chatInput,
+    setInput: setChatInput,
+    streaming: chatStreaming,
+    send: sendChatMessage,
+    clearChat,
+    loadSession: loadSessionFromHook,
+  } = useEdenChat(pw);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
@@ -2726,7 +2790,7 @@ function EdenTab({ pw }: { pw: string }) {
       refetchStats();
       refetchStatus();
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       setConfirming(false);
       toast({ title: "Failed to start enrichment", description: e.message, variant: "destructive" });
     },
@@ -2750,7 +2814,7 @@ function EdenTab({ pw }: { pw: string }) {
       toast({ title: "EDEN Embedding started", description: `Embedding ${data.total?.toLocaleString() ?? "?"} assets with text-embedding-3-small` });
       refetchStats();
     },
-    onError: (e: any) => {
+    onError: (e: Error) => {
       setEmbedConfirming(false);
       toast({ title: "Failed to start embedding", description: e.message, variant: "destructive" });
     },
@@ -2767,14 +2831,8 @@ function EdenTab({ pw }: { pw: string }) {
     staleTime: 10000,
   });
 
-  async function loadSession(s: EdenSessionSummary) {
-    setChatMessages(
-      (s.messages ?? []).map((m) => ({
-        role: m.role,
-        content: m.content,
-      }))
-    );
-    setChatSessionId(s.sessionId);
+  function loadSession(s: EdenSessionSummary) {
+    loadSessionFromHook(s);
     setHistoryOpen(false);
   }
 
@@ -2782,88 +2840,10 @@ function EdenTab({ pw }: { pw: string }) {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [chatMessages]);
 
-  async function sendChatMessage(overrideMsg?: string) {
-    const raw = overrideMsg ?? chatInput;
-    if (!raw.trim() || chatStreaming) return;
-    const msg = raw.trim();
-    setChatInput("");
-    setChatMessages((prev) => [
-      ...prev,
-      { role: "user", content: msg },
-      { role: "assistant", content: "", assets: [], isStreaming: true },
-    ]);
-    setChatStreaming(true);
-
-    try {
-      const response = await fetch("/api/eden/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ message: msg, sessionId: chatSessionId || undefined }),
-      });
-      if (!response.ok || !response.body) {
-        const err = await response.json().catch(() => ({ error: "Chat failed" }));
-        throw new Error(err.error ?? "Chat failed");
-      }
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        const blocks = buf.split("\n\n");
-        buf = blocks.pop() ?? "";
-        for (const block of blocks) {
-          const evtMatch = block.match(/^event: (\w+)/m);
-          const dataMatch = block.match(/^data: (.+)/m);
-          if (!evtMatch || !dataMatch) continue;
-          const evt = evtMatch[1];
-          let data: any;
-          try { data = JSON.parse(dataMatch[1]); } catch { continue; }
-
-          if (evt === "context") {
-            if (data.sessionId) setChatSessionId(data.sessionId);
-            setChatMessages((prev) => {
-              const upd = [...prev];
-              const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, assets: data.assets ?? [] };
-              return upd;
-            });
-          } else if (evt === "token") {
-            setChatMessages((prev) => {
-              const upd = [...prev];
-              const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, content: last.content + data.text };
-              return upd;
-            });
-          } else if (evt === "done") {
-            if (data.sessionId) setChatSessionId(data.sessionId);
-            setChatMessages((prev) => {
-              const upd = [...prev];
-              const last = upd[upd.length - 1];
-              if (last?.role === "assistant") upd[upd.length - 1] = { ...last, isStreaming: false };
-              return upd;
-            });
-          } else if (evt === "error") {
-            throw new Error(data.message ?? "Chat error");
-          }
-        }
-      }
-    } catch (e: any) {
-      setChatMessages((prev) => {
-        const upd = [...prev];
-        const last = upd[upd.length - 1];
-        if (last?.role === "assistant" && last.isStreaming) {
-          upd[upd.length - 1] = { ...last, content: `Error: ${e.message}`, isStreaming: false };
-        }
-        return upd;
-      });
-    } finally {
-      setChatStreaming(false);
-    }
-  }
+  const { state: speechState, isSupported: speechSupported, toggle: toggleSpeech } = useSpeechRecognition(
+    (transcript) => setChatInput(chatInput ? `${chatInput} ${transcript}` : transcript)
+  );
+  const isListening = speechState === "listening";
 
   const cov = stats?.coverage;
   const emb = stats?.embeddingCoverage;
@@ -2888,9 +2868,7 @@ function EdenTab({ pw }: { pw: string }) {
 
         {/* Identity header */}
         <div className="px-5 py-4 border-b border-border bg-gradient-to-r from-emerald-500/5 to-transparent flex items-center gap-3" data-testid="eden-identity-header">
-          <div className="h-9 w-9 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0">
-            <BrainCircuit className="h-5 w-5 text-emerald-500" />
-          </div>
+          <EdenAvatar isThinking={chatStreaming} size={36} />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-sm font-bold text-foreground" data-testid="eden-name">EDEN</h3>
@@ -2911,7 +2889,7 @@ function EdenTab({ pw }: { pw: string }) {
                 variant="ghost"
                 size="sm"
                 className="text-xs h-7 px-2"
-                onClick={() => { setChatMessages([]); setChatSessionId(""); }}
+                onClick={() => clearChat()}
                 data-testid="button-chat-clear"
               >
                 New chat
@@ -2985,8 +2963,8 @@ function EdenTab({ pw }: { pw: string }) {
               {/* Empty state with starter chips */}
               {chatMessages.length === 0 && (
                 <div className="h-full flex flex-col items-center justify-center" data-testid="chat-empty">
-                  <BrainCircuit className="h-10 w-10 text-emerald-500/30 mb-3" />
-                  <p className="text-sm font-semibold text-foreground mb-1">Ask EDEN anything</p>
+                  <EdenConstellation isThinking={false} />
+                  <p className="text-sm font-semibold text-foreground mb-1 -mt-2">Ask EDEN anything</p>
                   <p className="text-xs text-muted-foreground mb-6 text-center max-w-xs">
                     Semantic search over {emb?.totalEmbedded?.toLocaleString()} embedded TTO assets from {institutionCount} research institutions.
                   </p>
@@ -3009,8 +2987,8 @@ function EdenTab({ pw }: { pw: string }) {
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`} data-testid={`chat-msg-${i}`}>
                   {msg.role === "assistant" && (
-                    <div className="h-6 w-6 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-1 mr-2">
-                      <BrainCircuit className="h-3.5 w-3.5 text-emerald-500" />
+                    <div className="shrink-0 mt-1 mr-2">
+                      <EdenAvatar isThinking={!!(msg.isStreaming)} size={24} />
                     </div>
                   )}
                   <div className={`max-w-[78%] ${msg.role === "user" ? "" : "flex-1"}`}>
@@ -3057,25 +3035,49 @@ function EdenTab({ pw }: { pw: string }) {
             </div>
 
             {/* Input bar */}
-            <div className="px-4 py-3 border-t border-border flex gap-2 bg-card" data-testid="chat-input-area">
-              <input
-                className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground"
-                placeholder="Ask about targets, mechanisms, institutions, licensing readiness…"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-                disabled={chatStreaming}
-                data-testid="input-chat"
-              />
-              <Button
-                onClick={() => sendChatMessage()}
-                disabled={chatStreaming || !chatInput.trim()}
-                size="sm"
-                className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
-                data-testid="button-chat-send"
-              >
-                {chatStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-              </Button>
+            <div className="px-4 py-3 border-t border-border bg-card" data-testid="chat-input-area">
+              <div className="flex gap-2">
+                <input
+                  className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground"
+                  placeholder="Ask about targets, mechanisms, institutions, licensing readiness…"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                  disabled={chatStreaming}
+                  data-testid="input-chat"
+                />
+                {speechSupported && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={toggleSpeech}
+                    disabled={chatStreaming}
+                    className={`shrink-0 transition-colors ${isListening ? "border-red-500 text-red-500 bg-red-500/5 hover:bg-red-500/10" : "text-muted-foreground hover:text-foreground"}`}
+                    title={isListening ? "Stop listening" : "Speak your question"}
+                    data-testid="button-chat-mic"
+                  >
+                    {isListening
+                      ? <MicOff className="h-4 w-4 animate-pulse" />
+                      : <Mic className="h-4 w-4" />}
+                  </Button>
+                )}
+                <Button
+                  onClick={() => sendChatMessage()}
+                  disabled={chatStreaming || !chatInput.trim()}
+                  size="sm"
+                  className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  data-testid="button-chat-send"
+                >
+                  {chatStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+                </Button>
+              </div>
+              {isListening && (
+                <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1" data-testid="status-listening">
+                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                  Listening… speak now
+                </p>
+              )}
             </div>
           </>
         )}
@@ -3473,7 +3475,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
-                  <BrainCircuit className="h-6 w-6 text-emerald-500" />
+                  <EdenAvatar size={28} />
                   EDEN — AI Analyst
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">Eden Radar Novel Innovation Experience. Deep-enriches the 20K relevant TTO assets using GPT-4o for RAG-powered analysis.</p>

@@ -483,7 +483,24 @@ export type ConceptInterest = typeof conceptInterests.$inferSelect;
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
-  messages: jsonb("messages").$type<Array<{ role: "user" | "assistant"; content: string; assetIds?: number[]; ts: string }>>().notNull().default(sql`'[]'::jsonb`),
+  messages: jsonb("messages").$type<Array<{
+    role: "user" | "assistant";
+    content: string;
+    assetIds?: number[];
+    assets?: Array<{
+      id: number;
+      assetName: string;
+      institution: string;
+      indication: string;
+      modality: string;
+      developmentStage?: string;
+      ipType?: string | null;
+      sourceName?: string | null;
+      sourceUrl?: string | null;
+      similarity: number;
+    }>;
+    ts: string;
+  }>>().notNull().default(sql`'[]'::jsonb`),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

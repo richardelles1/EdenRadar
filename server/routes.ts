@@ -1696,12 +1696,25 @@ export async function registerRoutes(
         role: "assistant",
         content: fullResponse,
         assetIds: retrieved.map((a) => a.id),
+        assets: retrieved.map((a) => ({
+          id: a.id,
+          assetName: a.assetName,
+          institution: a.institution,
+          indication: a.indication,
+          modality: a.modality,
+          developmentStage: a.developmentStage,
+          ipType: a.ipType,
+          sourceName: a.sourceName,
+          sourceUrl: a.sourceUrl,
+          similarity: Math.round(a.similarity * 100) / 100,
+        })),
       });
 
       sendEvent("done", { sessionId: sid });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Chat failed";
       console.error("[EDEN chat] Error:", err);
-      sendEvent("error", { message: err.message ?? "Chat failed" });
+      sendEvent("error", { message: errMsg });
     } finally {
       res.end();
     }
@@ -1714,8 +1727,9 @@ export async function registerRoutes(
       const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
       const sessions = await storage.listEdenSessions(limit);
       res.json(sessions);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed";
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -1726,8 +1740,9 @@ export async function registerRoutes(
       const session = await storage.getEdenSession(req.params.sessionId);
       if (!session) return res.status(404).json({ error: "Session not found" });
       res.json(session);
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed";
+      res.status(500).json({ error: msg });
     }
   });
 
