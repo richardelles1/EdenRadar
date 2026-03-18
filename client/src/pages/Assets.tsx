@@ -18,8 +18,10 @@ import {
   Check,
   X,
   FolderOpen,
+  ChevronDown,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import type { SavedAsset } from "@shared/schema";
 
 type PipelineWithCount = {
@@ -526,7 +528,33 @@ export default function Assets() {
             <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
               <div className="flex items-center justify-between mb-5">
                 <div>
-                  <h2 className="text-base font-semibold text-foreground">{selectedPipelineName}</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-base font-semibold text-foreground">{selectedPipelineName}</h2>
+                    <Sheet>
+                      <SheetTrigger asChild>
+                        <button
+                          className="md:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 transition-colors"
+                          data-testid="button-mobile-pipeline-menu"
+                        >
+                          <Layers className="w-3 h-3" />
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                      </SheetTrigger>
+                      <SheetContent side="left" className="w-72 p-4">
+                        <SheetHeader className="mb-4">
+                          <SheetTitle>Pipelines</SheetTitle>
+                        </SheetHeader>
+                        <PipelineSidebar
+                          pipelines={pipelines}
+                          uncategorisedCount={uncategorisedCount}
+                          selectedId={selectedPipeline}
+                          onSelect={setSelectedPipeline}
+                          onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
+                          isLoading={pipelinesLoading}
+                        />
+                      </SheetContent>
+                    </Sheet>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {displayedAssets.length} asset{displayedAssets.length !== 1 ? "s" : ""}
                   </p>
@@ -545,7 +573,7 @@ export default function Assets() {
                   </Link>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   {displayedAssets.map((asset) => (
                     <AssetCard
                       key={asset.id}

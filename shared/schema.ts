@@ -56,7 +56,7 @@ export type PipelineList = typeof pipelineLists.$inferSelect;
 export const savedAssets = pgTable("saved_assets", {
   id: serial("id").primaryKey(),
   ingestedAssetId: integer("ingested_asset_id"),
-  pipelineListId: integer("pipeline_list_id"),
+  pipelineListId: integer("pipeline_list_id").references(() => pipelineLists.id, { onDelete: "set null" }),
   assetName: text("asset_name").notNull(),
   target: text("target").notNull(),
   modality: text("modality").notNull(),
