@@ -35,7 +35,15 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 
 **Industry Portal**:
 - `DashboardLayout` checks Supabase session + role='industry'; redirects to /login if unauthenticated, to /research if wrong role
-- Routes: /scout, /assets, /reports, /alerts, /institutions, /sources
+- **IndustrySidebar** (emerald-400 accent): replaces old Sidebar.tsx for all industry routes; logo with Radar icon, 8 nav items: Scout, Concepts, Research Projects, Institutions, Alerts, Pipelines, Eden, Profile; company name avatar with initials in footer
+- **Industry Profile** (`/industry/profile`): localStorage key `eden-industry-profile`; fields: company name, company type, therapeutic focus areas (tag input), modalities of interest (tag input), preferred deal stages (toggle pills); saves to localStorage for Eden/Scout personalization
+- **Concepts tab** (`/industry/concepts`): fetches `GET /api/discovery/concepts` (active concept cards from Discovery portal); card grid with therapeutic area + stage badges, credibility score, seeking tags, submitter affiliation; filters: text search, therapeutic area, stage; links to `/discovery/concept/:id`
+- **Research Projects tab** (`/industry/projects`): fetches `GET /api/industry/projects` (research projects with `publishToIndustry=true`); card grid with status/area badges, open-for-collab badge, keywords, seeking; filters: text search, research area, status, collaboration
+- **Alerts revamp** (`/alerts`): 3-bucket layout — TTO Assets (from `firstSeenAt` 48h window), New Concepts, New Research Projects; summary sidebar card with per-bucket counts + total; collapsible sections; Create Alert sheet preserved; source: `GET /api/industry/alerts/delta`
+- **Eden placeholder** (`/industry/eden`): coming-soon page for Task #140 redesign
+- **Scout filter cleanup**: replaced multi-row pill SourceSelector + showControls selects with a single "Filters" button (with active count badge) that opens a right Sheet containing all filters (sources, score, sort, date, stage, modality, institution) + reset-all button; active filter badges shown inline below search bar for quick removal
+- Routes: /scout, /assets, /reports, /alerts, /institutions, /sources, /industry/concepts, /industry/projects, /industry/profile, /industry/eden
+- **Backend routes added**: `GET /api/industry/projects` (publishToIndustry=true research projects), `GET /api/industry/alerts/delta` (3-bucket 48h alert delta)
 
 **Researcher Portal**:
 - `ResearchLayout` checks Supabase session + role='researcher'; redirects to /login if unauthenticated, to /scout if wrong role

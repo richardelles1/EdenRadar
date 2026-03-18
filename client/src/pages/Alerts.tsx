@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,10 +14,22 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Bell, Plus, ChevronDown, ChevronUp, Building2, Sparkles, Clock,
+  Bell,
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+  Lightbulb,
+  FlaskConical,
+  Package,
+  Clock,
 } from "lucide-react";
 
 interface DeltaInstitution {
@@ -25,11 +38,20 @@ interface DeltaInstitution {
   sampleAssets: string[];
 }
 
-interface DeltaResponse {
-  runId: number | null;
-  ranAt: string | null;
-  totalNew: number;
-  byInstitution: DeltaInstitution[];
+interface IndustryDeltaResponse {
+  newAssets: {
+    total: number;
+    byInstitution: DeltaInstitution[];
+  };
+  newConcepts: {
+    total: number;
+    items: Array<{ id: number; title: string; therapeuticArea: string; submitterAffiliation?: string }>;
+  };
+  newProjects: {
+    total: number;
+    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string }>;
+  };
+  windowHours: number;
 }
 
 function formatRelative(dateStr: string | null): string {
@@ -42,58 +64,223 @@ function formatRelative(dateStr: string | null): string {
   return `${Math.round(days / 30)} months ago`;
 }
 
-function DeltaCard({ inst, index }: { inst: DeltaInstitution; index: number }) {
-  const [expanded, setExpanded] = useState(false);
+function SectionHeader({
+  icon: Icon,
+  label,
+  count,
+  color,
+  expanded,
+  onToggle,
+}: {
+  icon: React.ElementType;
+  label: string;
+  count: number;
+  color: string;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      className="w-full flex items-center gap-3 text-left select-none"
+      onClick={onToggle}
+      data-testid={`alerts-section-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
+      <div className={`w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${color}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <span className="text-sm font-semibold text-foreground">{label}</span>
+      </div>
+      <Badge
+        variant="secondary"
+        className="shrink-0 text-[11px] tabular-nums"
+      >
+        {count} new
+      </Badge>
+      {expanded ? (
+        <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      ) : (
+        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+      )}
+    </button>
+  );
+}
+
+function TtoAssetsSection({ data }: { data: IndustryDeltaResponse["newAssets"] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
+      <div className="p-4">
+        <SectionHeader
+          icon={Package}
+          label="TTO Assets"
+          count={data.total}
+          color="bg-primary/10 text-primary"
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
+      </div>
+      {expanded && (
+        <div className="border-t border-card-border/60 px-4 pb-4">
+          {data.total === 0 ? (
+            <p className="text-xs text-muted-foreground pt-3">
+              No new TTO assets in the last {48}h scan window.
+            </p>
+          ) : (
+            <div className="pt-3 space-y-2">
+              {data.byInstitution.map((inst, i) => (
+                <InstitutionRow key={inst.institution} inst={inst} index={i} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number }) {
+  const [open, setOpen] = useState(false);
   return (
     <div
-      className="rounded-lg border border-card-border bg-card hover:border-primary/20 transition-colors"
+      className="rounded-md border border-card-border/60 bg-background/50"
       data-testid={`delta-card-${index}`}
     >
       <div
-        className="flex items-center gap-3 p-4 cursor-pointer select-none"
-        onClick={() => setExpanded((v) => !v)}
+        className="flex items-center gap-2.5 p-3 cursor-pointer"
+        onClick={() => setOpen((v) => !v)}
       >
-        <div className="w-8 h-8 rounded-md bg-primary/10 flex items-center justify-center shrink-0">
-          <Building2 className="w-4 h-4 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-foreground truncate">{inst.institution}</p>
-          <p className="text-xs text-primary font-medium mt-0.5">
-            +{inst.count} new asset{inst.count !== 1 ? "s" : ""}
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="secondary" className="text-[11px] bg-primary/10 text-primary border-0 tabular-nums">
-            +{inst.count}
-          </Badge>
-          {expanded
-            ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
-            : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
-          }
-        </div>
+        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+        <span className="flex-1 text-xs font-medium text-foreground truncate">{inst.institution}</span>
+        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0">+{inst.count}</Badge>
+        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
       </div>
-
-      {expanded && inst.sampleAssets.length > 0 && (
-        <div className="px-4 pb-4 pt-0 border-t border-card-border/60">
-          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide pt-3 mb-2">
-            Sample new listings
-          </p>
-          <ul className="space-y-1.5">
+      {open && inst.sampleAssets.length > 0 && (
+        <div className="px-3 pb-3 border-t border-card-border/60">
+          <ul className="space-y-1 pt-2">
             {inst.sampleAssets.map((name, i) => (
-              <li
-                key={i}
-                className="flex items-start gap-2 text-xs text-foreground"
-                data-testid={`delta-asset-${index}-${i}`}
-              >
-                <span className="w-1 h-1 rounded-full bg-primary/60 mt-1.5 shrink-0" />
+              <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+                <span className="w-1 h-1 rounded-full bg-primary/50 mt-1.5 shrink-0" />
                 <span className="truncate">{name}</span>
               </li>
             ))}
           </ul>
           {inst.count > inst.sampleAssets.length && (
-            <p className="text-[10px] text-muted-foreground mt-2">
-              +{inst.count - inst.sampleAssets.length} more not shown
+            <p className="text-[10px] text-muted-foreground mt-1.5 pl-3">
+              +{inst.count - inst.sampleAssets.length} more
             </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConceptsSection({ data }: { data: IndustryDeltaResponse["newConcepts"] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
+      <div className="p-4">
+        <SectionHeader
+          icon={Lightbulb}
+          label="New Concepts"
+          count={data.total}
+          color="bg-amber-500/10 text-amber-500"
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
+      </div>
+      {expanded && (
+        <div className="border-t border-card-border/60 px-4 pb-4">
+          {data.total === 0 ? (
+            <p className="text-xs text-muted-foreground pt-3">
+              No new concepts published in the last 48h.
+            </p>
+          ) : (
+            <div className="pt-3 space-y-2">
+              {data.items.map((concept) => (
+                <Link key={concept.id} href={`/discovery/concept/${concept.id}`}>
+                  <div
+                    className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-amber-500/30 cursor-pointer transition-colors"
+                    data-testid={`alert-concept-${concept.id}`}
+                  >
+                    <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {concept.therapeuticArea && (
+                        <span className="text-[10px] text-amber-500">{concept.therapeuticArea}</span>
+                      )}
+                      {concept.submitterAffiliation && (
+                        <span className="text-[10px] text-muted-foreground truncate">{concept.submitterAffiliation}</span>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              ))}
+              {data.total > data.items.length && (
+                <Link href="/industry/concepts">
+                  <p className="text-xs text-primary hover:underline cursor-pointer">
+                    +{data.total - data.items.length} more — view all concepts →
+                  </p>
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] }) {
+  const [expanded, setExpanded] = useState(true);
+
+  return (
+    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
+      <div className="p-4">
+        <SectionHeader
+          icon={FlaskConical}
+          label="Research Projects"
+          count={data.total}
+          color="bg-violet-500/10 text-violet-500"
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        />
+      </div>
+      {expanded && (
+        <div className="border-t border-card-border/60 px-4 pb-4">
+          {data.total === 0 ? (
+            <p className="text-xs text-muted-foreground pt-3">
+              No new research projects published in the last 48h.
+            </p>
+          ) : (
+            <div className="pt-3 space-y-2">
+              {data.items.map((proj) => (
+                <div
+                  key={proj.id}
+                  className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-violet-500/30 transition-colors"
+                  data-testid={`alert-project-${proj.id}`}
+                >
+                  <p className="text-xs font-medium text-foreground truncate">
+                    {proj.discoveryTitle || proj.title}
+                  </p>
+                  <div className="flex items-center gap-2 mt-1">
+                    {proj.researchArea && (
+                      <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
+                  </div>
+                </div>
+              ))}
+              {data.total > data.items.length && (
+                <Link href="/industry/projects">
+                  <p className="text-xs text-primary hover:underline cursor-pointer">
+                    +{data.total - data.items.length} more — view all projects →
+                  </p>
+                </Link>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -108,7 +295,8 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
         <SheetHeader>
           <SheetTitle>Create Alert</SheetTitle>
           <SheetDescription>
-            Set up a saved search that notifies you when new matching assets are found.
+            Set up a saved search that notifies you when new matching assets
+            are found.
           </SheetDescription>
         </SheetHeader>
 
@@ -192,10 +380,18 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
           </div>
 
           <div className="pt-4 flex gap-3">
-            <Button className="flex-1" onClick={onClose} data-testid="button-save-alert">
+            <Button
+              className="flex-1"
+              onClick={onClose}
+              data-testid="button-save-alert"
+            >
               Save Alert
             </Button>
-            <Button variant="outline" onClick={onClose} data-testid="button-cancel-alert">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              data-testid="button-cancel-alert"
+            >
               Cancel
             </Button>
           </div>
@@ -208,13 +404,15 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
 export default function Alerts() {
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  const { data, isLoading } = useQuery<DeltaResponse>({
-    queryKey: ["/api/ingest/delta"],
+  const { data, isLoading } = useQuery<IndustryDeltaResponse>({
+    queryKey: ["/api/industry/alerts/delta"],
     staleTime: 5 * 60 * 1000,
   });
 
-  const hasData = !isLoading && data && data.totalNew > 0;
-  const noRun = !isLoading && (!data || !data.ranAt);
+  const totalNew =
+    (data?.newAssets.total ?? 0) +
+    (data?.newConcepts.total ?? 0) +
+    (data?.newProjects.total ?? 0);
 
   return (
     <div className="min-h-full bg-background">
@@ -222,13 +420,14 @@ export default function Alerts() {
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold text-foreground">Alerts</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                New asset discoveries from the latest TTO scan, broken down by institution.
+              <h1 className="text-xl font-bold text-foreground">Alerts</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                New discoveries across TTO assets, concepts, and research
+                projects — last 48 hours.
               </p>
             </div>
             <Button
-              className="gap-2"
+              className="gap-2 shrink-0"
               onClick={() => setSheetOpen(true)}
               data-testid="button-create-alert"
             >
@@ -239,70 +438,72 @@ export default function Alerts() {
         </div>
       </div>
 
-      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+      <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 w-full rounded-lg" />)}
+          <div className="space-y-3 max-w-2xl">
+            {[1, 2, 3].map((i) => (
+              <Skeleton key={i} className="h-20 w-full rounded-lg" />
+            ))}
           </div>
-        ) : noRun ? (
+        ) : !data ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
             <Bell className="w-10 h-10 text-muted-foreground/30" />
-            <p className="text-sm font-medium text-muted-foreground">No scans have been run yet</p>
-            <p className="text-xs text-muted-foreground/70">
-              Run a full scan from the Scout page to start seeing new asset discoveries here.
+            <p className="text-sm font-medium text-muted-foreground">
+              Could not load alerts
             </p>
           </div>
         ) : (
-          <>
-            <div
-              className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-lg border border-primary/20 bg-primary/5"
-              data-testid="delta-summary-card"
-            >
-              <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-primary" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap items-baseline gap-2">
-                  <span className="text-2xl font-bold text-primary tabular-nums">{data?.totalNew ?? 0}</span>
-                  <span className="text-sm text-foreground font-medium">new assets found</span>
-                  <span className="text-xs text-muted-foreground">
-                    across {data?.byInstitution.length ?? 0} institution{(data?.byInstitution.length ?? 0) !== 1 ? "s" : ""}
-                  </span>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+            <div className="lg:col-span-2 space-y-4">
+              <TtoAssetsSection data={data.newAssets} />
+              <ConceptsSection data={data.newConcepts} />
+              <ProjectsSection data={data.newProjects} />
+            </div>
+
+            <div className="lg:col-span-1">
+              <div className="rounded-lg border border-card-border bg-card p-5 space-y-3 sticky top-6">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Clock className="w-4 h-4" />
+                  <span className="text-xs font-medium">48-hour window</span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-1 text-xs text-muted-foreground">
-                  <Clock className="w-3 h-3" />
-                  <span>
-                    Run #{data?.runId} · {formatRelative(data?.ranAt ?? null)}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">TTO Assets</span>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      +{data.newAssets.total}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Concepts</span>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      +{data.newConcepts.total}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Research Projects</span>
+                    <span className="font-semibold text-foreground tabular-nums">
+                      +{data.newProjects.total}
+                    </span>
+                  </div>
+                </div>
+                <div className="border-t border-border/60 pt-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Total
+                  </span>
+                  <span className="text-xl font-bold text-primary tabular-nums">
+                    +{totalNew}
                   </span>
                 </div>
               </div>
             </div>
-
-            {hasData && (
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                  By Institution
-                </p>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {data!.byInstitution.map((inst, i) => (
-                    <DeltaCard key={inst.institution} inst={inst} index={i} />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {!hasData && data?.ranAt && (
-              <div className="flex flex-col items-center gap-3 py-10 text-center">
-                <Bell className="w-8 h-8 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">No new assets in the last scan</p>
-                <p className="text-xs text-muted-foreground/70">All known assets were already indexed.</p>
-              </div>
-            )}
-          </>
+          </div>
         )}
       </div>
 
-      <CreateAlertSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
+      <CreateAlertSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+      />
     </div>
   );
 }

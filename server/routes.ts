@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
@@ -3358,6 +3358,94 @@ If a field cannot be determined, use "N/A".`
         return res.json({ assets: [], literature: [], noResults: true });
       }
       res.json({ assets, literature });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/industry/projects", async (_req, res) => {
+    try {
+      const projects = await db
+        .select()
+        .from(researchProjects)
+        .where(eq(researchProjects.publishToIndustry, true))
+        .orderBy(desc(researchProjects.lastEditedAt));
+      res.json({ projects });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/industry/alerts/delta", async (_req, res) => {
+    try {
+      const WINDOW_HOURS = 48;
+      const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
+
+      const [newAssetRows, newConceptRows, newProjectRows] = await Promise.all([
+        db
+          .select({
+            institution: ingestedAssets.institution,
+            assetName: ingestedAssets.assetName,
+          })
+          .from(ingestedAssets)
+          .where(sql`${ingestedAssets.firstSeenAt} >= ${since}`)
+          .orderBy(desc(ingestedAssets.firstSeenAt)),
+
+        db
+          .select({
+            id: conceptCards.id,
+            title: conceptCards.title,
+            therapeuticArea: conceptCards.therapeuticArea,
+            submitterAffiliation: conceptCards.submitterAffiliation,
+          })
+          .from(conceptCards)
+          .where(
+            and(
+              eq(conceptCards.status, "active"),
+              sql`${conceptCards.createdAt} >= ${since}`,
+            ),
+          )
+          .orderBy(desc(conceptCards.createdAt))
+          .limit(20),
+
+        db
+          .select({
+            id: researchProjects.id,
+            title: researchProjects.title,
+            discoveryTitle: researchProjects.discoveryTitle,
+            researchArea: researchProjects.researchArea,
+            status: researchProjects.status,
+          })
+          .from(researchProjects)
+          .where(
+            and(
+              eq(researchProjects.publishToIndustry, true),
+              sql`${researchProjects.lastEditedAt} >= ${since}`,
+            ),
+          )
+          .orderBy(desc(researchProjects.lastEditedAt))
+          .limit(20),
+      ]);
+
+      const institutionMap = new Map<string, { count: number; sampleAssets: string[] }>();
+      for (const row of newAssetRows) {
+        const inst = row.institution || "Unknown";
+        const existing = institutionMap.get(inst) ?? { count: 0, sampleAssets: [] };
+        existing.count++;
+        if (existing.sampleAssets.length < 5) existing.sampleAssets.push(row.assetName);
+        institutionMap.set(inst, existing);
+      }
+
+      const byInstitution = Array.from(institutionMap.entries())
+        .map(([institution, { count, sampleAssets }]) => ({ institution, count, sampleAssets }))
+        .sort((a, b) => b.count - a.count);
+
+      res.json({
+        newAssets: { total: newAssetRows.length, byInstitution },
+        newConcepts: { total: newConceptRows.length, items: newConceptRows },
+        newProjects: { total: newProjectRows.length, items: newProjectRows },
+        windowHours: WINDOW_HOURS,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

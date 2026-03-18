@@ -32,6 +32,10 @@ import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
 import PitchDeck from "@/pages/PitchDeck";
+import IndustryConcepts from "@/pages/IndustryConcepts";
+import IndustryProjects from "@/pages/IndustryProjects";
+import IndustryProfile from "@/pages/IndustryProfile";
+import IndustryEden from "@/pages/IndustryEden";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -108,6 +112,27 @@ function Router() {
       <Route path="/report">
         <DashboardLayout>
           <Report />
+        </DashboardLayout>
+      </Route>
+
+      <Route path="/industry/concepts">
+        <DashboardLayout>
+          <IndustryConcepts />
+        </DashboardLayout>
+      </Route>
+      <Route path="/industry/projects">
+        <DashboardLayout>
+          <IndustryProjects />
+        </DashboardLayout>
+      </Route>
+      <Route path="/industry/profile">
+        <DashboardLayout>
+          <IndustryProfile />
+        </DashboardLayout>
+      </Route>
+      <Route path="/industry/eden">
+        <DashboardLayout>
+          <IndustryEden />
         </DashboardLayout>
       </Route>
 

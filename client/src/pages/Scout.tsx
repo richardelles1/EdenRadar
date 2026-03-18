@@ -9,10 +9,14 @@ import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe, TrendingUp, Flame } from "lucide-react";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import { FileBarChart2, Loader2, Globe, TrendingUp, Flame, SlidersHorizontal } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -99,33 +103,6 @@ function RadarOverlay({ sources }: { sources: string[] }) {
   );
 }
 
-function SourceSelector({
-  sources, selected, onToggle,
-}: {
-  sources: { id: string; label: string }[];
-  selected: string[];
-  onToggle: (id: string) => void;
-}) {
-  return (
-    <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-2">
-      <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0">Sources:</span>
-      {sources.map((s) => (
-        <button
-          key={s.id}
-          onClick={() => onToggle(s.id)}
-          className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
-            selected.includes(s.id)
-              ? "border-primary bg-primary/15 text-primary font-medium"
-              : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-          }`}
-          data-testid={`source-toggle-${s.id}`}
-        >
-          {s.label}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 type ConvergenceSignal = {
   therapyArea: string;
@@ -239,6 +216,7 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [selectedSources, setSelectedSources] = useState<string[]>(() => ssGet("scout-sources", ALL_SOURCE_KEYS));
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   useEffect(() => {
     try {
@@ -451,6 +429,16 @@ export default function Scout() {
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
+  const activeFilterCount = [
+    stageFilter !== "all",
+    modalityFilter !== "all",
+    institutionFilter !== "all",
+    dateFilter !== "all",
+    minScore !== 0,
+    sortMode !== "score",
+    selectedSources.length !== ALL_SOURCE_KEYS.length,
+  ].filter(Boolean).length;
+
   return (
     <div className="min-h-full bg-background flex flex-col">
       <div className="flex flex-1 w-full">
@@ -495,6 +483,20 @@ export default function Scout() {
                   {reportMutation.isPending ? "Generating..." : "Match Report"}
                 </span>
               </Button>
+              <Button
+                variant="outline"
+                className="shrink-0 relative gap-2 text-sm h-10 border-card-border"
+                onClick={() => setFiltersOpen(true)}
+                data-testid="button-open-filters"
+              >
+                <SlidersHorizontal className="w-4 h-4" />
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <Badge className="absolute -top-1.5 -right-1.5 w-4 h-4 p-0 flex items-center justify-center text-[10px] bg-primary text-primary-foreground border-0">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+              </Button>
             </div>
 
             <div className="max-w-3xl mx-auto flex items-center justify-end">
@@ -523,8 +525,6 @@ export default function Scout() {
             </div>
 
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
-
-            <SourceSelector sources={sources} selected={selectedSources} onToggle={handleToggleSource} />
           </div>
 
           {searchMutation.isPending && (
@@ -536,99 +536,40 @@ export default function Scout() {
           {showControls && (
             <div className="px-4 sm:px-6 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Score</span>
-                  <Select value={String(minScore)} onValueChange={(v) => setMinScore(Number(v))} data-testid="filter-score-select">
-                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[110px] focus:ring-0 focus:ring-offset-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Any Score</SelectItem>
-                      <SelectItem value="60">≥ 60</SelectItem>
-                      <SelectItem value="70">≥ 70</SelectItem>
-                      <SelectItem value="80">≥ 80</SelectItem>
-                      <SelectItem value="90">≥ 90</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Sort</span>
-                  <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
-                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[130px] focus:ring-0 focus:ring-offset-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="score">Best Match</SelectItem>
-                      <SelectItem value="recency">Newest First</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Date</span>
-                  <Select value={dateFilter} onValueChange={setDateFilter} data-testid="select-date">
-                    <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[120px] focus:ring-0 focus:ring-offset-0">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Time</SelectItem>
-                      <SelectItem value="30d">Last 30 Days</SelectItem>
-                      <SelectItem value="90d">Last 90 Days</SelectItem>
-                      <SelectItem value="1y">Last Year</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {availableStages.length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Stage</span>
-                    <Select value={stageFilter} onValueChange={setStageFilter} data-testid="filter-stage-select">
-                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[130px] focus:ring-0 focus:ring-offset-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Stages</SelectItem>
-                        {availableStages.map((s) => (
-                          <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <button
+                  onClick={() => setFiltersOpen(true)}
+                  className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                  data-testid="button-filters-hint"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  {activeFilterCount > 0
+                    ? `${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} active`
+                    : "Add filters"}
+                </button>
+                {stageFilter !== "all" && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setStageFilter("all")} data-testid="active-filter-stage">
+                    Stage: {stageFilter} ×
+                  </Badge>
                 )}
-
-                {availableModalities.length > 0 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Modality</span>
-                    <Select value={modalityFilter} onValueChange={setModalityFilter} data-testid="filter-modality-select">
-                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[150px] focus:ring-0 focus:ring-offset-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Modalities</SelectItem>
-                        {availableModalities.map((m) => (
-                          <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {modalityFilter !== "all" && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setModalityFilter("all")} data-testid="active-filter-modality">
+                    {modalityFilter} ×
+                  </Badge>
                 )}
-
-                {availableInstitutions.length > 1 && (
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide">Institution</span>
-                    <Select value={institutionFilter} onValueChange={setInstitutionFilter} data-testid="filter-institution-select">
-                      <SelectTrigger className="h-7 text-xs border-card-border bg-card w-[160px] focus:ring-0 focus:ring-offset-0">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All Institutions</SelectItem>
-                        {availableInstitutions.map((inst) => (
-                          <SelectItem key={inst} value={inst}>{inst}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                {institutionFilter !== "all" && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution">
+                    {institutionFilter} ×
+                  </Badge>
+                )}
+                {dateFilter !== "all" && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setDateFilter("all")} data-testid="active-filter-date">
+                    {dateFilter} ×
+                  </Badge>
+                )}
+                {minScore > 0 && (
+                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setMinScore(0)} data-testid="active-filter-score">
+                    Score ≥ {minScore} ×
+                  </Badge>
                 )}
               </div>
             </div>
@@ -672,6 +613,153 @@ export default function Scout() {
           onExportCsv={handleExportCsv}
         />
       </div>
+
+      <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
+          <SheetHeader>
+            <SheetTitle>Filters & Sources</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sources</p>
+              <div className="flex flex-wrap gap-2">
+                {sources.map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => handleToggleSource(s.id)}
+                    className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
+                      selectedSources.includes(s.id)
+                        ? "border-primary bg-primary/15 text-primary font-medium"
+                        : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    }`}
+                    data-testid={`source-toggle-${s.id}`}
+                  >
+                    {s.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort & Score</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-muted-foreground">Min Score</label>
+                  <Select value={String(minScore)} onValueChange={(v) => setMinScore(Number(v))} data-testid="filter-score-select">
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">Any Score</SelectItem>
+                      <SelectItem value="60">≥ 60</SelectItem>
+                      <SelectItem value="70">≥ 70</SelectItem>
+                      <SelectItem value="80">≥ 80</SelectItem>
+                      <SelectItem value="90">≥ 90</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] text-muted-foreground">Sort By</label>
+                  <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="score">Best Match</SelectItem>
+                      <SelectItem value="recency">Newest First</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date Range</p>
+              <Select value={dateFilter} onValueChange={setDateFilter} data-testid="select-date">
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Time</SelectItem>
+                  <SelectItem value="30d">Last 30 Days</SelectItem>
+                  <SelectItem value="90d">Last 90 Days</SelectItem>
+                  <SelectItem value="1y">Last Year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {availableStages.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Development Stage</p>
+                <Select value={stageFilter} onValueChange={setStageFilter} data-testid="filter-stage-select">
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Stages</SelectItem>
+                    {availableStages.map((s) => (
+                      <SelectItem key={s} value={s} className="capitalize">{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {availableModalities.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Modality</p>
+                <Select value={modalityFilter} onValueChange={setModalityFilter} data-testid="filter-modality-select">
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Modalities</SelectItem>
+                    {availableModalities.map((m) => (
+                      <SelectItem key={m} value={m} className="capitalize">{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {availableInstitutions.length > 1 && (
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Institution</p>
+                <Select value={institutionFilter} onValueChange={setInstitutionFilter} data-testid="filter-institution-select">
+                  <SelectTrigger className="h-8 text-xs w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Institutions</SelectItem>
+                    {availableInstitutions.map((inst) => (
+                      <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => {
+                  setStageFilter("all");
+                  setModalityFilter("all");
+                  setInstitutionFilter("all");
+                  setDateFilter("all");
+                  setMinScore(0);
+                  setSortMode("score");
+                  setSelectedSources(ALL_SOURCE_KEYS);
+                }}
+                className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-1 border border-dashed border-card-border rounded-md"
+                data-testid="button-reset-filters"
+              >
+                Reset all filters
+              </button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
