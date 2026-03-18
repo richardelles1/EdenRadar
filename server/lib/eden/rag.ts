@@ -93,7 +93,7 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
 function buildPortfolioStatsBlock(stats: PortfolioStats): string {
   if (stats.total === 0) return "";
 
-  const modalityLines = stats.byModality.slice(0, 10)
+  const modalityLines = stats.byModality
     .map((m) => `${m.modality} (${m.count.toLocaleString()})`)
     .join(", ");
 

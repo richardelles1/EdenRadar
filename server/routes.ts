@@ -1823,7 +1823,10 @@ export async function registerRoutes(
     try {
       const [session, portfolioStats] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
-        fetchPortfolioStats().catch(() => undefined),
+        fetchPortfolioStats().catch((err) => {
+          console.error("[eden] Portfolio stats preload failed — count answers may be degraded:", err?.message ?? err);
+          return undefined;
+        }),
       ]);
       const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
