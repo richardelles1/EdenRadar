@@ -147,6 +147,96 @@ app.use((req, res, next) => {
     log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Ensure T007 taxonomy + convergence tables exist ──────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS therapy_area_taxonomy (
+        id serial PRIMARY KEY,
+        name text NOT NULL UNIQUE,
+        parent_id integer,
+        level integer NOT NULL DEFAULT 0,
+        asset_count integer NOT NULL DEFAULT 0,
+        last_updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS convergence_signals (
+        id serial PRIMARY KEY,
+        therapy_area text NOT NULL,
+        target_or_mechanism text NOT NULL,
+        institution_count integer NOT NULL DEFAULT 0,
+        asset_ids jsonb,
+        institutions jsonb,
+        score real NOT NULL DEFAULT 0,
+        detected_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] taxonomy + convergence tables ready", "startup");
+  } catch (err: any) {
+    log(`[startup] taxonomy migration failed: ${err?.message}`, "startup");
+  }
+
+  // ── Ensure review_queue table exists ─────────────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS review_queue (
+        id serial PRIMARY KEY,
+        asset_id integer NOT NULL,
+        reason text NOT NULL,
+        status text NOT NULL DEFAULT 'pending',
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        resolved_at timestamp
+      )
+    `);
+    log("[startup] review_queue table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] review_queue migration failed: ${err?.message}`, "startup");
+  }
+
+  // ── Ensure concept_cards + concept_interests tables exist ─────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS concept_cards (
+        id serial PRIMARY KEY,
+        user_id text NOT NULL,
+        submitter_name text NOT NULL,
+        submitter_affiliation text,
+        submitter_email text,
+        title text NOT NULL,
+        one_liner text NOT NULL,
+        hypothesis text,
+        problem text NOT NULL,
+        proposed_approach text NOT NULL,
+        required_expertise text,
+        seeking jsonb,
+        therapeutic_area text NOT NULL,
+        modality text NOT NULL DEFAULT 'unknown',
+        stage integer NOT NULL DEFAULT 1,
+        credibility_score integer,
+        credibility_rationale text,
+        interest_collaborating integer NOT NULL DEFAULT 0,
+        interest_funding integer NOT NULL DEFAULT 0,
+        interest_advising integer NOT NULL DEFAULT 0,
+        attached_files jsonb DEFAULT '[]',
+        status text NOT NULL DEFAULT 'active',
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS concept_interests (
+        id serial PRIMARY KEY,
+        concept_id integer NOT NULL,
+        user_id text NOT NULL,
+        interest_type text NOT NULL,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] concept_cards + concept_interests tables ready", "startup");
+  } catch (err: any) {
+    log(`[startup] concept_cards migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"

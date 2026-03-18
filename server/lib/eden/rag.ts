@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import type { RetrievedAsset } from "../../storage";
 import { db } from "../../db";
-import { ingestedAssets } from "../../../shared/schema";
+import { ingestedAssets, therapyAreaTaxonomy } from "../../../shared/schema";
 import { sql, desc } from "drizzle-orm";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -36,7 +36,7 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     return _statsCache;
   }
 
-  const [totalRows, modalityRows, stageRows, institutionRows] = await Promise.all([
+  const [totalRows, modalityRows, stageRows, institutionRows, therapyAreaRows] = await Promise.all([
     db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
     db.execute(sql`
       SELECT modality, COUNT(*)::int AS count FROM ingested_assets
@@ -51,8 +51,13 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     db.execute(sql`
       SELECT institution, COUNT(*)::int AS count FROM ingested_assets
       WHERE relevant = true
-      GROUP BY institution ORDER BY count DESC LIMIT 20
+      GROUP BY institution ORDER BY count DESC LIMIT 15
     `),
+    db.select({ name: therapyAreaTaxonomy.name, assetCount: therapyAreaTaxonomy.assetCount })
+      .from(therapyAreaTaxonomy)
+      .where(sql`${therapyAreaTaxonomy.assetCount} > 0`)
+      .orderBy(desc(therapyAreaTaxonomy.assetCount))
+      .limit(15),
   ]);
 
   const total = Number((totalRows.rows[0] as Record<string, unknown>)?.total ?? 0);
@@ -68,12 +73,16 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     institution: String(r.institution ?? ""),
     count: Number(r.count ?? 0),
   }));
+  const byTherapyArea = therapyAreaRows.map((r) => ({
+    area: r.name,
+    count: r.assetCount,
+  }));
 
   _statsCache = {
     total,
     byModality,
     byStage,
-    byTherapyArea: [],
+    byTherapyArea,
     topInstitutions,
     lastFetched: Date.now(),
   };
@@ -84,7 +93,7 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
 function buildPortfolioStatsBlock(stats: PortfolioStats): string {
   if (stats.total === 0) return "";
 
-  const modalityLines = stats.byModality.slice(0, 8)
+  const modalityLines = stats.byModality.slice(0, 10)
     .map((m) => `${m.modality} (${m.count.toLocaleString()})`)
     .join(", ");
 
@@ -92,17 +101,21 @@ function buildPortfolioStatsBlock(stats: PortfolioStats): string {
     .map((s) => `${s.stage}: ${s.count.toLocaleString()}`)
     .join(" | ");
 
-  const topInst = stats.topInstitutions.slice(0, 8)
+  const topInst = stats.topInstitutions.slice(0, 15)
     .map((i) => `${i.institution} (${i.count})`)
     .join(", ");
+
+  const therapyAreaLines = stats.byTherapyArea.length > 0
+    ? stats.byTherapyArea.slice(0, 12).map((a) => `${a.area} (${a.count})`).join(", ")
+    : "";
 
   return `## Your portfolio — live numbers you know cold
 Total relevant assets indexed: **${stats.total.toLocaleString()}**
 By modality: ${modalityLines}
 By development stage: ${stageLines}
-Top institutions by asset count: ${topInst}
+Top 15 institutions by asset count: ${topInst}${therapyAreaLines ? `\nTop therapy areas: ${therapyAreaLines}` : ""}
 
-When asked "how many" questions, use these numbers. Do not count from retrieved assets — use your portfolio knowledge. If asked for a number you don't have here, say so and offer to dig into the data.`;
+When asked "how many" questions, use these numbers. Do not count from retrieved assets — use your portfolio knowledge. If asked for a breakdown you don't have here, say so and offer to dig into the data.`;
 }
 
 // ── Aggregation query detection and execution ─────────────────────────────
@@ -325,6 +338,7 @@ function buildContext(assets: RetrievedAsset[]): string {
       const lines = [
         `[Asset ${i + 1}] ${a.assetName}`,
         `  Institution: ${a.institution}`,
+        a.technologyId ? `  Technology ID: ${a.technologyId}` : null,
         a.mechanismOfAction ? `  Mechanism: ${a.mechanismOfAction}` : null,
         a.innovationClaim ? `  Innovation: ${a.innovationClaim}` : null,
         `  Target: ${a.target} | Modality: ${a.modality}`,

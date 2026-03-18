@@ -39,6 +39,7 @@ export type RetrievedAsset = {
   sourceName: string | null;
   summary: string | null;
   categories: string | null;
+  technologyId: string | null;
   similarity: number;
 };
 
@@ -1181,7 +1182,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories,
+        summary, categories, technology_id,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE embedding IS NOT NULL AND relevant = true
@@ -1208,6 +1209,7 @@ export class DatabaseStorage implements IStorage {
       sourceName: typeof r.source_name === "string" && r.source_name ? r.source_name : null,
       summary: typeof r.summary === "string" && r.summary ? r.summary : null,
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+      technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
     }));
   }
@@ -1219,7 +1221,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories,
+        summary, categories, technology_id,
         0.85 AS similarity
       FROM ingested_assets
       WHERE relevant = true AND source_type = 'tech_transfer' AND LOWER(institution) LIKE ${pattern}
@@ -1245,6 +1247,7 @@ export class DatabaseStorage implements IStorage {
       sourceName: typeof r.source_name === "string" && r.source_name ? r.source_name : null,
       summary: typeof r.summary === "string" && r.summary ? r.summary : null,
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+      technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       similarity: 0.85,
     }));
   }
