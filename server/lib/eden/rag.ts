@@ -116,7 +116,7 @@ async function runNewestByInstitution(institution: string): Promise<AggResult> {
       firstSeenAt: ingestedAssets.firstSeenAt,
     })
     .from(ingestedAssets)
-    .where(sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${institution.toLowerCase() + "%"}`)
+    .where(sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${"%" + institution.toLowerCase() + "%"}`)
     .orderBy(desc(ingestedAssets.firstSeenAt))
     .limit(8);
   return rows as AggResult;
