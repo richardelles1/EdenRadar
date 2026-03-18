@@ -2420,13 +2420,6 @@ export const ritScraper: InstitutionScraper = {
   },
 };
 
-// 6. New Mexico State University (Tradespace)
-// React SPA — no public JSON API found at /api/opportunities or /graphql endpoints
-export const nmStateScraper = createStubScraper(
-  "New Mexico State University (Tradespace)",
-  "Tradespace marketplace is a React SPA with no public API endpoint — same pattern as UTEP Tradespace stub"
-);
-
 // 7. New Mexico Tech
 // Invention summaries page lists technologies as PDF links with descriptive anchor text
 export const nmTechScraper: InstitutionScraper = {
@@ -3135,18 +3128,23 @@ export const foxChaseScraper: InstitutionScraper = {
 
 // Fred Hutchinson Cancer Center
 // Investigation (March 2026):
-//   AEM page uses Elastic App Search (engine "cancer-consortium") but that engine
-//   indexes cancerconsortium.org only — 0 fredhutch.org/technology-details results.
-//   Playwright is the only working approach: AEM renders Elastic results client-side
-//   as anchor tags once the JS bundle fully loads.
-// Fix (Task #136): removed dead Elastic scan path; pure Playwright with extended
-//   post-navigation wait (5 s) and scroll to trigger AEM lazy-load; broadened
-//   selector list to capture .cmp-list, .listing, and generic [class*="card"] patterns.
+//   AEM page uses Elastic App Search — default URL loads 10 results (size=n_10_n).
+//   Fix (Task #137): Navigate directly to ?size=n_1000_n with the search_result_type
+//   filter so all 61 available technologies appear in a single page load.
+//   Verified: 61 tech-details links returned in one load (2026-03-18).
 export const fredHutchScraper: InstitutionScraper = {
   institution: "Fred Hutchinson Cancer Center",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fred Hutchinson Cancer Center";
-    const LISTING_URL = "https://www.fredhutch.org/en/investors/business-development/available-technologies.html";
+    const BASE = "https://www.fredhutch.org";
+    // size=n_1000_n forces Elastic App Search to return up to 1000 results in one page.
+    // The filter restricts to "Available Technologies" search_result_type.
+    const LISTING_URL =
+      `${BASE}/en/investors/business-development/available-technologies.html` +
+      `?size=n_1000_n` +
+      `&filters%5B0%5D%5Bfield%5D=search_result_type` +
+      `&filters%5B0%5D%5Btype%5D=any` +
+      `&filters%5B0%5D%5Bvalues%5D%5B0%5D=Available%20Technologies`;
 
     let browser: import("playwright").Browser | null = null;
     try {
@@ -3174,67 +3172,33 @@ export const fredHutchScraper: InstitutionScraper = {
 
       // Non-throwing wait for any tech link to appear
       await page.waitForSelector(
-        'a[href*="technology-details"], a[href*="/available-technologies/"], main a[href*="technolog"]',
+        'a[href*="technology-details"]',
         { timeout: 12_000 }
       ).catch(() => null);
 
       const allLinks = new Map<string, string>();
 
-      const collectPage = async () => {
-        const links = await page.$$eval(
-          [
-            'a[href*="technology-details"]',
-            'a[href*="/available-technologies/"]',
-            '.cmp-teaser a[href*="technolog"]',
-            '.cmp-list a[href*="technolog"]',
-            '[class*="listing"] a[href*="technolog"]',
-            '[class*="card"] a[href*="technolog"]',
-            'main a[href*="technolog"]',
-          ].join(","),
-          (els) => Array.from(new Set(els)).map((el) => ({
-            href: (el as HTMLAnchorElement).getAttribute("href") ?? "",
-            text: el.textContent?.trim() ?? "",
-          }))
-        );
-        for (const l of links) {
-          if (!l.href) continue;
-          const isDetailLink =
-            /technology-details/.test(l.href) ||
-            /\/available-technologies\/[^/]+/.test(l.href);
-          if (!isDetailLink) continue;
-          if (!allLinks.has(l.href)) allLinks.set(l.href, l.text);
-        }
-      };
-
-      await collectPage();
-
-      // AEM listing is typically all-in-one but attempt Next button for future pages
-      for (let pg = 2; pg <= 20; pg++) {
-        const nextBtn = await page.$(
-          '[class*="next" i] a, button[aria-label*="next" i], [data-testid*="next" i]'
-        ).catch(() => null);
-        if (!nextBtn) break;
-        const isDisabled = await nextBtn.evaluate((el) =>
-          el.classList.contains("disabled") || el.hasAttribute("disabled") ||
-          el.getAttribute("aria-disabled") === "true"
-        ).catch(() => true);
-        if (isDisabled) break;
-
-        await nextBtn.click();
-        await page.waitForTimeout(3_000);
-        const prevSize = allLinks.size;
-        await collectPage();
-        if (allLinks.size === prevSize) break;
+      // Collect all technology-details links from the fully-loaded page
+      const links = await page.$$eval(
+        'a[href*="technology-details"]',
+        (els) => Array.from(new Set(els)).map((el) => ({
+          href: (el as HTMLAnchorElement).getAttribute("href") ?? "",
+          text: el.textContent?.trim() ?? "",
+        }))
+      );
+      for (const l of links) {
+        if (!l.href || !/technology-details/.test(l.href)) continue;
+        if (!allLinks.has(l.href)) allLinks.set(l.href, l.text);
       }
 
       const results: ScrapedListing[] = [];
       for (const [href, title] of Array.from(allLinks.entries())) {
         if (!title || title.length < 3) continue;
-        const fullUrl = href.startsWith("http") ? href : `https://www.fredhutch.org${href}`;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
         results.push({ title, description: "", url: fullUrl, institution: INST });
       }
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright AEM)`);
+      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright AEM, size=1000)`);
       return results;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -4164,92 +4128,29 @@ export const nottinghamScraper = createTechPublisherScraper(
   { maxPg: 80 }
 );
 
-// ── TechLink (DoD Technology Transfer) — API-first + Playwright fallback (Task #136) ─
-// techlinkcenter.org/technologies — React SPA backed by CloudFront CDN.
+// ── TechLink (DoD Technology Transfer) — ES XHR Intercept + Playwright (Task #137) ─
+// techlinkcenter.org/technologies — React SPA backed by an OpenSearch/ES cluster.
 // robots.txt: /technologies not disallowed. Legal: DoD Partnership Intermediary
 // under 15 U.S.C. § 3715; purpose is public discovery and licensing.
 //
+// Verified: 6,626 listings on 663 pages (10/page) as of 2026-03-18.
+//
 // Strategy:
-//   1. REST API (server-side) — CloudFront CDN exposes a public /api/public/v1/tech
-//      endpoint. Attempt paginated JSON fetch first; if it returns valid data, use it.
-//   2. Playwright — fallback if the API returns 404 or empty data. Uses
-//      domcontentloaded + 5 s explicit wait (networkidle times out on SPAs that poll).
-//      waitForSelector wrapped in .catch() so timeout does not abort the run.
+//   1. XHR Intercept — Playwright captures the Elasticsearch XHR the React app fires.
+//      The request URL contains a `source` param (JSON-encoded ES query).
+//      After capturing the first XHR, we replay it from browser context (page.evaluate)
+//      with modified from/size to bulk-retrieve all results in batches of 100.
+//      This avoids clicking 663 Next buttons (~33 min).
+//   2. Next-button fallback — if XHR replay fails (e.g. auth rejected for direct replay),
+//      fall back to clicking up to MAX_BTN_PAGES (200) pages via the Next button,
+//      collecting data from both the DOM and intercepted XHR responses.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "TechLink (DoD Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
-    const API_BASE = "https://d2vrpothuwvesb.cloudfront.net/api/public/v1/tech";
+    const MAX_BTN_PAGES = 200; // fallback cap: ~2,000 listings at 10/page
 
-    // ── Strategy 1: REST API ─────────────────────────────────────────────────
-    const apiResults: ScrapedListing[] = [];
-    try {
-      // Try common paged formats: offset/limit, page/size, page/pageSize
-      const PAGE_SIZE = 100;
-      let page = 1;
-      let morePages = true;
-
-      while (morePages && page <= 50) {
-        let resp: Response | null = null;
-        // Try multiple query-string conventions until one succeeds
-        for (const qs of [
-          `?page=${page}&limit=${PAGE_SIZE}`,
-          `?page=${page}&pageSize=${PAGE_SIZE}`,
-          `?offset=${(page - 1) * PAGE_SIZE}&limit=${PAGE_SIZE}`,
-          `?page=${page}&per_page=${PAGE_SIZE}`,
-        ]) {
-          try {
-            const r = await fetch(`${API_BASE}${qs}`, {
-              signal: AbortSignal.timeout(15_000),
-              headers: {
-                "Accept": "application/json",
-                "Origin": BASE,
-                "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)",
-              },
-            });
-            if (r.ok) { resp = r; break; }
-          } catch { /* try next format */ }
-        }
-        if (!resp) { morePages = false; break; }
-
-        let body: unknown;
-        try { body = await resp.json(); } catch { morePages = false; break; }
-
-        // Normalise response shapes: { data: [...] }, { results: [...] }, or bare []
-        const items: unknown[] = Array.isArray(body)
-          ? body
-          : Array.isArray((body as Record<string, unknown>)?.data)
-            ? (body as Record<string, unknown[]>).data
-            : Array.isArray((body as Record<string, unknown>)?.results)
-              ? (body as Record<string, unknown[]>).results
-              : [];
-
-        if (items.length === 0) { morePages = false; break; }
-
-        for (const item of items) {
-          const r = item as Record<string, unknown>;
-          const title = String(r.title ?? r.name ?? r.techName ?? "").trim();
-          if (!title || title.length < 4) continue;
-          const slug = String(r.slug ?? r.id ?? r.uuid ?? r.techId ?? "").toString().trim();
-          const url = slug ? `${BASE}/technologies/${slug}` : BASE;
-          const description = String(r.description ?? r.summary ?? r.abstract ?? "").slice(0, 1000);
-          apiResults.push({ title, description, url, institution: INST });
-        }
-
-        page++;
-        if (items.length < PAGE_SIZE) morePages = false;
-      }
-    } catch {
-      // API unavailable — fall through to Playwright
-    }
-
-    if (apiResults.length > 0) {
-      console.log(`[scraper] ${INST}: ${apiResults.length} listings (REST API)`);
-      return apiResults;
-    }
-
-    // ── Strategy 2: Playwright ───────────────────────────────────────────────
     let browser: import("playwright").Browser | null = null;
     try {
       const { chromium } = await import("playwright");
@@ -4264,139 +4165,216 @@ export const techLinkScraper: InstitutionScraper = {
         "Accept-Language": "en-US,en;q=0.9",
       });
 
-      // Use domcontentloaded — networkidle times out on React SPAs that poll for data
+      // ── XHR intercept ──────────────────────────────────────────────────────
+      // Capture the first ES search request URL + Authorization header, plus
+      // collect items from every ES response as they fire.
+      let esRequestUrl: string | null = null;
+      let esAuthHeader: string | null = null;
+      let esTotal = 0;
+      const xhrItems = new Map<string, { title: string; description: string; url: string }>();
+
+      const extractHits = (hits: unknown[]) => {
+        for (const hit of hits) {
+          const h = hit as Record<string, unknown>;
+          const src = (h._source ?? {}) as Record<string, unknown>;
+          const title = String(src.title ?? src.name ?? src.techName ?? "").trim();
+          if (!title || title.length < 4) continue;
+          const slug = String(src.slug ?? src.id ?? h._id ?? "").trim();
+          const url = slug ? `${BASE}/technologies/${slug}` : BASE;
+          const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
+          xhrItems.set(url, { title, description, url });
+        }
+      };
+
+      // Capture auth header from the outgoing request
+      page.on("request", (req) => {
+        const url = req.url();
+        if (!url.includes("es.amazonaws.com") || !url.includes("_search")) return;
+        if (!esRequestUrl) {
+          esRequestUrl = url;
+          esAuthHeader = req.headers()["authorization"] ?? null;
+        }
+      });
+
+      page.on("response", async (resp) => {
+        const url = resp.url();
+        if (!url.includes("es.amazonaws.com") || !url.includes("_search")) return;
+        try {
+          const data = await resp.json().catch(() => null);
+          if (!data?.hits?.hits) return;
+          extractHits(data.hits.hits as unknown[]);
+          if (!esTotal) {
+            esTotal = (data.hits.total?.value as number) ?? (data.hits.total as number) ?? 0;
+          }
+        } catch { /* ignore parse errors */ }
+      });
+
       await page.goto(`${BASE}/technologies`, {
         timeout: 60_000,
         waitUntil: "domcontentloaded",
       });
+      await page.waitForTimeout(8_000); // wait for React mount + first XHR
 
-      // Allow React to mount and fetch initial data
-      await page.waitForTimeout(5_000);
+      // ── Try bulk replay via browser-context fetch ──────────────────────────
+      // The ES URL contains ?source=<JSON-encoded-query>. We decode the JSON,
+      // change `from` and `size`, and replay with the same Authorization header
+      // the React app uses (a public client key embedded in its bundle).
+      // credentials:"omit" is required — the ES endpoint uses CORS allow-origin:*
+      // which is incompatible with credentials:"include".
+      let usedXhrReplay = false;
+      if (esRequestUrl && esAuthHeader && esTotal > 10) {
+        const replayed = await page.evaluate(
+          async ({
+            baseUrl,
+            authHeader,
+            total,
+          }: {
+            baseUrl: string;
+            authHeader: string;
+            total: number;
+          }): Promise<unknown[] | null> => {
+            try {
+              const urlObj = new URL(baseUrl);
+              const rawSource = urlObj.searchParams.get("source");
+              if (!rawSource) return null;
 
-      // Wait for tech cards — non-throwing; proceed even if selector never appears
+              const baseQuery = JSON.parse(rawSource) as Record<string, unknown>;
+              const PAGE_SIZE = 100;
+              const totalPages = Math.ceil(total / PAGE_SIZE);
+              const allHits: unknown[] = [];
+              let errors = 0;
+
+              for (let pg = 0; pg < Math.min(totalPages, 70); pg++) {
+                const newQuery = { ...baseQuery, from: pg * PAGE_SIZE, size: PAGE_SIZE };
+                const newUrlObj = new URL(baseUrl);
+                newUrlObj.searchParams.set("source", JSON.stringify(newQuery));
+                newUrlObj.searchParams.set("source_content_type", "application/json");
+
+                const r = await fetch(newUrlObj.toString(), {
+                  method: "GET",
+                  credentials: "omit",
+                  headers: {
+                    "Accept": "application/json, text/plain, */*",
+                    "Authorization": authHeader,
+                  },
+                });
+                if (!r.ok) {
+                  errors++;
+                  if (errors > 2) break;
+                  continue;
+                }
+                const data = (await r.json()) as Record<string, unknown>;
+                const hits = (
+                  (data.hits as Record<string, unknown>)?.hits ?? []
+                ) as unknown[];
+                if (hits.length === 0) break;
+                allHits.push(...hits);
+                if (hits.length < PAGE_SIZE) break; // last page
+              }
+              return allHits.length > 0 ? allHits : null;
+            } catch {
+              return null;
+            }
+          },
+          { baseUrl: esRequestUrl, authHeader: esAuthHeader, total: esTotal }
+        ).catch(() => null);
+
+        if (replayed && Array.isArray(replayed) && replayed.length > 0) {
+          extractHits(replayed as unknown[]);
+          usedXhrReplay = true;
+        }
+      }
+
+      if (usedXhrReplay && xhrItems.size > 50) {
+        const results = Array.from(xhrItems.values()).map((item) => ({
+          ...item,
+          institution: INST,
+        }));
+        console.log(`[scraper] ${INST}: ${results.length} listings (ES XHR bulk replay)`);
+        return results;
+      }
+
+      // ── Fallback: Next-button DOM pagination + XHR collection ─────────────
+      // Clicks up to MAX_BTN_PAGES Next buttons; each click triggers a new XHR
+      // which the interceptor above automatically collects from.
       await page.waitForSelector('a[href*="/technologies/"]', {
         state: "attached",
         timeout: 20_000,
       }).catch(() => null);
 
-      const allLinks = new Map<string, string>();
+      const domLinks = new Map<string, string>();
 
-      const collectPage = async () => {
+      const collectDomPage = async () => {
         const cards = await page.$$eval('a[href*="/technologies/"]', (els) =>
           els
-            .filter((el) => {
-              const href = el.getAttribute("href") ?? "";
-              // Exclude the listing page itself (/technologies without a slug)
-              return /\/technologies\/[^/]+/.test(href);
-            })
+            .filter((el) => /\/technologies\/[^/]+/.test(el.getAttribute("href") ?? ""))
             .map((el) => {
               const href = el.getAttribute("href") ?? "";
-              // Prefer h2 > h3 > first meaningful text
               const heading =
                 el.querySelector("h2,h3,h4") ??
                 el.querySelector('[class*="title"],[class*="Title"]');
               const title = heading
                 ? (heading.textContent?.trim() ?? "")
                 : (el.textContent?.trim().split("\n")[0] ?? "");
-              const paras = Array.from(
-                el.querySelectorAll("p,[class*='description'],[class*='excerpt']")
-              );
-              const desc = paras
-                .map((p) => p.textContent?.trim() ?? "")
-                .filter((s) => s.length > 10)
-                .slice(0, 2)
-                .join(" ");
-              return { href, title, desc };
+              return { href, title };
             })
         );
         for (const c of cards) {
           if (!c.href || !c.title || c.title.length < 5) continue;
-          if (allLinks.has(c.href)) continue;
-          allLinks.set(c.href, c.title + (c.desc ? "\x00" + c.desc : ""));
+          if (!domLinks.has(c.href)) domLinks.set(c.href, c.title);
         }
       };
 
-      await collectPage();
+      await collectDomPage();
 
-      // Paginate — try URL-based navigation first, fall back to Next button
-      // TechLink may support /technologies?page=N or a Next button
-      let usedUrlPagination = false;
+      for (let pg = 2; pg <= MAX_BTN_PAGES; pg++) {
+        const nextBtn = await page.$(
+          [
+            'button[aria-label*="Next Page" i]',
+            'button[aria-label*="next" i]',
+            'button[title*="next" i]',
+            'li[class*="next" i] button',
+            'a[rel="next"]',
+          ].join(",")
+        ).catch(() => null);
+        if (!nextBtn) break;
 
-      // Probe for URL-based pagination
-      const probe2 = await page.evaluate(() => {
-        // Check if location has a page param pattern or pagination links exist
-        const links = Array.from(document.querySelectorAll("a[href*='page='], a[href*='/technologies?']"));
-        return links.map(l => (l as HTMLAnchorElement).href).filter(h => /page[=\-]?\d/.test(h)).slice(0, 3);
-      });
+        const disabled = await nextBtn.evaluate(
+          (el) =>
+            el.hasAttribute("disabled") ||
+            el.classList.contains("disabled") ||
+            el.classList.contains("Mui-disabled") ||
+            el.getAttribute("aria-disabled") === "true"
+        ).catch(() => true);
+        if (disabled) break;
 
-      if (probe2.length > 0) {
-        // URL-based pagination available
-        usedUrlPagination = true;
-        for (let pg = 2; pg <= 200; pg++) {
-          const pageUrl = probe2[0].replace(/page[=\-]?\d+/, `page=${pg}`);
-          const prevSize = allLinks.size;
-          try {
-            await page.goto(pageUrl, { timeout: 30_000, waitUntil: "domcontentloaded" });
-            await page.waitForTimeout(3_000);
-            await collectPage();
-          } catch { break; }
-          if (allLinks.size === prevSize) break;
+        const prevSize = domLinks.size;
+        try {
+          await nextBtn.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => null);
+          await nextBtn.click({ timeout: 10_000 });
+          await page.waitForTimeout(2_500);
+          await collectDomPage();
+        } catch {
+          break;
+        }
+        if (domLinks.size === prevSize) break;
+      }
+
+      // Merge DOM links with anything collected from XHR intercept
+      for (const [href, title] of Array.from(domLinks.entries())) {
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (!xhrItems.has(fullUrl)) {
+          xhrItems.set(fullUrl, { title, description: "", url: fullUrl });
         }
       }
 
-      if (!usedUrlPagination) {
-        // Fall back to Next button click — use broad selector matching MUI and generic patterns.
-        // Each click is wrapped in its own try/catch so viewport/timeout errors stop pagination
-        // without discarding links already collected in allLinks.
-        for (let pg = 2; pg <= 200; pg++) {
-          const nextBtn = await page.$(
-            [
-              'button[aria-label*="next" i]',
-              'button[title*="next" i]',
-              'li[class*="next" i] button',
-              'li[class*="next" i] a',
-              'a[rel="next"]',
-              '[data-testid*="next" i]',
-              'nav button:last-child',
-            ].join(",")
-          ).catch(() => null);
-          if (!nextBtn) break;
-
-          const disabled = await nextBtn.evaluate(
-            (el) =>
-              el.hasAttribute("disabled") ||
-              el.classList.contains("disabled") ||
-              el.classList.contains("Mui-disabled") ||
-              el.getAttribute("aria-disabled") === "true"
-          ).catch(() => true);
-          if (disabled) break;
-
-          const prevSize = allLinks.size;
-          try {
-            // Scroll into view before clicking to avoid "element outside viewport" errors
-            await nextBtn.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => null);
-            await nextBtn.click({ timeout: 10_000 });
-            await page.waitForTimeout(3_000);
-            await collectPage();
-          } catch {
-            // Click failed (e.g., outside viewport, element removed) — stop pagination
-            // but preserve all links collected so far
-            break;
-          }
-          if (allLinks.size === prevSize) break;
-        }
-      }
-
-      const results: ScrapedListing[] = [];
-      for (const [href, raw] of Array.from(allLinks.entries())) {
-        const sepIdx = raw.indexOf("\x00");
-        const title = sepIdx >= 0 ? raw.substring(0, sepIdx) : raw;
-        const description = sepIdx >= 0 ? raw.substring(sepIdx + 1) : "";
-        const url = href.startsWith("http") ? href : `${BASE}${href}`;
-        results.push({ title, description, url, institution: INST });
-      }
-
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      const results = Array.from(xhrItems.values()).map((item) => ({
+        ...item,
+        institution: INST,
+      }));
+      console.log(
+        `[scraper] ${INST}: ${results.length} listings (DOM+XHR, ${usedXhrReplay ? "replay" : "btn-paginated"})`
+      );
       return results;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
