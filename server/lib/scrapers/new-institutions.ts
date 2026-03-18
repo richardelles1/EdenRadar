@@ -1610,11 +1610,16 @@ export const morganStateScraper: InstitutionScraper = {
       { path: "/technology-transfer-and-intellectual-property/pending-utility-patents" },
     ];
 
-    // Biotech/STEM relevance filter — accept rows whose title contains at least one
-    // domain-relevant keyword. Morgan State's patent portfolio is primarily STEM/
-    // biomedical; this filters out any navigation or header text that slips through.
-    const BIOTECH_RE =
-      /\b(method|system|device|apparatus|sensor|detection|imaging|signal|network|algorithm|circuit|composition|compound|nano|bio|cell|gene|protein|drug|therapy|treatment|vaccine|antibody|assay|diagnostic|material|energy|power|wireless|security|cyber|encrypt|autono|robot|vehicle|navigation|control|machine|learn|neural|model|platform|software|hardware)\b/i;
+    // Noise-rejection filter — these pages are explicitly "issued-patents" and
+    // "pending-utility-patents" so all table rows are real patents. The filter only
+    // rejects residual UI chrome (navigation links, section headers) that might
+    // occasionally appear in a <td> due to CMS injection. Rather than keyword-matching
+    // biotech terms (which would drop valid titles like "Engineered Cyanobacteria…"),
+    // we rely on the header-row skip and minimum-length check as the sole gates.
+    // A light noise check: reject rows that look like UI chrome (very short, or pure
+    // nav/action text).
+    const isNoisyRow = (t: string) =>
+      /^(home|about|contact|faq|menu|back|next|previous|click|download|more|learn more|submit|search|filter)$/i.test(t);
 
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
@@ -1625,16 +1630,23 @@ export const morganStateScraper: InstitutionScraper = {
         const $ = await fetchHtml(url, 20_000);
         if (!$) continue;
 
-        // Morgan State renders a simple HTML table: row 0 = header (<th>), subsequent = data (<td>)
+        // Morgan State table layout (3 columns per data row):
+        //   cells[0] — Patent number (e.g., "#12,499,118") with link to PDF
+        //   cells[1] — Title         (e.g., "System and Method for Synchronization…")
+        //   cells[2] — Inventors     (e.g., "Snehanshu Banerjee, Mansoureh Jeihani")
+        // Header row also uses <td> (not <th>), styled with background-color: #cccccc.
         $("table tr").each((_, row) => {
           const cells = $(row).find("td");
-          if (cells.length < 1) return; // Header row (all <th>) — skip
+          if (cells.length < 2) return; // Need at least patent# + title columns
 
-          const rawTitle = cleanText($(cells[0]).text());
+          const patentNum = cleanText($(cells[0]).text());
+
+          // Skip header row ("Patent #" / "Morgan U.S. Issued Patents")
+          if (/^(patent|title|invention|technology|name|description)/i.test(patentNum)) return;
+
+          // Column 1 = title
+          const rawTitle = cleanText($(cells[1]).text());
           if (!rawTitle || rawTitle.length < 8) return;
-
-          // Skip accidental column-header rows rendered in <td>
-          if (/^(title|patent|invention|technology|name|description|inventor)/i.test(rawTitle)) return;
 
           // Strip trailing issue/filing date annotations
           // e.g., "Method for Detecting Foo - Issued 12/16/2025" → "Method for Detecting Foo"
@@ -1645,14 +1657,18 @@ export const morganStateScraper: InstitutionScraper = {
 
           if (cleanTitle.length < 8) return;
 
-          // Apply biotech/STEM relevance gate — reject non-technical rows
-          if (!BIOTECH_RE.test(cleanTitle)) return;
+          // Reject residual UI chrome that occasionally slips into table cells
+          if (isNoisyRow(cleanTitle)) return;
 
           if (seen.has(cleanTitle)) return;
           seen.add(cleanTitle);
 
-          const inventors = cells.length >= 2 ? cleanText($(cells[1]).text()) : "";
-          const description = inventors ? `Inventors: ${inventors}` : "";
+          // Column 2 = inventors
+          const inventors = cells.length >= 3 ? cleanText($(cells[2]).text()) : "";
+          const parts: string[] = [];
+          if (patentNum) parts.push(`Patent: ${patentNum}`);
+          if (inventors) parts.push(`Inventors: ${inventors}`);
+          const description = parts.join(". ");
 
           // URL points to the source page (issued vs pending) so users land on the right list
           results.push({ title: cleanTitle, description, url, institution: INST });
@@ -4329,7 +4345,9 @@ export const techLinkScraper: InstitutionScraper = {
       }
 
       if (!usedUrlPagination) {
-        // Fall back to Next button click — use broad selector matching MUI and generic patterns
+        // Fall back to Next button click — use broad selector matching MUI and generic patterns.
+        // Each click is wrapped in its own try/catch so viewport/timeout errors stop pagination
+        // without discarding links already collected in allLinks.
         for (let pg = 2; pg <= 200; pg++) {
           const nextBtn = await page.$(
             [
@@ -4341,21 +4359,30 @@ export const techLinkScraper: InstitutionScraper = {
               '[data-testid*="next" i]',
               'nav button:last-child',
             ].join(",")
-          );
+          ).catch(() => null);
           if (!nextBtn) break;
+
           const disabled = await nextBtn.evaluate(
             (el) =>
               el.hasAttribute("disabled") ||
               el.classList.contains("disabled") ||
               el.classList.contains("Mui-disabled") ||
               el.getAttribute("aria-disabled") === "true"
-          );
+          ).catch(() => true);
           if (disabled) break;
 
           const prevSize = allLinks.size;
-          await nextBtn.click();
-          await page.waitForTimeout(3_000);
-          await collectPage();
+          try {
+            // Scroll into view before clicking to avoid "element outside viewport" errors
+            await nextBtn.scrollIntoViewIfNeeded({ timeout: 5_000 }).catch(() => null);
+            await nextBtn.click({ timeout: 10_000 });
+            await page.waitForTimeout(3_000);
+            await collectPage();
+          } catch {
+            // Click failed (e.g., outside viewport, element removed) — stop pagination
+            // but preserve all links collected so far
+            break;
+          }
           if (allLinks.size === prevSize) break;
         }
       }
