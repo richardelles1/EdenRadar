@@ -160,9 +160,15 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
         <div className="px-3 pb-3 border-t border-card-border/60">
           <ul className="space-y-1 pt-2">
             {inst.sampleAssets.map((name, i) => (
-              <li key={i} className="flex items-start gap-2 text-[11px] text-muted-foreground">
+              <li key={i} className="flex items-start gap-2 text-[11px]">
                 <span className="w-1 h-1 rounded-full bg-primary/50 mt-1.5 shrink-0" />
-                <span className="truncate">{name}</span>
+                <Link
+                  href={`/scout?q=${encodeURIComponent(name)}`}
+                  className="truncate text-primary/80 hover:text-primary hover:underline transition-colors"
+                  data-testid={`alert-asset-link-${i}`}
+                >
+                  {name}
+                </Link>
               </li>
             ))}
           </ul>
@@ -171,6 +177,13 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
               +{inst.count - inst.sampleAssets.length} more
             </p>
           )}
+          <Link
+            href={`/scout?q=${encodeURIComponent(inst.institution)}`}
+            className="inline-flex items-center gap-1 text-[10px] text-primary/70 hover:text-primary hover:underline mt-2 transition-colors"
+            data-testid={`alert-scout-link-${inst.institution}`}
+          >
+            Search Scout for {inst.institution} assets →
+          </Link>
         </div>
       )}
     </div>
@@ -257,21 +270,22 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
           ) : (
             <div className="pt-3 space-y-2">
               {data.items.map((proj) => (
-                <div
-                  key={proj.id}
-                  className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-violet-500/30 transition-colors"
-                  data-testid={`alert-project-${proj.id}`}
-                >
-                  <p className="text-xs font-medium text-foreground truncate">
-                    {proj.discoveryTitle || proj.title}
-                  </p>
-                  <div className="flex items-center gap-2 mt-1">
-                    {proj.researchArea && (
-                      <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
-                    )}
-                    <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
+                <Link key={proj.id} href="/industry/projects">
+                  <div
+                    className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-violet-500/30 cursor-pointer transition-colors"
+                    data-testid={`alert-project-${proj.id}`}
+                  >
+                    <p className="text-xs font-medium text-foreground truncate">
+                      {proj.discoveryTitle || proj.title}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      {proj.researchArea && (
+                        <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                      )}
+                      <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
+                    </div>
                   </div>
-                </div>
+                </Link>
               ))}
               {data.total > data.items.length && (
                 <Link href="/industry/projects">

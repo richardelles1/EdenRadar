@@ -217,6 +217,7 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [selectedSources, setSelectedSources] = useState<string[]>(() => ssGet("scout-sources", ALL_SOURCE_KEYS));
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [contentType, setContentType] = useState<"assets" | "concepts" | "projects">("assets");
 
   useEffect(() => {
     try {
@@ -230,6 +231,14 @@ export default function Scout() {
 
   const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
+  const { data: conceptsData } = useQuery<{ concepts: Array<{ id: number; title: string; oneLiner: string; therapeuticArea: string; modality: string; stage: number; credibilityScore: number | null; submitterAffiliation: string | null; seeking: string[] | null }> }>({
+    queryKey: ["/api/discovery/concepts"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: projectsData } = useQuery<{ projects: Array<{ id: number; title: string; discoveryTitle: string | null; description: string | null; discoverySummary: string | null; researchArea: string | null; status: string; openForCollaboration: boolean | null; keywords: string[] | null }> }>({
+    queryKey: ["/api/industry/projects"],
+    staleTime: 5 * 60 * 1000,
+  });
 
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
@@ -575,8 +584,36 @@ export default function Scout() {
             </div>
           )}
 
-          <div className="flex-1 px-4 sm:px-6 pb-10">
-            {!searchMutation.isPending && (
+          <div className="flex-1 px-4 sm:px-6 pb-10 space-y-4">
+            <div className="flex items-center gap-1 border-b border-border pb-0" data-testid="content-type-tabs">
+              {([
+                { key: "assets", label: "TTO Assets", count: filteredResults.length },
+                { key: "concepts", label: "Concepts", count: conceptsData?.concepts.length ?? 0 },
+                { key: "projects", label: "Research Projects", count: projectsData?.projects.length ?? 0 },
+              ] as const).map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => setContentType(key)}
+                  className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                    contentType === key
+                      ? "border-primary text-primary"
+                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                  }`}
+                  data-testid={`tab-${key}`}
+                >
+                  {label}
+                  {count > 0 && (
+                    <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full font-medium ${
+                      contentType === key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {contentType === "assets" && !searchMutation.isPending && (
               <SearchResults
                 assets={filteredResults}
                 isLoading={false}
@@ -586,6 +623,85 @@ export default function Scout() {
                 onSave={(asset) => saveMutation.mutate(asset)}
                 onUnsave={handleUnsave}
               />
+            )}
+
+            {contentType === "concepts" && (
+              <div className="space-y-3">
+                {!conceptsData ? (
+                  <div className="text-sm text-muted-foreground text-center py-10">Loading concepts...</div>
+                ) : conceptsData.concepts.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-10">No concepts published yet.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {conceptsData.concepts.map((c) => (
+                      <a
+                        key={c.id}
+                        href={`/discovery/concept/${c.id}`}
+                        className="rounded-lg border border-card-border bg-card hover:border-amber-500/30 p-4 transition-colors block"
+                        data-testid={`scout-concept-card-${c.id}`}
+                      >
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-medium">
+                            {c.therapeuticArea}
+                          </span>
+                          {c.credibilityScore != null && (
+                            <span className="text-[10px] text-muted-foreground">Score {c.credibilityScore}</span>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-foreground leading-snug">{c.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.oneLiner}</p>
+                        {c.submitterAffiliation && (
+                          <p className="text-[10px] text-muted-foreground mt-2 border-t border-border/60 pt-1.5">{c.submitterAffiliation}</p>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {contentType === "projects" && (
+              <div className="space-y-3">
+                {!projectsData ? (
+                  <div className="text-sm text-muted-foreground text-center py-10">Loading research projects...</div>
+                ) : projectsData.projects.length === 0 ? (
+                  <div className="text-sm text-muted-foreground text-center py-10">No research projects published for industry yet.</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {projectsData.projects.map((p) => (
+                      <div
+                        key={p.id}
+                        className="rounded-lg border border-card-border bg-card hover:border-violet-500/30 p-4 transition-colors"
+                        data-testid={`scout-project-card-${p.id}`}
+                      >
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                          {p.researchArea && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 font-medium">
+                              {p.researchArea}
+                            </span>
+                          )}
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize ${
+                            p.status === "active"
+                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
+                              : "bg-slate-500/10 text-slate-500 border-slate-500/20"
+                          }`}>
+                            {p.status}
+                          </span>
+                        </div>
+                        <p className="text-sm font-semibold text-foreground leading-snug">{p.discoveryTitle || p.title}</p>
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.discoverySummary || p.description}</p>
+                        {(p.keywords ?? []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(p.keywords ?? []).slice(0, 3).map((k) => (
+                              <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">{k}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         </main>

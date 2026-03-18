@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FlaskConical, Search, Handshake } from "lucide-react";
+import { FlaskConical, Search, Handshake, Building2 } from "lucide-react";
 import type { ResearchProject } from "@shared/schema";
 
 type ProjectsResponse = {
@@ -101,8 +101,23 @@ function ProjectCard({ project }: { project: ResearchProject }) {
           )}
         </div>
       )}
+
+      {getProjectInstitution(project) && (
+        <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground border-t border-border/60 pt-1.5">
+          <Building2 className="w-3 h-3 shrink-0" />
+          <span className="truncate">{getProjectInstitution(project)}</span>
+        </div>
+      )}
     </div>
   );
+}
+
+function getProjectInstitution(p: ResearchProject): string | null {
+  const contributors = p.projectContributors ?? [];
+  for (const c of contributors) {
+    if (c.institution) return c.institution;
+  }
+  return null;
 }
 
 export default function IndustryProjects() {
@@ -110,6 +125,7 @@ export default function IndustryProjects() {
   const [areaFilter, setAreaFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [collabFilter, setCollabFilter] = useState("all");
+  const [institutionFilter, setInstitutionFilter] = useState("all");
 
   const { data, isLoading } = useQuery<ProjectsResponse>({
     queryKey: ["/api/industry/projects"],
@@ -131,24 +147,40 @@ export default function IndustryProjects() {
     return result.sort();
   }, [projects]);
 
+  const institutions = useMemo(() => {
+    const seen = new Set<string>();
+    const result: string[] = [];
+    for (const p of projects) {
+      const inst = getProjectInstitution(p);
+      if (inst && !seen.has(inst)) {
+        seen.add(inst);
+        result.push(inst);
+      }
+    }
+    return result.sort();
+  }, [projects]);
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
     return projects.filter((p) => {
+      const inst = getProjectInstitution(p);
       const textOk =
         !q ||
         (p.title ?? "").toLowerCase().includes(q) ||
         (p.discoveryTitle ?? "").toLowerCase().includes(q) ||
         (p.description ?? "").toLowerCase().includes(q) ||
         (p.discoverySummary ?? "").toLowerCase().includes(q) ||
-        (p.researchArea ?? "").toLowerCase().includes(q);
+        (p.researchArea ?? "").toLowerCase().includes(q) ||
+        (inst ?? "").toLowerCase().includes(q);
       const areaOk = areaFilter === "all" || p.researchArea === areaFilter;
       const statusOk = statusFilter === "all" || p.status === statusFilter;
       const collabOk =
         collabFilter === "all" ||
         (collabFilter === "yes" && p.openForCollaboration);
-      return textOk && areaOk && statusOk && collabOk;
+      const instOk = institutionFilter === "all" || inst === institutionFilter;
+      return textOk && areaOk && statusOk && collabOk && instOk;
     });
-  }, [projects, search, areaFilter, statusFilter, collabFilter]);
+  }, [projects, search, areaFilter, statusFilter, collabFilter, institutionFilter]);
 
   return (
     <div className="min-h-full bg-background">
@@ -225,6 +257,22 @@ export default function IndustryProjects() {
               <SelectItem value="yes">Open to Collaborate</SelectItem>
             </SelectContent>
           </Select>
+          {institutions.length > 0 && (
+            <Select value={institutionFilter} onValueChange={setInstitutionFilter}>
+              <SelectTrigger
+                className="h-9 text-xs w-[180px]"
+                data-testid="select-projects-institution"
+              >
+                <SelectValue placeholder="All institutions" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Institutions</SelectItem>
+                {institutions.map((inst) => (
+                  <SelectItem key={inst} value={inst}>{inst}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         {isLoading ? (
