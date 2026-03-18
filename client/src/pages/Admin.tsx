@@ -2558,7 +2558,7 @@ function modalityBadgeClass(modality?: string): string {
   return "bg-muted text-muted-foreground border-border";
 }
 
-function AdminEdenOrbLegacy({ isThinking = false }: { isThinking?: boolean }) {
+function _AdminEdenOrbLegacyUnused({ isThinking = false }: { isThinking?: boolean }) {
   const W = 560, H = 600;
   const cx = W / 2, cy = H / 2;
 
