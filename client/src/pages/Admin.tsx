@@ -2511,12 +2511,25 @@ type EdenEmbedStatusResponse = {
 };
 
 const STARTER_QUESTIONS = [
-  "What oncology assets at preclinical stage are available for licensing right now?",
-  "Which institutions have the most GLP-1 related technologies?",
-  "Find CNS assets with defined mechanism of action from top universities",
-  "What antibody-based therapeutics are available for autoimmune indications?",
-  "Show me RNA therapy assets with innovation claims and licensing readiness",
-  "Which universities are licensing cardiovascular or metabolic assets right now?",
+  { label: "Oncology assets for licensing",    q: "What oncology assets at preclinical stage are available for licensing right now?" },
+  { label: "Top GLP-1 institutions",           q: "Which institutions have the most GLP-1 related technologies?" },
+  { label: "CNS assets with mechanism",        q: "Find CNS assets with defined mechanism of action from top universities" },
+  { label: "Autoimmune antibody therapeutics", q: "What antibody-based therapeutics are available for autoimmune indications?" },
+];
+
+const PORTAL_DOTS = [
+  { s: 6,  x: "7%",  y: "10%", c: "#f59e0b", o: 0.13, d: 7.2,  dl: 0.0 },
+  { s: 4,  x: "18%", y: "82%", c: "#f59e0b", o: 0.10, d: 9.8,  dl: 2.3 },
+  { s: 7,  x: "58%", y: "6%",  c: "#f59e0b", o: 0.09, d: 11.5, dl: 4.7 },
+  { s: 3,  x: "88%", y: "75%", c: "#f59e0b", o: 0.11, d: 8.1,  dl: 6.2 },
+  { s: 5,  x: "3%",  y: "50%", c: "#8b5cf6", o: 0.11, d: 10.3, dl: 1.1 },
+  { s: 7,  x: "88%", y: "22%", c: "#8b5cf6", o: 0.10, d: 8.7,  dl: 3.4 },
+  { s: 4,  x: "45%", y: "91%", c: "#8b5cf6", o: 0.09, d: 12.0, dl: 5.9 },
+  { s: 6,  x: "72%", y: "60%", c: "#8b5cf6", o: 0.07, d: 9.1,  dl: 7.8 },
+  { s: 5,  x: "30%", y: "14%", c: "#10b981", o: 0.09, d: 13.2, dl: 0.7 },
+  { s: 8,  x: "92%", y: "45%", c: "#10b981", o: 0.08, d: 7.9,  dl: 2.8 },
+  { s: 4,  x: "65%", y: "86%", c: "#10b981", o: 0.10, d: 10.6, dl: 4.3 },
+  { s: 6,  x: "12%", y: "37%", c: "#10b981", o: 0.07, d: 14.0, dl: 8.1 },
 ];
 
 function renderMdInline(text: string): (string | JSX.Element)[] {
@@ -2673,8 +2686,8 @@ function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
   const p3 = makePath(HAL, 1);
 
   return (
-    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden="true"
-      className="mx-auto w-full max-w-[560px]">
+    <svg viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden="true"
+      className="mx-auto w-full max-w-[620px]" style={{ height: "auto" }}>
       <defs>
         <filter id="eo-glow" x="-120%" y="-120%" width="340%" height="340%">
           <feGaussianBlur stdDeviation="2.8" result="blur"/>
@@ -3215,36 +3228,72 @@ function EdenTab({ pw }: { pw: string }) {
                 from { opacity: 0; transform: translateY(12px); }
                 to   { opacity: 1; transform: translateY(0); }
               }
+              @keyframes eden-dot-float {
+                0%, 100% { transform: translateY(0px) translateX(0px); }
+                30%       { transform: translateY(-14px) translateX(5px); }
+                70%       { transform: translateY(-7px) translateX(-4px); }
+              }
             `}</style>
-            <div className="h-[520px] overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
+            <div className="relative h-[580px] overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
 
-              {/* Empty state with starter chips */}
+              {/* Portal floating dots — fixed behind all content */}
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                {PORTAL_DOTS.map((dot, i) => (
+                  <div
+                    key={i}
+                    className="absolute rounded-full"
+                    style={{
+                      width:  dot.s,
+                      height: dot.s,
+                      left:   dot.x,
+                      top:    dot.y,
+                      background: dot.c,
+                      opacity: dot.o,
+                      animation: `eden-dot-float ${dot.d}s ease-in-out infinite`,
+                      animationDelay: `${dot.dl}s`,
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* Empty state — orb as centerpiece, chips at the fringes */}
               {chatMessages.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center gap-0" data-testid="chat-empty">
+                <div className="relative h-full flex flex-col items-center justify-center" data-testid="chat-empty">
+
+                  {/* Corner chips */}
+                  {STARTER_QUESTIONS.map((sq, qi) => {
+                    const corners = [
+                      "absolute top-0 left-0",
+                      "absolute top-0 right-0",
+                      "absolute bottom-0 left-0",
+                      "absolute bottom-0 right-0",
+                    ];
+                    const aligns = ["text-left", "text-right", "text-left", "text-right"];
+                    return (
+                      <button
+                        key={sq.q}
+                        onClick={() => sendChatMessage(sq.q)}
+                        className={`${corners[qi]} ${aligns[qi]} text-[10px] rounded-lg border border-border/50 bg-card/80 backdrop-blur-sm hover:bg-muted/80 px-2.5 py-1.5 text-muted-foreground/70 hover:text-foreground shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 font-medium max-w-[148px] leading-tight`}
+                        style={{ animation: "em-fade-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${240 + qi * 50}ms` }}
+                        data-testid={`chip-starter-${qi}`}
+                      >
+                        {sq.label}
+                      </button>
+                    );
+                  })}
+
+                  {/* Orb + headline */}
                   <EdenOrb isThinking={chatStreaming} />
                   <p
-                    className="text-base font-semibold text-foreground mb-1 -mt-1"
+                    className="text-base font-semibold text-foreground mb-1 -mt-2"
                     style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "60ms" }}
                   >Ask EDEN anything</p>
                   <p
-                    className="text-xs text-muted-foreground mb-5 text-center max-w-xs leading-relaxed"
+                    className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed"
                     style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
                   >
                     Your AI analyst for {emb?.totalEmbedded?.toLocaleString()} TTO assets across {institutionCount} research institutions.
                   </p>
-                  <div className="flex flex-wrap gap-2 justify-center max-w-lg" data-testid="starter-chips">
-                    {STARTER_QUESTIONS.map((q, qi) => (
-                      <button
-                        key={q}
-                        onClick={() => sendChatMessage(q)}
-                        className="text-xs rounded-xl border border-border/60 bg-card hover:bg-muted/80 px-3.5 py-2 text-muted-foreground hover:text-foreground shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 text-left font-medium"
-                        style={{ animation: "em-fade-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${180 + qi * 40}ms` }}
-                        data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
-                      >
-                        {q}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               )}
 
