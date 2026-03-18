@@ -2888,6 +2888,7 @@ function EdenTab({ pw }: { pw: string }) {
 
   function loadSession(s: EdenSessionSummary) {
     loadSessionFromHook(s);
+    setExpandedCitations({});
     setHistoryOpen(false);
   }
 
@@ -2943,7 +2944,7 @@ function EdenTab({ pw }: { pw: string }) {
                 variant="ghost"
                 size="sm"
                 className="text-xs h-7 px-2"
-                onClick={() => clearChat()}
+                onClick={() => { clearChat(); setExpandedCitations({}); }}
                 data-testid="button-chat-clear"
               >
                 New chat
