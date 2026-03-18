@@ -49,7 +49,7 @@ interface IndustryDeltaResponse {
   };
   newProjects: {
     total: number;
-    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string; projectUrl?: string | null }>;
+    items: Array<{ id: number; title: string; discoveryTitle?: string; researchArea?: string; status: string; discoverySummary?: string; description?: string; projectUrl?: string | null; projectContributors?: Array<{ name: string; institution: string; role: string; email: string }> | null }>;
   };
   windowHours: number;
 }
@@ -286,12 +286,17 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
                         {proj.discoverySummary || proj.description}
                       </p>
                     )}
-                    <div className="flex items-center justify-between mt-1.5">
-                      <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between mt-1.5 gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
                         {proj.researchArea && (
                           <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
                         )}
-                        <span className="text-[10px] text-muted-foreground capitalize">{proj.status}</span>
+                        {(proj.projectContributors ?? [])[0]?.institution && (
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {(proj.projectContributors ?? [])[0].institution}
+                          </span>
+                        )}
+                        <span className="text-[10px] text-muted-foreground/60 capitalize">{proj.status}</span>
                       </div>
                       {proj.projectUrl && (
                         <a

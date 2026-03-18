@@ -3467,6 +3467,7 @@ If a field cannot be determined, use "N/A".`
             discoverySummary: researchProjects.discoverySummary,
             description: researchProjects.description,
             projectUrl: researchProjects.projectUrl,
+            projectContributors: researchProjects.projectContributors,
           })
           .from(researchProjects)
           .where(
