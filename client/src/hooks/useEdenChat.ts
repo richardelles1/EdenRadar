@@ -133,6 +133,16 @@ export function useEdenChat(pw: string) {
           }
         }
       }
+
+      // Finalize the last assistant turn in case `done` event was not received
+      setMessages((prev) => {
+        const upd = [...prev];
+        const last = upd[upd.length - 1];
+        if (last?.role === "assistant" && last.isStreaming) {
+          upd[upd.length - 1] = { ...last, isStreaming: false };
+        }
+        return upd;
+      });
     } catch (e: unknown) {
       const errMsg = e instanceof Error ? e.message : "Chat failed";
       setMessages((prev) => {

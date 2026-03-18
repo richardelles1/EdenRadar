@@ -1680,18 +1680,6 @@ export async function registerRoutes(
         sendEvent("token", { text: token });
       }
 
-      if (retrieved.length > 0) {
-        const citationLines = retrieved
-          .filter((a) => a.assetName && a.institution)
-          .map((a) => {
-            const link = a.sourceUrl ? ` — [View](${a.sourceUrl})` : "";
-            return `- **${a.assetName}** (${a.institution})${link}`;
-          });
-        const citationBlock = `\n\n## Sources\n${citationLines.join("\n")}`;
-        sendEvent("token", { text: citationBlock });
-        fullResponse += citationBlock;
-      }
-
       await storage.appendEdenMessage(sid, {
         role: "assistant",
         content: fullResponse,
