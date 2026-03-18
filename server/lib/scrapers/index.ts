@@ -47,7 +47,6 @@ import {
   latrobeScraper,
   vanderbiltScraper,
   queensBelfastScraper,
-  uclBusinessScraper,
   cernKtScraper,
   cancerResearchHorizonsScraper,
   // Batch E — UK & Canada (Task #134)
@@ -610,7 +609,6 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   yissumScraper,                  // Yissum (Hebrew Univ.) — 234 techs via WP REST API
   nottinghamScraper,              // University of Nottingham — TechPublisher slug "uon"
   techLinkScraper,                // TechLink (DoD) — Playwright, React SPA, no bot protection
-  researchPortalGhentScraper,     // Ghent Univ. — Playwright + stealth, Akamai-gated (1637 patents)
   // ── International Batch B (Task #114) ────────────────────────────────────
   yedaResearchScraper,            // Yeda R&D / Weizmann Institute — 159 techs, mailto href extraction
   glasgowScraper,                 // University of Glasgow — in-part "gla" — 31 techs
@@ -637,7 +635,6 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   latrobeScraper,                 // La Trobe University — TechPublisher "latrobe" — 9 sitemap techs
   vanderbiltScraper,              // Vanderbilt University — TechPublisher "vanderbilt" — 213 sitemap techs
   queensBelfastScraper,           // Queen's Univ. Belfast — TechPublisher "qub" — listings confirmed
-  uclBusinessScraper,             // UCL Business (xip.uclb.com) — Playwright/Elucid3 SPA — 34+ categories (supersedes blocked in-part "ucl" target)
   // ── International Scrapers — Batch D (Task #119) ────────────────────────
   cernKtScraper,                  // CERN Knowledge Transfer — Drupal SSR, 54 tech pages — probed 2026-03-17
   cancerResearchHorizonsScraper,  // Cancer Research Horizons (CRUK) — Playwright, JS-rendered, oncology portfolio — probed 2026-03-17

@@ -75,7 +75,15 @@ async function playwrightScrape(): Promise<ScrapedListing[]> {
     await collectPage();
 
     for (let pg = 2; pg <= 50; pg++) {
-      const nextBtn = await page.$('button[title="Next"]');
+      const nextBtn = await page.$(
+        [
+          'button[title="Next"]',
+          'button[aria-label*="next" i]',
+          'button[title*="next" i]',
+          'li[class*="next" i] button',
+          '[data-testid*="next" i]',
+        ].join(",")
+      );
       if (!nextBtn) break;
       const isDisabled = await nextBtn.evaluate(
         (el) =>
@@ -111,22 +119,42 @@ async function playwrightScrape(): Promise<ScrapedListing[]> {
 }
 
 async function discoverCredentials(): Promise<{ orgId: number; accessKey: string } | null> {
-  try {
-    const res = await fetch(BASE, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      signal: AbortSignal.timeout(15_000),
-    });
-    if (!res.ok) return null;
-    const html = await res.text();
-    const idMatch = html.match(/data-organization-id="(\d+)"/);
-    const keyMatch = html.match(/data-organization-access-key="([^"]+)"/);
-    if (!idMatch || !keyMatch) return null;
-    const orgId = parseInt(idMatch[1], 10);
-    if (isNaN(orgId)) return null;
-    return { orgId, accessKey: keyMatch[1] };
-  } catch {
-    return null;
+  const probeUrls = [`${BASE}/technologies`, BASE, `${BASE}/`];
+  for (const url of probeUrls) {
+    try {
+      const res = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        },
+        signal: AbortSignal.timeout(20_000),
+        redirect: "follow",
+      });
+      if (!res.ok) continue;
+      const html = await res.text();
+      const idMatch = html.match(/data-organization-id="(\d+)"/);
+      const keyMatch = html.match(/data-organization-access-key="([^"]+)"/);
+      if (idMatch && keyMatch) {
+        const orgId = parseInt(idMatch[1], 10);
+        if (!isNaN(orgId)) {
+          console.log(`[scraper] ${INST}: discovered orgId=${orgId} from ${url}`);
+          return { orgId, accessKey: keyMatch[1] };
+        }
+      }
+      // Also check for inline JS config objects: {orgId:186,accessKey:"..."}
+      const jsMatch = html.match(/"orgId"\s*:\s*(\d+)[\s\S]*?"accessKey"\s*:\s*"([^"]+)"/) ??
+        html.match(/organizationId[=:]\s*(\d+)[\s\S]*?accessKey[=:]\s*["']([^"']+)["']/);
+      if (jsMatch) {
+        const orgId = parseInt(jsMatch[1], 10);
+        if (!isNaN(orgId)) {
+          console.log(`[scraper] ${INST}: discovered orgId=${orgId} from JS config in ${url}`);
+          return { orgId, accessKey: jsMatch[2] };
+        }
+      }
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 async function apiScrape(orgId: number, accessKey: string): Promise<ScrapedListing[]> {

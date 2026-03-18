@@ -900,7 +900,106 @@ export const portlandStateScraper = createInPartScraper("pdx", "Portland State U
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createMontanaStateScraper();
 export const unmScraper = createStubScraper("University of New Mexico", "unm.flintbox.com — JS-rendered, no accessible public API; requires headless browser or credentials");
-export const nmsuScraper = createStubScraper("New Mexico State University");
+// ── New Mexico State University — Arrowhead Center (Task #135) ────────────────
+// URL: https://arrowheadcenter.nmsu.edu/technologies/
+// WordPress site — technologies as paginated HTML listing.
+// WP REST API: /wp-json/wp/v2/pages?per_page=100 (used as fallback).
+export const nmsuScraper: InstitutionScraper = {
+  institution: "New Mexico State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "New Mexico State University";
+    const BASE = "https://arrowheadcenter.nmsu.edu";
+    const INDEX = `${BASE}/technologies/`;
+
+    try {
+      const seenUrls = new Set<string>();
+      const techUrls: string[] = [];
+
+      const collectFrom$ = ($: Awaited<ReturnType<typeof fetchHtml>>) => {
+        if (!$) return;
+        $("a[href*='/technologies/']").each((_, el) => {
+          const href = ($)(el).attr("href") ?? "";
+          if (!href) return;
+          const full = href.startsWith("http") ? href : `${BASE}${href}`;
+          const clean = full.split("?")[0].split("#")[0];
+          if (clean === INDEX || seenUrls.has(clean)) return;
+          if (!/\/technologies\/[^/]+\/?$/.test(clean)) return;
+          seenUrls.add(clean);
+          techUrls.push(clean);
+        });
+      };
+
+      // Page 1
+      const page1$ = await fetchHtml(INDEX, 20_000);
+      collectFrom$(page1$);
+
+      // Detect max page
+      let maxPage = 1;
+      page1$?.("a[href*='/technologies/page/']").each((_, el) => {
+        const m = (page1$!(el).attr("href") ?? "").match(/\/page\/(\d+)/);
+        if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+      });
+
+      // Fetch remaining pages (WordPress /page/N pagination)
+      const BATCH = 6;
+      const pageUrls: string[] = [];
+      for (let p = 2; p <= Math.min(maxPage, 30); p++) {
+        pageUrls.push(`${INDEX}page/${p}/`);
+      }
+      for (let i = 0; i < pageUrls.length; i += BATCH) {
+        const batch = pageUrls.slice(i, i + BATCH);
+        const settled = await Promise.allSettled(batch.map((u) => fetchHtml(u, 20_000)));
+        for (const r of settled) {
+          if (r.status === "fulfilled") collectFrom$(r.value);
+        }
+      }
+
+      // Fallback: WP REST API for pages/posts tagged "technology"
+      if (techUrls.length === 0) {
+        try {
+          const apiUrl = `${BASE}/wp-json/wp/v2/pages?per_page=100&search=technology`;
+          const r = await fetch(apiUrl, {
+            signal: AbortSignal.timeout(15_000),
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+          if (r.ok) {
+            const items = await r.json() as Array<{ link: string; title: { rendered: string }; excerpt: { rendered: string } }>;
+            for (const item of items) {
+              if (!item.link || seenUrls.has(item.link)) continue;
+              seenUrls.add(item.link);
+              const title = cleanText(item.title?.rendered ?? "");
+              const description = cleanText((item.excerpt?.rendered ?? "").replace(/<[^>]+>/g, " "));
+              if (title && title.length > 5) {
+                techUrls.push(item.link);
+              }
+            }
+          }
+        } catch {
+          // REST API unavailable
+        }
+      }
+
+      if (techUrls.length === 0) {
+        console.log(`[scraper] ${INST}: 0 tech URLs found`);
+        return [];
+      }
+
+      const toTitle = (u: string) =>
+        (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+
+      const enriched = await enrichWithDetailPages(
+        techUrls.map((u) => ({ title: toTitle(u), description: "", url: u, institution: INST })),
+        { description: [".entry-content p", ".post-content p", "main p", "article p"] }
+      );
+
+      console.log(`[scraper] ${INST}: ${enriched.length} listings`);
+      return enriched;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
 export const unrScraper = createStubScraper("University of Nevada, Reno");
 export const unlvScraper = createTechPublisherScraper("unlvecondev", "University of Nevada, Las Vegas");
 export const usuScraper = createFlintboxScraper(
@@ -1494,10 +1593,116 @@ export const ncatScraper: InstitutionScraper = {
   },
 };
 
-export const morganStateScraper = createStubScraper(
-  "Morgan State University",
-  "IPD Executive Summaries page says 'Coming Soon' — no listings available yet"
-);
+// ── Morgan State University — IPD PDF scraper (Task #135) ─────────────────────
+// Source: Health, Medical and Biomedical IPD List PDF
+// URL: https://www.morgan.edu/Documents/ADMINISTRATION/OFFICES/OTT/ipd/IPDList-Health,MedicalandBiomedical.pdf
+// Falls back to TTO HTML page if PDF is unavailable.
+export const morganStateScraper: InstitutionScraper = {
+  institution: "Morgan State University",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Morgan State University";
+    const PDF_URL =
+      "https://www.morgan.edu/Documents/ADMINISTRATION/OFFICES/OTT/ipd/IPDList-Health,MedicalandBiomedical.pdf";
+    const TTO_URL = "https://www.morgan.edu/technologytransfer";
+
+    try {
+      // ── Primary: PDF parse ────────────────────────────────────────────────
+      const pdfRes = await fetch(PDF_URL, {
+        signal: AbortSignal.timeout(30_000),
+        headers: { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36" },
+        redirect: "follow",
+      });
+
+      if (pdfRes.ok) {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const pdfParse: (buf: Buffer) => Promise<{ text: string }> = require("pdf-parse");
+        const buf = Buffer.from(await pdfRes.arrayBuffer());
+        const parsed = await pdfParse(buf);
+        const text = parsed.text ?? "";
+
+        const results: ScrapedListing[] = [];
+        const seen = new Set<string>();
+
+        // PDF structure: each technology entry starts with an uppercase title line,
+        // followed by patent number(s), inventor list, and a description paragraph.
+        // Detect entries by lines that look like tech titles (ALL CAPS or Title Case,
+        // not "Page" headers, not blank) followed by a patent-number indicator.
+        const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+
+        let i = 0;
+        while (i < lines.length) {
+          const line = lines[i];
+
+          // Skip obvious headers/footers
+          if (/^(Page \d|Morgan State|Health,|Medical|Biomedical|IPD List)/i.test(line)) {
+            i++;
+            continue;
+          }
+
+          // Detect title: non-trivial line that isn't a patent number or inventor label
+          const isTitle =
+            line.length > 8 &&
+            !(/^(Patent|Inventor|Docket|Status|Background|Application|Serial|US\s*\d)/i.test(line)) &&
+            !(/^\d+[\.\-]/.test(line));
+
+          if (isTitle && i + 1 < lines.length) {
+            const title = cleanText(line);
+            if (title.length < 8 || seen.has(title)) { i++; continue; }
+
+            // Gather description from subsequent lines until next entry
+            const descLines: string[] = [];
+            let j = i + 1;
+            while (j < lines.length && j < i + 10) {
+              const next = lines[j];
+              if (/^(Patent|Inventor|Docket|Serial|US\s*\d|Application)/i.test(next)) { j++; continue; }
+              if (next.length > 20 && !(/^[A-Z\s,]+$/.test(next))) {
+                descLines.push(next);
+              }
+              j++;
+            }
+
+            const description = descLines.slice(0, 3).join(" ").slice(0, 600);
+            seen.add(title);
+            results.push({ title, description, url: TTO_URL, institution: INST });
+            i = j;
+            continue;
+          }
+          i++;
+        }
+
+        if (results.length > 0) {
+          console.log(`[scraper] ${INST}: ${results.length} listings (PDF)`);
+          return results;
+        }
+      }
+
+      // ── Fallback: TTO HTML page ──────────────────────────────────────────
+      const page$ = await fetchHtml(TTO_URL, 20_000);
+      if (!page$) {
+        console.log(`[scraper] ${INST}: PDF and TTO page both unavailable`);
+        return [];
+      }
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      // Look for technology titles in lists/tables
+      page$("li, td, .tech-title, h3, h4").each((_, el) => {
+        const text = cleanText(page$(el).text());
+        if (text.length < 10 || seen.has(text)) return;
+        if (/^(home|about|contact|news|event|faculty|student|program|research|office)/i.test(text)) return;
+        seen.add(text);
+        results.push({ title: text, description: "", url: TTO_URL, institution: INST });
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (HTML fallback)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
 
 // ── Task #104: Bespoke Scrapers Batch 2A (March 2026) ─────────────────────────
 
@@ -2315,13 +2520,112 @@ export const sandiaScraper: InstitutionScraper = {
   },
 };
 
-// 9. Los Alamos National Laboratory
-// Tech-and-capability-search page and all known LANL tech listing URLs return HTTP 404;
-// confirmed zero listings accessible via static scraping
-export const losAlamosScraper = createStubScraper(
-  "Los Alamos National Laboratory",
-  "Confirmed zero listings: tech-and-capability-search page and all known LANL tech listing paths return HTTP 404"
-);
+// ── Los Alamos National Laboratory — HTML scraper (Task #135) ────────────────
+// Primary URL: /business/technology-transfer/available-technologies/ (Drupal-based)
+// Fallback: sitemap.xml scan for technology transfer content.
+// Previous stub noted HTTP 404 on old paths; trying refreshed URLs from 2026 probe.
+export const losAlamosScraper: InstitutionScraper = {
+  institution: "Los Alamos National Laboratory",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Los Alamos National Laboratory";
+    const BASE = "https://www.lanl.gov";
+
+    // Candidate index pages in priority order (probed March 2026)
+    const CANDIDATE_INDEXES = [
+      `${BASE}/business/technology-transfer/available-technologies/`,
+      `${BASE}/business/technology-transfer/available-technologies/index.php`,
+      `${BASE}/business/technology-transfer/`,
+      `${BASE}/partnerships/technology-transfer/available-technologies/`,
+    ];
+
+    const seenUrls = new Set<string>();
+    const techUrls: string[] = [];
+
+    const collectFrom$ = ($: Awaited<ReturnType<typeof fetchHtml>>, indexUrl: string) => {
+      if (!$) return;
+      // Link patterns: /business/technology-transfer/available-technologies/<slug>
+      // or generic technology-detail paths
+      $("a[href]").each((_, el) => {
+        const href = ($)(el).attr("href") ?? "";
+        if (!href) return;
+        const full = href.startsWith("http") ? href : `${BASE}${href}`;
+        const clean = full.split("?")[0].split("#")[0];
+        // Must be a deeper path under the index, not the index itself
+        if (seenUrls.has(clean)) return;
+        const relevantPath =
+          /\/technology-transfer\/available-technologies\/[^/]+\/?$/.test(clean) ||
+          /\/technology-transfer\/tech-[^/]+\/?$/.test(clean) ||
+          /\/tech\/[^/]+\/?$/.test(clean);
+        if (!relevantPath) return;
+        if (clean === indexUrl || clean === `${indexUrl}/`) return;
+        seenUrls.add(clean);
+        techUrls.push(clean);
+      });
+    };
+
+    try {
+      // Try each candidate index URL
+      for (const idx of CANDIDATE_INDEXES) {
+        const page$ = await fetchHtml(idx, 20_000);
+        if (page$) {
+          collectFrom$(page$, idx);
+          // Check for pagination
+          let maxPage = 1;
+          page$("a[href*='?page=']").each((_, el) => {
+            const m = (page$!(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
+            if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+          });
+          for (let p = 2; p <= Math.min(maxPage, 30); p++) {
+            const paged = await fetchHtml(`${idx}?page=${p}`, 20_000);
+            if (paged) collectFrom$(paged, idx);
+          }
+          if (techUrls.length > 0) break;
+        }
+      }
+
+      // If no detail pages found, try Wayback Machine CDX snapshot
+      if (techUrls.length === 0) {
+        try {
+          const cdx = await fetch(
+            `https://web.archive.org/cdx/search/cdx?url=lanl.gov/business/technology-transfer/available-technologies/*&output=json&limit=200&fl=original&collapse=urlkey`,
+            { signal: AbortSignal.timeout(15_000), headers: { "User-Agent": "Mozilla/5.0" } }
+          );
+          if (cdx.ok) {
+            const rows = await cdx.json() as string[][];
+            for (const [url] of rows.slice(1)) {
+              if (!url || seenUrls.has(url)) continue;
+              const clean = url.split("?")[0];
+              if (!/\/available-technologies\/[^/]+$/.test(clean)) continue;
+              seenUrls.add(clean);
+              techUrls.push(clean);
+            }
+          }
+        } catch {
+          // Wayback CDX unavailable
+        }
+      }
+
+      if (techUrls.length === 0) {
+        console.log(`[scraper] ${INST}: 0 tech URLs found — site may be restructured`);
+        return [];
+      }
+
+      const toTitle = (u: string) =>
+        (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+
+      const enriched = await enrichWithDetailPages(
+        techUrls.map((u) => ({ title: toTitle(u), description: "", url: u, institution: INST })),
+        { description: ["main p", ".field-body p", "article p", ".content p"] }
+      );
+
+      console.log(`[scraper] ${INST}: ${enriched.length} listings`);
+      return enriched;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
 
 // Flintbox portals
 export const umbcScraper = createFlintboxScraper(
@@ -2931,20 +3235,37 @@ export const fredHutchScraper: InstitutionScraper = {
         });
 
         await page.goto(LISTING_URL, { timeout: 45_000, waitUntil: "networkidle" });
-        // Wait for at least one technology-details link to appear in the DOM
-        await page.waitForSelector('a[href*="technology-details"]', { timeout: 15_000 });
+        // Wait for tech links — try specific selector first, fall back to any tech-related link
+        await page.waitForSelector(
+          'a[href*="technology-details"], a[href*="/available-technologies/"], main a[href*="technology"]',
+          { timeout: 15_000 }
+        ).catch(() => null); // proceed even if timeout
 
         const allLinks = new Map<string, string>();
 
         const collectPage = async () => {
-          const links = await page.$$eval('a[href*="technology-details"]', (els) =>
-            els.map((el) => ({
-              href: el.getAttribute("href") ?? "",
-              text: el.textContent?.trim() ?? "",
-            }))
+          // Collect both the original pattern and any new AEM patterns
+          const links = await page.$$eval(
+            [
+              'a[href*="technology-details"]',
+              'a[href*="/available-technologies/"]',
+              '.cmp-teaser a[href*="technolog"]',
+              'main a[href*="technolog"]',
+            ].join(","),
+            (els) =>
+              Array.from(new Set(els)).map((el) => ({
+                href: (el as HTMLAnchorElement).getAttribute("href") ?? "",
+                text: el.textContent?.trim() ?? "",
+              }))
           );
           for (const l of links) {
-            if (l.href && !allLinks.has(l.href)) allLinks.set(l.href, l.text);
+            // Filter: must point to a detail page (has path depth beyond /available-technologies/)
+            if (!l.href) continue;
+            const isDetailLink =
+              /technology-details/.test(l.href) ||
+              /\/available-technologies\/[^/]+/.test(l.href);
+            if (!isDetailLink) continue;
+            if (!allLinks.has(l.href)) allLinks.set(l.href, l.text);
           }
         };
 
@@ -2974,7 +3295,10 @@ export const fredHutchScraper: InstitutionScraper = {
             "https://www.fredhutch.org/en/investors/business-development/available-technologies/research-tools.html";
           try {
             await page.goto(RESEARCH_TOOLS_URL, { timeout: 30_000, waitUntil: "networkidle" });
-            await page.waitForSelector('a[href*="technology-details"]', { timeout: 10_000 });
+            await page.waitForSelector(
+              'a[href*="technology-details"], main a[href*="technolog"]',
+              { timeout: 10_000 }
+            ).catch(() => null);
             await collectPage();
           } catch {
             // sub-page unavailable — proceed with empty results
@@ -3327,38 +3651,66 @@ export const stjudeScraper: InstitutionScraper = {
   },
 };
 
-// ── Nationwide Children's Hospital — bespoke HTML scraper ─────────────────────
+// ── Nationwide Children's Hospital — cheerio scraper (Task #135) ─────────────
 // Main listing at /research/technology-commercialization/available-technologies.
 // Individual tech pages at /research/technology-commercialization/available-technologies/<slug>.
-// Title: <h1 class=" contentHeading"> (or any <h1>), Description: <meta name="og:description">.
+// Follows pagination links (rel="next", .next, ?page=N).
 export const nationwideChildrensScraper: InstitutionScraper = {
   institution: "Nationwide Children's Hospital",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Nationwide Children's Hospital";
     const BASE = "https://www.nationwidechildrens.org";
-    const INDEX_URL = `${BASE}/research/technology-commercialization/available-technologies`;
-    const TIMEOUT_MS = 15_000;
-    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36";
+    const INDEX_PATH = "/research/technology-commercialization/available-technologies";
+    const INDEX_URL = `${BASE}${INDEX_PATH}`;
 
     try {
-      const res = await fetch(INDEX_URL, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-
-      // Collect /research/technology-commercialization/available-technologies/<slug>
       const seenUrls = new Set<string>();
       const techUrls: string[] = [];
-      const hrefRe = /href="(\/research\/technology-commercialization\/available-technologies\/[^"]+)"/g;
-      let m: RegExpExecArray | null;
-      while ((m = hrefRe.exec(html)) !== null) {
-        const fullUrl = `${BASE}${m[1]}`;
-        if (!seenUrls.has(fullUrl)) {
-          seenUrls.add(fullUrl);
-          techUrls.push(fullUrl);
+
+      const collectFromPage = ($: Awaited<ReturnType<typeof fetchHtml>>) => {
+        if (!$) return;
+        // Tech detail links: /research/technology-commercialization/available-technologies/<slug>
+        $(`a[href*="${INDEX_PATH}/"]`).each((_, el) => {
+          const href = ($)(el).attr("href") ?? "";
+          if (!href) return;
+          const full = href.startsWith("http") ? href : `${BASE}${href}`;
+          const cleaned = full.split("?")[0].split("#")[0];
+          if (cleaned === INDEX_URL || seenUrls.has(cleaned)) return;
+          if (!/available-technologies\/[^/]+$/.test(cleaned)) return;
+          seenUrls.add(cleaned);
+          techUrls.push(cleaned);
+        });
+      };
+
+      // Page 1
+      let page1$ = await fetchHtml(INDEX_URL, 20_000);
+      collectFromPage(page1$);
+
+      // Follow pagination: rel=next, .next a, ?page=N links
+      let currentUrl = INDEX_URL;
+      for (let pg = 2; pg <= 40; pg++) {
+        if (!page1$) break;
+        let nextUrl: string | null = null;
+        // rel="next"
+        page1$('a[rel="next"], .pager__item--next a, .next a, li.next a').each((_, el) => {
+          const href = page1$!(el).attr("href");
+          if (href && !nextUrl) nextUrl = href.startsWith("http") ? href : `${BASE}${href}`;
+        });
+        // ?page=N pattern
+        if (!nextUrl) {
+          const m = currentUrl.match(/[?&]page=(\d+)/);
+          const nextN = m ? parseInt(m[1]) + 1 : pg;
+          const candidate = `${INDEX_URL}?page=${nextN}`;
+          if (candidate !== currentUrl) nextUrl = candidate;
         }
+        if (!nextUrl || nextUrl === currentUrl) break;
+        currentUrl = nextUrl;
+        const next$ = await fetchHtml(nextUrl, 20_000);
+        if (!next$) break;
+        const prevCount = techUrls.length;
+        collectFromPage(next$);
+        if (techUrls.length === prevCount) break; // No new links
+        page1$ = next$;
       }
 
       if (techUrls.length === 0) {
@@ -3366,32 +3718,17 @@ export const nationwideChildrensScraper: InstitutionScraper = {
         return [];
       }
 
-      const results: ScrapedListing[] = [];
-      for (const url of techUrls) {
-        try {
-          const pageRes = await fetch(url, {
-            headers: { "User-Agent": UA },
-            signal: AbortSignal.timeout(TIMEOUT_MS),
-          });
-          if (!pageRes.ok) continue;
-          const pageHtml = await pageRes.text();
-          const h1Match = pageHtml.match(/<h1[^>]*>([^<]+)<\/h1>/i);
-          const ogDescMatch = pageHtml.match(/<meta\s+name="og:description"\s+content="([^"]+)"/i);
-          const metaDescMatch = pageHtml.match(/<meta\s+name="description"\s+content="([^"]+)"/i);
-          const title = h1Match ? cleanText(h1Match[1]) : "";
-          const description = ogDescMatch
-            ? cleanText(ogDescMatch[1])
-            : metaDescMatch ? cleanText(metaDescMatch[1]) : "";
-          if (title && title.length > 5) {
-            results.push({ title, description, url, institution: INST });
-          }
-        } catch {
-          continue;
-        }
-      }
+      const toTitle = (u: string) =>
+        (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
-      return results;
+      // Enrich detail pages in batches
+      const enriched = await enrichWithDetailPages(
+        techUrls.map((u) => ({ title: toTitle(u), description: "", url: u, institution: INST })),
+        { description: [".field-body p", "main p", "article p", ".contentBody p"] }
+      );
+
+      console.log(`[scraper] ${INST}: ${enriched.length} listings`);
+      return enriched;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
@@ -3989,27 +4326,61 @@ export const techLinkScraper: InstitutionScraper = {
 
       await collectPage();
 
-      // Paginate — try Next button, then page numbers, then infinite scroll
-      for (let pg = 2; pg <= 200; pg++) {
-        // Look for a Next / arrow button that isn't disabled
-        const nextBtn = await page.$(
-          'button[aria-label="next page"],button[title="Next"],button[aria-label="Go to next page"],[aria-label="next"],[title="next"]'
-        );
-        if (!nextBtn) break;
-        const disabled = await nextBtn.evaluate(
-          (el) =>
-            el.hasAttribute("disabled") ||
-            el.classList.contains("disabled") ||
-            el.classList.contains("Mui-disabled") ||
-            el.getAttribute("aria-disabled") === "true"
-        );
-        if (disabled) break;
+      // Paginate — try URL-based navigation first, fall back to Next button
+      // TechLink may support /technologies?page=N or a Next button
+      let usedUrlPagination = false;
 
-        const prevSize = allLinks.size;
-        await nextBtn.click();
-        await page.waitForTimeout(3_000);
-        await collectPage();
-        if (allLinks.size === prevSize) break; // No new items
+      // Probe for URL-based pagination
+      const probe2 = await page.evaluate(() => {
+        // Check if location has a page param pattern or pagination links exist
+        const links = Array.from(document.querySelectorAll("a[href*='page='], a[href*='/technologies?']"));
+        return links.map(l => (l as HTMLAnchorElement).href).filter(h => /page[=\-]?\d/.test(h)).slice(0, 3);
+      });
+
+      if (probe2.length > 0) {
+        // URL-based pagination available
+        usedUrlPagination = true;
+        for (let pg = 2; pg <= 200; pg++) {
+          const pageUrl = probe2[0].replace(/page[=\-]?\d+/, `page=${pg}`);
+          const prevSize = allLinks.size;
+          try {
+            await page.goto(pageUrl, { timeout: 30_000, waitUntil: "networkidle" });
+            await collectPage();
+          } catch { break; }
+          if (allLinks.size === prevSize) break;
+        }
+      }
+
+      if (!usedUrlPagination) {
+        // Fall back to Next button click — use broad selector matching MUI and generic patterns
+        for (let pg = 2; pg <= 200; pg++) {
+          const nextBtn = await page.$(
+            [
+              'button[aria-label*="next" i]',
+              'button[title*="next" i]',
+              'li[class*="next" i] button',
+              'li[class*="next" i] a',
+              'a[rel="next"]',
+              '[data-testid*="next" i]',
+              'nav button:last-child',
+            ].join(",")
+          );
+          if (!nextBtn) break;
+          const disabled = await nextBtn.evaluate(
+            (el) =>
+              el.hasAttribute("disabled") ||
+              el.classList.contains("disabled") ||
+              el.classList.contains("Mui-disabled") ||
+              el.getAttribute("aria-disabled") === "true"
+          );
+          if (disabled) break;
+
+          const prevSize = allLinks.size;
+          await nextBtn.click();
+          await page.waitForTimeout(3_000);
+          await collectPage();
+          if (allLinks.size === prevSize) break;
+        }
       }
 
       const results: ScrapedListing[] = [];
@@ -4219,94 +4590,92 @@ export const saarlandScraper = createInPartScraper("saarland", "Saarland Univers
 export const stellenboschScraper = createInPartScraper("sun", "Stellenbosch University");
 export const macquarieScraper = createInPartScraper("mq", "Macquarie University");
 
-// ── 11. Edinburgh Innovations (Elucid3 storefront, Playwright) ──────────────
-// The Edinburgh Innovations licensing portal is a jQuery/Elucid3 SPA that
-// renders product cards client-side. Playwright is required to retrieve the
-// product list. Categories: /products/research-materials, /products/software,
-// /products/datasets, /products/education.
+// ── Edinburgh Innovations — HTML listing scraper (rewritten Task #135) ────────
+// Old scraper targeted licensing.edinburgh-innovations.ed.ac.uk (Elucid3 SPA) — wrong subdomain.
+// Correct URL: https://edinburgh-innovations.ed.ac.uk/technology
+// Pagination: ?page=N (confirmed via ?page=3 in user-provided URLs)
+// Detail: /technology/{slug}
 export const edinburghInnovationsScraper: InstitutionScraper = {
   institution: "Edinburgh Innovations",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Edinburgh Innovations";
-    const BASE = "https://licensing.edinburgh-innovations.ed.ac.uk";
-    let browser: import("playwright").Browser | null = null;
+    const BASE = "https://edinburgh-innovations.ed.ac.uk";
+    const INDEX = `${BASE}/technology`;
+
     try {
-      const { chromium } = await import("playwright");
-      browser = await chromium.launch({
-        headless: true,
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-        ],
-      });
-      const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({
-        "User-Agent":
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        Referer: "https://www.google.com/",
-        "Accept-Language": "en-US,en;q=0.9",
-      });
+      // Fetch page 1 and detect max page
+      const page1$ = await fetchHtml(INDEX, 20_000);
+      if (!page1$) {
+        console.warn(`[scraper] ${INST}: could not fetch listing page`);
+        return [];
+      }
 
-      const allProducts = new Map<string, string>();
+      let maxPage = 1;
+      page1$("a[href*='?page=']").each((_, el) => {
+        const m = (page1$(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
+        if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
+      });
+      console.log(`[scraper] ${INST}: detected ${maxPage} pages`);
 
-      const collectProducts = async () => {
-        const links = await page.$$eval("a[href*='/product/']", (els) =>
-          els.map((el) => ({
-            href: (el as HTMLAnchorElement).href ?? "",
-            text: el.textContent?.trim() ?? "",
-          }))
-        );
-        for (const l of links) {
-          if (!l.href || l.href.includes("/products/") || allProducts.has(l.href))
-            continue;
-          const title = l.text.replace(/\s+/g, " ").trim();
-          if (title.length < 5) continue;
-          allProducts.set(l.href, title);
-        }
+      // Collect all page URLs (cap at 60 for safety)
+      const pageUrls = [INDEX];
+      for (let p = 2; p <= Math.min(maxPage, 60); p++) {
+        pageUrls.push(`${INDEX}?page=${p}`);
+      }
+
+      // Collect links + anchor text (as title) from listing pages
+      const slugTitles = new Map<string, string>();
+
+      const collectFromPage = ($: Awaited<ReturnType<typeof fetchHtml>>) => {
+        if (!$) return;
+        $("a[href*='/technology/']").each((_, el) => {
+          const href = ($)(el).attr("href") ?? "";
+          if (!href) return;
+          const full = href.startsWith("http") ? href : `${BASE}${href}`;
+          const clean = full.split("?")[0].split("#")[0];
+          if (clean.replace(/\/$/, "") === INDEX.replace(/\/$/, "")) return;
+          if (!/\/technology\/[^?#/]+/.test(clean)) return;
+          if (!slugTitles.has(clean)) {
+            // Title from link text; fallback to slug
+            const text = cleanText(($)(el).text());
+            const slug = clean.split("/").pop()?.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "";
+            slugTitles.set(clean, text.length > 5 ? text : slug);
+          }
+        });
       };
 
-      // Load the main products catalogue
-      await page.goto(`${BASE}/products`, {
-        timeout: 30_000,
-        waitUntil: "networkidle",
-      });
-      await collectProducts();
+      collectFromPage(page1$);
 
-      // Discover category pages and visit each
-      const categoryUrls = await page.$$eval("a[href*='/products/']", (els) =>
-        Array.from(
-          new Set(
-            els
-              .map((el) => (el as HTMLAnchorElement).href ?? "")
-              .filter((h) => h.includes("/products/"))
-          )
-        )
-      );
-
-      for (const catUrl of categoryUrls.slice(0, 10)) {
-        try {
-          await page.goto(catUrl, {
-            timeout: 25_000,
-            waitUntil: "networkidle",
-          });
-          await collectProducts();
-        } catch {
-          continue;
+      const BATCH = 8;
+      for (let i = 1; i < pageUrls.length; i += BATCH) {
+        const batch = pageUrls.slice(i, i + BATCH);
+        const results = await Promise.allSettled(
+          batch.map((u) => fetchHtml(u, 20_000))
+        );
+        for (const r of results) {
+          if (r.status === "fulfilled" && r.value) collectFromPage(r.value);
         }
       }
 
-      const results: ScrapedListing[] = Array.from(allProducts.entries()).map(
-        ([url, title]) => ({ title, description: "", url, institution: INST })
+      if (slugTitles.size === 0) {
+        console.log(`[scraper] ${INST}: 0 tech URLs found`);
+        return [];
+      }
+
+      console.log(`[scraper] ${INST}: ${slugTitles.size} tech URLs — enriching`);
+
+      // Enrich detail pages for description
+      const enriched = await enrichWithDetailPages(
+        Array.from(slugTitles.entries()).map(([u, t]) => ({ title: t, description: "", url: u, institution: INST })),
+        { description: ["article p", ".field-body p", ".node__content p", "main p"] }
       );
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
-      return results;
+
+      console.log(`[scraper] ${INST}: ${enriched.length} listings after enrichment`);
+      return enriched;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
       return [];
-    } finally {
-      await browser?.close();
     }
   },
 };
@@ -4686,27 +5055,46 @@ export const cancerResearchHorizonsScraper: InstitutionScraper = {
         // No load-more button — all items already rendered
       }
 
-      // Extract all individual tech page links (not the listing page itself)
-      const links = await page.$$eval(
-        `a[href*='/our-portfolio/our-licensing-opportunities/']`,
-        (els) =>
-          els.map((el) => ({
-            href: (el as HTMLAnchorElement).href ?? "",
-            text: el.textContent?.trim() ?? "",
-          }))
-      );
-
       const seen = new Set<string>();
       const results: ScrapedListing[] = [];
 
-      for (const l of links) {
-        if (!l.href || seen.has(l.href)) continue;
-        // Skip the listing page itself
-        if (l.href.replace(/\/$/, "") === LISTING.replace(/\/$/, "")) continue;
-        seen.add(l.href);
-        const title = l.text.replace(/\s+/g, " ").trim();
-        if (title.length < 5) continue;
-        results.push({ title, description: "", url: l.href, institution: INST });
+      const collectLinks = async () => {
+        const links = await page.$$eval(
+          `a[href*='/our-portfolio/our-licensing-opportunities/']`,
+          (els) =>
+            els.map((el) => ({
+              href: (el as HTMLAnchorElement).href ?? "",
+              text: el.textContent?.trim() ?? "",
+            }))
+        );
+        let added = 0;
+        for (const l of links) {
+          if (!l.href || seen.has(l.href)) continue;
+          if (l.href.replace(/\/$/, "") === LISTING.replace(/\/$/, "")) continue;
+          seen.add(l.href);
+          const title = l.text.replace(/\s+/g, " ").trim();
+          if (title.length < 5) continue;
+          results.push({ title, description: "", url: l.href, institution: INST });
+          added++;
+        }
+        return added;
+      };
+
+      await collectLinks();
+
+      // Follow ?page=N pagination — confirmed from user-provided URL ?page=3
+      for (let pg = 2; pg <= 50; pg++) {
+        const pageUrl = `${LISTING}?page=${pg}`;
+        try {
+          await page.goto(pageUrl, { timeout: 30_000, waitUntil: "domcontentloaded" });
+          await page.waitForTimeout(3_000);
+          await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+          await page.waitForTimeout(1_500);
+          const added = await collectLinks();
+          if (added === 0) break; // No new links on this page — reached the end
+        } catch {
+          break;
+        }
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings`);
@@ -4774,7 +5162,7 @@ export const imperialScraper: InstitutionScraper = {
     const seen = new Set<string>();
     const results: ScrapedListing[] = [];
 
-    function extractFromPage($p: ReturnType<typeof page1$>): void {
+    function extractFromPage($p: import("cheerio").CheerioAPI): void {
       $p("a[href*='/technology-search/']").each((_, el) => {
         const href = ($p(el).attr("href") ?? "").split("?")[0];
         if (!href || href.endsWith("/technology-search/") || seen.has(href)) return;
@@ -4818,7 +5206,7 @@ export const imperialScraper: InstitutionScraper = {
 
 // ── 2. University of Birmingham — Flintbox ────────────────────────────────────
 // https://unibirmingham.flintbox.com/technologies
-export const birminghamScraper = createFlintboxScraper("unibirmingham", "University of Birmingham");
+export const birminghamScraper = createFlintboxScraper({ slug: "unibirmingham", orgId: 0, accessKey: "" }, "University of Birmingham");
 
 // ── 3. University of Sheffield — HTML listing ─────────────────────────────────
 // https://sheffield.ac.uk/commercialisation/current-opportunities/
@@ -4880,7 +5268,7 @@ export const cardiffScraper = createStubScraper("Cardiff University", "in-part p
 
 // ── 6. University of Dundee — Flintbox ───────────────────────────────────────
 // https://dundee.flintbox.com/technologies
-export const dundeeScraper = createFlintboxScraper("dundee", "University of Dundee");
+export const dundeeScraper = createFlintboxScraper({ slug: "dundee", orgId: 0, accessKey: "" }, "University of Dundee");
 
 // ── 7. University of Warwick — no usable public TTO listing ──────────────────
 export const warwickScraper = createStubScraper("University of Warwick", "in-part portal inactive — no public TTO listing found");
@@ -4889,7 +5277,7 @@ export const warwickScraper = createStubScraper("University of Warwick", "in-par
 
 // ── 8. McGill University — Flintbox ──────────────────────────────────────────
 // https://mcgill.flintbox.com/technologies
-export const mcgillScraper = createFlintboxScraper("mcgill", "McGill University");
+export const mcgillScraper = createFlintboxScraper({ slug: "mcgill", orgId: 0, accessKey: "" }, "McGill University");
 
 // ── 9. University of Waterloo — HTML catalog ─────────────────────────────────
 // https://uwaterloo.ca/research/catalogs/watco-technologies/
@@ -5012,7 +5400,7 @@ export const mcmasterScraper: InstitutionScraper = {
 
 // ── 11. University of Calgary — Flintbox ──────────────────────────────────────
 // https://calgary.flintbox.com/technologies
-export const calgaryScraper = createFlintboxScraper("calgary", "University of Calgary");
+export const calgaryScraper = createFlintboxScraper({ slug: "calgary", orgId: 0, accessKey: "" }, "University of Calgary");
 
 // ── DOE National Labs — Proxy-Routed Scrapers (Task #121) ────────────────────
 //
