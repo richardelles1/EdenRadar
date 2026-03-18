@@ -2718,7 +2718,7 @@ function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
 
 function relevanceLabel(similarity: number): { label: string; cls: string } {
   if (similarity >= 0.70) return { label: "Strong", cls: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" };
-  if (similarity >= 0.55) return { label: "Good", cls: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800" };
+  if (similarity >= 0.50) return { label: "Good", cls: "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-400 dark:border-teal-800" };
   return { label: "Relevant", cls: "bg-muted text-muted-foreground border-border" };
 }
 

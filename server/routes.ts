@@ -1675,7 +1675,7 @@ export async function registerRoutes(
       } else {
         const queryEmbedding = await embedQuery(message.trim());
         const allRetrieved = await storage.semanticSearch(queryEmbedding, 15);
-        const retrieved = allRetrieved.filter((a) => a.similarity >= 0.42);
+        const retrieved = allRetrieved.filter((a) => a.similarity > 0.45);
 
         const assetPayload = retrieved.map((a) => ({
           id: a.id,
