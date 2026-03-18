@@ -22,8 +22,7 @@ const BIOTECH_SIGNALS = [
   "clinical", "trial", "fda", "license", "licensing", "patent", "asset",
   "portfolio", "pipeline", "stage", "biotech", "biopharma", "pharma",
   "institution", "university", "research", "vaccine", "immunotherapy",
-  "stem", "diagnostic", "assay", "platform", "tto", "transfer", "technology",
-  "find", "show", "list", "search", "available", "which", "what", "where",
+  "stem cell", "diagnostic", "assay", "platform", "tto", "tech transfer", "technology",
   "how many", "gpl", "glp", "cnc", "cns", "hiv", "covid", "autoimmune",
   "inflammation", "cardiac", "neuro", "stanford", "mit", "harvard", "columbia",
 ];
