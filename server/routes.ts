@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, type UserContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1832,13 +1832,19 @@ export async function registerRoutes(
 
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
+      // ── Session focus context + filter extraction ────────────────────────
+      const focusContext = getOrUpdateSessionFocus(sid, message.trim());
+      const filters = parseQueryFilters(message.trim(), focusContext);
+      const filtersActive = hasMeaningfulFilters(filters);
+      const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
+
       const chat = isConversational(message.trim());
 
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
 
         let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats)) {
+        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1850,12 +1856,49 @@ export async function registerRoutes(
           assets: [],
         });
       } else if (isAggregationQuery(message.trim())) {
-        // Try deterministic SQL aggregation first; fall through to RAG if no result
+        // ── Filtered count: if session has active filters, use SQL COUNT ──
+        if (filtersActive) {
+          const count = await storage.filteredCount(
+            geoRx,
+            filters.modality,
+            filters.stage,
+            filters.indication,
+            filters.institution
+          ).catch(() => null);
+
+          if (count !== null) {
+            const filterDesc = [
+              filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
+              filters.modality || "",
+              filters.stage || "",
+              filters.indication || "",
+              filters.institution || "",
+            ].filter(Boolean).join(", ");
+
+            const queryResult = `Filtered count (${filterDesc || "current focus"}): **${count}** relevant assets match the active filters.`;
+            sendEvent("context", { sessionId: sid, assets: [] });
+            let fullResponse = "";
+            for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats, focusContext)) {
+              fullResponse += token;
+              sendEvent("token", { text: token });
+            }
+            await storage.appendEdenMessage(sid, {
+              role: "assistant",
+              content: fullResponse,
+              assetIds: [],
+              assets: [],
+            });
+            sendEvent("done", { sessionId: sid });
+            return;
+          }
+        }
+
+        // ── Deterministic SQL aggregation (unfiltered) ────────────────────
         const queryResult = await resolveAggregationQuery(message.trim()).catch(() => null);
         if (queryResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats)) {
+          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats, focusContext)) {
             fullResponse += token;
             sendEvent("token", { text: token });
           }
@@ -1868,13 +1911,21 @@ export async function registerRoutes(
           sendEvent("done", { sessionId: sid });
           return;
         }
-        // Fall through to RAG if aggregation produced no data
+
+        // ── Fall through to RAG ───────────────────────────────────────────
         const institutionName = detectInstitutionKeyword(message.trim());
         const [queryEmbedding, institutionAssets] = await Promise.all([
           embedQuery(message.trim()),
           institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
         ]);
-        const allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+
+        let allSemantic: import("./storage").RetrievedAsset[];
+        if (filtersActive) {
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
+        } else {
+          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+        }
+
         const threshold = institutionName ? 0.38 : 0.45;
         const institutionIds = new Set(institutionAssets.map((a) => a.id));
         const retrieved = [
@@ -1889,7 +1940,7 @@ export async function registerRoutes(
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats)) {
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1903,7 +1954,14 @@ export async function registerRoutes(
           embedQuery(message.trim()),
           institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
         ]);
-        const allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+
+        let allSemantic: import("./storage").RetrievedAsset[];
+        if (filtersActive) {
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
+        } else {
+          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+        }
+
         const threshold = institutionName ? 0.38 : 0.45;
         const institutionIds = new Set(institutionAssets.map((a) => a.id));
         const retrieved = [
@@ -1927,7 +1985,7 @@ export async function registerRoutes(
         sendEvent("context", { sessionId: sid, assets: assetPayload });
 
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats)) {
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }

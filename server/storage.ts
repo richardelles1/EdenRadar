@@ -190,6 +190,8 @@ export interface IStorage {
   }>>;
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
+  filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number): Promise<RetrievedAsset[]>;
+  filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string): Promise<number>;
   searchIngestedAssetsByInstitution(name: string, limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
   appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
@@ -1186,6 +1188,83 @@ export class DatabaseStorage implements IStorage {
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE embedding IS NOT NULL AND relevant = true
+      ORDER BY embedding <=> ${vectorStr}::vector
+      LIMIT ${limit}
+    `);
+
+    return (result.rows as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      assetName: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
+      target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
+      modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
+      indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
+      developmentStage: typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? ""),
+      institution: typeof r.institution === "string" ? r.institution : String(r.institution ?? ""),
+      mechanismOfAction: typeof r.mechanism_of_action === "string" && r.mechanism_of_action ? r.mechanism_of_action : null,
+      innovationClaim: typeof r.innovation_claim === "string" && r.innovation_claim ? r.innovation_claim : null,
+      unmetNeed: typeof r.unmet_need === "string" && r.unmet_need ? r.unmet_need : null,
+      comparableDrugs: typeof r.comparable_drugs === "string" && r.comparable_drugs ? r.comparable_drugs : null,
+      completenessScore: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+      licensingReadiness: typeof r.licensing_readiness === "string" && r.licensing_readiness ? r.licensing_readiness : null,
+      ipType: typeof r.ip_type === "string" && r.ip_type ? r.ip_type : null,
+      sourceUrl: typeof r.source_url === "string" && r.source_url ? r.source_url : null,
+      sourceName: typeof r.source_name === "string" && r.source_name ? r.source_name : null,
+      summary: typeof r.summary === "string" && r.summary ? r.summary : null,
+      categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+      technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
+      similarity: parseFloat(String(r.similarity ?? 0)),
+    }));
+  }
+
+  async filteredCount(
+    geoRegex?: string,
+    modality?: string,
+    stage?: string,
+    indication?: string,
+    institutionPattern?: string
+  ): Promise<number> {
+    const conditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
+    if (geoRegex) conditions.push(sql`institution ~* ${geoRegex}`);
+    if (modality) conditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
+    if (stage) conditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
+    if (indication) conditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
+    if (institutionPattern) conditions.push(sql`LOWER(institution) LIKE ${"%" + institutionPattern.toLowerCase() + "%"}`);
+
+    const where = conditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
+    const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM ingested_assets WHERE ${where}`);
+    return Number((result.rows[0] as Record<string, unknown>)?.count ?? 0);
+  }
+
+  async filteredSemanticSearch(
+    queryEmbedding: number[],
+    geoRegex?: string,
+    modality?: string,
+    stage?: string,
+    indication?: string,
+    institutionPattern?: string,
+    limit = 15
+  ): Promise<RetrievedAsset[]> {
+    const vectorStr = `[${queryEmbedding.join(",")}]`;
+    const filterConditions: ReturnType<typeof sql>[] = [
+      sql`embedding IS NOT NULL AND relevant = true`,
+    ];
+    if (geoRegex) filterConditions.push(sql`institution ~* ${geoRegex}`);
+    if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
+    if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
+    if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
+    if (institutionPattern) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institutionPattern.toLowerCase() + "%"}`);
+
+    const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
+
+    const result = await db.execute(sql`
+      SELECT
+        id, asset_name, target, modality, indication, development_stage, institution,
+        mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+        completeness_score, licensing_readiness, ip_type, source_url, source_name,
+        summary, categories, technology_id,
+        1 - (embedding <=> ${vectorStr}::vector) AS similarity
+      FROM ingested_assets
+      WHERE ${where}
       ORDER BY embedding <=> ${vectorStr}::vector
       LIMIT ${limit}
     `);

@@ -17,6 +17,230 @@ export type UserContext = {
   modalities?: string[];
 };
 
+// ── Structured filter types ───────────────────────────────────────────────
+
+export type GeoKey = "us" | "eu" | "uk" | "asia";
+
+export type QueryFilters = {
+  modality?: string;
+  geography?: GeoKey;
+  stage?: string;
+  indication?: string;
+  institution?: string;
+};
+
+export type SessionFocusContext = {
+  modality?: string;
+  geography?: GeoKey;
+  stage?: string;
+  indication?: string;
+  institution?: string;
+};
+
+// In-memory session focus store (ephemeral — fine for this use case)
+const _sessionFocusMap = new Map<string, SessionFocusContext>();
+
+// ── Vocabulary tables ─────────────────────────────────────────────────────
+
+const MODALITY_ALIASES: Record<string, string> = {
+  "gene therapy": "Gene Therapy",
+  "gene editing": "Gene Editing",
+  "cell therapy": "Cell Therapy",
+  "car-t": "CAR-T",
+  "car t": "CAR-T",
+  "small molecule": "Small Molecule",
+  "antibody": "Antibody",
+  "monoclonal antibody": "Antibody",
+  "mrna": "mRNA",
+  "rna therapeutics": "RNA Therapeutics",
+  "sirna": "siRNA",
+  "antisense": "Antisense",
+  "protac": "PROTAC",
+  "adc": "ADC",
+  "antibody-drug conjugate": "ADC",
+  "bispecific": "Bispecific Antibody",
+  "vaccine": "Vaccine",
+  "peptide": "Peptide",
+  "nanoparticle": "Nanoparticle",
+  "protein therapy": "Protein/Biologics",
+  "protein replacement": "Protein/Biologics",
+};
+
+const GEO_DETECT: Record<string, GeoKey> = {
+  "american": "us",
+  " us ": "us",
+  "u.s.": "us",
+  "united states": "us",
+  "u.s.-based": "us",
+  "us-based": "us",
+  "domestic": "us",
+  "european": "eu",
+  " eu ": "eu",
+  "europe ": "eu",
+  "british": "uk",
+  " uk ": "uk",
+  "u.k.": "uk",
+  "united kingdom": "uk",
+  " england ": "uk",
+  "asian": "asia",
+  "japanese": "asia",
+  "chinese": "asia",
+  "korean": "asia",
+};
+
+export const GEO_INSTITUTION_REGEX: Record<GeoKey, string> = {
+  us: "Stanford|MIT|Harvard|Yale|Princeton|Columbia|UCLA|UCSF|Duke|Cornell|Michigan|Washington University|Johns Hopkins|Vanderbilt|Emory|NYU|Northwestern|Penn State|UNC|Pittsburgh|Mayo|NIH|MD Anderson|Memorial Sloan|Carnegie Mellon|Georgia Tech|Purdue|Minnesota|Colorado|Florida|Illinois|USC|Rockefeller|Salk|Scripps|Caltech|UC Berkeley|UC San|WUSTL|Baylor|Tufts|Brown|Dartmouth|Georgetown|Cincinnati|Utah|Arizona|Nebraska|Virginia|UC Davis|UC Irvine|Case Western|Icahn|Sinai|Weill Cornell|Wake Forest|Texas A|Notre Dame|Rice University|Tulane|Oregon Health",
+  uk: "Oxford|Cambridge|Imperial College|University College London|UCL|King.s College|Edinburgh|Manchester|Glasgow|Bristol|Wellcome|Sanger|Francis Crick|Babraham|Sheffield|Leeds|Newcastle|Liverpool|Exeter|Bath|Surrey|Dundee|Nottingham|Birmingham|Cardiff|Aberdeen|Queen Mary|Royal College|Barts|Guy.s|St Thomas",
+  eu: "ETH Zurich|EPFL|Karolinska|LMU Munich|Technical University Munich|TU Munich|Heidelberg|Max Planck|Charité|KU Leuven|Ghent|Erasmus|University of Amsterdam|Utrecht|Leiden|Copenhagen|Aarhus|Stockholm|Uppsala|Paris|Sorbonne|Pasteur|CNRS|INSERM|Bologna|Milan|Rome|Padova|Madrid|Barcelona|Valencia|Vienna|Zurich|Basel|Bern|Lausanne|Maastricht|Lund|Gothenburg|Helsinki|Oslo|Bergen|Groningen|Bonn|Frankfurt|Hamburg|Berlin|Dresden|Leipzig|Freiburg|Tübingen",
+  asia: "University of Tokyo|Kyoto|Osaka|Keio|RIKEN|Seoul National|KAIST|Tsinghua|Peking|Fudan|National University of Singapore|NUS|University of Hong Kong|Hong Kong|Chinese University|Yonsei|Monash|Melbourne|Sydney|Queensland|Auckland",
+};
+
+const STAGE_DETECT: Array<[RegExp, string]> = [
+  [/\bpreclinical\b|pre-clinical\b/i, "preclinical"],
+  [/\bphase\s*1\b|phase\s*i\b/i, "phase 1"],
+  [/\bphase\s*2\b|phase\s*ii\b/i, "phase 2"],
+  [/\bphase\s*3\b|phase\s*iii\b/i, "phase 3"],
+  [/\bind-enabling\b|ind enabling\b/i, "IND-enabling"],
+  [/\bdiscovery\b/i, "discovery"],
+  [/\bclinical\b/i, "clinical"],
+  [/\bapproved\b/i, "approved"],
+];
+
+const INDICATION_KEYWORDS = [
+  "oncology", "cancer", "tumor", "tumour", "leukemia", "lymphoma", "glioblastoma",
+  "neurology", "neurodegenerative", "alzheimer", "parkinson", "als", "huntington", "neurological",
+  "rare disease", "orphan disease", "genetic disorder", "monogenic",
+  "autoimmune", "inflammation", "inflammatory", "rheumatoid", "lupus", "crohn",
+  "metabolic", "obesity", "diabetes", "mash", "nash", "fatty liver",
+  "cardiovascular", "cardiac", "heart failure", "stroke", "atherosclerosis",
+  "infectious disease", "hiv", "covid", "tuberculosis", "malaria", "antimicrobial",
+  "respiratory", "asthma", "copd", "pulmonary",
+  "ophthalmic", "ocular", "retinal", "macular",
+  "dermatology", "skin", "fibrosis", "psoriasis",
+  "musculoskeletal", "bone", "muscle dystrophy",
+  "renal", "kidney", "liver disease",
+  "immunology", "immunotherapy", "checkpoint inhibitor",
+];
+
+// ── Detection helpers ─────────────────────────────────────────────────────
+
+function detectModality(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  for (const [alias, canonical] of Object.entries(MODALITY_ALIASES)) {
+    if (lower.includes(alias)) return canonical;
+  }
+  return undefined;
+}
+
+function detectGeography(text: string): GeoKey | undefined {
+  const padded = ` ${text.toLowerCase()} `;
+  for (const [pattern, geo] of Object.entries(GEO_DETECT)) {
+    if (padded.includes(pattern)) return geo;
+  }
+  return undefined;
+}
+
+function detectStage(text: string): string | undefined {
+  for (const [rx, canonical] of STAGE_DETECT) {
+    if (rx.test(text)) return canonical;
+  }
+  return undefined;
+}
+
+function detectIndication(text: string): string | undefined {
+  const lower = text.toLowerCase();
+  for (const kw of INDICATION_KEYWORDS) {
+    if (lower.includes(kw)) return kw;
+  }
+  return undefined;
+}
+
+// ── Public filter API ─────────────────────────────────────────────────────
+
+export function parseQueryFilters(query: string, sessionContext?: SessionFocusContext): QueryFilters {
+  const filters: QueryFilters = {};
+
+  const modality = detectModality(query);
+  if (modality) filters.modality = modality;
+  else if (sessionContext?.modality) filters.modality = sessionContext.modality;
+
+  const geography = detectGeography(query);
+  if (geography) filters.geography = geography;
+  else if (sessionContext?.geography) filters.geography = sessionContext.geography;
+
+  const stage = detectStage(query);
+  if (stage) filters.stage = stage;
+  else if (sessionContext?.stage) filters.stage = sessionContext.stage;
+
+  const indication = detectIndication(query);
+  if (indication) filters.indication = indication;
+  else if (sessionContext?.indication) filters.indication = sessionContext.indication;
+
+  if (sessionContext?.institution) filters.institution = sessionContext.institution;
+
+  return filters;
+}
+
+export function hasMeaningfulFilters(filters: QueryFilters): boolean {
+  return !!(filters.modality || filters.geography || filters.stage || filters.indication || filters.institution);
+}
+
+// ── Session focus management ──────────────────────────────────────────────
+
+const RESET_PATTERNS = [
+  /\b(?:start fresh|start over|reset|clear filters?|new search|forget(?: that)?|remove filter|broaden|show everything|all assets?|no filter)\b/i,
+  /\b(?:scratch that|never ?mind|actually let'?s|let'?s try something different)\b/i,
+];
+
+function shouldResetFocus(message: string): boolean {
+  return RESET_PATTERNS.some((r) => r.test(message));
+}
+
+function extractFocusUpdates(message: string, current: SessionFocusContext): SessionFocusContext {
+  if (shouldResetFocus(message)) return {};
+
+  const updated = { ...current };
+
+  const modality = detectModality(message);
+  if (modality) updated.modality = modality;
+
+  const geography = detectGeography(message);
+  if (geography) updated.geography = geography;
+
+  const stage = detectStage(message);
+  if (stage) updated.stage = stage;
+
+  const indication = detectIndication(message);
+  if (indication) updated.indication = indication;
+
+  const instMatch = message.match(
+    /(?:from|at|by)\s+([\w\s]+?(?:university|institute|college|hospital|MIT|Stanford|Harvard|Yale|Columbia|Duke|Cornell|Johns Hopkins)[\w\s]*)/i
+  );
+  if (instMatch?.[1]) {
+    updated.institution = instMatch[1].trim();
+  }
+
+  return updated;
+}
+
+export function getOrUpdateSessionFocus(sessionId: string, message: string): SessionFocusContext {
+  const current = _sessionFocusMap.get(sessionId) ?? {};
+  const updated = extractFocusUpdates(message, current);
+  _sessionFocusMap.set(sessionId, updated);
+  return updated;
+}
+
+export function buildFocusContextBlock(focus: SessionFocusContext): string {
+  const parts: string[] = [];
+  if (focus.geography) parts.push(`Geography: ${focus.geography.toUpperCase()} institutions`);
+  if (focus.modality) parts.push(`Modality: ${focus.modality}`);
+  if (focus.stage) parts.push(`Stage: ${focus.stage}`);
+  if (focus.indication) parts.push(`Indication area: ${focus.indication}`);
+  if (focus.institution) parts.push(`Institution: ${focus.institution}`);
+  if (!parts.length) return "";
+  return `## Active session focus\n${parts.join(" | ")}\n\nWhen answering, naturally acknowledge the active filters. If the user asks a count question, use the filtered count, not the global total.`;
+}
+
 // ── Portfolio stats cache (10-minute TTL) ────────────────────────────────────
 
 export type PortfolioStats = {
@@ -121,7 +345,8 @@ When asked "how many" questions, use these numbers. Do not count from retrieved 
 // ── Aggregation query detection and execution ─────────────────────────────
 
 const AGG_PATTERNS = [
-  /how many\s+(?:assets?|technologies?|compounds?|programs?|drugs?)/i,
+  // Broad "how many" — catch any variant
+  /how many/i,
   /count\s+(?:of\s+)?(?:assets?|technologies?|compounds?)/i,
   /how much\s+(?:work|research)/i,
   /top\s+(?:\d+\s+)?institutions?/i,
@@ -138,6 +363,16 @@ const AGG_PATTERNS = [
   /asset\s+count/i,
   /how\s+active\s+is/i,
   /portfolio\s+of\s+\w/i,
+  // Conversational count phrasings
+  /what'?s\s+the\s+total/i,
+  /give\s+me\s+(?:a\s+)?count/i,
+  /(?:total|overall)\s+count/i,
+  /how\s+many\s+do\s+you\s+have/i,
+  /how\s+many\s+are\s+there/i,
+  /how\s+many\s+in\s+(?:the\s+)?(?:database|system|portfolio|index)/i,
+  /(?:what|give me|show me)\s+(?:the\s+)?(?:total|count|number)/i,
+  /how\s+large\s+is\s+(?:the\s+)?(?:database|portfolio|index)/i,
+  /size\s+of\s+(?:the\s+)?(?:database|portfolio|index)/i,
 ];
 
 export function isAggregationQuery(query: string): boolean {
@@ -457,7 +692,11 @@ When the message begins with QUERY RESULT:, you have precise data from the datab
 ✓ Strong:
 **Asset Name** (Institution) — A first-in-class PROTAC targeting [protein] with demonstrated degradation in primary patient samples, at a stage where the key next step is selectivity profiling before IND filing.`;
 
-function buildSystemPrompt(userContext?: UserContext, portfolioStats?: PortfolioStats): string {
+function buildSystemPrompt(
+  userContext?: UserContext,
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
+): string {
   const parts: string[] = [BASE_SYSTEM_PROMPT];
 
   if (portfolioStats && portfolioStats.total > 0) {
@@ -471,6 +710,11 @@ function buildSystemPrompt(userContext?: UserContext, portfolioStats?: Portfolio
     if (contextBlock) parts.push(contextBlock);
   }
 
+  if (focusContext) {
+    const focusBlock = buildFocusContextBlock(focusContext);
+    if (focusBlock) parts.push(focusBlock);
+  }
+
   return parts.join("\n\n");
 }
 
@@ -479,10 +723,11 @@ export async function* ragQuery(
   assets: RetrievedAsset[],
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
-  portfolioStats?: PortfolioStats
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
-  const systemPrompt = buildSystemPrompt(userContext, portfolioStats);
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -513,9 +758,10 @@ export async function* directQuery(
   question: string,
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
-  portfolioStats?: PortfolioStats
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
 ): AsyncGenerator<string> {
-  const systemPrompt = buildSystemPrompt(userContext, portfolioStats);
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
     { role: "system", content: systemPrompt },
@@ -543,9 +789,10 @@ export async function* aggregationQuery(
   queryResult: string,
   conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
   userContext?: UserContext,
-  portfolioStats?: PortfolioStats
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
 ): AsyncGenerator<string> {
-  const systemPrompt = buildSystemPrompt(userContext, portfolioStats);
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
     { role: "system", content: systemPrompt },
