@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, semanticSearch, ragQuery } from "./lib/eden/rag";
+import { embedQuery, ragQuery } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1638,7 +1638,7 @@ export async function registerRoutes(
       return res.status(400).json({ error: "message is required" });
     }
 
-    const sid = (typeof sessionId === "string" && sessionId) || `eden-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const sid = (typeof sessionId === "string" && sessionId) || crypto.randomUUID();
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -1651,12 +1651,12 @@ export async function registerRoutes(
 
     try {
       const session = await storage.getOrCreateEdenSession(sid);
-      const history = (session.turns ?? []).map((t) => ({ role: t.role, content: t.content }));
+      const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
-      await storage.appendEdenTurn(sid, { role: "user", content: message.trim() });
+      await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
       const queryEmbedding = await embedQuery(message.trim());
-      const retrieved = await semanticSearch(queryEmbedding, 8);
+      const retrieved = await storage.semanticSearch(queryEmbedding, 15);
 
       sendEvent("context", {
         sessionId: sid,
@@ -1666,6 +1666,8 @@ export async function registerRoutes(
           institution: a.institution,
           indication: a.indication,
           modality: a.modality,
+          ipType: a.ipType,
+          sourceName: a.sourceName,
           similarity: Math.round(a.similarity * 100) / 100,
         })),
       });
@@ -1676,7 +1678,19 @@ export async function registerRoutes(
         sendEvent("token", { text: token });
       }
 
-      await storage.appendEdenTurn(sid, {
+      if (retrieved.length > 0) {
+        const citationLines = retrieved
+          .filter((a) => a.assetName && a.institution)
+          .map((a) => {
+            const link = a.sourceUrl ? ` — [View](${a.sourceUrl})` : "";
+            return `- **${a.assetName}** (${a.institution})${link}`;
+          });
+        const citationBlock = `\n\n## Sources\n${citationLines.join("\n")}`;
+        sendEvent("token", { text: citationBlock });
+        fullResponse += citationBlock;
+      }
+
+      await storage.appendEdenMessage(sid, {
         role: "assistant",
         content: fullResponse,
         assetIds: retrieved.map((a) => a.id),

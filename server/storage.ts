@@ -18,6 +18,28 @@ import {
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or } from "drizzle-orm";
 
+export type RetrievedAsset = {
+  id: number;
+  assetName: string;
+  target: string;
+  modality: string;
+  indication: string;
+  developmentStage: string;
+  institution: string;
+  mechanismOfAction: string | null;
+  innovationClaim: string | null;
+  unmetNeed: string | null;
+  comparableDrugs: string | null;
+  completenessScore: number | null;
+  licensingReadiness: string | null;
+  ipType: string | null;
+  sourceUrl: string | null;
+  sourceName: string | null;
+  summary: string | null;
+  categories: string | null;
+  similarity: number;
+};
+
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
@@ -156,8 +178,9 @@ export interface IStorage {
     unmetNeed: string | null; comparableDrugs: string | null;
   }>>;
 
+  semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
-  appendEdenTurn(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
+  appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
   listEdenSessions(limit?: number): Promise<EdenSession[]>;
 }
@@ -1082,26 +1105,64 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
+  async semanticSearch(queryEmbedding: number[], limit = 15): Promise<RetrievedAsset[]> {
+    const vectorStr = `[${queryEmbedding.join(",")}]`;
+    const result = await db.execute(sql`
+      SELECT
+        id, asset_name, target, modality, indication, development_stage, institution,
+        mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+        completeness_score, licensing_readiness, ip_type, source_url, source_name,
+        summary, categories,
+        1 - (embedding <=> ${vectorStr}::vector) AS similarity
+      FROM ingested_assets
+      WHERE embedding IS NOT NULL AND relevant = true
+      ORDER BY embedding <=> ${vectorStr}::vector
+      LIMIT ${limit}
+    `);
+
+    return (result.rows as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      assetName: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
+      target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
+      modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
+      indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
+      developmentStage: typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? ""),
+      institution: typeof r.institution === "string" ? r.institution : String(r.institution ?? ""),
+      mechanismOfAction: typeof r.mechanism_of_action === "string" && r.mechanism_of_action ? r.mechanism_of_action : null,
+      innovationClaim: typeof r.innovation_claim === "string" && r.innovation_claim ? r.innovation_claim : null,
+      unmetNeed: typeof r.unmet_need === "string" && r.unmet_need ? r.unmet_need : null,
+      comparableDrugs: typeof r.comparable_drugs === "string" && r.comparable_drugs ? r.comparable_drugs : null,
+      completenessScore: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+      licensingReadiness: typeof r.licensing_readiness === "string" && r.licensing_readiness ? r.licensing_readiness : null,
+      ipType: typeof r.ip_type === "string" && r.ip_type ? r.ip_type : null,
+      sourceUrl: typeof r.source_url === "string" && r.source_url ? r.source_url : null,
+      sourceName: typeof r.source_name === "string" && r.source_name ? r.source_name : null,
+      summary: typeof r.summary === "string" && r.summary ? r.summary : null,
+      categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+      similarity: parseFloat(String(r.similarity ?? 0)),
+    }));
+  }
+
   async getOrCreateEdenSession(sessionId: string): Promise<EdenSession> {
     const [existing] = await db.select().from(edenSessions).where(eq(edenSessions.sessionId, sessionId));
     if (existing) return existing;
     const [created] = await db
       .insert(edenSessions)
-      .values({ sessionId, turns: [] })
+      .values({ sessionId, messages: [] })
       .returning();
     return created;
   }
 
-  async appendEdenTurn(
+  async appendEdenMessage(
     sessionId: string,
     turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }
   ): Promise<EdenSession> {
     const session = await this.getOrCreateEdenSession(sessionId);
     const newTurn = { ...turn, ts: new Date().toISOString() };
-    const updatedTurns = [...(session.turns ?? []), newTurn];
+    const updatedMessages = [...(session.messages ?? []), newTurn];
     const [updated] = await db
       .update(edenSessions)
-      .set({ turns: updatedTurns, updatedAt: new Date() })
+      .set({ messages: updatedMessages, updatedAt: new Date() })
       .where(eq(edenSessions.sessionId, sessionId))
       .returning();
     return updated;

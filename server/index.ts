@@ -81,10 +81,21 @@ app.use((req, res, next) => {
       CREATE TABLE IF NOT EXISTS eden_sessions (
         id serial PRIMARY KEY,
         session_id text NOT NULL UNIQUE,
-        turns jsonb NOT NULL DEFAULT '[]'::jsonb,
+        messages jsonb NOT NULL DEFAULT '[]'::jsonb,
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
+    `);
+    await db.execute(sql`
+      DO $$
+      BEGIN
+        IF EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'eden_sessions' AND column_name = 'turns'
+        ) THEN
+          ALTER TABLE eden_sessions RENAME COLUMN turns TO messages;
+        END IF;
+      END $$
     `);
     log("[startup] eden_sessions table ready", "startup");
   } catch (err: any) {
