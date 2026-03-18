@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { db } from "../db";
+import { db } from "../../db";
 import { sql } from "drizzle-orm";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });

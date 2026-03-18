@@ -3,6 +3,8 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { sql } from "drizzle-orm";
 
 const app = express();
 const httpServer = createServer(app);
@@ -61,6 +63,34 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // ── Startup migrations: ensure pgvector + embedding column ───────────────
+  try {
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+    await db.execute(sql`
+      ALTER TABLE ingested_assets
+      ADD COLUMN IF NOT EXISTS embedding vector(1536)
+    `);
+    log("[startup] pgvector extension and embedding column ready", "startup");
+  } catch (err: any) {
+    log(`[startup] pgvector migration skipped or failed: ${err?.message}`, "startup");
+  }
+
+  // ── Ensure eden_sessions table exists ────────────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS eden_sessions (
+        id serial PRIMARY KEY,
+        session_id text NOT NULL UNIQUE,
+        turns jsonb NOT NULL DEFAULT '[]'::jsonb,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] eden_sessions table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] eden_sessions migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"
