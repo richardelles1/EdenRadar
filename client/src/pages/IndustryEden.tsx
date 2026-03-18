@@ -281,23 +281,18 @@ function EmptyState({
   streaming,
   totalIndexed,
   profile,
+  introPlayed,
+  onIntroDone,
 }: {
   onSend: (q: string) => void;
   streaming: boolean;
   totalIndexed: number;
   profile: ReturnType<typeof getIndustryProfile>;
+  introPlayed: boolean;
+  onIntroDone: () => void;
 }) {
-  const [introPlayed, setIntroPlayed] = useState(() => {
-    try { return sessionStorage.getItem("eden-intro-played") === "1"; } catch { return false; }
-  });
-
-  function handleIntroDone() {
-    try { sessionStorage.setItem("eden-intro-played", "1"); } catch {}
-    setIntroPlayed(true);
-  }
-
   if (!introPlayed) {
-    return <EdenIntro onDone={handleIntroDone} />;
+    return <EdenIntro onDone={onIntroDone} />;
   }
 
   const greetName = profile.companyName || null;
@@ -345,7 +340,7 @@ function EmptyState({
 
       {/* Prompt cards grid — 2×3 or 2×2 on mobile */}
       <div
-        className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
         style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
       >
         {PROMPT_CARDS.map((card, i) => {
@@ -375,6 +370,12 @@ export default function IndustryEden() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
   const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
+
+  // Intro animation state — only suppress once user has sent their first message
+  const [introPlayed, setIntroPlayed] = useState(() => {
+    try { return sessionStorage.getItem("eden-intro-played") === "1"; } catch { return false; }
+  });
+  const handleIntroDone = () => setIntroPlayed(true);
 
   // Read industry profile from localStorage for context injection
   const profile = useMemo(() => getIndustryProfile(), []);
@@ -422,6 +423,13 @@ export default function IndustryEden() {
     clearChat,
     loadSession,
   } = useEdenChat(SITE_PW, userContext);
+
+  // Mark intro as permanently played (this session) once the user sends their first message
+  useEffect(() => {
+    if (messages.length > 0) {
+      try { sessionStorage.setItem("eden-intro-played", "1"); } catch {}
+    }
+  }, [messages.length]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -647,6 +655,8 @@ export default function IndustryEden() {
                 streaming={streaming}
                 totalIndexed={totalIndexed}
                 profile={profile}
+                introPlayed={introPlayed}
+                onIntroDone={handleIntroDone}
               />
             )}
 

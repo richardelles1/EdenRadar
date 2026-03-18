@@ -1,5 +1,8 @@
 import OpenAI from "openai";
 import type { RetrievedAsset } from "../../storage";
+import { db } from "../../db";
+import { ingestedAssets } from "../../../shared/schema";
+import { sql, desc } from "drizzle-orm";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const EMBED_MODEL = "text-embedding-3-small";
@@ -14,14 +17,156 @@ export type UserContext = {
   modalities?: string[];
 };
 
-export async function embedQuery(query: string): Promise<number[]> {
-  const response = await client.embeddings.create({
-    model: EMBED_MODEL,
-    input: query.slice(0, 8000),
-  });
-  return response.data[0].embedding;
+// ── Aggregation query detection and execution ─────────────────────────────
+
+const AGG_PATTERNS = [
+  /how many\s+(?:assets?|technologies?|compounds?|programs?|drugs?)/i,
+  /count\s+(?:of\s+)?(?:assets?|technologies?|compounds?)/i,
+  /how much\s+(?:work|research)/i,
+  /top\s+(?:\d+\s+)?institutions?/i,
+  /which institutions?\s+(?:has|have|lead|are)/i,
+  /number\s+of\s+(?:assets?|technologies?)/i,
+  /breakdown\s+(?:of|by)\s+(?:institution|modality|stage)/i,
+  /(?:modality|stage)\s+breakdown/i,
+  /most\s+(?:assets?|active)\s+(?:in|for)/i,
+  /what(?:'s| is) the\s+(?:most|largest|biggest)\s+/i,
+  /newest\s+assets?\s+from/i,
+  /latest\s+(?:from|out of)/i,
+  /list\s+all\s+(?:institutions?|universities)/i,
+  /asset\s+count/i,
+  /how\s+active\s+is/i,
+  /portfolio\s+of\s+\w/i,
+];
+
+export function isAggregationQuery(query: string): boolean {
+  return AGG_PATTERNS.some((p) => p.test(query));
 }
 
+type AggResult = Record<string, unknown>[];
+
+async function runCountByInstitution(area?: string): Promise<AggResult> {
+  const rows = await db
+    .select({ institution: ingestedAssets.institution, count: sql<number>`count(*)::int` })
+    .from(ingestedAssets)
+    .where(
+      area
+        ? sql`${ingestedAssets.relevant} = true AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"} OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
+        : sql`${ingestedAssets.relevant} = true`
+    )
+    .groupBy(ingestedAssets.institution)
+    .orderBy(sql`count(*) DESC`)
+    .limit(15);
+  return rows as AggResult;
+}
+
+async function runCountByModality(): Promise<AggResult> {
+  const rows = await db
+    .select({ modality: ingestedAssets.modality, count: sql<number>`count(*)::int` })
+    .from(ingestedAssets)
+    .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.modality} != 'unknown'`)
+    .groupBy(ingestedAssets.modality)
+    .orderBy(sql`count(*) DESC`)
+    .limit(15);
+  return rows as AggResult;
+}
+
+async function runCountByStage(): Promise<AggResult> {
+  const rows = await db
+    .select({ stage: ingestedAssets.developmentStage, count: sql<number>`count(*)::int` })
+    .from(ingestedAssets)
+    .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.developmentStage} != 'unknown'`)
+    .groupBy(ingestedAssets.developmentStage)
+    .orderBy(sql`count(*) DESC`)
+    .limit(12);
+  return rows as AggResult;
+}
+
+async function runNewestByInstitution(institution: string): Promise<AggResult> {
+  const rows = await db
+    .select({
+      assetName: ingestedAssets.assetName,
+      indication: ingestedAssets.indication,
+      modality: ingestedAssets.modality,
+      developmentStage: ingestedAssets.developmentStage,
+      firstSeenAt: ingestedAssets.firstSeenAt,
+    })
+    .from(ingestedAssets)
+    .where(sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${institution.toLowerCase() + "%"}`)
+    .orderBy(desc(ingestedAssets.firstSeenAt))
+    .limit(8);
+  return rows as AggResult;
+}
+
+// Detect which aggregation to run based on query keywords
+async function resolveAggregationQuery(query: string): Promise<string | null> {
+  const lower = query.toLowerCase();
+
+  // Stage breakdown
+  if (/stage|phases?\s+break/i.test(lower) && !/which|who|what assets/i.test(lower)) {
+    const rows = await runCountByStage();
+    if (!rows.length) return null;
+    const lines = rows.map((r) => `  • ${r["stage"]}: ${r["count"]} assets`).join("\n");
+    return `**Development stage breakdown** across all relevant assets:\n${lines}`;
+  }
+
+  // Modality breakdown
+  if (/modali|small molecule|antibod|gene therapy|cell therapy/i.test(lower) && /breakdown|count|how many|split/i.test(lower)) {
+    const rows = await runCountByModality();
+    if (!rows.length) return null;
+    const lines = rows.map((r) => `  • ${r["modality"]}: ${r["count"]} assets`).join("\n");
+    return `**Modality breakdown** across the indexed portfolio:\n${lines}`;
+  }
+
+  // Newest by specific institution
+  const instMatch = lower.match(/newest|latest|recent.*(?:from|at|out of)\s+([a-z\s]+?)(?:\s+tto|\s+university|\s+institute|\s+college|$)/i);
+  if (instMatch?.[1]) {
+    const inst = instMatch[1].trim();
+    const rows = await runNewestByInstitution(inst);
+    if (!rows.length) return null;
+    const lines = rows.map((r) => `  • ${r["assetName"]} (${r["modality"]}, ${r["developmentStage"]}, ${r["indication"]})`).join("\n");
+    return `**Most recent assets from ${inst.replace(/\b\w/g, (c) => c.toUpperCase())}** in the database:\n${lines}`;
+  }
+
+  // Top institutions in an area
+  const areaMatch = lower.match(/(?:top\s+institutions?|who(?:'s|\s+is|\s+are)?\s+(?:most active|leading|doing the most)|which institutions?)\s+(?:in|for|working on)\s+(.+?)(?:\?|$)/i);
+  if (areaMatch?.[1]) {
+    const area = areaMatch[1].trim().replace(/\?$/, "");
+    const rows = await runCountByInstitution(area);
+    if (!rows.length) return null;
+    const lines = rows.slice(0, 10).map((r) => `  • ${r["institution"]}: ${r["count"]} assets`).join("\n");
+    return `**Top institutions** in ${area}:\n${lines}`;
+  }
+
+  // General institution count or "how many" per institution
+  if (/how many.*(?:does|from|at)\s+([A-Za-z]+)(?:\s+tto|\s+university|\s+institute)?/i.test(query)) {
+    const m = query.match(/how many.*(?:does|from|at)\s+([A-Za-z]+(?:\s+[A-Za-z]+)?)/i);
+    if (m?.[1]) {
+      const rows = await runCountByInstitution(m[1].trim());
+      const match = rows.find((r) => String(r["institution"]).toLowerCase().includes(m[1].toLowerCase()));
+      if (match) return `**${match["institution"]}** has **${match["count"]} assets** in the database.`;
+    }
+  }
+
+  // General how many (total or by area)
+  if (/how many\s+(?:assets?|technologies?)/i.test(lower)) {
+    const areaHint = lower.match(/(?:in|for|related to|on)\s+([a-z\s]+?)(?:\s+are|\s+exist|\?|$)/i)?.[1]?.trim();
+    const rows = await runCountByInstitution(areaHint || undefined);
+    if (!rows.length) return null;
+    const total = rows.reduce((s, r) => s + (r["count"] as number), 0);
+    if (areaHint) {
+      const top3 = rows.slice(0, 3).map((r) => `${r["institution"]} (${r["count"]})`).join(", ");
+      return `There are **${total} assets** related to "${areaHint}" across the indexed portfolio. Top institutions: ${top3}.`;
+    }
+    const top5 = rows.slice(0, 5).map((r) => `${r["institution"]} (${r["count"]})`).join(", ");
+    return `There are **${total} relevant assets** in total. The most active institutions: ${top5}.`;
+  }
+
+  return null;
+}
+
+export { resolveAggregationQuery };
+
+// ── Conversational detection ──────────────────────────────────────────────
 const BIOTECH_SIGNALS = [
   "target", "mechanism", "moa", "modality", "antibody", "therapeutic", "biologic",
   "gene", "protein", "receptor", "kinase", "inhibitor", "agonist", "antagonist",
@@ -43,6 +188,15 @@ export function isConversational(query: string): boolean {
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
     return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i").test(lower);
   });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+export async function embedQuery(query: string): Promise<number[]> {
+  const response = await client.embeddings.create({
+    model: EMBED_MODEL,
+    input: query.slice(0, 8000),
+  });
+  return response.data[0].embedding;
 }
 
 function buildUserContextBlock(ctx: UserContext): string {
@@ -97,6 +251,9 @@ When someone greets you, asks something casual, or follows up conversationally, 
 - If retrieved assets don't fully address the question, say so honestly and briefly
 - Do NOT include a Sources section — asset cards are shown separately
 - Use markdown sparingly — bold asset names, nothing else unless complexity demands it
+
+## Aggregation query results
+When the message begins with QUERY RESULT:, you are given precise data from the database. Present it conversationally — do not repeat the raw table, weave it into natural language. Use it to answer the user's question accurately. Do not say you don't have the data.
 
 ## Opening styles — vary these, do not repeat the same style consecutively
 - **Observational**: Lead with a landscape observation ("There's genuine momentum here…", "This space is moving fast…", "A few things stand out in this area…")
@@ -190,6 +347,38 @@ export async function* directQuery(
     stream: true,
     temperature: 0.7,
     max_tokens: 280,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
+// ── Aggregation query with conversational formatting ──────────────────────
+export async function* aggregationQuery(
+  question: string,
+  queryResult: string,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext
+): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext);
+
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-6),
+    {
+      role: "user",
+      content: `QUERY RESULT:\n${queryResult}\n\nUSER QUESTION: ${question}\n\nPresent the above data conversationally in 2-4 sentences. Be specific with numbers. Offer a follow-up.`,
+    },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
+    stream: true,
+    temperature: 0.4,
+    max_tokens: 300,
   });
 
   for await (const chunk of stream) {

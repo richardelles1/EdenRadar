@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, isConversational, type UserContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, type UserContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1842,6 +1842,54 @@ export async function registerRoutes(
           content: fullResponse,
           assetIds: [],
           assets: [],
+        });
+      } else if (isAggregationQuery(message.trim())) {
+        // Try deterministic SQL aggregation first; fall through to RAG if no result
+        const queryResult = await resolveAggregationQuery(message.trim()).catch(() => null);
+        if (queryResult) {
+          sendEvent("context", { sessionId: sid, assets: [] });
+          let fullResponse = "";
+          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx)) {
+            fullResponse += token;
+            sendEvent("token", { text: token });
+          }
+          await storage.appendEdenMessage(sid, {
+            role: "assistant",
+            content: fullResponse,
+            assetIds: [],
+            assets: [],
+          });
+          sendEvent("done", { sessionId: sid });
+          return;
+        }
+        // Fall through to RAG if aggregation produced no data
+        const institutionName = detectInstitutionKeyword(message.trim());
+        const [queryEmbedding, institutionAssets] = await Promise.all([
+          embedQuery(message.trim()),
+          institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
+        ]);
+        const allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+        const threshold = institutionName ? 0.38 : 0.45;
+        const institutionIds = new Set(institutionAssets.map((a) => a.id));
+        const retrieved = [
+          ...institutionAssets,
+          ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
+        ].slice(0, 15);
+        const assetPayload = retrieved.map((a) => ({
+          id: a.id, assetName: a.assetName, institution: a.institution,
+          indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
+          similarity: Math.round(a.similarity * 100) / 100,
+        }));
+        sendEvent("context", { sessionId: sid, assets: assetPayload });
+        let fullResponse = "";
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, {
+          role: "assistant", content: fullResponse,
+          assetIds: retrieved.map((a) => a.id), assets: assetPayload,
         });
       } else {
         const institutionName = detectInstitutionKeyword(message.trim());
