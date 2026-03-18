@@ -40,6 +40,7 @@ export type SearchHistory = typeof searchHistory.$inferSelect;
 
 export const savedAssets = pgTable("saved_assets", {
   id: serial("id").primaryKey(),
+  ingestedAssetId: integer("ingested_asset_id"),
   assetName: text("asset_name").notNull(),
   target: text("target").notNull(),
   modality: text("modality").notNull(),
@@ -131,6 +132,8 @@ export const ingestedAssets = pgTable("ingested_assets", {
   contactEmail: text("contact_email"),
   technologyId: text("technology_id"),
   abstract: text("abstract"),
+  // source_name added via startup migration; declared here for type safety
+  sourceName: text("source_name"),
   // NOTE: embedding column is managed via startup migration (CREATE EXTENSION vector + ADD COLUMN IF NOT EXISTS)
   // This declaration provides TypeScript type safety; actual column creation is handled at server startup.
   embedding: vector1536("embedding"),

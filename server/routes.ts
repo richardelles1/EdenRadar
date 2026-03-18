@@ -221,6 +221,7 @@ const dossierBodySchema = z.object({
 });
 
 const saveAssetBodySchema = z.object({
+  ingested_asset_id: z.number().int().optional(),
   asset_name: z.string(),
   target: z.string(),
   modality: z.string(),
@@ -572,6 +573,7 @@ export async function registerRoutes(
     try {
       const body = saveAssetBodySchema.parse(req.body);
       const asset = await storage.createSavedAsset({
+        ingestedAssetId: body.ingested_asset_id ?? null,
         assetName: body.asset_name,
         target: body.target,
         modality: body.modality,
