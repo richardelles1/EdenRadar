@@ -48,8 +48,8 @@ export async function searchTechTransfer(query: string, maxResults = 50): Promis
     }
 
     return rows.map(toSignal);
-  } catch (err: any) {
-    console.warn("[techtransfer] DB search failed:", err?.message);
+  } catch (err: unknown) {
+    console.warn("[techtransfer] DB search failed:", err instanceof Error ? err.message : String(err));
     return [];
   }
 }
