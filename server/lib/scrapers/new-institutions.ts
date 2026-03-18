@@ -1606,9 +1606,15 @@ export const morganStateScraper: InstitutionScraper = {
     const INST = "Morgan State University";
     const BASE = "https://www.morgan.edu";
     const PAGES = [
-      { path: "/technology-transfer-and-intellectual-property/issued-patents", label: "issued" },
-      { path: "/technology-transfer-and-intellectual-property/pending-utility-patents", label: "pending" },
+      { path: "/technology-transfer-and-intellectual-property/issued-patents" },
+      { path: "/technology-transfer-and-intellectual-property/pending-utility-patents" },
     ];
+
+    // Biotech/STEM relevance filter — accept rows whose title contains at least one
+    // domain-relevant keyword. Morgan State's patent portfolio is primarily STEM/
+    // biomedical; this filters out any navigation or header text that slips through.
+    const BIOTECH_RE =
+      /\b(method|system|device|apparatus|sensor|detection|imaging|signal|network|algorithm|circuit|composition|compound|nano|bio|cell|gene|protein|drug|therapy|treatment|vaccine|antibody|assay|diagnostic|material|energy|power|wireless|security|cyber|encrypt|autono|robot|vehicle|navigation|control|machine|learn|neural|model|platform|software|hardware)\b/i;
 
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
@@ -1619,62 +1625,49 @@ export const morganStateScraper: InstitutionScraper = {
         const $ = await fetchHtml(url, 20_000);
         if (!$) continue;
 
-        // Find all tables on the page — Morgan State uses a simple HTML table
+        // Morgan State renders a simple HTML table: row 0 = header (<th>), subsequent = data (<td>)
         $("table tr").each((_, row) => {
           const cells = $(row).find("td");
-          if (cells.length < 1) return; // Skip header rows (th) and empty rows
+          if (cells.length < 1) return; // Header row (all <th>) — skip
 
           const rawTitle = cleanText($(cells[0]).text());
-          if (!rawTitle || rawTitle.length < 6) return;
+          if (!rawTitle || rawTitle.length < 8) return;
 
-          // Skip obvious column headers mistakenly in <td>
-          if (/^(title|patent|invention|technology|name|description)/i.test(rawTitle)) return;
+          // Skip accidental column-header rows rendered in <td>
+          if (/^(title|patent|invention|technology|name|description|inventor)/i.test(rawTitle)) return;
 
-          // Strip trailing issue/filing date annotations added by Morgan State
+          // Strip trailing issue/filing date annotations
           // e.g., "Method for Detecting Foo - Issued 12/16/2025" → "Method for Detecting Foo"
           const cleanTitle = rawTitle
             .replace(/\s*[-–]\s*(Issued|Filed|Pending|Granted|Published)\s+\d{1,2}\/\d{1,2}\/\d{4}\s*$/i, "")
             .replace(/\s*[-–]\s*\d{1,2}\/\d{1,2}\/\d{4}\s*$/, "")
             .trim();
 
-          const inventors = cells.length >= 2 ? cleanText($(cells[1]).text()) : "";
-          const description = inventors ? `Inventors: ${inventors}` : "";
+          if (cleanTitle.length < 8) return;
+
+          // Apply biotech/STEM relevance gate — reject non-technical rows
+          if (!BIOTECH_RE.test(cleanTitle)) return;
 
           if (seen.has(cleanTitle)) return;
           seen.add(cleanTitle);
+
+          const inventors = cells.length >= 2 ? cleanText($(cells[1]).text()) : "";
+          const description = inventors ? `Inventors: ${inventors}` : "";
+
+          // URL points to the source page (issued vs pending) so users land on the right list
           results.push({ title: cleanTitle, description, url, institution: INST });
         });
       } catch {
-        // Page unavailable — continue to next
+        // Page unavailable — continue to next source page
       }
     }
 
-    if (results.length > 0) {
-      console.log(`[scraper] ${INST}: ${results.length} listings (HTML tables)`);
-      return results;
+    if (results.length === 0) {
+      console.log(`[scraper] ${INST}: 0 patent rows found — table pages may be unavailable`);
+      return [];
     }
 
-    // Last-resort fallback: TTO overview page
-    const TTO_URL = `${BASE}/technology-transfer-and-intellectual-property`;
-    try {
-      const page$ = await fetchHtml(TTO_URL, 15_000);
-      if (!page$) {
-        console.log(`[scraper] ${INST}: all pages unavailable`);
-        return [];
-      }
-      const fallbackSeen = new Set<string>();
-      page$("li, td, h3, h4").each((_, el) => {
-        const text = cleanText(page$(el).text());
-        if (text.length < 10 || fallbackSeen.has(text)) return;
-        if (/^(home|about|contact|news|event|faculty|student|program|office)/i.test(text)) return;
-        fallbackSeen.add(text);
-        results.push({ title: text, description: "", url: TTO_URL, institution: INST });
-      });
-      console.log(`[scraper] ${INST}: ${results.length} listings (TTO page fallback)`);
-    } catch {
-      // fallback also unavailable
-    }
-
+    console.log(`[scraper] ${INST}: ${results.length} listings (HTML tables)`);
     return results;
   },
 };
