@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useEdenChat, type ChatAsset, type ChatMessage, type EdenSessionSummary } from "@/hooks/useEdenChat";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
+import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
 
 const ADMIN_KEY = "eden-admin-pw";
 
@@ -2537,92 +2538,6 @@ type EdenEmbedStatusResponse = {
   failed: number;
 };
 
-const STARTER_QUESTIONS = [
-  { label: "Oncology assets for licensing",    q: "What oncology assets at preclinical stage are available for licensing right now?" },
-  { label: "Top GLP-1 institutions",           q: "Which institutions have the most GLP-1 related technologies?" },
-  { label: "CNS assets with mechanism",        q: "Find CNS assets with defined mechanism of action from top universities" },
-  { label: "Autoimmune antibody therapeutics", q: "What antibody-based therapeutics are available for autoimmune indications?" },
-];
-
-// Portal brand color hex values keyed to PORTAL_CONFIG[role].color strings
-const PORTAL_COLOR_HEX: Record<string, string> = {
-  amber:  "#f59e0b", // concept
-  violet: "#8b5cf6", // researcher
-  green:  "#10b981", // industry (uses emerald-400 shade)
-};
-const PC = PORTAL_COLOR_HEX;
-
-const PORTAL_DOTS = [
-  { s: 6,  x: "7%",  y: "10%", c: PC.amber,  o: 0.13, d: 7.2,  dl: 0.0 },
-  { s: 4,  x: "18%", y: "82%", c: PC.amber,  o: 0.10, d: 9.8,  dl: 2.3 },
-  { s: 7,  x: "58%", y: "6%",  c: PC.amber,  o: 0.09, d: 11.5, dl: 4.7 },
-  { s: 3,  x: "88%", y: "75%", c: PC.amber,  o: 0.11, d: 8.1,  dl: 6.2 },
-  { s: 5,  x: "3%",  y: "50%", c: PC.violet, o: 0.11, d: 10.3, dl: 1.1 },
-  { s: 7,  x: "88%", y: "22%", c: PC.violet, o: 0.10, d: 8.7,  dl: 3.4 },
-  { s: 4,  x: "45%", y: "91%", c: PC.violet, o: 0.09, d: 12.0, dl: 5.9 },
-  { s: 6,  x: "72%", y: "60%", c: PC.violet, o: 0.07, d: 9.1,  dl: 7.8 },
-  { s: 5,  x: "30%", y: "14%", c: PC.green,  o: 0.09, d: 13.2, dl: 0.7 },
-  { s: 8,  x: "92%", y: "45%", c: PC.green,  o: 0.08, d: 7.9,  dl: 2.8 },
-  { s: 4,  x: "65%", y: "86%", c: PC.green,  o: 0.10, d: 10.6, dl: 4.3 },
-  { s: 6,  x: "12%", y: "37%", c: PC.green,  o: 0.07, d: 14.0, dl: 8.1 },
-];
-
-function renderMdInline(text: string): (string | JSX.Element)[] {
-  const parts = text.split(/(\*\*[^*]+\*\*|\[[^\]]*\]\([^)]+\)|`[^`]+`)/g);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
-    }
-    const link = part.match(/^\[([^\]]*)\]\(([^)]+)\)$/);
-    if (link) {
-      return <a key={i} href={link[2]} target="_blank" rel="noopener noreferrer" className="underline text-primary hover:text-primary/80">{link[1]}</a>;
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <code key={i} className="font-mono text-[11px] bg-muted px-1 rounded">{part.slice(1, -1)}</code>;
-    }
-    return part;
-  });
-}
-
-function MarkdownContent({ text, isStreaming }: { text: string; isStreaming?: boolean }) {
-  const lines = text.split("\n");
-  const nodes: JSX.Element[] = [];
-  lines.forEach((line, i) => {
-    if (line.startsWith("## ")) {
-      nodes.push(<h2 key={i} className="font-bold text-sm mt-3 mb-0.5 text-foreground">{renderMdInline(line.slice(3))}</h2>);
-    } else if (line.startsWith("### ")) {
-      nodes.push(<h3 key={i} className="font-semibold text-sm mt-2 mb-0.5 text-foreground">{renderMdInline(line.slice(4))}</h3>);
-    } else if (line.startsWith("- ") || line.startsWith("* ")) {
-      nodes.push(
-        <div key={i} className="flex gap-1.5 text-sm leading-relaxed">
-          <span className="mt-0.5 shrink-0 text-muted-foreground">•</span>
-          <span>{renderMdInline(line.slice(2))}</span>
-        </div>
-      );
-    } else if (/^\d+\.\s/.test(line)) {
-      const match = line.match(/^(\d+)\.\s(.*)$/);
-      if (match) {
-        nodes.push(
-          <div key={i} className="flex gap-1.5 text-sm leading-relaxed">
-            <span className="shrink-0 text-muted-foreground">{match[1]}.</span>
-            <span>{renderMdInline(match[2])}</span>
-          </div>
-        );
-      }
-    } else if (line.trim() === "") {
-      nodes.push(<div key={i} className="h-1.5" />);
-    } else {
-      nodes.push(<p key={i} className="text-sm leading-relaxed">{renderMdInline(line)}</p>);
-    }
-  });
-  return (
-    <div className="space-y-0.5">
-      {nodes}
-      {isStreaming && <span className="animate-pulse text-muted-foreground">▌</span>}
-    </div>
-  );
-}
-
 function devStageBadgeClass(stage?: string): string {
   if (!stage) return "bg-muted text-muted-foreground border-border";
   const s = stage.toLowerCase();
@@ -2643,41 +2558,7 @@ function modalityBadgeClass(modality?: string): string {
   return "bg-muted text-muted-foreground border-border";
 }
 
-function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
-  const r = size / 2;
-  const innerR = r * 0.52;
-  const ring1R = r * 0.72;
-  const ring2R = r * 0.92;
-  const gradId = `ea-grad-${size}`;
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} fill="none" className="shrink-0" aria-hidden="true">
-      <defs>
-        <radialGradient id={gradId} cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0.55"/>
-          <stop offset="55%" stopColor="#10b981" stopOpacity="0.22"/>
-          <stop offset="100%" stopColor="#10b981" stopOpacity="0.04"/>
-        </radialGradient>
-      </defs>
-      <style>{`
-        @keyframes eden-ring1 { 0%,100%{opacity:.18;r:${ring1R}px} 50%{opacity:.38;r:${ring1R * 1.06}px} }
-        @keyframes eden-ring2 { 0%,100%{opacity:.08;r:${ring2R}px} 50%{opacity:.22;r:${ring2R * 1.04}px} }
-        @keyframes eden-think1 { 0%,100%{opacity:.35;r:${ring1R}px} 50%{opacity:.6;r:${ring1R * 1.1}px} }
-        @keyframes eden-think2 { 0%,100%{opacity:.18;r:${ring2R}px} 50%{opacity:.4;r:${ring2R * 1.07}px} }
-        @keyframes eden-core { 0%,100%{opacity:.85} 50%{opacity:1} }
-      `}</style>
-      <circle cx={r} cy={r} r={ring2R} fill="none" stroke="#10b981"
-        style={{ animation: isThinking ? `eden-think2 1s ease-in-out infinite` : `eden-ring2 2.8s ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={ring1R} fill="none" stroke="#10b981" strokeWidth="1.2"
-        style={{ animation: isThinking ? `eden-think1 0.8s ease-in-out infinite` : `eden-ring1 2.2s ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={innerR} fill={`url(#${gradId})`} />
-      <circle cx={r} cy={r} r={innerR * 0.6} fill="#10b981"
-        style={{ animation: `eden-core ${isThinking ? "0.7s" : "2s"} ease-in-out infinite` }} />
-      <circle cx={r} cy={r} r={innerR * 0.28} fill="#ecfdf5" />
-    </svg>
-  );
-}
-
-function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
+function AdminEdenOrbLegacy({ isThinking = false }: { isThinking?: boolean }) {
   const W = 560, H = 600;
   const cx = W / 2, cy = H / 2;
 
@@ -2934,6 +2815,11 @@ function EdenTab({ pw }: { pw: string }) {
   const [readinessOpen, setReadinessOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
+  const [introPlayed, setIntroPlayed] = useState(() => {
+    try { return sessionStorage.getItem("eden-admin-intro-played") === "1"; } catch { return false; }
+  });
+  const handleIntroDone = () => setIntroPlayed(true);
+  const inputRef = React.useRef<HTMLInputElement>(null);
 
   const { data: savedAssetsData } = useQuery<{ assets: Array<{ ingestedAssetId: number | null }> }>({
     queryKey: ["/api/saved-assets"],
@@ -3096,6 +2982,12 @@ function EdenTab({ pw }: { pw: string }) {
   }, [chatMessages]);
 
   useEffect(() => {
+    if (chatMessages.length > 0) {
+      try { sessionStorage.setItem("eden-admin-intro-played", "1"); } catch {}
+    }
+  }, [chatMessages.length]);
+
+  useEffect(() => {
     if (!chatSessionId) return;
     fetch(`/api/eden/feedback/${chatSessionId}`, { headers: { "x-admin-password": pw } })
       .then((r) => r.ok ? r.json() : [])
@@ -3217,252 +3109,298 @@ function EdenTab({ pw }: { pw: string }) {
           </div>
         )}
 
-        {/* Not-ready gate */}
+        {/* Not-ready banner — non-blocking */}
         {!chatReady && (
-          <div className="p-10 text-center" data-testid="chat-not-ready">
-            <Sparkles className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm font-medium text-foreground mb-1">EDEN is not yet active</p>
-            <p className="text-xs text-muted-foreground">Generate vector embeddings first using the EDEN Readiness panel below.</p>
+          <div className="mx-5 my-3 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 flex items-center gap-2" data-testid="chat-not-ready">
+            <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+            <p className="text-xs text-amber-700 dark:text-amber-400">EDEN is not yet active — generate vector embeddings first using the EDEN Readiness panel below.</p>
           </div>
         )}
 
         {/* Chat area */}
-        {chatReady && (
-          <>
-            <style>{`
-              @keyframes em-slide-user {
-                from { opacity: 0; transform: translateX(20px) translateY(4px); }
-                to   { opacity: 1; transform: translateX(0) translateY(0); }
-              }
-              @keyframes em-slide-assistant {
-                from { opacity: 0; transform: translateX(-20px) translateY(4px); }
-                to   { opacity: 1; transform: translateX(0) translateY(0); }
-              }
-              @keyframes em-fade-in {
-                from { opacity: 0; transform: translateY(8px) scale(0.97); }
-                to   { opacity: 1; transform: translateY(0) scale(1); }
-              }
-              @keyframes em-fade-up {
-                from { opacity: 0; transform: translateY(12px); }
-                to   { opacity: 1; transform: translateY(0); }
-              }
-              @keyframes eden-dot-float {
-                0%, 100% { transform: translateY(0px) translateX(0px); }
-                30%       { transform: translateY(-14px) translateX(5px); }
-                70%       { transform: translateY(-7px) translateX(-4px); }
-              }
-            `}</style>
-            <div className="relative h-[580px] overflow-y-auto p-5 space-y-5 bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
+        <>
+          <style>{`
+            @keyframes em-slide-user {
+              from { opacity: 0; transform: translateX(20px) translateY(4px); }
+              to   { opacity: 1; transform: translateX(0) translateY(0); }
+            }
+            @keyframes em-slide-assistant {
+              from { opacity: 0; transform: translateX(-20px) translateY(4px); }
+              to   { opacity: 1; transform: translateX(0) translateY(0); }
+            }
+            @keyframes em-fade-in {
+              from { opacity: 0; transform: translateY(8px) scale(0.97); }
+              to   { opacity: 1; transform: translateY(0) scale(1); }
+            }
+            @keyframes em-fade-up {
+              from { opacity: 0; transform: translateY(12px); }
+              to   { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes em-dot-float {
+              0%, 100% { transform: translateY(0px) translateX(0px); }
+              33%       { transform: translateY(-10px) translateX(4px); }
+              66%       { transform: translateY(-5px) translateX(-3px); }
+            }
+            @keyframes em-pill-in {
+              from { opacity: 0; transform: translateY(6px) scale(0.95); }
+              to   { opacity: 1; transform: translateY(0) scale(1); }
+            }
+          `}</style>
+          <div className="relative h-[580px] overflow-y-auto flex flex-col bg-gradient-to-b from-background to-emerald-500/[0.02]" data-testid="chat-messages">
 
-              {/* Portal floating dots — fixed behind all content */}
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                {PORTAL_DOTS.map((dot, i) => (
-                  <div
-                    key={i}
-                    className="absolute rounded-full"
-                    style={{
-                      width:  dot.s,
-                      height: dot.s,
-                      left:   dot.x,
-                      top:    dot.y,
-                      background: dot.c,
-                      opacity: dot.o,
-                      animation: `eden-dot-float ${dot.d}s ease-in-out infinite`,
-                      animationDelay: `${dot.dl}s`,
-                    }}
-                  />
-                ))}
-              </div>
-
-              {/* Empty state — orb as centerpiece, chips at the fringes */}
-              {chatMessages.length === 0 && (
-                <div className="relative h-full flex flex-col items-center justify-center" data-testid="chat-empty">
-
-                  {/* Corner chips */}
-                  {STARTER_QUESTIONS.map((sq, qi) => {
-                    const corners = [
-                      "absolute top-0 left-0",
-                      "absolute top-0 right-0",
-                      "absolute bottom-0 left-0",
-                      "absolute bottom-0 right-0",
-                    ];
-                    const aligns = ["text-left", "text-right", "text-left", "text-right"];
-                    return (
-                      <button
-                        key={sq.q}
-                        onClick={() => sendChatMessage(sq.q)}
-                        className={`${corners[qi]} ${aligns[qi]} text-[10px] rounded-lg border border-border/50 bg-card/80 backdrop-blur-sm hover:bg-muted/80 px-2.5 py-1.5 text-muted-foreground/70 hover:text-foreground shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 font-medium max-w-[148px] leading-tight`}
-                        style={{ animation: "em-fade-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${240 + qi * 50}ms` }}
-                        data-testid={`chip-starter-${qi}`}
-                      >
-                        {sq.label}
-                      </button>
-                    );
-                  })}
-
-                  {/* Orb + headline */}
-                  <EdenOrb isThinking={chatStreaming} />
-                  <p
-                    className="text-base font-semibold text-foreground mb-1 -mt-2"
-                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "60ms" }}
-                  >Ask EDEN anything</p>
-                  <p
-                    className="text-xs text-muted-foreground text-center max-w-xs leading-relaxed"
-                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
-                  >
-                    Your AI analyst for {emb?.totalEmbedded?.toLocaleString()} TTO assets across {institutionCount} research institutions.
-                  </p>
-                </div>
-              )}
-
-              {/* Message thread */}
-              {chatMessages.map((msg, i) => (
+            {/* Ambient dots */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden="true">
+              {[
+                { s: 5,  x: "6%",  y: "18%", c: "#10b981", o: 0.07, d: 7.2,  dl: 0.0 },
+                { s: 4,  x: "17%", y: "78%", c: "#10b981", o: 0.06, d: 9.8,  dl: 2.3 },
+                { s: 6,  x: "58%", y: "9%",  c: "#6ee7b7", o: 0.07, d: 11.5, dl: 4.7 },
+                { s: 3,  x: "86%", y: "72%", c: "#10b981", o: 0.06, d: 8.1,  dl: 6.2 },
+                { s: 5,  x: "3%",  y: "48%", c: "#6ee7b7", o: 0.05, d: 10.3, dl: 1.1 },
+                { s: 7,  x: "91%", y: "22%", c: "#10b981", o: 0.07, d: 8.7,  dl: 3.4 },
+                { s: 4,  x: "44%", y: "88%", c: "#6ee7b7", o: 0.05, d: 12.0, dl: 5.9 },
+              ].map((dot, i) => (
                 <div
                   key={i}
-                  className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                  style={{ animation: msg.role === "user" ? "em-slide-user 340ms cubic-bezier(0.16, 1, 0.3, 1) both" : "em-slide-assistant 340ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
-                  data-testid={`chat-msg-${i}`}
-                >
-                  {msg.role === "assistant" && (
-                    <div className="shrink-0 mt-1 mr-2">
-                      <EdenAvatar isThinking={!!(msg.isStreaming)} size={24} />
-                    </div>
-                  )}
-                  <div className={`max-w-[78%] ${msg.role === "user" ? "" : (msg.isStreaming && !msg.content ? "w-auto" : "flex-1")}`}>
-                    <div className={`rounded-2xl px-4 py-3 ${
-                      msg.role === "user"
-                        ? "bg-gradient-to-br from-emerald-600 to-emerald-700 text-white text-sm ml-auto w-fit shadow-sm"
-                        : "bg-muted/60 border border-border border-l-2 border-l-emerald-500/40 text-foreground"
-                    }`}>
-                      {msg.role === "assistant" && msg.isStreaming && !msg.content && (
-                        <div className="flex gap-1 items-center py-0.5">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "0ms" }} />
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "120ms" }} />
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/60 animate-bounce" style={{ animationDelay: "240ms" }} />
-                        </div>
-                      )}
-                      {msg.role === "user" && (
-                        <p className="text-sm leading-relaxed">{msg.content}</p>
-                      )}
-                      {msg.role === "assistant" && msg.content && (
-                        <>
-                          <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
-                          {msg.isStreaming && <span className="animate-pulse text-emerald-400 font-light ml-0.5 select-none">|</span>}
-                        </>
+                  className="absolute rounded-full"
+                  style={{
+                    width: dot.s, height: dot.s,
+                    left: dot.x, top: dot.y,
+                    background: dot.c, opacity: dot.o,
+                    animation: `em-dot-float ${dot.d}s ease-in-out infinite`,
+                    animationDelay: `${dot.dl}s`,
+                  }}
+                />
+              ))}
+            </div>
+
+            {/* Empty state — EdenIntro animation or prompt card grid */}
+            {chatMessages.length === 0 && (
+              introPlayed ? (
+                <div className="flex flex-col items-center justify-center flex-1 px-4 py-8" data-testid="chat-empty">
+                  <div
+                    className="flex flex-col items-center mb-6"
+                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+                  >
+                    <div className="relative mb-4">
+                      <EdenAvatar isThinking={chatStreaming} size={52} />
+                      {chatStreaming && (
+                        <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />
                       )}
                     </div>
-
-                    {/* Feedback buttons */}
-                    {msg.role === "assistant" && !msg.isStreaming && msg.content && (
-                      <div className="flex items-center gap-0.5 mt-1.5 ml-0.5">
-                        <button
-                          onClick={() => handleFeedback(i, "up")}
-                          className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/30 hover:text-emerald-500"}`}
-                          title="Good response"
-                          data-testid={`button-feedback-up-${i}`}
-                        >
-                          <ThumbsUp className="h-3 w-3" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
-                        </button>
-                        <button
-                          onClick={() => handleFeedback(i, "down")}
-                          className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-400"}`}
-                          title="Bad response"
-                          data-testid={`button-feedback-down-${i}`}
-                        >
-                          <ThumbsDown className="h-3 w-3" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Citation cards — deferred behind toggle */}
-                    {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
-                      <div className="mt-2" data-testid={`chat-citations-${i}`}>
-                        {!expandedCitations[i] ? (
-                          <button
-                            className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
-                            onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
-                            data-testid={`button-show-citations-${i}`}
-                          >
-                            <ChevronDown className="h-3 w-3 shrink-0 group-hover:text-foreground transition-colors" />
-                            Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
-                          </button>
-                        ) : (
-                          <>
-                            <button
-                              className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-1.5 group"
-                              onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
-                              data-testid={`button-hide-citations-${i}`}
-                            >
-                              <ChevronDown className="h-3 w-3 shrink-0 rotate-180 group-hover:text-foreground transition-colors" />
-                              Hide assets
-                            </button>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                              {msg.assets.map((a, ci) => (
-                                <div
-                                  key={a.id}
-                                  style={{ animation: "em-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 55}ms` }}
-                                >
-                                  <CitationCard asset={a} index={ci} adminPassword={pw} savedIngestedIds={savedIngestedIds} />
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground leading-none">
+                      <span style={{
+                        background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 60%, #6ee7b7 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      }}>
+                        E · D · E · N
+                      </span>
+                    </h1>
+                    <p className="text-[11px] text-muted-foreground mt-1 tracking-widest uppercase">
+                      Engine for Discovery &amp; Emerging Networks
+                    </p>
+                    {emb?.totalEmbedded != null && (
+                      <p className="text-[11px] text-muted-foreground/60 mt-1">
+                        {emb.totalEmbedded.toLocaleString()} assets indexed across {institutionCount} institutions
+                      </p>
                     )}
                   </div>
-                </div>
-              ))}
-              <div ref={chatEndRef} />
-            </div>
-
-            {/* Input bar */}
-            <div className="px-4 py-3 border-t border-border bg-card" data-testid="chat-input-area">
-              <div className="flex gap-2">
-                <input
-                  className="flex-1 text-sm bg-background border border-border rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-ring text-foreground placeholder:text-muted-foreground"
-                  placeholder="Ask about targets, mechanisms, institutions, licensing readiness…"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
-                  disabled={chatStreaming}
-                  data-testid="input-chat"
-                />
-                {speechSupported && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={toggleSpeech}
-                    disabled={chatStreaming}
-                    className={`shrink-0 transition-colors ${isListening ? "border-red-500 text-red-500 bg-red-500/5 hover:bg-red-500/10" : "text-muted-foreground hover:text-foreground"}`}
-                    title={isListening ? "Stop listening" : "Speak your question"}
-                    data-testid="button-chat-mic"
+                  <div
+                    className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
+                    style={{ animation: "em-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
                   >
-                    {isListening
-                      ? <MicOff className="h-4 w-4 animate-pulse" />
-                      : <Mic className="h-4 w-4" />}
-                  </Button>
-                )}
-                <Button
-                  onClick={() => sendChatMessage()}
-                  disabled={chatStreaming || !chatInput.trim()}
-                  size="sm"
-                  className="shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
-                  data-testid="button-chat-send"
-                >
-                  {chatStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
-                </Button>
+                    {PROMPT_CARDS.map((card, ci) => {
+                      const Icon = card.icon;
+                      return (
+                        <button
+                          key={card.q}
+                          onClick={() => sendChatMessage(card.q)}
+                          disabled={chatStreaming}
+                          className={`group text-left rounded-xl border bg-gradient-to-br p-3 sm:p-4 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none ${card.color}`}
+                          style={{ animation: "em-fade-up 360ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${180 + ci * 45}ms` }}
+                          data-testid={`prompt-card-${ci}`}
+                        >
+                          <Icon className={`h-4 w-4 sm:h-5 sm:w-5 mb-2 sm:mb-2.5 shrink-0 ${card.iconColor}`} />
+                          <p className="text-[11px] sm:text-xs font-semibold text-foreground leading-tight">{card.label}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <EdenIntro onDone={handleIntroDone} />
+              )
+            )}
+
+            {/* Message thread */}
+            {chatMessages.length > 0 && (
+              <div className="px-4 sm:px-5 py-5 space-y-5 max-w-3xl w-full mx-auto">
+                {chatMessages.map((msg, i) => {
+                  const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
+                    ? getFollowUpPills(msg.content)
+                    : [];
+                  return (
+                    <div
+                      key={i}
+                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                      style={{ animation: msg.role === "user" ? "em-slide-user 340ms cubic-bezier(0.16, 1, 0.3, 1) both" : "em-slide-assistant 340ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
+                      data-testid={`chat-msg-${i}`}
+                    >
+                      {msg.role === "assistant" && (
+                        <div className="shrink-0 mt-1 mr-2">
+                          <EdenAvatar isThinking={!!(msg.isStreaming)} size={22} />
+                        </div>
+                      )}
+                      <div className={`${msg.role === "user" ? "max-w-[78%]" : "flex-1 min-w-0"}`}>
+                        <div className={`rounded-2xl px-4 py-3 ${
+                          msg.role === "user"
+                            ? "rounded-tr-sm bg-emerald-600 text-white text-sm ml-auto w-fit shadow-sm"
+                            : "rounded-tl-sm bg-muted/60 border-l-2 border-l-emerald-500/40 text-foreground"
+                        }`}>
+                          {msg.role === "assistant" && msg.isStreaming && !msg.content && (
+                            <div className="flex gap-1 items-center py-0.5">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "0ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "130ms" }} />
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "260ms" }} />
+                            </div>
+                          )}
+                          {msg.role === "user" && (
+                            <p className="text-sm leading-relaxed">{msg.content}</p>
+                          )}
+                          {msg.role === "assistant" && msg.content && (
+                            <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
+                          )}
+                        </div>
+
+                        {/* Feedback buttons */}
+                        {msg.role === "assistant" && !msg.isStreaming && msg.content && (
+                          <div className="flex items-center gap-0.5 mt-1 ml-0.5">
+                            <button
+                              onClick={() => handleFeedback(i, "up")}
+                              className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/30 hover:text-emerald-500"}`}
+                              title="Good response"
+                              data-testid={`button-feedback-up-${i}`}
+                            >
+                              <ThumbsUp className="h-3 w-3" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
+                            </button>
+                            <button
+                              onClick={() => handleFeedback(i, "down")}
+                              className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-400"}`}
+                              title="Bad response"
+                              data-testid={`button-feedback-down-${i}`}
+                            >
+                              <ThumbsDown className="h-3 w-3" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Follow-up pills */}
+                        {followUps.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2 ml-0.5" data-testid={`follow-up-pills-${i}`}>
+                            {followUps.map((pill, pi) => (
+                              <button
+                                key={pill}
+                                onClick={() => { sendChatMessage(pill); inputRef.current?.focus(); }}
+                                disabled={chatStreaming}
+                                className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-500/25 bg-emerald-500/5 text-muted-foreground hover:text-foreground hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all disabled:opacity-40"
+                                style={{ animation: "em-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${pi * 60}ms` }}
+                                data-testid={`pill-followup-${i}-${pi}`}
+                              >
+                                {pill}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Citation cards — deferred behind toggle */}
+                        {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
+                          <div className="mt-2.5" data-testid={`chat-citations-${i}`}>
+                            {!expandedCitations[i] ? (
+                              <button
+                                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
+                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
+                                data-testid={`button-show-citations-${i}`}
+                              >
+                                <ChevronDown className="h-3 w-3 shrink-0 group-hover:text-foreground transition-colors" />
+                                Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
+                              </button>
+                            ) : (
+                              <>
+                                <button
+                                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-2 group"
+                                  onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
+                                  data-testid={`button-hide-citations-${i}`}
+                                >
+                                  <ChevronDown className="h-3 w-3 shrink-0 rotate-180 group-hover:text-foreground transition-colors" />
+                                  Hide assets
+                                </button>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                                  {msg.assets.map((a, ci) => (
+                                    <div
+                                      key={a.id}
+                                      style={{ animation: "em-fade-in 320ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 55}ms` }}
+                                    >
+                                      <CitationCard asset={a} index={ci} adminPassword={pw} savedIngestedIds={savedIngestedIds} />
+                                    </div>
+                                  ))}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div ref={chatEndRef} />
               </div>
-              {isListening && (
-                <p className="text-[11px] text-red-500 mt-1.5 flex items-center gap-1" data-testid="status-listening">
-                  <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
-                  Listening… speak now
-                </p>
+            )}
+            {chatMessages.length === 0 && <div ref={chatEndRef} />}
+          </div>
+
+          {/* Input bar — integrated pill style */}
+          <div className="px-4 py-3 border-t border-border bg-background/95 backdrop-blur" data-testid="chat-input-area">
+            <div className="flex gap-2 items-center rounded-2xl border border-border bg-card px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500/50 transition-all">
+              <input
+                ref={inputRef}
+                className="flex-1 text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60"
+                placeholder="Ask about targets, mechanisms, institutions, licensing readiness…"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } }}
+                disabled={chatStreaming}
+                data-testid="input-chat"
+              />
+              {speechSupported && (
+                <button
+                  type="button"
+                  onClick={toggleSpeech}
+                  disabled={chatStreaming}
+                  className={`shrink-0 p-1.5 rounded-lg transition-colors ${isListening ? "text-red-500 bg-red-500/10 animate-pulse" : "text-muted-foreground/50 hover:text-muted-foreground"}`}
+                  title={isListening ? "Stop listening" : "Speak your question"}
+                  data-testid="button-chat-mic"
+                >
+                  {isListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                </button>
               )}
+              <button
+                onClick={() => sendChatMessage()}
+                disabled={chatStreaming || !chatInput.trim()}
+                className="shrink-0 h-7 w-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-600/30 text-white flex items-center justify-center transition-all"
+                data-testid="button-chat-send"
+              >
+                {chatStreaming ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+              </button>
             </div>
-          </>
-        )}
+            {isListening && (
+              <p className="text-[11px] text-red-500 mt-1.5 flex items-center justify-center gap-1" data-testid="status-listening">
+                <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse inline-block" />
+                Listening… speak now
+              </p>
+            )}
+          </div>
+        </>
       </div>
 
       {/* ── EDEN Readiness (collapsible) ── */}

@@ -4,9 +4,8 @@ import { Button } from "@/components/ui/button";
 import {
   Loader2, Zap, Mic, MicOff, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronRight, Clock, ExternalLink,
-  Dna, FlaskConical, Brain, Shield, TrendingUp, Building2,
 } from "lucide-react";
-import { EdenAvatar, MarkdownContent } from "@/components/EdenOrb";
+import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { useEdenChat, type ChatAsset, type EdenSessionSummary, type EdenUserContext } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -15,102 +14,6 @@ import { getIndustryProfile } from "@/hooks/use-industry";
 
 const SITE_PW = "quality";
 
-// ── Prompt cards with icons ───────────────────────────────────────────────
-const PROMPT_CARDS = [
-  {
-    icon: Dna,
-    label: "CRISPR from top universities",
-    q: "Which CRISPR assets from top research universities are in preclinical stage?",
-    color: "from-emerald-500/10 to-emerald-600/5 border-emerald-500/20 hover:border-emerald-500/40",
-    iconColor: "text-emerald-500",
-  },
-  {
-    icon: TrendingUp,
-    label: "Oncology asset count",
-    q: "How many oncology assets does Stanford TTO have?",
-    color: "from-violet-500/10 to-violet-600/5 border-violet-500/20 hover:border-violet-500/40",
-    iconColor: "text-violet-500",
-  },
-  {
-    icon: FlaskConical,
-    label: "Gene therapy leaders",
-    q: "Who is doing the most work in gene therapy right now?",
-    color: "from-blue-500/10 to-blue-600/5 border-blue-500/20 hover:border-blue-500/40",
-    iconColor: "text-blue-500",
-  },
-  {
-    icon: Shield,
-    label: "Autoimmune assets for us",
-    q: "Recommend assets for a company focused on autoimmune indications",
-    color: "from-amber-500/10 to-amber-600/5 border-amber-500/20 hover:border-amber-500/40",
-    iconColor: "text-amber-500",
-  },
-  {
-    icon: Brain,
-    label: "CNS platform tech",
-    q: "Find CNS platform technologies with clear mechanisms of action available for licensing",
-    color: "from-rose-500/10 to-rose-600/5 border-rose-500/20 hover:border-rose-500/40",
-    iconColor: "text-rose-500",
-  },
-  {
-    icon: Building2,
-    label: "MIT & Harvard pipeline",
-    q: "What therapeutics are coming out of MIT and Harvard TTO offices?",
-    color: "from-teal-500/10 to-teal-600/5 border-teal-500/20 hover:border-teal-500/40",
-    iconColor: "text-teal-500",
-  },
-];
-
-// ── Rule-based follow-up pills ────────────────────────────────────────────
-const FOLLOW_UP_RULES: Array<{ test: (text: string) => boolean; pills: string[] }> = [
-  {
-    test: (t) => /oncolog|cancer|tumor/i.test(t),
-    pills: ["Filter to Phase 1 oncology only", "Show oncology antibody programs", "Which have issued patents?"],
-  },
-  {
-    test: (t) => /gene therapy|crispr|aav|viral vector/i.test(t),
-    pills: ["Show ex-vivo gene therapy assets", "Compare delivery modalities", "Who leads in AAV platforms?"],
-  },
-  {
-    test: (t) => /autoimmune|rheumat|inflam/i.test(t),
-    pills: ["Show antibody-based options only", "Filter to Phase 2+", "Who is most active in autoimmune?"],
-  },
-  {
-    test: (t) => /cns|neuro|brain|alzheimer|parkinson/i.test(t),
-    pills: ["Show CNS small molecules only", "Which have clinical data?", "Top institutions in neurology?"],
-  },
-  {
-    test: (t) => /stanford|mit|harvard|columbia|johns Hopkins/i.test(t),
-    pills: ["Compare these institutions", "Show only preclinical from these TTOs", "What's their most active area?"],
-  },
-  {
-    test: (t) => /licens|available|partnership|deal/i.test(t),
-    pills: ["Show exclusive licensing opportunities", "Which have active TTO contacts?", "Filter by readiness stage"],
-  },
-  {
-    test: (t) => /antibod|bispecific|mab|monoclonal/i.test(t),
-    pills: ["Show bispecific antibody programs", "Filter antibodies to oncology", "Who leads in antibody tech?"],
-  },
-  {
-    test: (t) => /how many|count|number|how much/i.test(t),
-    pills: ["Break this down by stage", "Show the top institutions", "How does this compare by modality?"],
-  },
-];
-
-const DEFAULT_FOLLOW_UPS = [
-  "Show me similar assets",
-  "Who else is working in this space?",
-  "Show the institution breakdown",
-];
-
-function getFollowUpPills(responseText: string): string[] {
-  for (const rule of FOLLOW_UP_RULES) {
-    if (rule.test(responseText)) {
-      return rule.pills.slice(0, 2).concat(DEFAULT_FOLLOW_UPS.slice(0, 1));
-    }
-  }
-  return DEFAULT_FOLLOW_UPS.slice(0, 3);
-}
 
 // ── Helpers ───────────────────────────────────────────────────────────────
 function relevanceLabel(sim: number): { label: string; cls: string } {
@@ -196,81 +99,6 @@ function CitationCard({ asset, index, savedIngestedIds }: {
           View source
         </a>
       )}
-    </div>
-  );
-}
-
-// ── EDEN acronym intro animation ─────────────────────────────────────────
-function EdenIntro({ onDone }: { onDone: () => void }) {
-  const [phase, setPhase] = useState<"letters" | "phrase" | "settle" | "done">("letters");
-
-  useEffect(() => {
-    // letters fade in staggered → after 1.2s move to phrase
-    const t1 = setTimeout(() => setPhase("phrase"), 1200);
-    // phrase fades in → after 2s settle both to smaller
-    const t2 = setTimeout(() => setPhase("settle"), 2600);
-    // settle complete → call onDone
-    const t3 = setTimeout(() => { setPhase("done"); onDone(); }, 3800);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
-  }, [onDone]);
-
-  const LETTERS = ["E", "D", "E", "N"];
-  const settled = phase === "settle" || phase === "done";
-
-  return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none">
-      {/* Giant letter row */}
-      <div className={`flex gap-1 sm:gap-2 transition-all duration-700 ease-out ${settled ? "scale-[0.38] opacity-70" : "scale-100"}`}
-        style={{ transformOrigin: "center center" }}>
-        {LETTERS.map((letter, i) => (
-          <span
-            key={i}
-            className="font-black tracking-tight text-foreground leading-none"
-            style={{
-              fontSize: "clamp(72px, 18vw, 160px)",
-              opacity: phase === "letters" || phase === "phrase" || phase === "settle" ? 1 : 0,
-              transform: phase === "letters" && i > 0
-                ? `translateY(${i % 2 === 0 ? "12px" : "-12px"}) scale(0.85)`
-                : "translateY(0) scale(1)",
-              transition: `opacity 0.45s ease ${i * 0.12}s, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.12}s`,
-              background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 100%)",
-              WebkitBackgroundClip: "text",
-              WebkitTextFillColor: "transparent",
-              backgroundClip: "text",
-            }}
-          >
-            {letter}
-          </span>
-        ))}
-      </div>
-
-      {/* Dot separator */}
-      <div
-        className="flex gap-2 mt-1 sm:mt-2 transition-all duration-500"
-        style={{
-          opacity: phase === "phrase" || phase === "settle" ? 1 : 0,
-          transform: settled ? "translateY(-60px)" : "translateY(0)",
-          transition: "opacity 0.4s ease 0.1s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        {["E", "D", "E", "N"].map((l, i) => (
-          <span key={i} className="text-sm font-bold text-muted-foreground/50">·</span>
-        ))}
-      </div>
-
-      {/* Full phrase */}
-      <p
-        className="text-center font-semibold text-foreground/80 mt-3 sm:mt-4 px-4 max-w-sm sm:max-w-md"
-        style={{
-          fontSize: "clamp(14px, 3vw, 22px)",
-          opacity: phase === "phrase" || phase === "settle" ? 1 : 0,
-          transform: settled ? "translateY(-52px) scale(0.8)" : "translateY(0) scale(1)",
-          transition: "opacity 0.5s ease 0.2s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
-          transformOrigin: "center top",
-        }}
-      >
-        Engine for Discovery &amp; Emerging Networks
-      </p>
     </div>
   );
 }
