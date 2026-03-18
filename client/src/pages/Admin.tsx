@@ -2674,7 +2674,7 @@ function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
 
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} fill="none" aria-hidden="true"
-      className="mx-auto w-full max-w-[420px]">
+      className="mx-auto w-full max-w-[560px]">
       <defs>
         <filter id="eo-glow" x="-120%" y="-120%" width="340%" height="340%">
           <feGaussianBlur stdDeviation="2.8" result="blur"/>
@@ -2717,6 +2717,24 @@ function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
             <animateMotion dur={halDur} begin={`${-n * parseFloat(halDur) / 3}s`} repeatCount="indefinite" path={p3}/>
           </circle>
         ))}
+      </g>
+
+      {/* Tilted ring A — 24° incline, slow independent counter-rotation for parallax depth */}
+      <g transform={`rotate(24, ${cx}, ${cy})`}>
+        <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-counter ${isThinking ? "18s" : "44s"} linear infinite` }}>
+          <ellipse cx={cx} cy={cy} rx={188} ry={56}
+            stroke="#10b981" strokeWidth="0.5" strokeOpacity="0.10" strokeDasharray="6 16" fill="none"/>
+          <ellipse cx={cx} cy={cy} rx={102} ry={31}
+            stroke="#6ee7b7" strokeWidth="0.3" strokeOpacity="0.07" strokeDasharray="4 10" fill="none"/>
+        </g>
+      </g>
+
+      {/* Tilted ring B — -19° incline, slow forward rotation for additional depth layer */}
+      <g transform={`rotate(-19, ${cx}, ${cy})`}>
+        <g style={{ transformOrigin: `${cx}px ${cy}px`, animation: `eden-orb-rotate ${isThinking ? "12s" : "30s"} linear infinite` }}>
+          <ellipse cx={cx} cy={cy} rx={146} ry={44}
+            stroke="#6ee7b7" strokeWidth="0.45" strokeOpacity="0.09" strokeDasharray="5 13" fill="none"/>
+        </g>
       </g>
 
       {/* Main rotating group */}
