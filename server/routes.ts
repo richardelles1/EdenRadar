@@ -676,6 +676,35 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/pipelines/:id/assets", async (req, res) => {
+    try {
+      const pipelineId = parseInt(req.params.id);
+      if (isNaN(pipelineId)) return res.status(400).json({ error: "Invalid pipeline ID" });
+      const pipeline = await storage.getPipelineList(pipelineId);
+      if (!pipeline) return res.status(404).json({ error: "Pipeline not found" });
+      const body = saveAssetBodySchema.parse({ ...req.body, pipeline_list_id: pipelineId });
+      const asset = await storage.createSavedAsset({
+        ingestedAssetId: body.ingested_asset_id ?? null,
+        pipelineListId: pipelineId,
+        assetName: body.asset_name,
+        target: body.target,
+        modality: body.modality,
+        developmentStage: body.development_stage,
+        diseaseIndication: body.disease_indication,
+        summary: body.summary,
+        sourceTitle: body.source_title,
+        sourceJournal: body.source_journal,
+        publicationYear: body.publication_year,
+        sourceName: body.source_name,
+        sourceUrl: body.source_url ?? null,
+        pmid: body.pmid ?? null,
+      });
+      res.status(201).json({ asset });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to add asset to pipeline" });
+    }
+  });
+
   app.get("/api/scrapers/active", (_req, res) => {
     res.json({ institutions: ALL_SCRAPERS.map((s) => s.institution) });
   });
