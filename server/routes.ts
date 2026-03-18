@@ -1272,6 +1272,7 @@ export async function registerRoutes(
     total: number;
     resumed: boolean;
   } | null = null;
+  let standardEnrichShouldStop = false;
 
   async function runEnrichmentWorker(
     jobId: number,
@@ -1286,6 +1287,7 @@ export async function registerRoutes(
 
     async function worker() {
       while (idx < assets.length) {
+        if (standardEnrichShouldStop) break;
         const asset = assets[idx++];
         if (!asset) continue;
         try {
@@ -1395,6 +1397,7 @@ export async function registerRoutes(
       const job = await storage.createEnrichmentJob(assets.length);
       res.json({ message: "Enrichment started", total: assets.length, jobId: job.id });
 
+      standardEnrichShouldStop = false;
       runEnrichmentWorker(job.id, assets, 0, 0, false);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
@@ -1427,20 +1430,23 @@ export async function registerRoutes(
   let edenTotal = 0;
   let edenImproved = 0;
   let edenFailed = 0;
+  let edenShouldStop = false;
 
   app.get("/api/admin/eden/stats", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
-      const [coverage, embeddingCoverage, latest] = await Promise.all([
+      const [coverage, embeddingCoverage, latest, needingDeepEnrich] = await Promise.all([
         storage.getDeepEnrichmentCoverage(),
         storage.getEmbeddingCoverage(),
         storage.getLatestDeepEnrichmentJob(),
+        storage.getAssetsNeedingDeepEnrichCount(),
       ]);
       res.json({
         coverage,
         embeddingCoverage,
         latestJob: latest ?? null,
+        needingDeepEnrich,
         live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null,
       });
     } catch (err: any) {
@@ -1459,6 +1465,7 @@ export async function registerRoutes(
       edenTotal = assets.length;
       edenProcessed = 0;
       edenRunning = true;
+      edenShouldStop = false;
 
       edenImproved = 0;
       edenFailed = 0;
@@ -1482,19 +1489,20 @@ export async function registerRoutes(
             storage.updateEnrichmentJob(edenJobId, { processed, improved: succeeded }).catch(() => {});
           }
         },
+        () => edenShouldStop,
       ).then(async (batchResult) => {
         edenRunning = false;
         edenImproved = batchResult.succeeded;
         edenFailed = batchResult.failed;
         if (edenJobId !== null) {
           await storage.updateEnrichmentJob(edenJobId, {
-            status: "done",
+            status: edenShouldStop ? "stopped" : "done",
             completedAt: new Date(),
             processed: batchResult.succeeded + batchResult.failed,
             improved: batchResult.succeeded,
           }).catch(() => {});
         }
-        console.log(`[EDEN] Deep enrichment complete: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
+        console.log(`[EDEN] Deep enrichment ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
       }).catch(async (e) => {
         edenRunning = false;
         if (edenJobId !== null) {
@@ -1526,6 +1534,22 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/eden/enrich/stop", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (!edenRunning) return res.json({ message: "No EDEN enrichment running" });
+    edenShouldStop = true;
+    res.json({ message: "Stop signal sent — finishing in-flight batch then halting" });
+  });
+
+  app.post("/api/admin/enrichment/stop", async (req, res) => {
+    const pass = req.query.pw ?? req.headers["x-admin-password"];
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (!liveEnrichment) return res.json({ message: "No standard enrichment running" });
+    standardEnrichShouldStop = true;
+    res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
+  });
+
   (async () => {
     try {
       const staleDeepJob = await storage.getRunningDeepEnrichmentJob();
@@ -1538,6 +1562,7 @@ export async function registerRoutes(
           edenImproved = staleDeepJob.improved ?? 0;
           edenFailed = 0;
           edenRunning = true;
+          edenShouldStop = false;
           edenJobId = staleDeepJob.id;
 
           deepEnrichBatch(
@@ -1550,15 +1575,16 @@ export async function registerRoutes(
               edenFailed = failed;
               storage.updateEnrichmentJob(staleDeepJob.id, { processed: edenProcessed, improved: edenImproved }).catch(() => {});
             },
+            () => edenShouldStop,
           ).then(async (batchResult) => {
             edenRunning = false;
             await storage.updateEnrichmentJob(staleDeepJob.id, {
-              status: "done",
+              status: edenShouldStop ? "stopped" : "done",
               completedAt: new Date(),
               processed: (staleDeepJob.processed ?? 0) + batchResult.succeeded + batchResult.failed,
               improved: (staleDeepJob.improved ?? 0) + batchResult.succeeded,
             }).catch(() => {});
-            console.log(`[EDEN] Resumed job complete: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
+            console.log(`[EDEN] Resumed job ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
           }).catch(async (e) => {
             edenRunning = false;
             await storage.updateEnrichmentJob(staleDeepJob.id, { status: "failed", completedAt: new Date(), processed: edenProcessed, improved: edenImproved }).catch(() => {});

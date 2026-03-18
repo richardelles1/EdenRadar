@@ -95,6 +95,7 @@ export async function deepEnrichBatch(
   concurrency = 20,
   onFlush: (results: DeepEnrichResult[]) => Promise<number>,
   onProgress?: (processed: number, total: number, succeeded: number, failed: number) => void,
+  abortCheck?: () => boolean,
 ): Promise<DeepEnrichBatchResult> {
   const allResults = new Map<number, DeepEnrichResult>();
   let idx = 0;
@@ -123,6 +124,7 @@ export async function deepEnrichBatch(
 
   async function worker() {
     while (true) {
+      if (abortCheck?.()) break;
       let asset: DeepEnrichAssetInput | undefined;
       if (idx >= assets.length) break;
       asset = assets[idx++];

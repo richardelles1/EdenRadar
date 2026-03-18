@@ -125,6 +125,7 @@ export interface IStorage {
     avgCompletenessScore: number | null;
   }>;
   getAssetsNeedingDeepEnrich(): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null }>>;
+  getAssetsNeedingDeepEnrichCount(): Promise<number>;
   updateIngestedAssetDeepEnrichment(id: number, data: {
     target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
@@ -799,6 +800,27 @@ export class DatabaseStorage implements IStorage {
           ),
         ),
       );
+  }
+
+  async getAssetsNeedingDeepEnrichCount(): Promise<number> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(
+        and(
+          eq(ingestedAssets.relevant, true),
+          or(
+            isNull(ingestedAssets.completenessScore),
+            sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
+            sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
+            sql`(${ingestedAssets.unmetNeed} IS NULL OR ${ingestedAssets.unmetNeed} = '')`,
+            sql`(${ingestedAssets.comparableDrugs} IS NULL OR ${ingestedAssets.comparableDrugs} = '')`,
+            sql`(${ingestedAssets.ipType} IS NULL OR ${ingestedAssets.ipType} = 'unknown')`,
+            sql`(${ingestedAssets.licensingReadiness} IS NULL OR ${ingestedAssets.licensingReadiness} = 'unknown')`,
+          ),
+        ),
+      );
+    return row?.count ?? 0;
   }
 
   async updateIngestedAssetDeepEnrichment(id: number, data: {

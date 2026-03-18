@@ -1313,6 +1313,22 @@ function Enrichment({ pw }: { pw: string }) {
     },
   });
 
+  const stopEnrichment = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/stop", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Stop signal sent", description: "Field enrichment will halt after current batch" });
+      refetchStatus();
+    },
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
   const isRunning = status?.status === "running";
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
@@ -1417,16 +1433,24 @@ function Enrichment({ pw }: { pw: string }) {
 
       {isRunning && status && (
         <div className="border border-border rounded-xl bg-card p-5 space-y-3" data-testid="enrichment-progress">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin text-primary" />
-              <span className="text-sm font-medium text-foreground">
-                {isResumed ? "Resuming from checkpoint — " : ""}Processing...
-              </span>
-            </div>
-            <span className="text-sm tabular-nums text-muted-foreground" data-testid="enrichment-progress-text">
+          <div className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            <span className="text-sm font-medium text-foreground">
+              Field Enrichment (GPT-4o-mini){isResumed ? " — resuming from checkpoint" : ""}
+            </span>
+            <span className="text-sm tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
               {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
             </span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => stopEnrichment.mutate()}
+              disabled={stopEnrichment.isPending}
+              className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+              data-testid="button-enrichment-stop"
+            >
+              {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+            </Button>
           </div>
           <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
             <div
@@ -2490,6 +2514,7 @@ type EdenStatsResponse = {
   coverage: EdenCoverage;
   embeddingCoverage: EdenEmbeddingCoverage;
   latestJob: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
+  needingDeepEnrich?: number;
   live: { processed: number; total: number } | null;
 };
 
@@ -3022,6 +3047,23 @@ function EdenTab({ pw }: { pw: string }) {
     },
   });
 
+  const stopEdenMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminPassword: pw }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Stop signal sent", description: "EDEN Deep Enrichment will halt after the current batch finishes" });
+      refetchStatus();
+    },
+    onError: (e: Error) => toast({ title: "Failed to stop", description: e.message, variant: "destructive" }),
+  });
+
   const embedMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/embed", {
@@ -3111,7 +3153,7 @@ function EdenTab({ pw }: { pw: string }) {
   const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total, succeeded: 0, failed: 0 } : null;
   const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
   const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
-  const remaining = cov ? cov.totalRelevant - cov.deepEnriched : 0;
+  const remaining = stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
   const estCostUsd = remaining > 0 ? (remaining * 0.0012).toFixed(0) : "0";
   const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
   const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
@@ -3527,15 +3569,25 @@ function EdenTab({ pw }: { pw: string }) {
               </div>
             </div>
 
-            {/* Live enrichment status */}
+            {/* Live EDEN deep enrichment status */}
             {live && (
               <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4" data-testid="card-eden-live">
                 <div className="flex items-center gap-2 mb-2">
                   <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
                   <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    Enrichment running — {live.processed.toLocaleString()} / {live.total.toLocaleString()}
+                    EDEN Deep Enrichment (GPT-4o) — {live.processed.toLocaleString()} / {live.total.toLocaleString()}
                   </span>
-                  <span className="ml-auto text-sm font-bold text-emerald-600">{pct}%</span>
+                  <span className="text-sm font-bold text-emerald-600">{pct}%</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => stopEdenMutation.mutate()}
+                    disabled={stopEdenMutation.isPending}
+                    className="ml-auto h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    data-testid="button-eden-stop"
+                  >
+                    {stopEdenMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                  </Button>
                 </div>
                 <Progress value={pct ?? 0} className="h-1.5" />
               </div>
