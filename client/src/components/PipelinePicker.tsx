@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -9,8 +8,24 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Bookmark, Layers, Plus, Check, ChevronDown } from "lucide-react";
+import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2 } from "lucide-react";
 import type { ScoredAsset } from "@/lib/types";
+
+export type PipelinePickerPayload = {
+  asset_name: string;
+  target?: string;
+  modality?: string;
+  development_stage?: string;
+  disease_indication?: string;
+  summary?: string;
+  source_title?: string;
+  source_journal?: string;
+  publication_year?: string;
+  source_name?: string;
+  source_url?: string | null;
+  pmid?: string | null;
+  ingested_asset_id?: number | null;
+};
 
 type PipelineWithCount = {
   id: number;
@@ -29,54 +44,88 @@ type SavedAssetsResponse = {
 };
 
 type Props = {
-  asset: ScoredAsset;
+  payload?: PipelinePickerPayload;
+  asset?: ScoredAsset;
+  alreadySaved?: boolean;
   variant?: "icon" | "button";
 };
 
-export function PipelinePicker({ asset, variant = "icon" }: Props) {
+function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
+  return {
+    asset_name: asset.asset_name,
+    target: asset.target,
+    modality: asset.modality,
+    development_stage: asset.development_stage,
+    disease_indication: asset.indication,
+    summary: asset.summary,
+    source_title: asset.signals?.[0]?.title ?? asset.asset_name,
+    source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+    publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+    source_name: asset.source_types?.[0] ?? "unknown",
+    source_url: asset.source_urls?.[0] ?? null,
+    pmid: asset.id,
+  };
+}
+
+export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon" }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
 
+  const effectivePayload = payload ?? (asset ? buildPayload(asset) : null);
+
   const { data: pipelinesData } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
     staleTime: 30000,
   });
+
   const { data: savedData } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
+    enabled: alreadySaved === undefined,
   });
 
   const pipelines = pipelinesData?.pipelines ?? [];
   const savedAssets = savedData?.assets ?? [];
-  const alreadySaved = savedAssets.some(
-    (a) => (a.pmid ?? a.assetName) === (asset.id ?? asset.asset_name)
-  );
+
+  const isSaved = alreadySaved !== undefined
+    ? alreadySaved
+    : savedAssets.some(
+        (a) => (a.pmid ?? a.assetName) === (effectivePayload?.pmid ?? effectivePayload?.asset_name)
+      );
 
   const saveMutation = useMutation({
-    mutationFn: async ({ pipelineListId }: { pipelineListId: number | null }) => {
-      const res = await apiRequest("POST", "/api/saved-assets", {
-        asset_name: asset.asset_name,
-        target: asset.target,
-        modality: asset.modality,
-        development_stage: asset.development_stage,
-        disease_indication: asset.indication,
-        summary: asset.summary,
-        source_title: asset.signals?.[0]?.title ?? asset.asset_name,
-        source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-        publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-        source_name: asset.source_types?.[0] ?? "unknown",
-        source_url: asset.source_urls?.[0] ?? undefined,
-        pmid: asset.id,
-        pipeline_list_id: pipelineListId,
+    mutationFn: async ({ pipelineListId, pipelineId }: { pipelineListId: number | null; pipelineId?: number }) => {
+      if (!effectivePayload) throw new Error("No asset payload");
+      const url = pipelineId != null ? `/api/pipelines/${pipelineId}/assets` : "/api/saved-assets";
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asset_name: effectivePayload.asset_name,
+          target: effectivePayload.target ?? "unknown",
+          modality: effectivePayload.modality ?? "unknown",
+          development_stage: effectivePayload.development_stage ?? "unknown",
+          disease_indication: effectivePayload.disease_indication ?? "unknown",
+          summary: effectivePayload.summary ?? "",
+          source_title: effectivePayload.source_title ?? effectivePayload.asset_name,
+          source_journal: effectivePayload.source_journal ?? "Unknown",
+          publication_year: effectivePayload.publication_year ?? "",
+          source_name: effectivePayload.source_name ?? "unknown",
+          source_url: effectivePayload.source_url ?? undefined,
+          pmid: effectivePayload.pmid ?? undefined,
+          ingested_asset_id: effectivePayload.ingested_asset_id ?? undefined,
+          pipeline_list_id: pipelineListId,
+        }),
       });
+      if (!res.ok) throw new Error("Failed to save asset");
       return res.json();
     },
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      const pl = pipelines.find((p) => p.id === vars.pipelineListId);
+      const pl = pipelines.find((p) => p.id === (vars.pipelineId ?? vars.pipelineListId));
       toast({
         title: "Asset saved",
         description: pl ? `Added to "${pl.name}"` : "Added to Uncategorised",
@@ -90,23 +139,34 @@ export function PipelinePicker({ asset, variant = "icon" }: Props) {
 
   const createAndSaveMutation = useMutation({
     mutationFn: async (name: string) => {
-      const plRes = await apiRequest("POST", "/api/pipelines", { name });
-      const { pipeline } = await plRes.json();
-      const res = await apiRequest("POST", "/api/saved-assets", {
-        asset_name: asset.asset_name,
-        target: asset.target,
-        modality: asset.modality,
-        development_stage: asset.development_stage,
-        disease_indication: asset.indication,
-        summary: asset.summary,
-        source_title: asset.signals?.[0]?.title ?? asset.asset_name,
-        source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
-        publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-        source_name: asset.source_types?.[0] ?? "unknown",
-        source_url: asset.source_urls?.[0] ?? undefined,
-        pmid: asset.id,
-        pipeline_list_id: pipeline.id,
+      if (!effectivePayload) throw new Error("No asset payload");
+      const plRes = await fetch("/api/pipelines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
       });
+      if (!plRes.ok) throw new Error("Failed to create pipeline");
+      const { pipeline } = await plRes.json();
+      const res = await fetch(`/api/pipelines/${pipeline.id}/assets`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          asset_name: effectivePayload.asset_name,
+          target: effectivePayload.target ?? "unknown",
+          modality: effectivePayload.modality ?? "unknown",
+          development_stage: effectivePayload.development_stage ?? "unknown",
+          disease_indication: effectivePayload.disease_indication ?? "unknown",
+          summary: effectivePayload.summary ?? "",
+          source_title: effectivePayload.source_title ?? effectivePayload.asset_name,
+          source_journal: effectivePayload.source_journal ?? "Unknown",
+          publication_year: effectivePayload.publication_year ?? "",
+          source_name: effectivePayload.source_name ?? "unknown",
+          source_url: effectivePayload.source_url ?? undefined,
+          pmid: effectivePayload.pmid ?? undefined,
+          ingested_asset_id: effectivePayload.ingested_asset_id ?? undefined,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save asset");
       return { asset: await res.json(), pipeline };
     },
     onSuccess: ({ pipeline }) => {
@@ -131,36 +191,40 @@ export function PipelinePicker({ asset, variant = "icon" }: Props) {
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open && !isSaved} onOpenChange={(o) => { if (!isSaved) setOpen(o); }}>
       <PopoverTrigger asChild>
         {variant === "button" ? (
           <Button
             variant="outline"
             size="sm"
-            className={`gap-1.5 h-8 text-xs ${alreadySaved ? "border-primary/40 text-primary bg-primary/5" : "border-card-border"}`}
+            className={`gap-1.5 h-8 text-xs ${isSaved ? "border-primary/40 text-primary bg-primary/5" : "border-card-border"}`}
             disabled={isPending}
-            data-testid={`button-save-asset-${asset.id}`}
+            data-testid={`button-save-asset-${effectivePayload?.pmid ?? effectivePayload?.asset_name}`}
           >
-            {alreadySaved ? (
+            {isSaved ? (
               <Check className="w-3 h-3" />
             ) : (
               <Bookmark className="w-3 h-3" />
             )}
-            {alreadySaved ? "Saved" : "Save"}
+            {isSaved ? "Saved" : "Save"}
             <ChevronDown className="w-3 h-3 opacity-60" />
           </Button>
         ) : (
           <button
             className={`w-7 h-7 rounded flex items-center justify-center transition-all duration-150 ${
-              alreadySaved
+              isSaved
                 ? "text-primary bg-primary/10 border border-primary/30"
                 : "text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20"
             }`}
             disabled={isPending}
-            data-testid={`button-save-asset-${asset.id}`}
-            title={alreadySaved ? "Saved — click to save to another pipeline" : "Save to pipeline"}
+            data-testid={`button-save-asset-${effectivePayload?.pmid ?? effectivePayload?.asset_name}`}
+            title={isSaved ? "Saved — click to save to another pipeline" : "Save to pipeline"}
           >
-            <Bookmark className="w-3.5 h-3.5" />
+            {isPending ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            ) : (
+              <Bookmark className="w-3.5 h-3.5" fill={isSaved ? "currentColor" : "none"} />
+            )}
           </button>
         )}
       </PopoverTrigger>
@@ -190,7 +254,7 @@ export function PipelinePicker({ asset, variant = "icon" }: Props) {
         {pipelines.map((p) => (
           <button
             key={p.id}
-            onClick={() => saveMutation.mutate({ pipelineListId: p.id })}
+            onClick={() => saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
             disabled={isPending}
             className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted/50 transition-colors text-left"
             data-testid={`pipeline-option-${p.id}`}

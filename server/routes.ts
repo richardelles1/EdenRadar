@@ -648,6 +648,7 @@ export async function registerRoutes(
       const list = await storage.createPipelineList({ name });
       res.status(201).json({ pipeline: { ...list, assetCount: 0 } });
     } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });
       res.status(500).json({ error: err.message ?? "Failed to create pipeline" });
     }
   });
@@ -661,6 +662,7 @@ export async function registerRoutes(
       if (!list) return res.status(404).json({ error: "Pipeline not found" });
       res.json({ pipeline: list });
     } catch (err: any) {
+      if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });
       res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
     }
   });
@@ -1798,7 +1800,8 @@ export async function registerRoutes(
 
   app.post("/api/eden/chat", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
+    if (pass !== "eden" && pass !== SITE_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
 
     const { message, sessionId } = req.body ?? {};
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -1894,7 +1897,8 @@ export async function registerRoutes(
 
   app.get("/api/eden/feedback/:sessionId", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
+    if (pass !== "eden" && pass !== SITE_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
     try {
       const data = await storage.getEdenFeedbackForSession(req.params.sessionId);
       return res.json(data);
@@ -1906,7 +1910,8 @@ export async function registerRoutes(
 
   app.post("/api/eden/feedback", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const SITE_PASSWORD2 = process.env.SITE_PASSWORD ?? "quality";
+    if (pass !== "eden" && pass !== SITE_PASSWORD2) return res.status(401).json({ error: "Unauthorized" });
     const { sessionId, messageIndex, sentiment } = req.body ?? {};
     if (!sessionId || typeof messageIndex !== "number" || !["up", "down"].includes(sentiment)) {
       return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
@@ -1922,7 +1927,8 @@ export async function registerRoutes(
 
   app.get("/api/eden/sessions", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const SITE_PASSWORD3 = process.env.SITE_PASSWORD ?? "quality";
+    if (pass !== "eden" && pass !== SITE_PASSWORD3) return res.status(401).json({ error: "Unauthorized" });
     try {
       const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
       const sessions = await storage.listEdenSessions(limit);

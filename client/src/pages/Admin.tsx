@@ -13,6 +13,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { useEdenChat, type ChatAsset, type ChatMessage, type EdenSessionSummary } from "@/hooks/useEdenChat";
+import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 
 const ADMIN_KEY = "eden-admin-pw";
 
@@ -2859,196 +2860,36 @@ function relevanceLabel(similarity: number): { label: string; cls: string } {
 type PipelineWithCount = { id: number; name: string; assetCount: number };
 type PipelinesResponse = { pipelines: PipelineWithCount[]; uncategorisedCount: number };
 
-function CitationCard({ asset, index, adminPassword, savedIngestedIds }: {
+function CitationCard({ asset, index, savedIngestedIds }: {
   asset: ChatAsset;
   index: number;
-  adminPassword: string;
+  adminPassword?: string;
   savedIngestedIds: Set<number>;
 }) {
   const { label, cls } = relevanceLabel(asset.similarity);
-  const { toast } = useToast();
-  const [savedLocally, setSavedLocally] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [creatingPipeline, setCreatingPipeline] = useState(false);
-  const [newPipelineName, setNewPipelineName] = useState("");
-  const isSaved = savedIngestedIds.has(asset.id) || savedLocally;
+  const isSaved = savedIngestedIds.has(asset.id);
 
-  const { data: pipelinesData } = useQuery<PipelinesResponse>({
-    queryKey: ["/api/pipelines"],
-    staleTime: 30000,
-    enabled: popoverOpen,
-  });
-  const pipelines = pipelinesData?.pipelines ?? [];
-
-  const bookmarkMutation = useMutation({
-    mutationFn: async ({ pipelineListId, pipelineId }: { pipelineListId: number | null; pipelineId?: number }) => {
-      const url = pipelineId != null ? `/api/pipelines/${pipelineId}/assets` : "/api/saved-assets";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": adminPassword },
-        body: JSON.stringify({
-          ingested_asset_id: asset.id,
-          asset_name: asset.assetName,
-          target: "unknown",
-          modality: asset.modality || "unknown",
-          development_stage: asset.developmentStage || "unknown",
-          disease_indication: asset.indication || "unknown",
-          summary: "",
-          source_title: asset.assetName,
-          source_journal: asset.institution,
-          publication_year: "",
-          source_name: asset.sourceName || "tto",
-          source_url: asset.sourceUrl ?? undefined,
-          pipeline_list_id: pipelineListId,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save asset");
-      return res.json();
-    },
-    onMutate: () => setSavedLocally(true),
-    onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      const pl = pipelines.find((p) => p.id === (vars.pipelineId ?? vars.pipelineListId));
-      toast({ title: "Asset saved", description: pl ? `Added to "${pl.name}"` : "Added to Uncategorised" });
-      setPopoverOpen(false);
-    },
-    onError: () => {
-      setSavedLocally(false);
-      toast({ title: "Failed to save", description: "Please try again", variant: "destructive" });
-    },
-  });
-
-  const createAndSaveMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const plRes = await fetch("/api/pipelines", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!plRes.ok) throw new Error("Failed to create pipeline");
-      const { pipeline } = await plRes.json();
-      const res = await fetch(`/api/pipelines/${pipeline.id}/assets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": adminPassword },
-        body: JSON.stringify({
-          ingested_asset_id: asset.id,
-          asset_name: asset.assetName,
-          target: "unknown",
-          modality: asset.modality || "unknown",
-          development_stage: asset.developmentStage || "unknown",
-          disease_indication: asset.indication || "unknown",
-          summary: "",
-          source_title: asset.assetName,
-          source_journal: asset.institution,
-          publication_year: "",
-          source_name: asset.sourceName || "tto",
-          source_url: asset.sourceUrl ?? undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save asset");
-      return { asset: await res.json(), pipeline };
-    },
-    onMutate: () => setSavedLocally(true),
-    onSuccess: ({ pipeline }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      toast({ title: "Asset saved", description: `Added to new pipeline "${pipeline.name}"` });
-      setNewPipelineName("");
-      setCreatingPipeline(false);
-      setPopoverOpen(false);
-    },
-    onError: () => {
-      setSavedLocally(false);
-      toast({ title: "Failed to save", description: "Please try again", variant: "destructive" });
-    },
-  });
-
-  const isPending = bookmarkMutation.isPending || createAndSaveMutation.isPending;
+  const pickerPayload: PipelinePickerPayload = {
+    asset_name: asset.assetName,
+    target: "unknown",
+    modality: asset.modality || "unknown",
+    development_stage: asset.developmentStage || "unknown",
+    disease_indication: asset.indication || "unknown",
+    summary: "",
+    source_title: asset.assetName,
+    source_journal: asset.institution,
+    publication_year: "",
+    source_name: asset.sourceName || "tto",
+    source_url: asset.sourceUrl ?? null,
+    ingested_asset_id: asset.id,
+  };
 
   return (
     <div className="rounded-lg border border-border bg-background p-3 flex flex-col gap-1.5" data-testid={`citation-card-${index}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2 flex-1">{asset.assetName}</p>
         <div className="flex items-center gap-1 shrink-0">
-          <Popover open={popoverOpen && !isSaved} onOpenChange={(o) => { if (!isSaved) setPopoverOpen(o); }}>
-            <PopoverTrigger asChild>
-              <button
-                disabled={isSaved || isPending}
-                className={`p-0.5 rounded transition-colors ${isSaved ? "text-emerald-500 cursor-default" : "text-muted-foreground hover:text-emerald-500"}`}
-                title={isSaved ? "Saved to pipeline" : "Save to pipeline"}
-                data-testid={`button-bookmark-${index}`}
-              >
-                {isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                ) : (
-                  <Bookmark className="h-3 w-3" fill={isSaved ? "currentColor" : "none"} />
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 shadow-lg" align="end" data-testid={`pipeline-picker-${index}`}>
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">Save to pipeline</div>
-              <button
-                onClick={() => bookmarkMutation.mutate({ pipelineListId: null })}
-                disabled={isPending}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors text-left"
-                data-testid="pipeline-option-uncategorised"
-              >
-                <Layers className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="flex-1 truncate">Uncategorised</span>
-              </button>
-              {pipelines.length > 0 && <div className="my-1 border-t border-border" />}
-              {pipelines.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => bookmarkMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
-                  disabled={isPending}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors text-left"
-                  data-testid={`pipeline-option-${p.id}`}
-                >
-                  <Layers className="w-3 h-3 text-primary/70 shrink-0" />
-                  <span className="flex-1 truncate">{p.name}</span>
-                  <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
-                </button>
-              ))}
-              <div className="mt-1 border-t border-border pt-1">
-                {creatingPipeline ? (
-                  <div className="flex items-center gap-1 px-1">
-                    <Input
-                      autoFocus
-                      value={newPipelineName}
-                      onChange={(e) => setNewPipelineName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newPipelineName.trim()) createAndSaveMutation.mutate(newPipelineName.trim());
-                        if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
-                      }}
-                      placeholder="Pipeline name…"
-                      className="h-6 text-xs flex-1"
-                      data-testid="input-new-pipeline-name"
-                    />
-                    <Button
-                      size="sm"
-                      className="h-6 px-1.5 text-xs"
-                      onClick={() => { if (newPipelineName.trim()) createAndSaveMutation.mutate(newPipelineName.trim()); }}
-                      disabled={!newPipelineName.trim() || isPending}
-                      data-testid="button-confirm-new-pipeline"
-                    >
-                      <Check className="w-3 h-3" />
-                    </Button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setCreatingPipeline(true)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-left"
-                    data-testid="button-new-pipeline"
-                  >
-                    <Plus className="w-3 h-3 shrink-0" />
-                    New pipeline…
-                  </button>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <PipelinePicker payload={pickerPayload} alreadySaved={isSaved} />
           <span className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${cls}`}>{label}</span>
         </div>
       </div>

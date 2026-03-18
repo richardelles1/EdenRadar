@@ -353,8 +353,24 @@ export default function Assets() {
     staleTime: 30000,
   });
 
+  const assetsQueryKey = selectedPipeline === "all"
+    ? ["/api/saved-assets"]
+    : selectedPipeline === null
+      ? ["/api/saved-assets", "pipeline", null]
+      : ["/api/saved-assets", "pipeline", selectedPipeline];
+
   const { data, isLoading: assetsLoading } = useQuery<SavedAssetsResponse>({
-    queryKey: ["/api/saved-assets"],
+    queryKey: assetsQueryKey,
+    queryFn: async () => {
+      const url = selectedPipeline === "all"
+        ? "/api/saved-assets"
+        : selectedPipeline === null
+          ? "/api/saved-assets?pipelineListId=null"
+          : `/api/saved-assets?pipelineListId=${selectedPipeline}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to load assets");
+      return res.json();
+    },
   });
 
   const deleteMutation = useMutation({
@@ -403,16 +419,10 @@ export default function Assets() {
 
   const pipelines = pipelinesData?.pipelines ?? [];
   const uncategorisedCount = pipelinesData?.uncategorisedCount ?? 0;
-  const allAssets = data?.assets ?? [];
-
-  const displayedAssets = selectedPipeline === "all"
-    ? allAssets
-    : selectedPipeline === null
-      ? allAssets.filter((a) => a.pipelineListId == null)
-      : allAssets.filter((a) => a.pipelineListId === selectedPipeline);
+  const displayedAssets = data?.assets ?? [];
 
   const isLoading = pipelinesLoading || assetsLoading;
-  const totalAssets = allAssets.length;
+  const totalAssets = displayedAssets.length;
 
   const selectedPipelineName = selectedPipeline === "all"
     ? "All Assets"

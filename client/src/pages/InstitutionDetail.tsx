@@ -1,24 +1,19 @@
 import { useState } from "react";
 import { Link, useParams } from "wouter";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   ArrowLeft, Building2, ExternalLink, FlaskConical, RefreshCw,
-  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown, Bookmark, Layers, Plus, Check, Loader2,
+  ShieldOff, ChevronDown, ChevronUp, ArrowUpDown,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
 import { INSTITUTIONS, BLOCKED_SLUGS as _BLOCKED } from "@/lib/institutions";
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
-import { useToast } from "@/hooks/use-toast";
-
-type PipelineWithCount = { id: number; name: string; assetCount: number };
-type PipelinesResponse = { pipelines: PipelineWithCount[]; uncategorisedCount: number };
+import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 
 const BLOCKED_SLUGS = new Set([
   "ucsf", "duke", "umich", "mayo", "ucolorado", "columbia",
@@ -56,111 +51,27 @@ function AssetRow({ asset, index, savedIngestedIds }: {
   index: number;
   savedIngestedIds: Set<number>;
 }) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
   const [expanded, setExpanded] = useState(false);
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [savedLocally, setSavedLocally] = useState(false);
-  const [creatingPipeline, setCreatingPipeline] = useState(false);
-  const [newPipelineName, setNewPipelineName] = useState("");
 
   const modality = detectModality(asset.assetName);
   const stage = detectStage(asset.assetName, asset.developmentStage);
   const score = computeCommercialScore(asset);
-  const isSaved = savedIngestedIds.has(asset.id) || savedLocally;
+  const isSaved = savedIngestedIds.has(asset.id);
 
-  const { data: pipelinesData } = useQuery<PipelinesResponse>({
-    queryKey: ["/api/pipelines"],
-    staleTime: 30000,
-    enabled: popoverOpen,
-  });
-  const pipelines = pipelinesData?.pipelines ?? [];
-
-  const saveMutation = useMutation({
-    mutationFn: async ({ pipelineListId, pipelineId }: { pipelineListId: number | null; pipelineId?: number }) => {
-      const url = pipelineId != null ? `/api/pipelines/${pipelineId}/assets` : "/api/saved-assets";
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ingested_asset_id: asset.id,
-          asset_name: asset.assetName,
-          target: asset.target || "unknown",
-          modality: modality || asset.modality || "unknown",
-          development_stage: stage || asset.developmentStage || "unknown",
-          disease_indication: asset.indication || "unknown",
-          summary: asset.summary || "",
-          source_title: asset.assetName,
-          source_journal: asset.institution,
-          publication_year: "",
-          source_name: asset.sourceName || "tech_transfer",
-          source_url: asset.sourceUrl ?? undefined,
-          pipeline_list_id: pipelineListId,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save asset");
-      return res.json();
-    },
-    onMutate: () => setSavedLocally(true),
-    onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      const pl = pipelines.find((p) => p.id === (vars.pipelineId ?? vars.pipelineListId));
-      toast({ title: "Asset saved", description: pl ? `Added to "${pl.name}"` : "Added to Uncategorised" });
-      setPopoverOpen(false);
-    },
-    onError: () => {
-      setSavedLocally(false);
-      toast({ title: "Save failed", description: "Please try again", variant: "destructive" });
-    },
-  });
-
-  const createAndSaveMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const plRes = await fetch("/api/pipelines", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!plRes.ok) throw new Error("Failed to create pipeline");
-      const { pipeline } = await plRes.json();
-      const res = await fetch(`/api/pipelines/${pipeline.id}/assets`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ingested_asset_id: asset.id,
-          asset_name: asset.assetName,
-          target: asset.target || "unknown",
-          modality: modality || asset.modality || "unknown",
-          development_stage: stage || asset.developmentStage || "unknown",
-          disease_indication: asset.indication || "unknown",
-          summary: asset.summary || "",
-          source_title: asset.assetName,
-          source_journal: asset.institution,
-          publication_year: "",
-          source_name: asset.sourceName || "tech_transfer",
-          source_url: asset.sourceUrl ?? undefined,
-        }),
-      });
-      if (!res.ok) throw new Error("Failed to save asset");
-      return { asset: await res.json(), pipeline };
-    },
-    onMutate: () => setSavedLocally(true),
-    onSuccess: ({ pipeline }) => {
-      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
-      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      toast({ title: "Asset saved", description: `Added to new pipeline "${pipeline.name}"` });
-      setNewPipelineName("");
-      setCreatingPipeline(false);
-      setPopoverOpen(false);
-    },
-    onError: () => {
-      setSavedLocally(false);
-      toast({ title: "Save failed", description: "Please try again", variant: "destructive" });
-    },
-  });
-
-  const isPending = saveMutation.isPending || createAndSaveMutation.isPending;
+  const pickerPayload: PipelinePickerPayload = {
+    asset_name: asset.assetName,
+    target: asset.target || "unknown",
+    modality: modality || asset.modality || "unknown",
+    development_stage: stage || asset.developmentStage || "unknown",
+    disease_indication: asset.indication || "unknown",
+    summary: asset.summary || "",
+    source_title: asset.assetName,
+    source_journal: asset.institution,
+    publication_year: "",
+    source_name: asset.sourceName || "tech_transfer",
+    source_url: asset.sourceUrl ?? null,
+    ingested_asset_id: asset.id,
+  };
 
   return (
     <div
@@ -184,87 +95,7 @@ function AssetRow({ asset, index, savedIngestedIds }: {
         </div>
 
         <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-          <Popover open={popoverOpen && !isSaved} onOpenChange={(o) => { if (!isSaved) setPopoverOpen(o); }}>
-            <PopoverTrigger asChild>
-              <button
-                disabled={isSaved || isPending}
-                className={`w-7 h-7 rounded flex items-center justify-center transition-all ${
-                  isSaved
-                    ? "text-primary bg-primary/10 border border-primary/30 cursor-default"
-                    : "text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20"
-                }`}
-                title={isSaved ? "Saved to pipeline" : "Save to pipeline"}
-                data-testid={`button-save-asset-${index}`}
-              >
-                {isPending ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Bookmark className="w-3.5 h-3.5" fill={isSaved ? "currentColor" : "none"} />
-                )}
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-56 p-2 shadow-lg" align="end" data-testid={`pipeline-picker-${index}`}>
-              <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">Save to pipeline</div>
-              <button
-                onClick={() => saveMutation.mutate({ pipelineListId: null })}
-                disabled={isPending}
-                className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors text-left"
-                data-testid="pipeline-option-uncategorised"
-              >
-                <Layers className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="flex-1 truncate">Uncategorised</span>
-              </button>
-              {pipelines.length > 0 && <div className="my-1 border-t border-border" />}
-              {pipelines.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
-                  disabled={isPending}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-muted/50 transition-colors text-left"
-                  data-testid={`pipeline-option-${p.id}`}
-                >
-                  <Layers className="w-3 h-3 text-primary/70 shrink-0" />
-                  <span className="flex-1 truncate">{p.name}</span>
-                  <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
-                </button>
-              ))}
-              <div className="mt-1 border-t border-border pt-1">
-                {creatingPipeline ? (
-                  <div className="flex items-center gap-1 px-1">
-                    <Input
-                      autoFocus
-                      value={newPipelineName}
-                      onChange={(e) => setNewPipelineName(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && newPipelineName.trim()) createAndSaveMutation.mutate(newPipelineName.trim());
-                        if (e.key === "Escape") { setCreatingPipeline(false); setNewPipelineName(""); }
-                      }}
-                      placeholder="Pipeline name…"
-                      className="h-6 text-xs flex-1"
-                      data-testid="input-new-pipeline-name"
-                    />
-                    <button
-                      onClick={() => { if (newPipelineName.trim()) createAndSaveMutation.mutate(newPipelineName.trim()); }}
-                      disabled={!newPipelineName.trim() || isPending}
-                      className="w-6 h-6 flex items-center justify-center rounded bg-primary/10 text-primary hover:bg-primary/20 disabled:opacity-40"
-                      data-testid="button-confirm-new-pipeline"
-                    >
-                      <Check className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => setCreatingPipeline(true)}
-                    className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors text-left"
-                    data-testid="button-new-pipeline"
-                  >
-                    <Plus className="w-3 h-3 shrink-0" />
-                    New pipeline…
-                  </button>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          <PipelinePicker payload={pickerPayload} alreadySaved={isSaved} />
 
           {stage && (
             <span
