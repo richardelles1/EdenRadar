@@ -483,6 +483,15 @@ export const conceptInterests = pgTable("concept_interests", {
 });
 export type ConceptInterest = typeof conceptInterests.$inferSelect;
 
+export const edenMessageFeedback = pgTable("eden_message_feedback", {
+  id: serial("id").primaryKey(),
+  sessionId: text("session_id").notNull(),
+  messageIndex: integer("message_index").notNull(),
+  sentiment: text("sentiment").notNull(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type EdenMessageFeedback = typeof edenMessageFeedback.$inferSelect;
+
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),

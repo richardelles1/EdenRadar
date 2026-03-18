@@ -130,11 +130,11 @@ export async function* ragQuery(
   ];
 
   const stream = await client.chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-4o-mini",
     messages,
     stream: true,
     temperature: 0.5,
-    max_tokens: 700,
+    max_tokens: 600,
   });
 
   for await (const chunk of stream) {
@@ -154,11 +154,11 @@ export async function* directQuery(
   ];
 
   const stream = await client.chat.completions.create({
-    model: "gpt-4o",
+    model: "gpt-4o-mini",
     messages,
     stream: true,
     temperature: 0.7,
-    max_tokens: 350,
+    max_tokens: 280,
   });
 
   for await (const chunk of stream) {

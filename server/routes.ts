@@ -1631,6 +1631,44 @@ export async function registerRoutes(
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────
 
+  const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
+    { pattern: /\bstanford\b/i, name: "stanford" },
+    { pattern: /\bmit\b|\bmassachusetts\s+institute\b/i, name: "mit" },
+    { pattern: /\bharvard\b/i, name: "harvard" },
+    { pattern: /\bcolumbia\b/i, name: "columbia" },
+    { pattern: /\byale\b/i, name: "yale" },
+    { pattern: /\bjohns\s+hop+kins\b/i, name: "johns hopkins" },
+    { pattern: /\bduke\b/i, name: "duke" },
+    { pattern: /\bucsf\b/i, name: "ucsf" },
+    { pattern: /\bucla\b/i, name: "ucla" },
+    { pattern: /\bcaltech\b|\bcalifornia\s+institute\s+of\s+tech/i, name: "caltech" },
+    { pattern: /\bcornell\b/i, name: "cornell" },
+    { pattern: /\bprinceton\b/i, name: "princeton" },
+    { pattern: /\bupenn\b|\buniversity\s+of\s+pennsylvania\b/i, name: "university of pennsylvania" },
+    { pattern: /\buniversity\s+of\s+michigan\b/i, name: "university of michigan" },
+    { pattern: /\buniversity\s+of\s+toronto\b/i, name: "university of toronto" },
+    { pattern: /\buniversity\s+of\s+oxford\b|\boxford\s+university\b/i, name: "university of oxford" },
+    { pattern: /\buniversity\s+of\s+cambridge\b|\bcambridge\s+university\b/i, name: "university of cambridge" },
+    { pattern: /\bwustl\b|\bwashington\s+university\b/i, name: "washington university" },
+    { pattern: /\buc\s+san\s+diego\b|\bucsd\b/i, name: "uc san diego" },
+    { pattern: /\buc\s+davis\b/i, name: "uc davis" },
+    { pattern: /\buc\s+berkeley\b|\bberkeley\b/i, name: "uc berkeley" },
+    { pattern: /\bpitt\b|\buniversity\s+of\s+pittsburgh\b/i, name: "university of pittsburgh" },
+    { pattern: /\bemory\b/i, name: "emory" },
+    { pattern: /\bvanderbi?lt\b/i, name: "vanderbilt" },
+    { pattern: /\bgeorgetown\b/i, name: "georgetown" },
+    { pattern: /\bnorthwestern\b/i, name: "northwestern" },
+    { pattern: /\bnyu\b|\bnew\s+york\s+university\b/i, name: "new york university" },
+    { pattern: /\bbaylor\b/i, name: "baylor" },
+    { pattern: /\btufts\b/i, name: "tufts" },
+  ];
+  function detectInstitutionKeyword(query: string): string | null {
+    for (const { pattern, name } of INSTITUTION_PATTERNS) {
+      if (pattern.test(query)) return name;
+    }
+    return null;
+  }
+
   app.post("/api/eden/chat", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
@@ -1675,9 +1713,18 @@ export async function registerRoutes(
           assets: [],
         });
       } else {
-        const queryEmbedding = await embedQuery(message.trim());
-        const allRetrieved = await storage.semanticSearch(queryEmbedding, 15);
-        const retrieved = allRetrieved.filter((a) => a.similarity > 0.45);
+        const institutionName = detectInstitutionKeyword(message.trim());
+        const [queryEmbedding, institutionAssets] = await Promise.all([
+          embedQuery(message.trim()),
+          institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
+        ]);
+        const allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+        const threshold = institutionName ? 0.38 : 0.45;
+        const institutionIds = new Set(institutionAssets.map((a) => a.id));
+        const retrieved = [
+          ...institutionAssets,
+          ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
+        ].slice(0, 15);
 
         const assetPayload = retrieved.map((a) => ({
           id: a.id,
@@ -1715,6 +1762,22 @@ export async function registerRoutes(
       sendEvent("error", { message: errMsg });
     } finally {
       res.end();
+    }
+  });
+
+  app.post("/api/eden/feedback", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { sessionId, messageIndex, sentiment } = req.body ?? {};
+    if (!sessionId || typeof messageIndex !== "number" || !["up", "down"].includes(sentiment)) {
+      return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
+    }
+    try {
+      await storage.createEdenMessageFeedback(sessionId, messageIndex, sentiment);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.error("[EDEN feedback]", err);
+      return res.status(500).json({ error: "Failed to record feedback" });
     }
   });
 

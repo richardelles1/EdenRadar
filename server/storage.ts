@@ -14,9 +14,10 @@ import {
   savedGrants, type SavedGrant, type InsertSavedGrant,
   reviewQueue,
   edenSessions, type EdenSession,
+  edenMessageFeedback,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or } from "drizzle-orm";
+import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike } from "drizzle-orm";
 
 export type RetrievedAsset = {
   id: number;
@@ -179,10 +180,12 @@ export interface IStorage {
   }>>;
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
+  searchIngestedAssetsByInstitution(name: string, limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
   appendEdenMessage(sessionId: string, turn: { role: "user" | "assistant"; content: string; assetIds?: number[] }): Promise<EdenSession>;
   getEdenSession(sessionId: string): Promise<EdenSession | undefined>;
   listEdenSessions(limit?: number): Promise<EdenSession[]>;
+  createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1141,6 +1144,47 @@ export class DatabaseStorage implements IStorage {
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
     }));
+  }
+
+  async searchIngestedAssetsByInstitution(name: string, limit = 8): Promise<RetrievedAsset[]> {
+    const pattern = `%${name.toLowerCase()}%`;
+    const result = await db.execute(sql`
+      SELECT
+        id, asset_name, target, modality, indication, development_stage, institution,
+        mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+        completeness_score, licensing_readiness, ip_type, source_url, source_name,
+        summary, categories,
+        0.85 AS similarity
+      FROM ingested_assets
+      WHERE relevant = true AND LOWER(institution) LIKE ${pattern}
+      ORDER BY last_seen_at DESC
+      LIMIT ${limit}
+    `);
+    return (result.rows as Record<string, unknown>[]).map((r) => ({
+      id: Number(r.id),
+      assetName: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
+      target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
+      modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
+      indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
+      developmentStage: typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? ""),
+      institution: typeof r.institution === "string" ? r.institution : String(r.institution ?? ""),
+      mechanismOfAction: typeof r.mechanism_of_action === "string" && r.mechanism_of_action ? r.mechanism_of_action : null,
+      innovationClaim: typeof r.innovation_claim === "string" && r.innovation_claim ? r.innovation_claim : null,
+      unmetNeed: typeof r.unmet_need === "string" && r.unmet_need ? r.unmet_need : null,
+      comparableDrugs: typeof r.comparable_drugs === "string" && r.comparable_drugs ? r.comparable_drugs : null,
+      completenessScore: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+      licensingReadiness: typeof r.licensing_readiness === "string" && r.licensing_readiness ? r.licensing_readiness : null,
+      ipType: typeof r.ip_type === "string" && r.ip_type ? r.ip_type : null,
+      sourceUrl: typeof r.source_url === "string" && r.source_url ? r.source_url : null,
+      sourceName: typeof r.source_name === "string" && r.source_name ? r.source_name : null,
+      summary: typeof r.summary === "string" && r.summary ? r.summary : null,
+      categories: typeof r.categories === "string" && r.categories ? r.categories : null,
+      similarity: 0.85,
+    }));
+  }
+
+  async createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void> {
+    await db.insert(edenMessageFeedback).values({ sessionId, messageIndex, sentiment });
   }
 
   async getOrCreateEdenSession(sessionId: string): Promise<EdenSession> {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -2938,10 +2938,12 @@ function EdenTab({ pw }: { pw: string }) {
     input: chatInput,
     setInput: setChatInput,
     streaming: chatStreaming,
+    sessionId: chatSessionId,
     send: sendChatMessage,
     clearChat,
     loadSession: loadSessionFromHook,
   } = useEdenChat(pw);
+  const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
@@ -3037,7 +3039,22 @@ function EdenTab({ pw }: { pw: string }) {
   function loadSession(s: EdenSessionSummary) {
     loadSessionFromHook(s);
     setExpandedCitations({});
+    setMessageFeedback({});
     setHistoryOpen(false);
+  }
+
+  async function handleFeedback(msgIndex: number, sentiment: "up" | "down") {
+    if (messageFeedback[msgIndex]) return;
+    setMessageFeedback((prev) => ({ ...prev, [msgIndex]: sentiment }));
+    try {
+      await fetch("/api/eden/feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ sessionId: chatSessionId, messageIndex: msgIndex, sentiment }),
+      });
+    } catch {
+      setMessageFeedback((prev) => { const n = { ...prev }; delete n[msgIndex]; return n; });
+    }
   }
 
   useEffect(() => {
@@ -3092,7 +3109,7 @@ function EdenTab({ pw }: { pw: string }) {
                 variant="ghost"
                 size="sm"
                 className="text-xs h-7 px-2"
-                onClick={() => { clearChat(); setExpandedCitations({}); }}
+                onClick={() => { clearChat(); setExpandedCitations({}); setMessageFeedback({}); }}
                 data-testid="button-chat-clear"
               >
                 New chat
@@ -3200,7 +3217,7 @@ function EdenTab({ pw }: { pw: string }) {
                       <button
                         key={q}
                         onClick={() => sendChatMessage(q)}
-                        className="text-xs rounded-full border border-border bg-background hover:bg-muted px-3 py-1.5 text-muted-foreground hover:text-foreground transition-colors transition-transform duration-150 hover:scale-[1.02] text-left"
+                        className="text-xs rounded-xl border border-border/60 bg-card hover:bg-muted/80 px-3.5 py-2 text-muted-foreground hover:text-foreground shadow-sm hover:shadow-md transition-all duration-200 hover:-translate-y-0.5 text-left font-medium"
                         style={{ animation: "em-fade-up 280ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${180 + qi * 40}ms` }}
                         data-testid={`chip-starter-${q.slice(0, 20).replace(/\s/g, "-").toLowerCase()}`}
                       >
@@ -3247,6 +3264,28 @@ function EdenTab({ pw }: { pw: string }) {
                         </>
                       )}
                     </div>
+
+                    {/* Feedback buttons */}
+                    {msg.role === "assistant" && !msg.isStreaming && msg.content && (
+                      <div className="flex items-center gap-0.5 mt-1.5 ml-0.5">
+                        <button
+                          onClick={() => handleFeedback(i, "up")}
+                          className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/30 hover:text-emerald-500"}`}
+                          title="Good response"
+                          data-testid={`button-feedback-up-${i}`}
+                        >
+                          <ThumbsUp className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => handleFeedback(i, "down")}
+                          className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-400"}`}
+                          title="Bad response"
+                          data-testid={`button-feedback-down-${i}`}
+                        >
+                          <ThumbsDown className="h-3 w-3" />
+                        </button>
+                      </div>
+                    )}
 
                     {/* Citation cards — deferred behind toggle */}
                     {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
