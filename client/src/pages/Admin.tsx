@@ -2630,8 +2630,8 @@ function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; s
 }
 
 function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
-  const W = 560, H = 520;
-  const cx = W / 2, cy = H / 2 + 10;
+  const W = 560, H = 600;
+  const cx = W / 2, cy = H / 2;
 
   const HAL = { rx: 248, ry: 84 };
   const R1  = { rx: 210, ry: 71 };
