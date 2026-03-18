@@ -20,7 +20,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, isConversational } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, isConversational, type UserContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1803,12 +1803,13 @@ export async function registerRoutes(
     const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
     if (pass !== "eden" && pass !== SITE_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
 
-    const { message, sessionId } = req.body ?? {};
+    const { message, sessionId, userContext } = req.body ?? {};
     if (!message || typeof message !== "string" || !message.trim()) {
       return res.status(400).json({ error: "message is required" });
     }
 
     const sid = (typeof sessionId === "string" && sessionId) || crypto.randomUUID();
+    const ctx: UserContext | undefined = userContext && typeof userContext === "object" ? userContext as UserContext : undefined;
 
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
@@ -1831,7 +1832,7 @@ export async function registerRoutes(
         sendEvent("context", { sessionId: sid, assets: [] });
 
         let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history)) {
+        for await (const token of directQuery(message.trim(), history, ctx)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1872,7 +1873,7 @@ export async function registerRoutes(
         sendEvent("context", { sessionId: sid, assets: assetPayload });
 
         let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history)) {
+        for await (const token of ragQuery(message.trim(), retrieved, history, ctx)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
@@ -1949,6 +1950,129 @@ export async function registerRoutes(
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed";
       res.status(500).json({ error: msg });
+    }
+  });
+
+  // ── Eden data-query tool routes ───────────────────────────────────────────
+  // Simple SQL aggregations — authenticated with site or admin password
+
+  function edenQueryAuth(req: import("express").Request, res: import("express").Response): boolean {
+    const pass = (req.headers["x-admin-password"] ?? req.query.adminPassword) as string;
+    const SITE_PW = process.env.SITE_PASSWORD ?? "quality";
+    if (pass !== "eden" && pass !== SITE_PW) {
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/eden/query/count-by-institution", async (req, res) => {
+    if (!edenQueryAuth(req, res)) return;
+    try {
+      const area = typeof req.query.area === "string" ? req.query.area.toLowerCase() : null;
+      const rows = await db
+        .select({
+          institution: ingestedAssets.institution,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(ingestedAssets)
+        .where(
+          area
+            ? sql`${ingestedAssets.relevant} = true AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area + "%"} OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area + "%"})`
+            : sql`${ingestedAssets.relevant} = true`
+        )
+        .groupBy(ingestedAssets.institution)
+        .orderBy(sql`count(*) DESC`)
+        .limit(20);
+      res.json({ results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+    }
+  });
+
+  app.get("/api/eden/query/top-institutions", async (req, res) => {
+    if (!edenQueryAuth(req, res)) return;
+    try {
+      const area = typeof req.query.area === "string" ? req.query.area.toLowerCase() : "";
+      const rows = await db
+        .select({
+          institution: ingestedAssets.institution,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(ingestedAssets)
+        .where(
+          area
+            ? sql`${ingestedAssets.relevant} = true AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area + "%"} OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area + "%"} OR lower(${ingestedAssets.assetName}) LIKE ${"%" + area + "%"})`
+            : sql`${ingestedAssets.relevant} = true`
+        )
+        .groupBy(ingestedAssets.institution)
+        .orderBy(sql`count(*) DESC`)
+        .limit(10);
+      res.json({ area, results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+    }
+  });
+
+  app.get("/api/eden/query/count-by-modality", async (req, res) => {
+    if (!edenQueryAuth(req, res)) return;
+    try {
+      const rows = await db
+        .select({
+          modality: ingestedAssets.modality,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.modality} != 'unknown'`)
+        .groupBy(ingestedAssets.modality)
+        .orderBy(sql`count(*) DESC`)
+        .limit(20);
+      res.json({ results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+    }
+  });
+
+  app.get("/api/eden/query/count-by-stage", async (req, res) => {
+    if (!edenQueryAuth(req, res)) return;
+    try {
+      const rows = await db
+        .select({
+          stage: ingestedAssets.developmentStage,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.developmentStage} != 'unknown'`)
+        .groupBy(ingestedAssets.developmentStage)
+        .orderBy(sql`count(*) DESC`)
+        .limit(15);
+      res.json({ results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
+    }
+  });
+
+  app.get("/api/eden/query/newest-by-institution", async (req, res) => {
+    if (!edenQueryAuth(req, res)) return;
+    try {
+      const institution = typeof req.query.institution === "string" ? req.query.institution : null;
+      if (!institution) return res.status(400).json({ error: "institution param required" });
+      const rows = await db
+        .select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          indication: ingestedAssets.indication,
+          modality: ingestedAssets.modality,
+          developmentStage: ingestedAssets.developmentStage,
+          firstSeenAt: ingestedAssets.firstSeenAt,
+        })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${institution.toLowerCase() + "%"}`)
+        .orderBy(desc(ingestedAssets.firstSeenAt))
+        .limit(10);
+      res.json({ institution, results: rows });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Query failed" });
     }
   });
 

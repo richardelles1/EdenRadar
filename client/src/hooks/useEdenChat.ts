@@ -46,7 +46,15 @@ function parseSsePayload(evt: string, raw: unknown): void | { type: "context"; d
   if (evt === "error") return { type: "error", data: raw as SseErrorPayload };
 }
 
-export function useEdenChat(pw: string) {
+export type EdenUserContext = {
+  companyName?: string;
+  companyType?: string;
+  therapeuticAreas?: string[];
+  dealStages?: string[];
+  modalities?: string[];
+};
+
+export function useEdenChat(pw: string, userContext?: EdenUserContext) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -68,7 +76,7 @@ export function useEdenChat(pw: string) {
       const response = await fetch("/api/eden/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ message: msg, sessionId: sessionId || undefined }),
+        body: JSON.stringify({ message: msg, sessionId: sessionId || undefined, userContext: userContext || undefined }),
       });
 
       if (!response.ok || !response.body) {

@@ -6,6 +6,14 @@ const EMBED_MODEL = "text-embedding-3-small";
 
 export { type RetrievedAsset };
 
+export type UserContext = {
+  companyName?: string;
+  companyType?: string;
+  therapeuticAreas?: string[];
+  dealStages?: string[];
+  modalities?: string[];
+};
+
 export async function embedQuery(query: string): Promise<number[]> {
   const response = await client.embeddings.create({
     model: EMBED_MODEL,
@@ -37,6 +45,17 @@ export function isConversational(query: string): boolean {
   });
 }
 
+function buildUserContextBlock(ctx: UserContext): string {
+  const lines: string[] = [];
+  if (ctx.companyName) lines.push(`Company: ${ctx.companyName}`);
+  if (ctx.companyType) lines.push(`Type: ${ctx.companyType}`);
+  if (ctx.therapeuticAreas?.length) lines.push(`Therapeutic focus: ${ctx.therapeuticAreas.join(", ")}`);
+  if (ctx.modalities?.length) lines.push(`Preferred modalities: ${ctx.modalities.join(", ")}`);
+  if (ctx.dealStages?.length) lines.push(`Deal stage interests: ${ctx.dealStages.join(", ")}`);
+  if (lines.length === 0) return "";
+  return `## Current user\n${lines.join("\n")}\n\nWeight your recommendations towards this user's therapeutic focus, preferred modalities, and deal stage interests. Reference their company by name when relevant.`;
+}
+
 function buildContext(assets: RetrievedAsset[]): string {
   return assets
     .map((a, i) => {
@@ -61,7 +80,7 @@ function buildContext(assets: RetrievedAsset[]): string {
     .join("\n\n");
 }
 
-const SYSTEM_PROMPT = `You are EDEN — an AI intelligence embedded in EdenRadar, with access to 40,000+ live technology transfer assets from 220+ research universities and institutions worldwide.
+const BASE_SYSTEM_PROMPT = `You are EDEN — an AI intelligence embedded in EdenRadar, with access to 40,000+ live technology transfer assets from 220+ research universities and institutions worldwide.
 
 You are a knowledgeable, warm colleague — brilliant at surfacing the right science, not a database printout. You speak naturally, with genuine personality and curiosity.
 
@@ -111,15 +130,24 @@ When someone greets you, asks something casual, or follows up conversationally, 
 ✓ Strong (use):
 **Asset Name** (Institution) — A first-in-class inhibitor targeting [mechanism] with preclinical proof-of-concept in [indication], currently available for exclusive licensing.`;
 
+function buildSystemPrompt(userContext?: UserContext): string {
+  if (!userContext) return BASE_SYSTEM_PROMPT;
+  const contextBlock = buildUserContextBlock(userContext);
+  if (!contextBlock) return BASE_SYSTEM_PROMPT;
+  return `${BASE_SYSTEM_PROMPT}\n\n${contextBlock}`;
+}
+
 export async function* ragQuery(
   question: string,
   assets: RetrievedAsset[],
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = []
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext
 ): AsyncGenerator<string> {
   const context = buildContext(assets);
+  const systemPrompt = buildSystemPrompt(userContext);
 
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...conversationHistory.slice(-6),
     {
       role: "user",
@@ -145,10 +173,13 @@ export async function* ragQuery(
 
 export async function* directQuery(
   question: string,
-  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = []
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext
 ): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext);
+
   const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
-    { role: "system", content: SYSTEM_PROMPT },
+    { role: "system", content: systemPrompt },
     ...conversationHistory.slice(-6),
     { role: "user", content: question },
   ];
