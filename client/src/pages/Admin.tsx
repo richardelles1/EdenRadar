@@ -2517,19 +2517,27 @@ const STARTER_QUESTIONS = [
   { label: "Autoimmune antibody therapeutics", q: "What antibody-based therapeutics are available for autoimmune indications?" },
 ];
 
+// Portal brand color hex values keyed to PORTAL_CONFIG[role].color strings
+const PORTAL_COLOR_HEX: Record<string, string> = {
+  amber:  "#f59e0b", // concept
+  violet: "#8b5cf6", // researcher
+  green:  "#10b981", // industry (uses emerald-400 shade)
+};
+const PC = PORTAL_COLOR_HEX;
+
 const PORTAL_DOTS = [
-  { s: 6,  x: "7%",  y: "10%", c: "#f59e0b", o: 0.13, d: 7.2,  dl: 0.0 },
-  { s: 4,  x: "18%", y: "82%", c: "#f59e0b", o: 0.10, d: 9.8,  dl: 2.3 },
-  { s: 7,  x: "58%", y: "6%",  c: "#f59e0b", o: 0.09, d: 11.5, dl: 4.7 },
-  { s: 3,  x: "88%", y: "75%", c: "#f59e0b", o: 0.11, d: 8.1,  dl: 6.2 },
-  { s: 5,  x: "3%",  y: "50%", c: "#8b5cf6", o: 0.11, d: 10.3, dl: 1.1 },
-  { s: 7,  x: "88%", y: "22%", c: "#8b5cf6", o: 0.10, d: 8.7,  dl: 3.4 },
-  { s: 4,  x: "45%", y: "91%", c: "#8b5cf6", o: 0.09, d: 12.0, dl: 5.9 },
-  { s: 6,  x: "72%", y: "60%", c: "#8b5cf6", o: 0.07, d: 9.1,  dl: 7.8 },
-  { s: 5,  x: "30%", y: "14%", c: "#10b981", o: 0.09, d: 13.2, dl: 0.7 },
-  { s: 8,  x: "92%", y: "45%", c: "#10b981", o: 0.08, d: 7.9,  dl: 2.8 },
-  { s: 4,  x: "65%", y: "86%", c: "#10b981", o: 0.10, d: 10.6, dl: 4.3 },
-  { s: 6,  x: "12%", y: "37%", c: "#10b981", o: 0.07, d: 14.0, dl: 8.1 },
+  { s: 6,  x: "7%",  y: "10%", c: PC.amber,  o: 0.13, d: 7.2,  dl: 0.0 },
+  { s: 4,  x: "18%", y: "82%", c: PC.amber,  o: 0.10, d: 9.8,  dl: 2.3 },
+  { s: 7,  x: "58%", y: "6%",  c: PC.amber,  o: 0.09, d: 11.5, dl: 4.7 },
+  { s: 3,  x: "88%", y: "75%", c: PC.amber,  o: 0.11, d: 8.1,  dl: 6.2 },
+  { s: 5,  x: "3%",  y: "50%", c: PC.violet, o: 0.11, d: 10.3, dl: 1.1 },
+  { s: 7,  x: "88%", y: "22%", c: PC.violet, o: 0.10, d: 8.7,  dl: 3.4 },
+  { s: 4,  x: "45%", y: "91%", c: PC.violet, o: 0.09, d: 12.0, dl: 5.9 },
+  { s: 6,  x: "72%", y: "60%", c: PC.violet, o: 0.07, d: 9.1,  dl: 7.8 },
+  { s: 5,  x: "30%", y: "14%", c: PC.green,  o: 0.09, d: 13.2, dl: 0.7 },
+  { s: 8,  x: "92%", y: "45%", c: PC.green,  o: 0.08, d: 7.9,  dl: 2.8 },
+  { s: 4,  x: "65%", y: "86%", c: PC.green,  o: 0.10, d: 10.6, dl: 4.3 },
+  { s: 6,  x: "12%", y: "37%", c: PC.green,  o: 0.07, d: 14.0, dl: 8.1 },
 ];
 
 function renderMdInline(text: string): (string | JSX.Element)[] {
