@@ -1856,10 +1856,12 @@ export async function registerRoutes(
           assets: [],
         });
       } else if (isAggregationQuery(message.trim())) {
-        // ── FIRST: Deterministic SQL aggregation ─────────────────────────
-        // resolveAggregationQuery handles institution counts, breakdowns,
-        // area-specific counts, and generic totals — must run BEFORE filteredCount
-        // so institution-count intents return COUNT(DISTINCT institution) not asset count.
+        // ── Step 1: Structural/breakdown queries via deterministic SQL ────
+        // Handles: institution COUNT(DISTINCT), institution-specific asset count,
+        // newest-by-institution, stage breakdown, area→institution breakdown.
+        // Generic count phrases ("how many do you have", "what's the total") and
+        // modality scalar counts ("how many gene therapy assets") intentionally
+        // return null here — they are handled by filteredCount in Step 2.
         const resolvedResult = await resolveAggregationQuery(message.trim()).catch(() => null);
         if (resolvedResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
@@ -1878,43 +1880,46 @@ export async function registerRoutes(
           return;
         }
 
-        // ── SECOND: Filtered asset count when session has active focus ────
-        // Only reaches here when resolveAggregationQuery returned null (generic
-        // count phrasing with no institution/area/modality anchor in the message).
-        if (filtersActive) {
-          const count = await storage.filteredCount(
-            geoRx,
-            filters.modality,
-            filters.stage,
-            filters.indication,
-            filters.institution
-          ).catch(() => null);
+        // ── Step 2: SQL COUNT for all remaining count intents ─────────────
+        // Runs unconditionally — filteredCount with no active filters returns
+        // the total asset count; with filters it returns the constrained count.
+        // Covers: "how many gene therapy assets" (modality filter from query),
+        // "what's the total" (no filters → total), "give me a count",
+        // "how many do you have" (session filters → filtered count), etc.
+        const count = await storage.filteredCount(
+          geoRx,
+          filters.modality,
+          filters.stage,
+          filters.indication,
+          filters.institution
+        ).catch(() => null);
 
-          if (count !== null) {
-            const filterDesc = [
-              filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
-              filters.modality || "",
-              filters.stage || "",
-              filters.indication || "",
-              filters.institution || "",
-            ].filter(Boolean).join(", ");
+        if (count !== null) {
+          const filterDesc = [
+            filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
+            filters.modality || "",
+            filters.stage || "",
+            filters.indication || "",
+            filters.institution || "",
+          ].filter(Boolean).join(", ");
 
-            const filteredCountResult = `Filtered count (${filterDesc || "current focus"}): **${count}** relevant assets match the active filters.`;
-            sendEvent("context", { sessionId: sid, assets: [] });
-            let fullResponse = "";
-            for await (const token of aggregationQuery(message.trim(), filteredCountResult, history, ctx, portfolioStats, focusContext)) {
-              fullResponse += token;
-              sendEvent("token", { text: token });
-            }
-            await storage.appendEdenMessage(sid, {
-              role: "assistant",
-              content: fullResponse,
-              assetIds: [],
-              assets: [],
-            });
-            sendEvent("done", { sessionId: sid });
-            return;
+          const sqlCountResult = filterDesc
+            ? `Filtered count (${filterDesc}): **${count}** relevant assets match the active filters.`
+            : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
+          sendEvent("context", { sessionId: sid, assets: [] });
+          let fullResponse = "";
+          for await (const token of aggregationQuery(message.trim(), sqlCountResult, history, ctx, portfolioStats, focusContext)) {
+            fullResponse += token;
+            sendEvent("token", { text: token });
           }
+          await storage.appendEdenMessage(sid, {
+            role: "assistant",
+            content: fullResponse,
+            assetIds: [],
+            assets: [],
+          });
+          sendEvent("done", { sessionId: sid });
+          return;
         }
 
         // ── Fall through to RAG ───────────────────────────────────────────

@@ -479,7 +479,10 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     return `**Development stage breakdown** across all relevant assets:\n${lines}`;
   }
 
-  if (/modali|small molecule|antibod|gene therapy|cell therapy/i.test(lower) && /breakdown|count|how many|split/i.test(lower)) {
+  // Only trigger modality breakdown for EXPLICIT breakdown/split requests.
+  // "how many gene therapy assets" is intentionally excluded here — it routes to
+  // filteredCount() via parseQueryFilters() modality detection in the chat route.
+  if (/modali|small molecule|antibod|gene therapy|cell therapy/i.test(lower) && /breakdown|split by|distribution of/i.test(lower)) {
     const rows = await runCountByModality();
     if (!rows.length) return null;
     const lines = rows.map((r) => `  • ${r["modality"]}: ${r["count"]} assets`).join("\n");
@@ -517,18 +520,8 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     }
   }
 
-  if (/how many\s+(?:assets?|technologies?)/i.test(lower)) {
-    const areaHint = lower.match(/(?:in|for|related to|on)\s+([a-z\s]+?)(?:\s+are|\s+exist|\?|$)/i)?.[1]?.trim();
-    const rows = await runCountByInstitution(areaHint || undefined);
-    if (!rows.length) return null;
-    const total = rows.reduce((s, r) => s + (r["count"] as number), 0);
-    if (areaHint) {
-      const top3 = rows.slice(0, 3).map((r) => `${r["institution"]} (${r["count"]})`).join(", ");
-      return `There are **${total} assets** related to "${areaHint}" across the indexed portfolio. Top institutions: ${top3}.`;
-    }
-    const top5 = rows.slice(0, 5).map((r) => `${r["institution"]} (${r["count"]})`).join(", ");
-    return `There are **${total} relevant assets** in total. The most active institutions: ${top5}.`;
-  }
+  // NOTE: generic "how many assets?" patterns are intentionally NOT matched here.
+  // They route to filteredCount() in the chat route so session filters are respected.
 
   // ── Institution-count intent: "how many institutions", "how many US universities" ──
   if (/how many\s+(?:\w+\s+)?(?:institutions?|universities|ttlos?|tech transfer offices?|schools?)/i.test(lower)) {
