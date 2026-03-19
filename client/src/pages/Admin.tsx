@@ -113,11 +113,20 @@ interface SchedulerStatus {
   lastCycleCompletedAt: string | null;
 }
 
+interface ActiveSearchRow {
+  institution: string;
+  ttoUrl: string;
+  totalInDb: number;
+  biotechRelevant: number;
+}
+
 interface CollectorHealthData {
   rows: CollectorHealthRow[];
+  activeSearchRows: ActiveSearchRow[];
   totalInDb: number;
   totalBiotechRelevant: number;
   totalInstitutions: number;
+  totalActiveSearch: number;
   issueCount: number;
   syncingCount: number;
   syncedToday: number;
@@ -624,6 +633,9 @@ function DataHealth({ pw }: { pw: string }) {
   const [schedulerOpen, setSchedulerOpen] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("health");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [liveOpen, setLiveOpen] = useState(true);
+  const [activeSearchOpen, setActiveSearchOpen] = useState(false);
+  const [activeSearchQuery, setActiveSearchQuery] = useState("");
   const lastStableOrder = useRef<string[]>([]);
   const { toast } = useToast();
 
@@ -1037,212 +1049,324 @@ function DataHealth({ pw }: { pw: string }) {
           )}
         </div>
 
-        <div className="flex flex-col gap-2 px-4 py-3 border-b border-border">
-          <div className="flex flex-wrap items-center gap-1.5">
-            {(([
-              { key: "all",      label: "All",          activeClass: "bg-primary text-primary-foreground border-primary" },
-              { key: "ok",       label: "Working",      activeClass: "bg-emerald-600 text-white border-emerald-600" },
-              { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
-              { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
-              { key: "failing",  label: "Failing",      activeClass: "bg-red-600 text-white border-red-600" },
-              { key: "never",    label: "Never synced", activeClass: "bg-muted text-foreground border-border" },
-            ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
-              const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setStatusFilter(key)}
-                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-                    statusFilter === key
-                      ? activeClass
-                      : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                  data-testid={`filter-status-${key}`}
-                >
-                  {label} ({count})
-                </button>
-              );
-            }))}
+        {/* ── Live Connections section ───────────────────────── */}
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 border-b border-border bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+          onClick={() => setLiveOpen((v) => !v)}
+          data-testid="section-live-connections"
+        >
+          <div className="flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            <span className="font-semibold text-foreground text-sm">Live Connections</span>
+            <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{data.totalInstitutions}</span>
+            <span className="text-[11px] text-muted-foreground/60">Sequence scan active</span>
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <Input
-              placeholder="Search institutions…"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="h-7 text-xs max-w-[220px]"
-              data-testid="input-institution-search"
-            />
-            <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
-              <Download className="h-3.5 w-3.5 mr-1.5" />
-              Export CSV
-            </Button>
-          </div>
-        </div>
+          <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${liveOpen ? "rotate-90" : ""}`} />
+        </button>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="border-b border-border">
-                {(["institution", "health", "totalInDb", "biotechRelevant", "lastSyncAt"] as SortKey[]).map((col) => {
-                  const label = col === "institution" ? "Institution" : col === "health" ? "Health" : col === "totalInDb" ? "Total" : col === "biotechRelevant" ? "Relevant" : "Last Sync";
-                  const align = col === "institution" ? "text-left" : "text-center";
-                  const minW = col === "institution" ? "min-w-[200px]" : col === "health" ? "min-w-[90px]" : col === "lastSyncAt" ? "min-w-[80px]" : "min-w-[70px]";
-                  const title = col === "totalInDb" ? "Total assets in database" : col === "biotechRelevant" ? "Biotech-relevant subset" : undefined;
-                  const active = sortKey === col;
+        {liveOpen && (
+          <>
+            <div className="flex flex-col gap-2 px-4 py-3 border-b border-border">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(([
+                  { key: "all",      label: "All",          activeClass: "bg-primary text-primary-foreground border-primary" },
+                  { key: "ok",       label: "Working",      activeClass: "bg-emerald-600 text-white border-emerald-600" },
+                  { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
+                  { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
+                  { key: "failing",  label: "Failing",      activeClass: "bg-red-600 text-white border-red-600" },
+                  { key: "never",    label: "Never synced", activeClass: "bg-muted text-foreground border-border" },
+                ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
+                  const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
                   return (
-                    <th key={col} className={`${align} py-3 px-4 font-semibold text-foreground ${minW}`} title={title}>
-                      <button
-                        onClick={() => handleSort(col)}
-                        className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${active ? "text-primary" : ""}`}
-                        data-testid={`sort-${col}`}
-                      >
-                        {label}
-                        <span className="text-[10px] opacity-60 w-3">
-                          {active ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
-                        </span>
-                      </button>
-                    </th>
-                  );
-                })}
-                <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
-                <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayRows.map((row) => {
-                const isExpanded = expandedInstitution === row.institution;
-                const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
-                return (
-                  <React.Fragment key={row.institution}>
-                    <tr
-                      className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""} ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
-                      data-testid={`health-row-${instSlug}`}
-                      onClick={() => handleRowClick(row.institution)}
+                    <button
+                      key={key}
+                      onClick={() => setStatusFilter(key)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                        statusFilter === key
+                          ? activeClass
+                          : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                      data-testid={`filter-status-${key}`}
                     >
-                      <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="truncate">{row.institution}</span>
-                          {row.consecutiveFailures >= 3 && (
-                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
-                              Broken Connection
-                            </Badge>
-                          )}
-                          {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
-                            <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
-                              {row.consecutiveFailures}x failed
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td className="text-center py-2 px-3">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <HealthDot health={row.health} />
-                          <HealthLabel health={row.health} />
-                        </div>
-                      </td>
-                      <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
-                        {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
-                      </td>
-                      <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
-                        {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
-                      </td>
-                      <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
-                        {row.health === "syncing" ? (
-                          <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
-                        ) : (
-                          relativeTime(row.lastSyncAt)
-                        )}
-                      </td>
-                      <td className="text-left py-2 px-3" data-testid={`error-${instSlug}`}>
-                        {row.health === "syncing" ? (
-                          <div className="w-full max-w-[180px]">
-                            <div className="text-[10px] text-blue-500 font-medium mb-1">{row.phase ?? "starting…"}</div>
-                            <div className="h-1.5 rounded-full bg-blue-500/15 overflow-hidden">
-                              <div
-                                className="h-full rounded-full bg-blue-500 animate-pulse transition-all duration-700"
-                                style={{ width: row.phase === "scraping" ? "33%" : row.phase === "comparing" ? "55%" : row.phase === "enriching" ? "75%" : row.phase === "done" ? "95%" : "12%" }}
-                              />
+                      {label} ({count})
+                    </button>
+                  );
+                }))}
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <Input
+                  placeholder="Search institutions…"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="h-7 text-xs max-w-[220px]"
+                  data-testid="input-institution-search"
+                />
+                <Button variant="outline" size="sm" onClick={exportCsv} data-testid="button-export-csv">
+                  <Download className="h-3.5 w-3.5 mr-1.5" />
+                  Export CSV
+                </Button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    {(["institution", "health", "totalInDb", "biotechRelevant", "lastSyncAt"] as SortKey[]).map((col) => {
+                      const label = col === "institution" ? "Institution" : col === "health" ? "Health" : col === "totalInDb" ? "Total" : col === "biotechRelevant" ? "Relevant" : "Last Sync";
+                      const align = col === "institution" ? "text-left" : "text-center";
+                      const minW = col === "institution" ? "min-w-[200px]" : col === "health" ? "min-w-[90px]" : col === "lastSyncAt" ? "min-w-[80px]" : "min-w-[70px]";
+                      const title = col === "totalInDb" ? "Total assets in database" : col === "biotechRelevant" ? "Biotech-relevant subset" : undefined;
+                      const active = sortKey === col;
+                      return (
+                        <th key={col} className={`${align} py-3 px-4 font-semibold text-foreground ${minW}`} title={title}>
+                          <button
+                            onClick={() => handleSort(col)}
+                            className={`inline-flex items-center gap-1 hover:text-primary transition-colors ${active ? "text-primary" : ""}`}
+                            data-testid={`sort-${col}`}
+                          >
+                            {label}
+                            <span className="text-[10px] opacity-60 w-3">
+                              {active ? (sortDir === "asc" ? "▲" : "▼") : "⇅"}
+                            </span>
+                          </button>
+                        </th>
+                      );
+                    })}
+                    <th className="text-left py-3 px-3 font-semibold text-foreground min-w-[120px]">Error</th>
+                    <th className="text-center py-3 px-3 font-semibold text-foreground min-w-[60px]">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.map((row) => {
+                    const isExpanded = expandedInstitution === row.institution;
+                    const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
+                    return (
+                      <React.Fragment key={row.institution}>
+                        <tr
+                          className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""} ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
+                          data-testid={`health-row-${instSlug}`}
+                          onClick={() => handleRowClick(row.institution)}
+                        >
+                          <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate">{row.institution}</span>
+                              {row.consecutiveFailures >= 3 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
+                                  Broken Connection
+                                </Badge>
+                              )}
+                              {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
+                                  {row.consecutiveFailures}x failed
+                                </Badge>
+                              )}
                             </div>
-                          </div>
-                        ) : row.lastSyncError ? (
-                          <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
-                            {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground/40">&mdash;</span>
-                        )}
-                      </td>
-                      <td className="text-center py-2 px-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex items-center justify-center gap-1">
-                          {row.health === "stale" ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
-                              onClick={() => cancelMutation.mutate(row.institution)}
-                              disabled={cancelMutation.isPending}
-                              title={`Cancel stale session for ${row.institution}`}
-                              data-testid={`button-cancel-${instSlug}`}
-                            >
-                              <XCircle className="h-3.5 w-3.5 mr-1" />
-                              Cancel
-                            </Button>
-                          ) : row.health === "syncing" ? (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-blue-600"
-                              onClick={() => handleRowClick(row.institution)}
-                              data-testid={`button-view-sync-${instSlug}`}
-                            >
-                              <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                              View
-                            </Button>
-                          ) : (
-                            <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-7 w-7 p-0"
-                                onClick={() => handleSyncClick(row.institution)}
-                                disabled={pendingSyncInst === row.institution}
-                                title={`Sync ${row.institution}`}
-                                data-testid={`button-sync-${instSlug}`}
-                              >
-                                <RefreshCw className={`h-3.5 w-3.5 ${pendingSyncInst === row.institution ? "animate-spin" : ""}`} />
-                              </Button>
-                              {sched.state === "running" && (
+                          </td>
+                          <td className="text-center py-2 px-3">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <HealthDot health={row.health} />
+                              <HealthLabel health={row.health} />
+                            </div>
+                          </td>
+                          <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
+                            {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
+                          </td>
+                          <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
+                            {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
+                          </td>
+                          <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                            {row.health === "syncing" ? (
+                              <span className="text-blue-600 dark:text-blue-400 font-medium">{row.phase ?? "syncing"}</span>
+                            ) : (
+                              relativeTime(row.lastSyncAt)
+                            )}
+                          </td>
+                          <td className="text-left py-2 px-3" data-testid={`error-${instSlug}`}>
+                            {row.health === "syncing" ? (
+                              <div className="w-full max-w-[180px]">
+                                <div className="text-[10px] text-blue-500 font-medium mb-1">{row.phase ?? "starting…"}</div>
+                                <div className="h-1.5 rounded-full bg-blue-500/15 overflow-hidden">
+                                  <div
+                                    className="h-full rounded-full bg-blue-500 animate-pulse transition-all duration-700"
+                                    style={{ width: row.phase === "scraping" ? "33%" : row.phase === "comparing" ? "55%" : row.phase === "enriching" ? "75%" : row.phase === "done" ? "95%" : "12%" }}
+                                  />
+                                </div>
+                              </div>
+                            ) : row.lastSyncError ? (
+                              <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
+                                {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground/40">&mdash;</span>
+                            )}
+                          </td>
+                          <td className="text-center py-2 px-3" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-center gap-1">
+                              {row.health === "stale" ? (
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600"
-                                  onClick={() => bumpMutation.mutate(row.institution)}
-                                  disabled={bumpMutation.isPending}
-                                  title={`Bump ${row.institution} to front of scheduler queue`}
-                                  data-testid={`button-bump-${instSlug}`}
+                                  className="h-7 px-2 text-xs text-orange-600 hover:text-orange-700 hover:bg-orange-50 dark:hover:bg-orange-950"
+                                  onClick={() => cancelMutation.mutate(row.institution)}
+                                  disabled={cancelMutation.isPending}
+                                  title={`Cancel stale session for ${row.institution}`}
+                                  data-testid={`button-cancel-${instSlug}`}
                                 >
-                                  <ArrowUpCircle className="h-3.5 w-3.5" />
+                                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                                  Cancel
                                 </Button>
+                              ) : row.health === "syncing" ? (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-blue-600"
+                                  onClick={() => handleRowClick(row.institution)}
+                                  data-testid={`button-view-sync-${instSlug}`}
+                                >
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                                  View
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 w-7 p-0"
+                                    onClick={() => handleSyncClick(row.institution)}
+                                    disabled={pendingSyncInst === row.institution}
+                                    title={`Sync ${row.institution}`}
+                                    data-testid={`button-sync-${instSlug}`}
+                                  >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${pendingSyncInst === row.institution ? "animate-spin" : ""}`} />
+                                  </Button>
+                                  {sched.state === "running" && (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-7 w-7 p-0 text-blue-500 hover:text-blue-600"
+                                      onClick={() => bumpMutation.mutate(row.institution)}
+                                      disabled={bumpMutation.isPending}
+                                      title={`Bump ${row.institution} to front of scheduler queue`}
+                                      data-testid={`button-bump-${instSlug}`}
+                                    >
+                                      <ArrowUpCircle className="h-3.5 w-3.5" />
+                                    </Button>
+                                  )}
+                                </>
                               )}
-                            </>
-                          )}
-                        </div>
+                            </div>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <ExpandedSyncPanel
+                            key={`panel-${row.institution}`}
+                            institution={row.institution}
+                            pw={pw}
+                            onCollapse={() => setExpandedInstitution(null)}
+                          />
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+
+        {/* ── Active Search section ──────────────────────────── */}
+        <button
+          className="w-full flex items-center justify-between px-4 py-3 border-t border-border bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+          onClick={() => setActiveSearchOpen((v) => !v)}
+          data-testid="section-active-search"
+        >
+          <div className="flex items-center gap-2">
+            <PackagePlus className="h-4 w-4 text-violet-500" />
+            <span className="font-semibold text-foreground text-sm">Active Search</span>
+            <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{data.totalActiveSearch ?? 0}</span>
+            <span className="text-[11px] text-muted-foreground/60">Manually imported — not sequence scanned</span>
+          </div>
+          <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${activeSearchOpen ? "rotate-90" : ""}`} />
+        </button>
+
+        {activeSearchOpen && (
+          <>
+            <div className="px-4 py-3 border-b border-border">
+              <Input
+                placeholder="Search active search institutions…"
+                value={activeSearchQuery}
+                onChange={(e) => setActiveSearchQuery(e.target.value)}
+                className="h-7 text-xs max-w-[260px]"
+                data-testid="input-active-search-filter"
+              />
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[200px]">Institution</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[70px]" title="Total assets in database">Total</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[70px]" title="Biotech-relevant subset">Relevant</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[90px]">Status</th>
+                    <th className="text-center py-3 px-4 font-semibold text-foreground min-w-[60px]">TTO Link</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(data.activeSearchRows ?? [])
+                    .filter((r) => !activeSearchQuery.trim() || r.institution.toLowerCase().includes(activeSearchQuery.toLowerCase().trim()))
+                    .map((row) => {
+                      const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
+                      return (
+                        <tr key={row.institution} className="border-b border-border/50 hover:bg-muted/20" data-testid={`active-search-row-${instSlug}`}>
+                          <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                            {row.institution}
+                          </td>
+                          <td className={`text-center py-2 px-4 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
+                            {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
+                          </td>
+                          <td className={`text-center py-2 px-4 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
+                            {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
+                          </td>
+                          <td className="text-center py-2 px-4">
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-violet-600 border-violet-500/30 bg-violet-500/5">
+                              Imported
+                            </Badge>
+                          </td>
+                          <td className="text-center py-2 px-4">
+                            {row.ttoUrl ? (
+                              <a
+                                href={row.ttoUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center h-6 w-6 rounded hover:bg-muted text-muted-foreground hover:text-primary transition-colors"
+                                title={row.ttoUrl}
+                                data-testid={`link-tto-${instSlug}`}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            ) : (
+                              <span className="text-muted-foreground/40 text-xs">&mdash;</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  {(data.activeSearchRows ?? []).filter((r) => !activeSearchQuery.trim() || r.institution.toLowerCase().includes(activeSearchQuery.toLowerCase().trim())).length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="text-center py-8 text-sm text-muted-foreground">
+                        {activeSearchQuery.trim()
+                          ? "No institutions match your search."
+                          : "No Active Search institutions yet — use Manual Import to add one."}
                       </td>
                     </tr>
-                    {isExpanded && (
-                      <ExpandedSyncPanel
-                        key={`panel-${row.institution}`}
-                        institution={row.institution}
-                        pw={pw}
-                        onCollapse={() => setExpandedInstitution(null)}
-                      />
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </>
   );

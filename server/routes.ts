@@ -1240,8 +1240,19 @@ export async function registerRoutes(
         };
       });
 
-      const totalInDb = rows.reduce((s, r) => s + r.totalInDb, 0);
-      const totalBiotechRelevant = rows.reduce((s, r) => s + r.biotechRelevant, 0);
+      const manualInsts = await storage.getManualInstitutions();
+      const activeSearchRows = manualInsts.map((m) => {
+        const dbRow = instMap.get(m.name);
+        return {
+          institution: m.name,
+          ttoUrl: m.ttoUrl ?? "",
+          totalInDb: dbRow?.totalInDb ?? 0,
+          biotechRelevant: dbRow?.biotechRelevant ?? 0,
+        };
+      });
+
+      const totalInDb = rows.reduce((s, r) => s + r.totalInDb, 0) + activeSearchRows.reduce((s, r) => s + r.totalInDb, 0);
+      const totalBiotechRelevant = rows.reduce((s, r) => s + r.biotechRelevant, 0) + activeSearchRows.reduce((s, r) => s + r.biotechRelevant, 0);
       const issueCount = rows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never").length;
       const syncingCount = rows.filter((r) => r.health === "syncing").length;
       const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
@@ -1251,9 +1262,11 @@ export async function registerRoutes(
 
       res.json({
         rows,
+        activeSearchRows,
         totalInDb,
         totalBiotechRelevant,
         totalInstitutions: allInstitutionNames.length,
+        totalActiveSearch: manualInsts.length,
         issueCount,
         syncingCount,
         syncedToday,
