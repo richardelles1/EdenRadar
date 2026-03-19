@@ -137,7 +137,7 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "clinicaltrials",   label: "ClinicalTrials.gov",   desc: "Active trials" },
   { key: "patents",          label: "Patents",               desc: "Patent databases" },
   { key: "nih_reporter",     label: "NIH Reporter",         desc: "Federal grants" },
-  { key: "harvard",          label: "Harvard Catalyst",     desc: "Harvard research database" },
+  { key: "harvard",          label: "Harvard LibraryCloud", desc: "Harvard Library catalog — theses, journals, datasets" },
   { key: "openalex",         label: "OpenAlex",             desc: "Academic publications" },
   { key: "semantic_scholar", label: "Semantic Scholar",     desc: "Research papers" },
   { key: "europepmc",        label: "Europe PMC",           desc: "European biomedical literature" },
@@ -356,7 +356,7 @@ export default function Scout() {
 
   const researchMutation = useMutation({
     mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
-      const backendSources = sources.map((k) => k === "harvard" ? "harvard_dataverse" : k);
+      const backendSources = sources.map((k) => k === "harvard" ? "harvard_librarycloud" : k);
       const res = await apiRequest("POST", "/api/search", {
         query,
         sources: backendSources,

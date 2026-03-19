@@ -27,6 +27,7 @@ import { searchDoaj } from "./doaj";
 import { searchOpenaire } from "./openaire";
 import { searchHal } from "./hal";
 import { searchHarvardDataverse } from "./harvard_dataverse";
+import { searchHarvardLibraryCloud } from "./harvard_librarycloud";
 import { searchFigshare } from "./figshare";
 import { searchDryad } from "./dryad";
 import { searchBioStudies } from "./biostudies";
@@ -73,6 +74,7 @@ export type SourceKey =
   | "openaire"
   | "hal"
   | "harvard_dataverse"
+  | "harvard_librarycloud"
   | "figshare"
   | "dryad"
   | "biostudies";
@@ -85,7 +87,7 @@ export const ALL_SOURCE_KEYS: SourceKey[] = [
   "base", "core", "ieee", "eric",
   "chemrxiv", "socarxiv", "psyarxiv", "eartharxiv", "engrxiv",
   "doaj", "openaire", "hal",
-  "harvard_dataverse", "figshare", "dryad", "biostudies",
+  "harvard_dataverse", "harvard_librarycloud", "figshare", "dryad", "biostudies",
 ];
 
 export interface DataSource {
@@ -353,6 +355,12 @@ export const dataSources: Record<SourceKey, DataSource> = {
     label: "Harvard Dataverse",
     description: "Harvard's open research data repository — datasets from institutions worldwide",
     search: searchHarvardDataverse,
+  },
+  harvard_librarycloud: {
+    id: "harvard_librarycloud",
+    label: "Harvard LibraryCloud",
+    description: "Harvard Library catalog — theses, dissertations, journals, and curated datasets",
+    search: searchHarvardLibraryCloud,
   },
   figshare: {
     id: "figshare",
