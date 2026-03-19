@@ -173,6 +173,95 @@ export async function extractAssetFromSignal(
   }
 }
 
+export async function extractAssetsFromSignalBatch(
+  signals: RawSignal[]
+): Promise<(Partial<ScoredAsset> | null)[]> {
+  if (signals.length === 0) return [];
+
+  const signalLines = signals.map((s, i) => {
+    const text = (s.text ?? "").slice(0, 400).replace(/\n+/g, " ");
+    const inst = s.institution_or_sponsor || s.authors_or_owner || "";
+    return `[${i + 1}] SOURCE: ${s.source_type} | INSTITUTION: ${inst} | TITLE: ${s.title} | TEXT: ${text}`;
+  }).join("\n\n");
+
+  const prompt = `You are a biotech intelligence analyst. Extract structured drug asset information from the following ${signals.length} research signals.
+
+Return ONLY a JSON object with a single key "items" whose value is an array of exactly ${signals.length} objects in the same order as the input.
+Each object must have these fields:
+- asset_name: specific drug, compound, therapy, or platform name (use the title as the name if no specific asset is named)
+- target: molecular or biological target ("unknown" if not mentioned)
+- modality: one of: "small molecule","antibody","CAR-T","gene therapy","mRNA therapy","peptide","bispecific antibody","ADC","cell therapy","oncolytic virus","RNA interference","antisense oligonucleotide","protein","vaccine","other","unknown"
+- indication: disease or condition ("unknown" if not stated)
+- development_stage: one of: "discovery","preclinical","phase 1","phase 2","phase 3","approved","unknown"
+- owner_name: company, university, or sponsor name
+- owner_type: "university" | "company" | "unknown"
+- institution: academic or research institution if applicable
+- licensing_status: "available" | "licensed" | "not available" | "unknown"
+- patent_status: "patented" | "patent pending" | "not patented" | "unknown"
+- summary: 1-2 sentence summary of mechanism and biotech significance
+- matching_tags: array of 3-5 keyword tags
+
+Signals:
+${signalLines}`;
+
+  try {
+    const response = await clientMini.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) return signals.map(() => null);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(content);
+    } catch {
+      return signals.map(() => null);
+    }
+
+    const obj = parsed as Record<string, unknown>;
+    const arr: unknown[] = Array.isArray(obj?.items)
+      ? obj.items as unknown[]
+      : Array.isArray(obj?.results)
+        ? obj.results as unknown[]
+        : Array.isArray(obj?.signals)
+          ? obj.signals as unknown[]
+          : Array.isArray(parsed)
+            ? parsed as unknown[]
+            : [];
+
+    if (arr.length !== signals.length) {
+      return signals.map(() => null);
+    }
+
+    return arr.map((item: unknown) => {
+      if (!item || typeof item !== "object") return null;
+      const p = item as Record<string, unknown>;
+      return {
+        asset_name: String(p.asset_name ?? "unknown"),
+        target: String(p.target ?? "unknown"),
+        modality: String(p.modality ?? "unknown"),
+        indication: String(p.indication ?? "unknown"),
+        development_stage: String(p.development_stage ?? "unknown"),
+        owner_name: String(p.owner_name ?? "unknown"),
+        owner_type: (p.owner_type === "university" || p.owner_type === "company") ? p.owner_type : "unknown" as const,
+        institution: String(p.institution ?? "unknown"),
+        licensing_status: String(p.licensing_status ?? "unknown"),
+        patent_status: String(p.patent_status ?? "unknown"),
+        summary: String(p.summary ?? ""),
+        matching_tags: Array.isArray(p.matching_tags) ? p.matching_tags.map(String) : [],
+      } as Partial<ScoredAsset>;
+    });
+  } catch (err) {
+    if (isFatalOpenAIError(err)) throw err;
+    console.error("extractAssetsFromSignalBatch error:", err);
+    return signals.map(() => null);
+  }
+}
+
 export async function generateWhyItMatters(
   asset: ScoredAsset,
   buyerProfile?: BuyerProfile

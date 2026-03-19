@@ -1,6 +1,8 @@
 import type { RawSignal, ScoredAsset } from "../types";
-import { extractAssetFromSignal, isFatalOpenAIError } from "../llm";
+import { extractAssetFromSignal, extractAssetsFromSignalBatch, isFatalOpenAIError } from "../llm";
 
+const BATCH_SIZE = 10;
+const INDIVIDUAL_TYPES = new Set(["tech_transfer", "patent"]);
 
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -73,89 +75,113 @@ function applyStructuredOverrides(
   };
 }
 
+function buildFallback(signal: RawSignal): Partial<ScoredAsset> {
+  return applyStructuredOverrides({
+    id: crypto.randomUUID().slice(0, 8),
+    asset_name: signal.title.slice(0, 80) || "unknown",
+    indication: "unknown",
+    modality: "unknown",
+    target: "unknown",
+    development_stage: signal.stage_hint || "unknown",
+    owner_name: signal.institution_or_sponsor || signal.authors_or_owner || "unknown",
+    owner_type: sourceTypeToOwnerType(signal.source_type, signal.metadata),
+    institution: signal.institution_or_sponsor || "unknown",
+    licensing_status: (signal.metadata?.licensing_status as string) || "unknown",
+    patent_status: (signal.metadata?.patent_status as string) || "unknown",
+    summary: signal.text?.slice(0, 200) || "",
+    why_it_matters: "",
+    source_types: [signal.source_type],
+    source_urls: [signal.url],
+    latest_signal_date: signal.date,
+    matching_tags: [],
+    evidence_count: 1,
+    confidence: "low",
+    contact_office: signal.source_type === "tech_transfer"
+      ? (signal.metadata?.contact_office as string | undefined)
+      : undefined,
+    signals: [signal],
+  }, signal);
+}
+
+function buildMerged(extracted: Partial<ScoredAsset>, signal: RawSignal): Partial<ScoredAsset> {
+  return applyStructuredOverrides({
+    id: crypto.randomUUID().slice(0, 8),
+    asset_name: extracted.asset_name ?? "unknown",
+    target: extracted.target ?? "unknown",
+    modality: extracted.modality ?? "unknown",
+    indication: extracted.indication ?? "unknown",
+    development_stage: extracted.development_stage ?? signal.stage_hint ?? "unknown",
+    owner_name: extracted.owner_name ?? signal.institution_or_sponsor ?? signal.authors_or_owner ?? "unknown",
+    owner_type: extracted.owner_type ?? sourceTypeToOwnerType(signal.source_type, signal.metadata),
+    institution: extracted.institution ?? signal.institution_or_sponsor ?? "unknown",
+    licensing_status: extracted.licensing_status ?? (signal.metadata?.licensing_status as string) ?? "unknown",
+    patent_status: extracted.patent_status ?? (signal.metadata?.patent_status as string) ?? "unknown",
+    summary: extracted.summary ?? signal.text?.slice(0, 300) ?? "",
+    why_it_matters: "",
+    source_types: [signal.source_type],
+    source_urls: [signal.url],
+    latest_signal_date: signal.date,
+    matching_tags: extracted.matching_tags ?? [],
+    evidence_count: 1,
+    confidence: inferConfidence(extracted, signal),
+    contact_office: signal.source_type === "tech_transfer"
+      ? (signal.metadata?.contact_office as string | undefined)
+      : undefined,
+    signals: [signal],
+  }, signal);
+}
+
 export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<ScoredAsset>[]> {
-  const tasks = signals.map((signal) => async (): Promise<Partial<ScoredAsset>> => {
-    try {
-      const extracted = await extractAssetFromSignal(signal);
-      if (!extracted) {
-        const fallback: Partial<ScoredAsset> = {
-          id: crypto.randomUUID().slice(0,8),
-          asset_name: signal.title.slice(0, 80) || "unknown",
-          indication: "unknown",
-          modality: "unknown",
-          target: "unknown",
-          development_stage: signal.stage_hint || "unknown",
-          owner_name: signal.institution_or_sponsor || signal.authors_or_owner || "unknown",
-          owner_type: sourceTypeToOwnerType(signal.source_type, signal.metadata),
-          institution: signal.institution_or_sponsor || "unknown",
-          licensing_status: (signal.metadata?.licensing_status as string) || "unknown",
-          patent_status: (signal.metadata?.patent_status as string) || "unknown",
-          summary: signal.text?.slice(0, 200) || "",
-          why_it_matters: "",
-          source_types: [signal.source_type],
-          source_urls: [signal.url],
-          latest_signal_date: signal.date,
-          matching_tags: [],
-          evidence_count: 1,
-          confidence: "low",
-          contact_office: signal.source_type === "tech_transfer" ? (signal.metadata?.contact_office as string | undefined) : undefined,
-          signals: [signal],
-        };
-        return applyStructuredOverrides(fallback, signal);
-      }
+  const output: Partial<ScoredAsset>[] = new Array(signals.length);
 
-      const merged: Partial<ScoredAsset> = {
-        id: crypto.randomUUID().slice(0,8),
-        asset_name: extracted.asset_name ?? "unknown",
-        target: extracted.target ?? "unknown",
-        modality: extracted.modality ?? "unknown",
-        indication: extracted.indication ?? "unknown",
-        development_stage: extracted.development_stage ?? signal.stage_hint ?? "unknown",
-        owner_name: extracted.owner_name ?? signal.institution_or_sponsor ?? signal.authors_or_owner ?? "unknown",
-        owner_type: extracted.owner_type ?? sourceTypeToOwnerType(signal.source_type, signal.metadata),
-        institution: extracted.institution ?? signal.institution_or_sponsor ?? "unknown",
-        licensing_status: extracted.licensing_status ?? (signal.metadata?.licensing_status as string) ?? "unknown",
-        patent_status: extracted.patent_status ?? (signal.metadata?.patent_status as string) ?? "unknown",
-        summary: extracted.summary ?? signal.text?.slice(0, 300) ?? "",
-        why_it_matters: "",
-        source_types: [signal.source_type],
-        source_urls: [signal.url],
-        latest_signal_date: signal.date,
-        matching_tags: extracted.matching_tags ?? [],
-        evidence_count: 1,
-        confidence: inferConfidence(extracted, signal),
-        contact_office: signal.source_type === "tech_transfer" ? (signal.metadata?.contact_office as string | undefined) : undefined,
-        signals: [signal],
-      };
+  const individualIndices: number[] = [];
+  const batchableIndices: number[] = [];
 
-      return applyStructuredOverrides(merged, signal);
-    } catch (err) {
-      if (isFatalOpenAIError(err)) throw err;
-      const errFallback: Partial<ScoredAsset> = {
-        id: crypto.randomUUID().slice(0,8),
-        asset_name: signal.title.slice(0, 80) || "unknown",
-        indication: "unknown",
-        modality: "unknown",
-        target: "unknown",
-        development_stage: signal.stage_hint || "unknown",
-        owner_name: signal.institution_or_sponsor || "unknown",
-        owner_type: "unknown",
-        institution: signal.institution_or_sponsor || "unknown",
-        licensing_status: "unknown",
-        patent_status: "unknown",
-        summary: "",
-        why_it_matters: "",
-        source_types: [signal.source_type],
-        source_urls: [signal.url],
-        latest_signal_date: signal.date,
-        matching_tags: [],
-        evidence_count: 1,
-        confidence: "low",
-        signals: [signal],
-      };
-      return applyStructuredOverrides(errFallback, signal);
+  signals.forEach((s, i) => {
+    if (INDIVIDUAL_TYPES.has(s.source_type)) {
+      individualIndices.push(i);
+    } else {
+      batchableIndices.push(i);
     }
   });
 
-  return runWithConcurrency(tasks, 10);
+  const individualTasks = individualIndices.map((origIdx) => async () => {
+    const signal = signals[origIdx];
+    try {
+      const extracted = await extractAssetFromSignal(signal);
+      output[origIdx] = extracted ? buildMerged(extracted, signal) : buildFallback(signal);
+    } catch (err) {
+      if (isFatalOpenAIError(err)) throw err;
+      output[origIdx] = buildFallback(signal);
+    }
+  });
+
+  const chunks: number[][] = [];
+  for (let i = 0; i < batchableIndices.length; i += BATCH_SIZE) {
+    chunks.push(batchableIndices.slice(i, i + BATCH_SIZE));
+  }
+
+  const batchTasks = chunks.map((chunk) => async () => {
+    const chunkSignals = chunk.map((i) => signals[i]);
+    try {
+      const results = await extractAssetsFromSignalBatch(chunkSignals);
+      results.forEach((extracted, j) => {
+        const origIdx = chunk[j];
+        const signal = signals[origIdx];
+        output[origIdx] = extracted ? buildMerged(extracted, signal) : buildFallback(signal);
+      });
+    } catch (err) {
+      if (isFatalOpenAIError(err)) throw err;
+      chunk.forEach((origIdx) => {
+        output[origIdx] = buildFallback(signals[origIdx]);
+      });
+    }
+  });
+
+  await Promise.all([
+    runWithConcurrency(individualTasks, 10),
+    runWithConcurrency(batchTasks, 10),
+  ]);
+
+  return output;
 }
