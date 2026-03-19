@@ -783,6 +783,7 @@ export default function Alerts() {
     if (data && !hasWrittenSeen.current) {
       hasWrittenSeen.current = true;
       localStorage.setItem(STORAGE_KEY, new Date().toISOString());
+      window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
     }
   }, [data]);
 

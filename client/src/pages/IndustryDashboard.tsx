@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
-import { INSTITUTIONS } from "@/lib/institutions";
+import { INSTITUTIONS, slugifyInstitutionName } from "@/lib/institutions";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
 
@@ -81,14 +81,6 @@ function useRotatingTicker<T>(items: T[], intervalMs = 8000, fadeDurationMs = 60
   return { item: items[idx] ?? null, idx, visible };
 }
 
-function slugifyInstitutionName(name: string): string {
-  const found = INSTITUTIONS.find(
-    (inst) => inst.name.toLowerCase() === name.toLowerCase()
-  );
-  if (found) return found.slug;
-  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-}
-
 function KpiCard({
   icon: Icon,
   label,
@@ -144,37 +136,6 @@ function SectionHeader({
           </span>
         </Link>
       )}
-    </div>
-  );
-}
-
-function SegmentedTabs({
-  tabs,
-  active,
-  onChange,
-}: {
-  tabs: { key: string; label: string }[];
-  active: string;
-  onChange: (key: string) => void;
-}) {
-  return (
-    <div className="inline-flex rounded-md border border-border overflow-hidden mb-4">
-      {tabs.map((tab, i) => (
-        <button
-          key={tab.key}
-          onClick={() => onChange(tab.key)}
-          className={`px-3 py-1.5 text-[11px] font-semibold transition-colors ${
-            i > 0 ? "border-l border-border" : ""
-          } ${
-            active === tab.key
-              ? "bg-primary text-primary-foreground"
-              : "bg-card text-muted-foreground hover:text-foreground hover:bg-muted/50"
-          }`}
-          data-testid={`tab-${tab.key}`}
-        >
-          {tab.label}
-        </button>
-      ))}
     </div>
   );
 }
@@ -445,27 +406,6 @@ function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
   );
 }
 
-const PARTICLES = [
-  { top: "8%",  left: "5%",  size: 8,  dur: 28, delay: 0   },
-  { top: "15%", left: "88%", size: 5,  dur: 34, delay: 3   },
-  { top: "22%", left: "42%", size: 10, dur: 22, delay: 7   },
-  { top: "35%", left: "72%", size: 6,  dur: 38, delay: 1   },
-  { top: "48%", left: "12%", size: 7,  dur: 26, delay: 5   },
-  { top: "55%", left: "60%", size: 4,  dur: 32, delay: 9   },
-  { top: "62%", left: "28%", size: 9,  dur: 30, delay: 2   },
-  { top: "70%", left: "80%", size: 5,  dur: 40, delay: 6   },
-  { top: "78%", left: "50%", size: 12, dur: 24, delay: 4   },
-  { top: "85%", left: "18%", size: 6,  dur: 36, delay: 8   },
-  { top: "90%", left: "90%", size: 8,  dur: 29, delay: 11  },
-  { top: "5%",  left: "65%", size: 5,  dur: 33, delay: 13  },
-  { top: "30%", left: "95%", size: 7,  dur: 27, delay: 15  },
-  { top: "42%", left: "35%", size: 4,  dur: 37, delay: 10  },
-  { top: "58%", left: "7%",  size: 6,  dur: 23, delay: 12  },
-  { top: "73%", left: "55%", size: 11, dur: 31, delay: 16  },
-  { top: "18%", left: "22%", size: 5,  dur: 35, delay: 14  },
-  { top: "92%", left: "40%", size: 7,  dur: 25, delay: 17  },
-];
-
 export default function IndustryDashboard() {
   const [, navigate] = useLocation();
   const profile = getIndustryProfile();
@@ -526,27 +466,6 @@ export default function IndustryDashboard() {
           100% { transform: translateY(0px) translateX(0px); opacity: var(--p-op-start); }
         }
       `}</style>
-
-      {/* Green dot particle background */}
-      {PARTICLES.map((p, i) => (
-        <div
-          key={i}
-          aria-hidden="true"
-          style={{
-            position: "absolute",
-            top: p.top,
-            left: p.left,
-            width: p.size,
-            height: p.size,
-            borderRadius: "50%",
-            background: "hsl(var(--primary))",
-            opacity: 0.08 + (i % 5) * 0.015,
-            animation: `particle-float ${p.dur}s ease-in-out ${p.delay}s infinite`,
-            zIndex: 0,
-            pointerEvents: "none",
-          }}
-        />
-      ))}
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
@@ -618,26 +537,34 @@ export default function IndustryDashboard() {
           data-testid="dashboard-new-assets-panel"
           style={{ animation: "dash-fade-up 400ms ease 140ms both" }}
         >
-          <div className="flex items-start justify-between gap-2 mb-1">
+          <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold text-foreground">New Assets</h2>
             </div>
-            <Link href="/scout">
-              <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                Explore <ArrowRight className="w-3 h-3" />
-              </span>
-            </Link>
+            <div className="flex items-center gap-1.5">
+              {(["institution", "category"] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setActiveTab(key)}
+                  className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+                    activeTab === key
+                      ? "bg-primary/10 text-primary font-medium"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  data-testid={`tab-${key}`}
+                >
+                  {key === "institution" ? "By Institution" : "By Therapy Area"}
+                </button>
+              ))}
+              <div className="w-px h-3 bg-border mx-0.5" />
+              <Link href="/scout">
+                <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                  Explore <ArrowRight className="w-3 h-3" />
+                </span>
+              </Link>
+            </div>
           </div>
-
-          <SegmentedTabs
-            tabs={[
-              { key: "institution", label: "By Institution" },
-              { key: "category", label: "By Therapy Area" },
-            ]}
-            active={activeTab}
-            onChange={(k) => setActiveTab(k as "institution" | "category")}
-          />
 
           {activeTab === "institution" ? (
             topInstitutions.length === 0 ? (

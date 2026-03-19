@@ -18,7 +18,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
 
@@ -44,9 +44,17 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { signOut } = useAuth();
   const [location] = useLocation();
 
-  const sinceParam = typeof window !== "undefined"
-    ? (localStorage.getItem(STORAGE_KEY) ?? "")
-    : "";
+  const [sinceParam, setSinceParam] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
+  );
+
+  useEffect(() => {
+    const handler = () => {
+      setSinceParam(localStorage.getItem(STORAGE_KEY) ?? "");
+    };
+    window.addEventListener("eden-alerts-seen", handler);
+    return () => window.removeEventListener("eden-alerts-seen", handler);
+  }, []);
 
   const deltaSidebarUrl = sinceParam
     ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`

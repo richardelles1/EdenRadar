@@ -7,22 +7,34 @@ interface Props {
 }
 
 const RADAR_PARTICLES = [
-  { x: "8%",  y: "15%", size: 4,   delay: "0s",    dur: "7s" },
-  { x: "82%", y: "10%", size: 3,   delay: "1.6s",  dur: "9s" },
-  { x: "91%", y: "52%", size: 3.5, delay: "3.1s",  dur: "6s" },
-  { x: "60%", y: "80%", size: 3,   delay: "0.8s",  dur: "8s" },
-  { x: "18%", y: "70%", size: 4,   delay: "4.2s",  dur: "7s" },
-  { x: "44%", y: "6%",  size: 3,   delay: "2.2s",  dur: "10s" },
-  { x: "70%", y: "35%", size: 5,   delay: "5.0s",  dur: "8s" },
-  { x: "28%", y: "28%", size: 3.5, delay: "1.0s",  dur: "11s" },
-  { x: "52%", y: "60%", size: 4,   delay: "3.8s",  dur: "7.5s" },
-  { x: "14%", y: "48%", size: 3,   delay: "6.1s",  dur: "9s" },
-  { x: "78%", y: "68%", size: 5,   delay: "2.7s",  dur: "6.5s" },
-  { x: "36%", y: "88%", size: 3.5, delay: "0.4s",  dur: "8.5s" },
-  { x: "62%", y: "22%", size: 4,   delay: "4.8s",  dur: "10s" },
-  { x: "88%", y: "82%", size: 3,   delay: "1.9s",  dur: "7s" },
-  { x: "22%", y: "92%", size: 3.5, delay: "3.3s",  dur: "9.5s" },
-  { x: "48%", y: "42%", size: 7,   delay: "5.5s",  dur: "12s" },
+  { x: "8%",  y: "15%", size: 4,   delay: "0s",    dur: "12s" },
+  { x: "82%", y: "10%", size: 3,   delay: "1.6s",  dur: "15s" },
+  { x: "91%", y: "52%", size: 3.5, delay: "3.1s",  dur: "11s" },
+  { x: "60%", y: "80%", size: 3,   delay: "0.8s",  dur: "14s" },
+  { x: "18%", y: "70%", size: 4,   delay: "4.2s",  dur: "13s" },
+  { x: "44%", y: "6%",  size: 3,   delay: "2.2s",  dur: "16s" },
+  { x: "70%", y: "35%", size: 5,   delay: "5.0s",  dur: "14s" },
+  { x: "28%", y: "28%", size: 3.5, delay: "1.0s",  dur: "18s" },
+  { x: "52%", y: "60%", size: 4,   delay: "3.8s",  dur: "13s" },
+  { x: "14%", y: "48%", size: 3,   delay: "6.1s",  dur: "15s" },
+  { x: "78%", y: "68%", size: 5,   delay: "2.7s",  dur: "12s" },
+  { x: "36%", y: "88%", size: 3.5, delay: "0.4s",  dur: "14s" },
+  { x: "62%", y: "22%", size: 4,   delay: "4.8s",  dur: "16s" },
+  { x: "88%", y: "82%", size: 3,   delay: "1.9s",  dur: "13s" },
+  { x: "22%", y: "92%", size: 3.5, delay: "3.3s",  dur: "15s" },
+  { x: "48%", y: "42%", size: 7,   delay: "5.5s",  dur: "19s" },
+  { x: "5%",  y: "35%", size: 3,   delay: "7.2s",  dur: "17s" },
+  { x: "95%", y: "25%", size: 4,   delay: "0.3s",  dur: "12s" },
+  { x: "33%", y: "55%", size: 3.5, delay: "8.0s",  dur: "14s" },
+  { x: "75%", y: "48%", size: 5,   delay: "2.5s",  dur: "16s" },
+  { x: "11%", y: "82%", size: 3,   delay: "6.8s",  dur: "13s" },
+  { x: "57%", y: "14%", size: 4,   delay: "4.1s",  dur: "15s" },
+  { x: "86%", y: "40%", size: 8,   delay: "1.4s",  dur: "20s" },
+  { x: "40%", y: "72%", size: 3,   delay: "9.3s",  dur: "14s" },
+  { x: "25%", y: "18%", size: 4.5, delay: "3.6s",  dur: "17s" },
+  { x: "66%", y: "94%", size: 3,   delay: "7.7s",  dur: "13s" },
+  { x: "50%", y: "30%", size: 10,  delay: "5.9s",  dur: "22s" },
+  { x: "2%",  y: "58%", size: 3.5, delay: "0.7s",  dur: "16s" },
 ];
 
 const LAB_PARTICLES = [
@@ -78,7 +90,7 @@ function RadarPortalBg({ reduced }: { reduced: boolean }) {
   const color = "142 65% 48%";
   return (
     <>
-      <DotGrid color={color} opacity={0.10} />
+      <DotGrid color={color} opacity={0.07} />
       <div
         style={{
           position: "absolute",

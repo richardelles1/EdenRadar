@@ -33,11 +33,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [session, role, loading, navigate]);
 
+  const [location] = useLocation();
+  const isEden = location === "/industry/eden";
+
   if (loading || !session || role !== "industry") return null;
 
   return (
     <div className="flex min-h-screen bg-background relative">
-      <PortalBackground variant="radar" />
+      {!isEden && <PortalBackground variant="radar" />}
       <IndustrySidebar />
       <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         {children}

@@ -188,20 +188,9 @@ export default function InstitutionDetail() {
     (savedData?.assets ?? []).map((a) => a.ingestedAssetId).filter((id): id is number => id != null)
   );
 
-  if (!inst) {
-    return (
-      <div className="min-h-full bg-background flex flex-col items-center justify-center py-24 text-center gap-4">
-        <Building2 className="w-10 h-10 text-muted-foreground" />
-        <h2 className="text-xl font-bold text-foreground">Institution not found</h2>
-        <Link href="/institutions">
-          <Button variant="outline" className="gap-2">
-            <ArrowLeft className="w-4 h-4" />
-            Back to Institutions
-          </Button>
-        </Link>
-      </div>
-    );
-  }
+  const slugTitle = slug
+    ? slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ")
+    : "Unknown Institution";
 
   const rawAssets = data?.assets ?? [];
   const isBlocked = BLOCKED_SLUGS.has(slug ?? "");
@@ -248,20 +237,31 @@ export default function InstitutionDetail() {
                 <Building2 className="w-6 h-6 text-primary" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-foreground">{inst.name}</h1>
-                <p className="text-sm text-muted-foreground mt-0.5">{inst.city} · {inst.ttoName}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h1 className="text-2xl font-bold text-foreground">{inst?.name ?? slugTitle}</h1>
+                  {!inst && (
+                    <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-600 dark:text-amber-400 border-0">
+                      Not in directory
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  {inst ? `${inst.city} · ${inst.ttoName}` : "Institution not in curated directory"}
+                </p>
               </div>
             </div>
-            <a href={inst.website} target="_blank" rel="noopener noreferrer">
-              <Button
-                variant="outline"
-                className="gap-2 border-card-border"
-                data-testid="button-view-tto-site"
-              >
-                <ExternalLink className="w-3.5 h-3.5" />
-                View TTO Site
-              </Button>
-            </a>
+            {inst?.website && (
+              <a href={inst.website} target="_blank" rel="noopener noreferrer">
+                <Button
+                  variant="outline"
+                  className="gap-2 border-card-border"
+                  data-testid="button-view-tto-site"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  View TTO Site
+                </Button>
+              </a>
+            )}
           </div>
         </div>
       </div>
@@ -270,11 +270,11 @@ export default function InstitutionDetail() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 rounded-lg border border-card-border bg-card">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">TTO Office</p>
-            <p className="text-sm font-medium text-foreground">{inst.ttoName}</p>
+            <p className="text-sm font-medium text-foreground">{inst?.ttoName ?? "—"}</p>
           </div>
           <div className="p-4 rounded-lg border border-card-border bg-card">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Location</p>
-            <p className="text-sm font-medium text-foreground">{inst.city}</p>
+            <p className="text-sm font-medium text-foreground">{inst?.city ?? "—"}</p>
           </div>
           <div className="p-4 rounded-lg border border-card-border bg-card" data-testid="stat-active-listings">
             <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold mb-1">Active Listings</p>
@@ -288,16 +288,18 @@ export default function InstitutionDetail() {
           </div>
         </div>
 
-        <div>
-          <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Specialty Areas</h2>
-          <div className="flex flex-wrap gap-2">
-            {inst.specialties.map((s) => (
-              <Badge key={s} variant="secondary" className="text-sm font-medium bg-primary/10 text-primary border-0 px-3 py-1">
-                {s}
-              </Badge>
-            ))}
+        {inst?.specialties && inst.specialties.length > 0 && (
+          <div>
+            <h2 className="text-sm font-semibold text-foreground uppercase tracking-wide mb-3">Specialty Areas</h2>
+            <div className="flex flex-wrap gap-2">
+              {inst.specialties.map((s) => (
+                <Badge key={s} variant="secondary" className="text-sm font-medium bg-primary/10 text-primary border-0 px-3 py-1">
+                  {s}
+                </Badge>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         <div>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -353,9 +355,11 @@ export default function InstitutionDetail() {
               <p className="text-xs text-muted-foreground/70 max-w-sm">
                 This institution&apos;s website blocks automated access from cloud hosting providers. Listings cannot be indexed automatically.
               </p>
-              <a href={inst.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
-                Visit TTO website directly →
-              </a>
+              {inst?.website && (
+                <a href={inst.website} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline">
+                  Visit TTO website directly →
+                </a>
+              )}
             </div>
           ) : rawAssets.length === 0 ? (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
