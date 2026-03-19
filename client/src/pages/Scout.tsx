@@ -664,8 +664,53 @@ export default function Scout() {
             {/* Assets tab — TTO results (always shown when no research sources active; else only when assets tab selected) */}
             {(researchSources.length === 0 || !hasSearched || resultTab === "assets") && !searchMutation.isPending && !(researchSources.length > 0 && researchMutation.isPending) && (
               <>
+                {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
+                {hasSearched && (
+                  <div className="flex items-center justify-end gap-2">
+                    <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
+                      {([0, 60, 70, 80] as const).map((threshold) => (
+                        <button
+                          key={threshold}
+                          onClick={() => setMinScore(threshold)}
+                          className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                            minScore === threshold
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-background text-muted-foreground hover:text-foreground"
+                          }`}
+                          data-testid={`score-threshold-${threshold}`}
+                        >
+                          {threshold === 0 ? "Any" : `${threshold}+`}
+                        </button>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() => setFiltersOpen(true)}
+                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                      data-testid="button-filters-hint"
+                    >
+                      <SlidersHorizontal className="w-3 h-3" />
+                      {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
+                    </button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                      onClick={handleGenerateReport}
+                      disabled={isAnyPending}
+                      data-testid="button-generate-report"
+                    >
+                      {reportMutation.isPending ? (
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <FileBarChart2 className="w-3 h-3" />
+                      )}
+                      {reportMutation.isPending ? "Generating..." : "Match Report"}
+                    </Button>
+                  </div>
+                )}
+
                 {hasSearched && researchSources.length > 0 && filteredResults.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                  <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <Search className="w-8 h-8 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">
                       Try refining your search for <span className="font-medium text-foreground">"{currentQuery}"</span>
@@ -679,51 +724,6 @@ export default function Scout() {
                     query={currentQuery}
                     savedAssetIds={savedAssetIds}
                     onUnsave={handleUnsave}
-                    headerAction={
-                      hasSearched && filteredResults.length > 0 ? (
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
-                            {([0, 60, 70, 80] as const).map((threshold) => (
-                              <button
-                                key={threshold}
-                                onClick={() => setMinScore(threshold)}
-                                className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                                  minScore === threshold
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-background text-muted-foreground hover:text-foreground"
-                                }`}
-                                data-testid={`score-threshold-${threshold}`}
-                              >
-                                {threshold === 0 ? "Any" : `${threshold}+`}
-                              </button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => setFiltersOpen(true)}
-                            className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                            data-testid="button-filters-hint"
-                          >
-                            <SlidersHorizontal className="w-3 h-3" />
-                            {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
-                          </button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                            onClick={handleGenerateReport}
-                            disabled={isAnyPending}
-                            data-testid="button-generate-report"
-                          >
-                            {reportMutation.isPending ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
-                            ) : (
-                              <FileBarChart2 className="w-3 h-3" />
-                            )}
-                            {reportMutation.isPending ? "Generating..." : "Match Report"}
-                          </Button>
-                        </div>
-                      ) : undefined
-                    }
                   />
                 )}
               </>
@@ -875,6 +875,7 @@ export default function Scout() {
                   setModalityFilter("all");
                   setInstitutionFilter("all");
                   setSortMode("score");
+                  setMinScore(0);
                 }}
                 className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-1 border border-dashed border-card-border rounded-md"
                 data-testid="button-reset-filters"
