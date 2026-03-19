@@ -441,7 +441,7 @@ export async function registerRoutes(
 
   app.get("/api/dashboard/stats", async (_req, res) => {
     try {
-      const [stats, recentSearches, recentAssets] = await Promise.all([
+      const [stats, recentSearches, recentAssets, sourcesResult, reviewCount] = await Promise.all([
         fetchPortfolioStats(),
         storage.getSearchHistory(8),
         db.select({
@@ -456,8 +456,12 @@ export async function registerRoutes(
         .where(sql`${ingestedAssets.relevant} = true`)
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
+        db.execute(sql`SELECT COUNT(DISTINCT source_name)::int AS n FROM ingested_assets WHERE source_name IS NOT NULL AND source_name != ''`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE needs_review = true`),
       ]);
-      return res.json({ stats, recentSearches, recentAssets });
+      const sourcesCount = Number((sourcesResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const assetsInReview = Number((reviewCount.rows[0] as Record<string, unknown>)?.n ?? 0);
+      return res.json({ stats, recentSearches, recentAssets, sourcesCount, assetsInReview });
     } catch (err: any) {
       console.error("[dashboard/stats] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load stats" });

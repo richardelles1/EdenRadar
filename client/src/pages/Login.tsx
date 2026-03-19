@@ -19,7 +19,7 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && session && role) {
-      const dest = role === "industry" ? "/scout" : role === "researcher" ? "/research" : "/discovery";
+      const dest = role === "industry" ? "/industry/dashboard" : role === "researcher" ? "/research" : "/discovery";
       navigate(dest, { replace: true });
     }
   }, [authLoading, session, role, navigate]);
@@ -27,7 +27,7 @@ export default function Login() {
   if (!authLoading && session && role) return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
-    navigate(r === "industry" ? "/scout" : r === "researcher" ? "/research" : "/discovery", { replace: true });
+    navigate(r === "industry" ? "/industry/dashboard" : r === "researcher" ? "/research" : "/discovery", { replace: true });
   }
 
   async function handleSubmit(e: React.FormEvent) {

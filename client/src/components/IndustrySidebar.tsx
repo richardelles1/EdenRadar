@@ -1,4 +1,5 @@
 import { Link, useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
   Search,
@@ -22,12 +23,18 @@ import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { getIndustryProfile } from "@/hooks/use-industry";
 
+type AlertsBadgeData = {
+  newAssets: { total: number };
+  newConcepts: { total: number };
+  newProjects: { total: number };
+};
+
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/industry/eden", label: "Eden", icon: Sparkles },
   { href: "/scout", label: "Scout", icon: Search, exact: true },
   { href: "/institutions", label: "Institutions", icon: Building2 },
-  { href: "/alerts", label: "Alerts", icon: Bell, accent: true },
+  { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
   { href: "/assets", label: "Pipelines", icon: Layers },
   { href: "/industry/projects", label: "EdenLab", icon: FlaskConical },
   { href: "/industry/concepts", label: "EdenDiscovery", icon: Lightbulb },
@@ -47,6 +54,16 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const profile = getIndustryProfile();
 
+  const { data: alertsData } = useQuery<AlertsBadgeData>({
+    queryKey: ["/api/industry/alerts/delta"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const totalAlerts =
+    (alertsData?.newAssets.total ?? 0) +
+    (alertsData?.newConcepts.total ?? 0) +
+    (alertsData?.newProjects.total ?? 0);
+
   async function handleSignOut() {
     await signOut();
     window.location.href = "/login";
@@ -55,7 +72,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="h-14 flex items-center px-4 border-b border-border shrink-0">
-        <Link href="/dashboard">
+        <Link href="/industry/dashboard">
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none"
             data-testid="industry-sidebar-logo"
@@ -88,10 +105,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, exact, accent }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon, exact, alertsBadge }) => {
           const isActive = exact
             ? location === href
             : location === href || location.startsWith(href + "/");
+          const showDot = alertsBadge && totalAlerts > 0 && !isActive;
           return (
             <Link key={href} href={href}>
               <div
@@ -103,8 +121,23 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
                 onClick={onClose}
               >
-                <Icon className={`w-4 h-4 shrink-0 ${accent && !isActive ? "text-emerald-500" : ""}`} />
+                <div className="relative shrink-0">
+                  <Icon
+                    className={`w-4 h-4 ${alertsBadge && !isActive ? "text-emerald-500" : ""}`}
+                  />
+                  {showDot && (
+                    <span
+                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border-2 border-background"
+                      data-testid="alerts-dot"
+                    />
+                  )}
+                </div>
                 <span>{label}</span>
+                {showDot && (
+                  <span className="ml-auto text-[10px] font-semibold text-emerald-500 tabular-nums" data-testid="alerts-count">
+                    {totalAlerts}
+                  </span>
+                )}
               </div>
             </Link>
           );
