@@ -3599,6 +3599,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
     setPastedText("");
     setImageFiles([]);
     setImagePreviews([]);
+    setDocFiles([]);
   };
 
   return (

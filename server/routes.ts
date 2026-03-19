@@ -4181,6 +4181,11 @@ If a field cannot be determined, use "N/A".`
 
     const combinedText = [rawText, ...docTexts].filter(Boolean).join("\n\n---\n\n");
 
+    // Guard: if documents were uploaded but yielded no extractable text (e.g. scanned/image PDFs)
+    if (docFiles.length > 0 && docTexts.length === 0 && !rawText && imageFiles.length === 0) {
+      return res.status(400).json({ error: "No text could be extracted from the uploaded documents. The files may be scanned/image-only PDFs. Try copying the text manually and using Paste Text mode instead." });
+    }
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const PARSE_PROMPT = `You are a biotech technology transfer analyst. Extract every distinct licensable asset from the provided TTO (Technology Transfer Office) content for institution: ${institution}.
