@@ -179,7 +179,7 @@ export async function extractAssetsFromSignalBatch(
   if (signals.length === 0) return [];
 
   const signalLines = signals.map((s, i) => {
-    const text = (s.text ?? "").slice(0, 400).replace(/\n+/g, " ");
+    const text = (s.text ?? "").slice(0, 1000).replace(/\n+/g, " ");
     const inst = s.institution_or_sponsor || s.authors_or_owner || "";
     return `[${i + 1}] SOURCE: ${s.source_type} | INSTITUTION: ${inst} | TITLE: ${s.title} | TEXT: ${text}`;
   }).join("\n\n");
