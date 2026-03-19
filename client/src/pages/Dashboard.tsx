@@ -155,8 +155,12 @@ function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
     ? (localStorage.getItem(STORAGE_KEY) ?? "")
     : "";
 
+  const deltaUrl = sinceParam
+    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
+    : "/api/industry/alerts/delta";
+
   const { data, isLoading } = useQuery<AlertDeltaResponse>({
-    queryKey: ["/api/industry/alerts/delta", sinceParam],
+    queryKey: [deltaUrl],
     staleTime: 5 * 60 * 1000,
   });
 

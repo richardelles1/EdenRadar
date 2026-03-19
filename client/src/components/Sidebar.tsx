@@ -48,12 +48,16 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     ? (localStorage.getItem(STORAGE_KEY) ?? "")
     : "";
 
+  const deltaSidebarUrl = sinceParam
+    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
+    : "/api/industry/alerts/delta";
+
   const { data: savedData } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
   });
 
   const { data: alertData } = useQuery<AlertDeltaResponse>({
-    queryKey: ["/api/industry/alerts/delta", sinceParam],
+    queryKey: [deltaSidebarUrl],
     staleTime: 5 * 60 * 1000,
   });
 
