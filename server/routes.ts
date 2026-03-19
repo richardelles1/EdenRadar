@@ -490,7 +490,14 @@ export async function registerRoutes(
           ORDER BY pl.created_at DESC
         `),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets`),
-        db.execute(sql`SELECT COUNT(DISTINCT source_journal)::int AS n FROM saved_assets WHERE source_journal IS NOT NULL AND source_journal != ''`),
+        db.execute(sql`
+          SELECT COUNT(DISTINCT COALESCE(ia.institution, sa.source_journal))::int AS n
+          FROM saved_assets sa
+          LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
+          WHERE COALESCE(ia.institution, sa.source_journal) IS NOT NULL
+            AND COALESCE(ia.institution, sa.source_journal) != ''
+            AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
+        `),
       ]);
       const pipelineSummaryLists = (lists.rows as Record<string, unknown>[]).map((r) => ({
         id: Number(r.id),

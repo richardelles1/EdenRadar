@@ -488,10 +488,10 @@ export default function IndustryDashboard() {
                     {pipelineLoading ? "—" : (pipelineData?.totalSavedAssets ?? 0)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-background/50" data-testid="pipeline-stat-total-indexed">
-                  <span className="text-xs text-muted-foreground">Total indexed</span>
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-background/50" data-testid="pipeline-stat-institutions">
+                  <span className="text-xs text-muted-foreground">Institutions covered</span>
                   <span className="text-sm font-bold text-foreground tabular-nums">
-                    {isLoading ? "—" : (stats?.total ?? 0).toLocaleString()}
+                    {pipelineLoading ? "—" : (pipelineData?.institutionCount ?? 0)}
                   </span>
                 </div>
                 {weeklyNew > 0 && weeklyNew < (stats?.total ?? 1) * 0.8 && (
