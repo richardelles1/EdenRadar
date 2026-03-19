@@ -37,8 +37,6 @@ type SavedAssetsResponse = {
 };
 
 
-const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex", "lab_discoveries"];
-
 const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
@@ -69,7 +67,7 @@ const RADAR_FACT_TEMPLATES = [
   (stats: RadarStats) => `${stats.institutions > 0 ? stats.institutions : "262"}+ institutions in our network`,
   () => "Matching against your acquisition thesis",
   () => "40+ therapy areas indexed and monitored",
-  (stats: RadarStats) => stats.topModality ? `CAR-T sees highest convergence signal` : "Ranking by relevance and licensing readiness",
+  () => "CAR-T sees highest convergence signal this week",
   () => "Filtering for biotech and pharma relevance",
   () => "Scoring novelty, fit, and licensability",
 ];
@@ -132,65 +130,6 @@ type InstitutionsResponse = {
   total: number;
 };
 
-function TTONetworkSidebar({ onSearch }: { onSearch: (query: string) => void }) {
-  const [filter, setFilter] = useState("");
-
-  const { data } = useQuery<InstitutionsResponse>({
-    queryKey: ["/api/scout/institutions"],
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const institutions = data?.institutions ?? [];
-  const total = data?.total ?? 0;
-
-  const filtered = filter.trim()
-    ? institutions.filter((i) => i.institution.toLowerCase().includes(filter.toLowerCase()))
-    : institutions;
-
-  return (
-    <div className="flex flex-col h-full" data-testid="tto-network-panel">
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-1.5 mb-1">
-          <Globe className="h-3.5 w-3.5 text-primary" />
-          <span className="text-xs font-semibold text-foreground uppercase tracking-wide">TTO Network</span>
-        </div>
-        {total > 0 && (
-          <p className="text-[10px] text-muted-foreground mb-3">
-            <span className="text-foreground font-semibold">{total}</span> institutions indexed
-          </p>
-        )}
-        <input
-          type="text"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter institutions..."
-          className="w-full h-7 px-2.5 text-[11px] rounded-md border border-border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
-          data-testid="tto-institution-filter"
-        />
-      </div>
-
-      <div className="flex-1 overflow-y-auto">
-        {filtered.slice(0, 60).map((inst) => (
-          <button
-            key={inst.institution}
-            onClick={() => onSearch(inst.institution)}
-            className="w-full text-left flex items-center justify-between gap-2 px-4 py-2 hover:bg-accent/50 transition-colors group border-b border-border/40 last:border-0"
-            data-testid={`tto-inst-${inst.institution}`}
-          >
-            <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate leading-tight">
-              {inst.institution}
-            </span>
-            <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">{inst.count}</span>
-          </button>
-        ))}
-        {filtered.length === 0 && filter && (
-          <p className="text-[11px] text-muted-foreground text-center py-6">No institutions match</p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 const RESEARCH_SOURCE_OPTIONS = [
   { key: "pubmed",        label: "PubMed",             desc: "Biomedical literature" },
   { key: "biorxiv",       label: "bioRxiv",             desc: "Biology preprints" },
@@ -233,36 +172,38 @@ function ScoutSidebar({
 
   return (
     <div className="flex flex-col h-full" data-testid="scout-sidebar">
-      <div className="flex border-b border-border shrink-0">
-        <button
-          onClick={() => setActiveTab("institutions")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-colors border-b-2 ${
-            activeTab === "institutions"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="scout-tab-institutions"
-        >
-          <Bldg className="h-3 w-3" />
-          TTO Network
-        </button>
-        <button
-          onClick={() => setActiveTab("sources")}
-          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-colors border-b-2 ${
-            activeTab === "sources"
-              ? "border-primary text-primary"
-              : "border-transparent text-muted-foreground hover:text-foreground"
-          }`}
-          data-testid="scout-tab-sources"
-        >
-          <Database className="h-3 w-3" />
-          Research
-          {researchSources.length > 0 && (
-            <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary text-[8px] text-primary-foreground font-bold">
-              {researchSources.length}
-            </span>
-          )}
-        </button>
+      <div className="p-2 border-b border-border shrink-0">
+        <div className="flex rounded-md border border-border overflow-hidden">
+          <button
+            onClick={() => setActiveTab("institutions")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold transition-colors ${
+              activeTab === "institutions"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="scout-tab-institutions"
+          >
+            <Bldg className="h-3 w-3" />
+            TTO Institutions
+          </button>
+          <button
+            onClick={() => setActiveTab("sources")}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-[11px] font-semibold transition-colors border-l border-border ${
+              activeTab === "sources"
+                ? "bg-primary text-primary-foreground"
+                : "bg-background text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="scout-tab-sources"
+          >
+            <Database className="h-3 w-3" />
+            Research Sources
+            {researchSources.length > 0 && (
+              <span className={`ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full text-[8px] font-bold ${activeTab === "sources" ? "bg-white/30 text-white" : "bg-primary text-primary-foreground"}`}>
+                {researchSources.length}
+              </span>
+            )}
+          </button>
+        </div>
       </div>
 
       {activeTab === "institutions" && (
@@ -656,14 +597,14 @@ export default function Scout() {
                   onSourceChange={() => {}}
                 />
               </div>
-              {hasSearched && !searchMutation.isPending && (
+              {inputQuery.trim().length > 0 && (
                 <Button
                   variant="ghost"
                   size="icon"
                   className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
                   onClick={handleClearSearch}
                   data-testid="button-clear-search"
-                  title="Clear search"
+                  title="New search"
                 >
                   <X className="w-4 h-4" />
                 </Button>
@@ -709,19 +650,9 @@ export default function Scout() {
             </div>
           )}
 
-          {showControls && (
+          {showControls && activeFilterCount > 0 && (
             <div className="px-4 sm:px-6 pb-3">
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setFiltersOpen(true)}
-                  className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                  data-testid="button-filters-hint"
-                >
-                  <SlidersHorizontal className="w-3 h-3" />
-                  {activeFilterCount > 0
-                    ? `${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} active — Refine`
-                    : "Refine results"}
-                </button>
                 {stageFilter !== "all" && (
                   <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setStageFilter("all")} data-testid="active-filter-stage">
                     Stage: {stageFilter} ×
@@ -762,21 +693,31 @@ export default function Scout() {
                 onUnsave={handleUnsave}
                 headerAction={
                   hasSearched && filteredResults.length > 0 ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary shrink-0"
-                      onClick={handleGenerateReport}
-                      disabled={isAnyPending}
-                      data-testid="button-generate-report"
-                    >
-                      {reportMutation.isPending ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <FileBarChart2 className="w-3 h-3" />
-                      )}
-                      {reportMutation.isPending ? "Generating..." : "Match Report"}
-                    </Button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setFiltersOpen(true)}
+                        className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                        data-testid="button-filters-hint"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
+                      </button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                        onClick={handleGenerateReport}
+                        disabled={isAnyPending}
+                        data-testid="button-generate-report"
+                      >
+                        {reportMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <FileBarChart2 className="w-3 h-3" />
+                        )}
+                        {reportMutation.isPending ? "Generating..." : "Match Report"}
+                      </Button>
+                    </div>
                   ) : undefined
                 }
               />
