@@ -3629,13 +3629,14 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                   <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 </div>
               </PopoverTrigger>
-              <PopoverContent className="w-[400px] p-1 max-h-64 overflow-y-auto" align="start" data-testid="institution-dropdown">
+              <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-1 max-h-64 overflow-y-auto" align="start" sideOffset={4} data-testid="institution-dropdown">
                 {filteredInsts.map((name) => (
                   <button
                     key={name}
                     type="button"
                     className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted transition-colors"
                     onMouseDown={(e) => { e.preventDefault(); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
+                    onTouchEnd={(e) => { e.preventDefault(); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
                     data-testid={`inst-option-${name}`}
                   >
                     {name}
@@ -3646,6 +3647,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                     type="button"
                     className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted text-primary font-medium transition-colors flex items-center gap-1.5"
                     onMouseDown={(e) => { e.preventDefault(); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
+                    onTouchEnd={(e) => { e.preventDefault(); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
                     data-testid="button-create-institution"
                   >
                     <Plus className="h-3.5 w-3.5" /> Create "{instSearch.trim()}"…
