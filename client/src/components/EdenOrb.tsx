@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { Dna, FlaskConical, Brain, Shield, TrendingUp, Building2 } from "lucide-react";
 
 export function EdenAvatar({ isThinking = false, size = 36 }: { isThinking?: boolean; size?: number }) {
@@ -305,37 +305,30 @@ export function getFollowUpPills(responseText: string): string[] {
 
 // ── EDEN acronym intro animation ──────────────────────────────────────────
 export function EdenIntro({ onDone }: { onDone: () => void }) {
-  const [phase, setPhase] = useState<"letters" | "phrase" | "settle" | "done">("letters");
-
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("phrase"), 1800);
-    const t2 = setTimeout(() => setPhase("settle"), 3000);
-    const t3 = setTimeout(() => { setPhase("done"); onDone(); }, 4200);
-    return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
+    const t = setTimeout(onDone, 1800);
+    return () => clearTimeout(t);
   }, [onDone]);
 
   const LETTERS = ["E", "D", "E", "N"];
-  const settled = phase === "settle" || phase === "done";
 
   return (
     <div className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none">
       <style>{`
         @keyframes eden-letter-in {
-          from { opacity: 0; transform: translateY(28px) scale(0.78); }
-          to   { opacity: 1; transform: translateY(0)    scale(1); }
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
         }
       `}</style>
-      <div
-        className={`flex gap-1 sm:gap-2 transition-all duration-700 ease-out ${settled ? "scale-[0.38] opacity-70" : "scale-100"}`}
-        style={{ transformOrigin: "center center" }}
-      >
+      <div className="flex gap-1 sm:gap-2">
         {LETTERS.map((letter, i) => (
           <span
             key={i}
             className="font-black tracking-tight leading-none"
             style={{
               fontSize: "clamp(72px, 18vw, 160px)",
-              animation: `eden-letter-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.28}s both`,
+              opacity: 0,
+              animation: `eden-letter-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 150}ms both`,
               background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
@@ -346,19 +339,6 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
           </span>
         ))}
       </div>
-
-      <p
-        className="text-center font-semibold text-foreground/80 mt-4 px-4 max-w-sm sm:max-w-md"
-        style={{
-          fontSize: "clamp(14px, 3vw, 22px)",
-          opacity: phase === "phrase" || phase === "settle" ? 1 : 0,
-          transform: settled ? "translateY(-52px) scale(0.8)" : "translateY(0) scale(1)",
-          transition: "opacity 0.5s ease 0.2s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
-          transformOrigin: "center top",
-        }}
-      >
-        Engine for Discovery &amp; Emerging Networks
-      </p>
     </div>
   );
 }

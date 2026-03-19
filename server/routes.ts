@@ -376,17 +376,22 @@ export async function registerRoutes(
         modality, stage, indication, institution, limit, minSimilarity,
       });
 
+      const TIER1_UNIVERSITIES = ["MIT", "Stanford", "Harvard", "UCSF", "Johns Hopkins", "Columbia", "Yale", "Penn", "Duke", "Cornell"];
+      const EARLY_STAGES = ["preclinical", "phase 1", "phase-1", "phase i", "phase 2", "phase-2", "phase ii"];
+
       const assets: ScoredAsset[] = results.map((r) => {
         const sim = r.similarity ?? 0;
-        // Remap sim 0.40→0, 1.00→85; completeness bonuses add up to +15
-        const remapped = ((sim - 0.40) / 0.60) * 85;
+        // Remap sim [0.40, 1.00] → [0, 85]; bonus points up to +15
+        const baseScore = Math.max(0, Math.round(((sim - 0.40) / 0.60) * 85));
+        const stageLower = (r.developmentStage ?? "").toLowerCase();
+        const instLower  = (r.institution ?? "").toLowerCase();
         const bonuses =
-          (r.institution && r.institution !== "unknown" ? 3 : 0) +
           (r.modality && r.modality !== "unknown" ? 3 : 0) +
           (r.developmentStage && r.developmentStage !== "unknown" ? 3 : 0) +
-          (r.indication && r.indication !== "unknown" ? 3 : 0) +
-          (r.summary && r.summary.length > 50 ? 3 : 0);
-        const score = Math.max(1, Math.min(100, Math.round(remapped + bonuses)));
+          (EARLY_STAGES.some((s) => stageLower.includes(s)) ? 4 : 0) +
+          (TIER1_UNIVERSITIES.some((u) => instLower.includes(u.toLowerCase())) ? 3 : 0) +
+          (r.licensingReadiness && r.licensingReadiness !== "unknown" ? 2 : 0);
+        const score = Math.max(1, Math.min(100, baseScore + Math.round(bonuses)));
         return {
           id: String(r.id),
           asset_name: r.assetName,
@@ -400,11 +405,11 @@ export async function registerRoutes(
           source_urls: r.sourceUrl ? [r.sourceUrl] : [],
           source_types: ["tech_transfer"],
           score,
-          score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: score },
+          score_breakdown: { freshness: 0, novelty: Math.round(bonuses), readiness: 0, licensability: 0, fit: baseScore, competition: 0, total: score },
           latest_signal_date: "",
           matching_tags: [],
           evidence_count: 1,
-          confidence: sim >= 0.70 ? "high" : sim >= 0.50 ? "medium" : "low",
+          confidence: score >= 75 ? "high" : score >= 50 ? "medium" : "low",
           signals: [],
           owner_name: r.institution,
           owner_type: "university" as const,
