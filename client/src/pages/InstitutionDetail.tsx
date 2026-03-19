@@ -9,7 +9,7 @@ import {
   ShieldOff, ChevronDown, ChevronUp, ArrowUpDown,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
-import { INSTITUTIONS, BLOCKED_SLUGS as _BLOCKED } from "@/lib/institutions";
+import { INSTITUTIONS } from "@/lib/institutions";
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
