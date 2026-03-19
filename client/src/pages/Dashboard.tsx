@@ -347,7 +347,7 @@ export default function Dashboard() {
                   {hotSignals.map((s, i) => (
                     <button
                       key={i}
-                      onClick={() => navigate(`/scout?q=${encodeURIComponent(s.targetOrMechanism + " " + s.therapyArea)}`)}
+                      onClick={() => navigate(`/scout?draft=${encodeURIComponent(s.targetOrMechanism + " " + s.therapyArea)}`)}
                       className="w-full text-left p-2 rounded-md hover:bg-muted/50 transition-colors group"
                       data-testid={`dashboard-hot-${i}`}
                     >
@@ -373,7 +373,7 @@ export default function Dashboard() {
                   {stats.byTherapyArea.slice(0, 10).map((a) => (
                     <button
                       key={a.area}
-                      onClick={() => navigate(`/scout?q=${encodeURIComponent(a.area)}`)}
+                      onClick={() => navigate(`/scout?draft=${encodeURIComponent(a.area)}`)}
                       className="text-[10px] px-2 py-0.5 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
                       data-testid={`dashboard-area-${a.area}`}
                     >
