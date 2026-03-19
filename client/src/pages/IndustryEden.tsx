@@ -132,7 +132,7 @@ function EmptyState({
         className="flex flex-col items-center mb-4 w-full"
         style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
       >
-        <div className="relative w-full max-w-[560px] mx-auto mb-1">
+        <div className="relative w-full max-w-[320px] sm:max-w-[560px] mx-auto mb-1">
           <EdenOrb isThinking={streaming} />
           {streaming && (
             <span className="absolute bottom-6 right-8 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />

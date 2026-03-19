@@ -391,7 +391,7 @@ export async function registerRoutes(
           (EARLY_STAGES.some((s) => stageLower.includes(s)) ? 4 : 0) +
           (TIER1_UNIVERSITIES.some((u) => instLower.includes(u.toLowerCase())) ? 3 : 0) +
           (r.licensingReadiness && r.licensingReadiness !== "unknown" ? 2 : 0);
-        const score = Math.max(1, Math.min(100, baseScore + Math.round(bonuses)));
+        const score = Math.max(0, Math.min(100, baseScore + Math.round(bonuses)));
         return {
           id: String(r.id),
           asset_name: r.assetName,
