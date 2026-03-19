@@ -1838,7 +1838,11 @@ export async function registerRoutes(
       const filtersActive = hasMeaningfulFilters(filters);
       const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
 
-      const chat = isConversational(message.trim());
+      // isAggregationQuery MUST be checked before isConversational — short count
+      // phrases like "what's the total" and "give me a count" have no biotech signals
+      // and would be misclassified as conversational, bypassing the SQL count path.
+      const aggQuery = isAggregationQuery(message.trim());
+      const chat = !aggQuery && isConversational(message.trim());
 
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
@@ -1855,7 +1859,7 @@ export async function registerRoutes(
           assetIds: [],
           assets: [],
         });
-      } else if (isAggregationQuery(message.trim())) {
+      } else if (aggQuery) {
         // ── Step 1: Structural/breakdown queries via deterministic SQL ────
         // Handles: institution COUNT(DISTINCT), institution-specific asset count,
         // newest-by-institution, stage breakdown, area→institution breakdown.
