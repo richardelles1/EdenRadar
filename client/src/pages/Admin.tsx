@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import type { ManualInstitution } from "@shared/schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -3372,6 +3375,495 @@ export default function Admin() {
   return <AdminPanel pw={pw} setAuthed={setAuthed} theme={theme} setTheme={setTheme} activeTab={activeTab} setActiveTab={setActiveTab} />;
 }
 
+type ParsedImportAsset = {
+  assetName: string; target: string; modality: string; indication: string;
+  developmentStage: string; summary: string; abstract: string;
+  patentStatus: string; licensingStatus: string; innovationClaim: string;
+  mechanismOfAction: string; categories: string[]; inventors: string[];
+  sourceUrl: string; technologyId: string; institution: string;
+};
+type ManualParseResult = {
+  parsed: ParsedImportAsset; completenessScore: number; grade: "pass" | "revisions" | "incomplete";
+};
+
+const MODALITY_OPTIONS = [
+  "small molecule","antibody","bispecific antibody","car-t","gene therapy","gene editing",
+  "mrna therapy","cell therapy","peptide","sirna","adc","protac","vaccine","nanoparticle",
+  "medical device","diagnostic","platform technology","research tool","unknown",
+];
+const STAGE_OPTIONS = ["discovery","preclinical","phase 1","phase 2","phase 3","approved","unknown"];
+const PATENT_OPTIONS = ["patented","patent pending","provisional","unknown"];
+const LICENSING_OPTIONS = ["available","exclusively licensed","non-exclusively licensed","optioned","startup formed","unknown"];
+
+function GradeBadge({ grade, score }: { grade: string; score: number }) {
+  if (grade === "pass") return (
+    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200">
+      ✓ Pass ({score}/100)
+    </Badge>
+  );
+  if (grade === "revisions") return (
+    <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200">
+      ⚠ Needs Revisions ({score}/100)
+    </Badge>
+  );
+  return (
+    <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200">
+      ✗ Incomplete ({score}/100)
+    </Badge>
+  );
+}
+
+function ManualImportTab({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [mode, setMode] = useState<"text" | "image">("text");
+  const [selectedInst, setSelectedInst] = useState("");
+  const [showCreateInst, setShowCreateInst] = useState(false);
+  const [newInstName, setNewInstName] = useState("");
+  const [newInstTtoUrl, setNewInstTtoUrl] = useState("");
+  const [pastedText, setPastedText] = useState("");
+  const [imageBase64s, setImageBase64s] = useState<string[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [parseResult, setParseResult] = useState<ManualParseResult | null>(null);
+  const [editedAsset, setEditedAsset] = useState<ParsedImportAsset | null>(null);
+  const [committed, setCommitted] = useState(false);
+
+  const { data: instData } = useQuery<{ institutions: ManualInstitution[] }>({
+    queryKey: ["/api/admin/manual-institutions", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/manual-institutions", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load institutions");
+      return res.json();
+    },
+  });
+
+  const createInstMutation = useMutation({
+    mutationFn: async () => {
+      if (!newInstName.trim()) throw new Error("Institution name is required");
+      const res = await fetch("/api/admin/manual-institutions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ name: newInstName.trim(), ttoUrl: newInstTtoUrl.trim() || undefined }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Failed to create institution");
+      return d;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/manual-institutions", pw] });
+      setSelectedInst(data.institution.name);
+      setShowCreateInst(false);
+      setNewInstName("");
+      setNewInstTtoUrl("");
+      toast({ title: "Institution saved", description: data.institution.name });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const parseMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedInst) throw new Error("Select or create an institution first");
+      const body: Record<string, unknown> = { institution: selectedInst };
+      if (mode === "text") {
+        if (!pastedText.trim()) throw new Error("Paste some text first");
+        body.pastedText = pastedText;
+      } else {
+        if (imageBase64s.length === 0) throw new Error("Upload at least one screenshot");
+        body.imageBase64s = imageBase64s;
+      }
+      const res = await fetch("/api/admin/manual-import/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Parse failed");
+      return d as ManualParseResult;
+    },
+    onSuccess: (data) => {
+      setParseResult(data);
+      setEditedAsset({ ...data.parsed });
+      setCommitted(false);
+    },
+    onError: (err: Error) => toast({ title: "Parse failed", description: err.message, variant: "destructive" }),
+  });
+
+  const commitMutation = useMutation({
+    mutationFn: async () => {
+      if (!editedAsset) throw new Error("Nothing to commit");
+      const res = await fetch("/api/admin/manual-import/commit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify(editedAsset),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || "Commit failed");
+      return d;
+    },
+    onSuccess: (data) => {
+      setCommitted(true);
+      toast({ title: "Added to Indexing Queue", description: data.message });
+      queryClient.invalidateQueries({ queryKey: ["/api/ingest/new-arrivals"] });
+    },
+    onError: (err: Error) => toast({ title: "Commit failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).slice(0, 8);
+    const previews: string[] = [];
+    const base64s: string[] = [];
+    for (const file of files) {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+      previews.push(dataUrl);
+      base64s.push(dataUrl);
+    }
+    setImagePreviews(previews);
+    setImageBase64s(base64s);
+  };
+
+  const updateField = (field: keyof ParsedImportAsset, value: string | string[]) => {
+    if (!editedAsset) return;
+    setEditedAsset({ ...editedAsset, [field]: value });
+  };
+
+  const manualInsts = instData?.institutions ?? [];
+  const scoreColor = (parseResult?.completenessScore ?? 0) >= 75 ? "bg-emerald-500" : (parseResult?.completenessScore ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500";
+
+  return (
+    <div className="space-y-6 max-w-4xl" data-testid="manual-import-tab">
+
+      {/* ── Institution Selector ──────────────────────────────── */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-semibold text-foreground">Institution</h3>
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1">
+            <Select value={selectedInst} onValueChange={(v) => { setSelectedInst(v); setShowCreateInst(false); }}>
+              <SelectTrigger data-testid="select-institution">
+                <SelectValue placeholder="Select institution…" />
+              </SelectTrigger>
+              <SelectContent>
+                {manualInsts.map((inst) => (
+                  <SelectItem key={inst.id} value={inst.name} data-testid={`inst-option-${inst.id}`}>
+                    {inst.name}
+                  </SelectItem>
+                ))}
+                {manualInsts.length === 0 && (
+                  <SelectItem value="__none__" disabled>No saved institutions yet</SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            variant="outline"
+            onClick={() => { setShowCreateInst((p) => !p); setSelectedInst(""); }}
+            className="gap-1.5 shrink-0"
+            data-testid="button-create-institution"
+          >
+            <Plus className="h-4 w-4" />
+            New institution
+          </Button>
+        </div>
+
+        {showCreateInst && (
+          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3" data-testid="create-institution-form">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Create New Institution</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <Input
+                placeholder="Institution name *"
+                value={newInstName}
+                onChange={(e) => setNewInstName(e.target.value)}
+                data-testid="input-new-inst-name"
+              />
+              <Input
+                placeholder="TTO URL (optional)"
+                value={newInstTtoUrl}
+                onChange={(e) => setNewInstTtoUrl(e.target.value)}
+                data-testid="input-new-inst-url"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => createInstMutation.mutate()}
+                disabled={createInstMutation.isPending || !newInstName.trim()}
+                data-testid="button-save-institution"
+              >
+                {createInstMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                Save & select
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowCreateInst(false)} data-testid="button-cancel-create-inst">
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {selectedInst && (
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid="selected-institution-label">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Institution: <strong>{selectedInst}</strong>
+          </p>
+        )}
+      </div>
+
+      {/* ── Input Mode ───────────────────────────────────────── */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <Pencil className="h-5 w-5 text-muted-foreground" />
+          <h3 className="font-semibold text-foreground">Asset Content</h3>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant={mode === "text" ? "default" : "outline"}
+            onClick={() => setMode("text")}
+            className="gap-1.5"
+            data-testid="button-mode-text"
+          >
+            <FileText className="h-3.5 w-3.5" /> Paste text
+          </Button>
+          <Button
+            size="sm"
+            variant={mode === "image" ? "default" : "outline"}
+            onClick={() => setMode("image")}
+            className="gap-1.5"
+            data-testid="button-mode-image"
+          >
+            <ImageIcon className="h-3.5 w-3.5" /> Upload screenshot
+          </Button>
+        </div>
+
+        {mode === "text" ? (
+          <Textarea
+            placeholder="Paste the full TTO listing text here — title, description, inventors, patent info, etc."
+            value={pastedText}
+            onChange={(e) => setPastedText(e.target.value)}
+            className="min-h-[180px] font-mono text-xs"
+            data-testid="textarea-paste-text"
+          />
+        ) : (
+          <div className="space-y-3">
+            <div
+              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
+              onClick={() => fileInputRef.current?.click()}
+              data-testid="dropzone-image-upload"
+            >
+              <Upload className="h-8 w-8 text-muted-foreground/50" />
+              <div className="text-center">
+                <p className="text-sm font-medium text-foreground">Click to upload screenshots</p>
+                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP — up to 8 images</p>
+              </div>
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+              data-testid="input-file-upload"
+            />
+            {imagePreviews.length > 0 && (
+              <div className="flex flex-wrap gap-2" data-testid="image-preview-grid">
+                {imagePreviews.map((src, i) => (
+                  <img
+                    key={i}
+                    src={src}
+                    alt={`Screenshot ${i + 1}`}
+                    className="h-24 w-auto rounded border border-border object-cover"
+                    data-testid={`image-preview-${i}`}
+                  />
+                ))}
+                <p className="w-full text-xs text-muted-foreground">{imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""} ready</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <Button
+          onClick={() => parseMutation.mutate()}
+          disabled={parseMutation.isPending || !selectedInst}
+          className="gap-2"
+          data-testid="button-parse"
+        >
+          {parseMutation.isPending ? (
+            <><Loader2 className="h-4 w-4 animate-spin" /> Parsing with AI…</>
+          ) : (
+            <><Zap className="h-4 w-4" /> Parse with AI</>
+          )}
+        </Button>
+      </div>
+
+      {/* ── Parse Result Preview ─────────────────────────────── */}
+      {parseResult && editedAsset && (
+        <div className="rounded-xl border border-border bg-card p-5 space-y-5" data-testid="parse-result-panel">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+              <h3 className="font-semibold text-foreground">Parsed Preview</h3>
+            </div>
+            <GradeBadge grade={parseResult.grade} score={parseResult.completenessScore} />
+          </div>
+
+          {/* Completeness bar */}
+          <div className="space-y-1.5" data-testid="completeness-bar">
+            <div className="flex justify-between text-xs text-muted-foreground">
+              <span>Completeness score</span>
+              <span>{parseResult.completenessScore}/100</span>
+            </div>
+            <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div
+                className={`h-2 rounded-full transition-all ${scoreColor}`}
+                style={{ width: `${parseResult.completenessScore}%` }}
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              {parseResult.grade === "pass" && "Ready to commit — all key fields populated."}
+              {parseResult.grade === "revisions" && "Consider filling in missing fields before committing."}
+              {parseResult.grade === "incomplete" && "Several key fields are missing — review before committing."}
+            </p>
+          </div>
+
+          {/* Editable fields */}
+          <div className="space-y-3" data-testid="editable-fields">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Asset Name *</label>
+                <Input value={editedAsset.assetName} onChange={(e) => updateField("assetName", e.target.value)} data-testid="field-asset-name" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Target</label>
+                <Input value={editedAsset.target} onChange={(e) => updateField("target", e.target.value)} data-testid="field-target" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Modality</label>
+                <Select value={editedAsset.modality} onValueChange={(v) => updateField("modality", v)}>
+                  <SelectTrigger data-testid="field-modality">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODALITY_OPTIONS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Indication</label>
+                <Input value={editedAsset.indication} onChange={(e) => updateField("indication", e.target.value)} data-testid="field-indication" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Development Stage</label>
+                <Select value={editedAsset.developmentStage} onValueChange={(v) => updateField("developmentStage", v)}>
+                  <SelectTrigger data-testid="field-stage">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {STAGE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Patent Status</label>
+                <Select value={editedAsset.patentStatus} onValueChange={(v) => updateField("patentStatus", v)}>
+                  <SelectTrigger data-testid="field-patent-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PATENT_OPTIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Licensing Status</label>
+                <Select value={editedAsset.licensingStatus} onValueChange={(v) => updateField("licensingStatus", v)}>
+                  <SelectTrigger data-testid="field-licensing-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LICENSING_OPTIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Source URL</label>
+                <Input value={editedAsset.sourceUrl} onChange={(e) => updateField("sourceUrl", e.target.value)} placeholder="https://…" data-testid="field-source-url" />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Summary</label>
+              <Textarea value={editedAsset.summary} onChange={(e) => updateField("summary", e.target.value)} className="min-h-[80px] text-sm" data-testid="field-summary" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Innovation Claim</label>
+              <Input value={editedAsset.innovationClaim} onChange={(e) => updateField("innovationClaim", e.target.value)} data-testid="field-innovation-claim" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Mechanism of Action</label>
+              <Input value={editedAsset.mechanismOfAction} onChange={(e) => updateField("mechanismOfAction", e.target.value)} data-testid="field-moa" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Categories (comma-separated)</label>
+              <Input
+                value={editedAsset.categories.join(", ")}
+                onChange={(e) => updateField("categories", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+                placeholder="oncology, immunotherapy"
+                data-testid="field-categories"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Inventors (comma-separated)</label>
+              <Input
+                value={editedAsset.inventors.join(", ")}
+                onChange={(e) => updateField("inventors", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
+                placeholder="Jane Smith, John Doe"
+                data-testid="field-inventors"
+              />
+            </div>
+          </div>
+
+          {/* Commit */}
+          {committed ? (
+            <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="commit-success">
+              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Asset added to Indexing Queue</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Go to the Indexing Queue tab to push it to Scout.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 pt-2 border-t border-border">
+              <Button
+                onClick={() => commitMutation.mutate()}
+                disabled={commitMutation.isPending || !editedAsset.assetName.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                data-testid="button-commit"
+              >
+                {commitMutation.isPending ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" /> Committing…</>
+                ) : (
+                  <><PackagePlus className="h-4 w-4" /> Commit to Indexing Queue</>
+                )}
+              </Button>
+              <p className="text-xs text-muted-foreground">Asset will appear in the Indexing Queue as unindexed.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
   pw: string;
   setAuthed: (v: boolean) => void;
@@ -3435,6 +3927,18 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             >
               <Inbox className="h-4 w-4" />
               Indexing Queue
+            </button>
+            <button
+              onClick={() => setActiveTab("manual-import")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "manual-import"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-manual-import"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Manual Import
             </button>
             <button
               onClick={() => setActiveTab("data-health")}
@@ -3540,6 +4044,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">All discovered assets not yet pushed to the pipeline, grouped by institution. Push to make them visible in Scout.</p>
               </div>
               <NewArrivals pw={pw} />
+            </>
+          )}
+
+          {activeTab === "manual-import" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Manual Import</h2>
+                <p className="text-sm text-muted-foreground mt-1">Upload a screenshot or paste text from any TTO listing — AI extracts structured fields and adds the asset to the Indexing Queue.</p>
+              </div>
+              <ManualImportTab pw={pw} />
             </>
           )}
 

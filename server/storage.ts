@@ -17,6 +17,7 @@ import {
   edenSessions, type EdenSession,
   edenMessageFeedback,
   userAlerts, type UserAlert, type InsertUserAlert,
+  manualInstitutions, type ManualInstitution, type InsertManualInstitution,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike } from "drizzle-orm";
@@ -204,6 +205,9 @@ export interface IStorage {
   createUserAlert(data: InsertUserAlert): Promise<UserAlert>;
   listUserAlerts(): Promise<UserAlert[]>;
   deleteUserAlert(id: number): Promise<void>;
+
+  getManualInstitutions(): Promise<ManualInstitution[]>;
+  createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1469,6 +1473,15 @@ export class DatabaseStorage implements IStorage {
 
   async deleteUserAlert(id: number): Promise<void> {
     await db.delete(userAlerts).where(eq(userAlerts.id, id));
+  }
+
+  async getManualInstitutions(): Promise<ManualInstitution[]> {
+    return db.select().from(manualInstitutions).orderBy(manualInstitutions.name);
+  }
+
+  async createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution> {
+    const [row] = await db.insert(manualInstitutions).values(data).returning();
+    return row;
   }
 }
 

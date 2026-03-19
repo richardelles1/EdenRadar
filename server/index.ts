@@ -237,6 +237,20 @@ app.use((req, res, next) => {
     log(`[startup] concept_cards migration failed: ${err?.message}`, "startup");
   }
 
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS manual_institutions (
+        id serial PRIMARY KEY,
+        name text NOT NULL UNIQUE,
+        tto_url text,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] manual_institutions table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] manual_institutions migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"

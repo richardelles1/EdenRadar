@@ -522,6 +522,16 @@ export const userAlerts = pgTable("user_alerts", {
 export type UserAlert = typeof userAlerts.$inferSelect;
 export type InsertUserAlert = typeof userAlerts.$inferInsert;
 
+export const manualInstitutions = pgTable("manual_institutions", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  ttoUrl: text("tto_url"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export const insertManualInstitutionSchema = createInsertSchema(manualInstitutions).omit({ id: true, createdAt: true });
+export type InsertManualInstitution = z.infer<typeof insertManualInstitutionSchema>;
+export type ManualInstitution = typeof manualInstitutions.$inferSelect;
+
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
