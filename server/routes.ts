@@ -1251,8 +1251,10 @@ export async function registerRoutes(
         };
       });
 
-      const totalInDb = rows.reduce((s, r) => s + r.totalInDb, 0) + activeSearchRows.reduce((s, r) => s + r.totalInDb, 0);
-      const totalBiotechRelevant = rows.reduce((s, r) => s + r.biotechRelevant, 0) + activeSearchRows.reduce((s, r) => s + r.biotechRelevant, 0);
+      // Compute totals from the raw DB aggregation (instRows) to avoid double-counting
+      // institutions that appear in both ALL_SCRAPERS and manual_institutions.
+      const totalInDb = instRows.reduce((s, r) => s + r.totalInDb, 0);
+      const totalBiotechRelevant = instRows.reduce((s, r) => s + r.biotechRelevant, 0);
       const issueCount = rows.filter((r) => r.health !== "ok" && r.health !== "syncing" && r.health !== "never").length;
       const syncingCount = rows.filter((r) => r.health === "syncing").length;
       const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
