@@ -306,8 +306,6 @@ function NewlyIndexedCard({
 }) {
   const { item, idx, visible } = useRotatingTicker(assets, 8000, 600);
 
-  if (assets.length === 0) return null;
-
   return (
     <div className="rounded-xl border border-border bg-card p-5 space-y-3 min-h-[200px] flex flex-col" data-testid="dashboard-recent-assets">
       <div className="flex items-center justify-between">
@@ -324,9 +322,15 @@ function NewlyIndexedCard({
       </div>
 
       <div className="flex-1 flex flex-col justify-center min-h-[100px]">
-        {item ? (
+        {assets.length === 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">No new assets indexed yet.</p>
+            <button onClick={onViewAll} className="text-xs text-primary hover:underline">
+              Search in Scout →
+            </button>
+          </div>
+        ) : item ? (
           <div
-            className="transition-opacity duration-600"
             style={{ opacity: visible ? 1 : 0, transition: "opacity 600ms ease" }}
             data-testid={`dashboard-asset-${item.id}`}
           >
@@ -341,19 +345,21 @@ function NewlyIndexedCard({
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between pt-1 border-t border-border/50">
-        <span className="text-[10px] text-muted-foreground">
-          {idx + 1} of {assets.length} new assets
-        </span>
-        <div className="flex gap-1">
-          {assets.slice(0, Math.min(assets.length, 8)).map((_, i) => (
-            <span
-              key={i}
-              className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
-            />
-          ))}
+      {assets.length > 0 && (
+        <div className="flex items-center justify-between pt-1 border-t border-border/50">
+          <span className="text-[10px] text-muted-foreground">
+            {idx + 1} of {assets.length} new assets
+          </span>
+          <div className="flex gap-1">
+            {assets.slice(0, Math.min(assets.length, 8)).map((_, i) => (
+              <span
+                key={i}
+                className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
+              />
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -653,21 +659,6 @@ export default function IndustryDashboard() {
           )}
         </div>
 
-        {/* Newly Indexed + New Alerts rotating ticker row */}
-        <div
-          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
-          style={{ animation: "dash-fade-up 400ms ease 160ms both" }}
-          data-testid="dashboard-ticker-row"
-        >
-          {recentAssets.length > 0 && (
-            <NewlyIndexedCard
-              assets={recentAssets}
-              onViewAll={() => navigate("/scout")}
-            />
-          )}
-          <NewAlertsCard onViewAll={() => navigate("/alerts")} />
-        </div>
-
         {/* Pipeline Summary */}
         <div
           className="rounded-xl border border-border bg-card p-5"
@@ -763,6 +754,19 @@ export default function IndustryDashboard() {
               </div>
             </div>
           </div>
+        </div>
+
+        {/* Newly Indexed + New Alerts rotating ticker row */}
+        <div
+          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+          style={{ animation: "dash-fade-up 400ms ease 200ms both" }}
+          data-testid="dashboard-ticker-row"
+        >
+          <NewlyIndexedCard
+            assets={recentAssets}
+            onViewAll={() => navigate("/scout")}
+          />
+          <NewAlertsCard onViewAll={() => navigate("/alerts")} />
         </div>
 
         {/* Browse by Therapy Area */}

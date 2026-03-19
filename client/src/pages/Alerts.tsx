@@ -179,9 +179,25 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
                   data-testid={`alert-card-${alert.id}`}
                 >
                   <div className="flex-1 min-w-0 space-y-1.5">
-                    <p className="text-xs font-medium text-foreground">
-                      {alert.query || "Any query"}
-                    </p>
+                    {(() => {
+                      const parts = [
+                        alert.query,
+                        ...(alert.modalities ?? []),
+                        ...(alert.stages ?? []),
+                      ].filter(Boolean);
+                      const draft = parts.join(" ");
+                      return draft ? (
+                        <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+                          <p className="text-xs font-medium text-foreground hover:text-primary transition-colors cursor-pointer" data-testid={`alert-title-${alert.id}`}>
+                            {alert.query || "Any query"}
+                          </p>
+                        </Link>
+                      ) : (
+                        <p className="text-xs font-medium text-foreground">
+                          {alert.query || "Any query"}
+                        </p>
+                      );
+                    })()}
                     <div className="flex flex-wrap gap-1">
                       {(alert.modalities ?? []).map((m) => (
                         <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{m}</span>
@@ -193,13 +209,21 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
                         <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
                       ))}
                     </div>
-                    {alert.query && (
-                      <Link href={`/scout?draft=${encodeURIComponent(alert.query)}`}>
-                        <span className="text-[10px] text-primary hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
-                          Explore matches →
-                        </span>
-                      </Link>
-                    )}
+                    {(() => {
+                      const parts = [
+                        alert.query,
+                        ...(alert.modalities ?? []),
+                        ...(alert.stages ?? []),
+                      ].filter(Boolean);
+                      const draft = parts.join(" ");
+                      return draft ? (
+                        <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+                          <span className="text-[10px] text-primary hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
+                            Explore matches →
+                          </span>
+                        </Link>
+                      ) : null;
+                    })()}
                   </div>
                   <button
                     onClick={() => deleteMutation.mutate(alert.id)}
