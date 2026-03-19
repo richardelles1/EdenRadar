@@ -381,17 +381,17 @@ export async function registerRoutes(
 
       const assets: ScoredAsset[] = results.map((r) => {
         const sim = r.similarity ?? 0;
-        // Remap sim [0.40, 1.00] → [0, 85]; bonus points up to +15
-        const baseScore = Math.max(0, Math.round(((sim - 0.40) / 0.60) * 85));
+        // Floor-lifted: sim 0.40 → score 40, sim 1.00 → score 100; quality bonuses max +10
+        const baseScore = Math.round(40 + ((sim - 0.40) / 0.60) * 60);
         const stageLower = (r.developmentStage ?? "").toLowerCase();
         const instLower  = (r.institution ?? "").toLowerCase();
         const bonuses =
-          (r.modality && r.modality !== "unknown" ? 3 : 0) +
-          (r.developmentStage && r.developmentStage !== "unknown" ? 3 : 0) +
-          (EARLY_STAGES.some((s) => stageLower.includes(s)) ? 4 : 0) +
           (TIER1_UNIVERSITIES.some((u) => instLower.includes(u.toLowerCase())) ? 3 : 0) +
-          (r.licensingReadiness && r.licensingReadiness !== "unknown" ? 2 : 0);
-        const score = Math.max(0, Math.min(100, baseScore + Math.round(bonuses)));
+          (r.developmentStage && r.developmentStage !== "unknown" ? 2 : 0) +
+          (EARLY_STAGES.some((s) => stageLower.includes(s)) ? 2 : 0) +
+          (r.licensingReadiness && r.licensingReadiness !== "unknown" ? 2 : 0) +
+          (r.modality && r.modality !== "unknown" ? 1 : 0);
+        const score = Math.max(0, Math.min(100, baseScore + bonuses));
         return {
           id: String(r.id),
           asset_name: r.assetName,
@@ -405,11 +405,11 @@ export async function registerRoutes(
           source_urls: r.sourceUrl ? [r.sourceUrl] : [],
           source_types: ["tech_transfer"],
           score,
-          score_breakdown: { freshness: 0, novelty: Math.round(bonuses), readiness: 0, licensability: 0, fit: baseScore, competition: 0, total: score },
+          score_breakdown: { freshness: 0, novelty: bonuses, readiness: 0, licensability: 0, fit: baseScore, competition: 0, total: score },
           latest_signal_date: "",
           matching_tags: [],
           evidence_count: 1,
-          confidence: score >= 75 ? "high" : score >= 50 ? "medium" : "low",
+          confidence: score >= 75 ? "high" : score >= 55 ? "medium" : "low",
           signals: [],
           owner_name: r.institution,
           owner_type: "university" as const,

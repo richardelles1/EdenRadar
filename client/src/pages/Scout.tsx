@@ -260,7 +260,6 @@ export default function Scout() {
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
-  const [dateFilter, setDateFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -449,7 +448,6 @@ export default function Scout() {
     setModalityFilter("all");
     setInstitutionFilter("all");
     setSortMode("score");
-    setDateFilter("all");
     setMinScore(0);
     try { sessionStorage.removeItem("scout-include-research"); } catch {}
   };
@@ -486,17 +484,12 @@ export default function Scout() {
   }, [searchResults]);
 
   const filteredResults = useMemo(() => {
-    const cutoff = getCutoffDate(dateFilter);
     let results = searchResults.filter((asset) => {
       const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
       const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
       const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
       const scoreOk = minScore === 0 || asset.score >= minScore;
-      const dateOk = dateFilter === "all" || (() => {
-        const d = parseDateLoose(asset.latest_signal_date);
-        return d !== null && d >= cutoff;
-      })();
-      return stageOk && modalityOk && institutionOk && scoreOk && dateOk;
+      return stageOk && modalityOk && institutionOk && scoreOk;
     });
     if (sortMode === "recency") {
       results = [...results].sort((a, b) => {
@@ -506,7 +499,7 @@ export default function Scout() {
       });
     }
     return results;
-  }, [searchResults, stageFilter, modalityFilter, institutionFilter, dateFilter, sortMode, minScore]);
+  }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || researchMutation.isPending || reportMutation.isPending;
@@ -515,8 +508,6 @@ export default function Scout() {
     stageFilter !== "all",
     modalityFilter !== "all",
     institutionFilter !== "all",
-    dateFilter !== "all",
-    minScore !== 0,
     sortMode !== "score",
   ].filter(Boolean).length;
 
@@ -666,16 +657,6 @@ export default function Scout() {
                     {institutionFilter} ×
                   </Badge>
                 )}
-                {dateFilter !== "all" && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setDateFilter("all")} data-testid="active-filter-date">
-                    {dateFilter} ×
-                  </Badge>
-                )}
-                {minScore > 0 && (
-                  <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setMinScore(0)} data-testid="active-filter-score">
-                    Score ≥ {minScore} ×
-                  </Badge>
-                )}
               </div>
             </div>
           )}
@@ -702,6 +683,22 @@ export default function Scout() {
                     headerAction={
                       hasSearched && filteredResults.length > 0 ? (
                         <div className="flex items-center gap-2 shrink-0">
+                          <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
+                            {([0, 60, 70, 80] as const).map((threshold) => (
+                              <button
+                                key={threshold}
+                                onClick={() => setMinScore(threshold)}
+                                className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                  minScore === threshold
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-background text-muted-foreground hover:text-foreground"
+                                }`}
+                                data-testid={`score-threshold-${threshold}`}
+                              >
+                                {threshold === 0 ? "Any" : `${threshold}+`}
+                              </button>
+                            ))}
+                          </div>
                           <button
                             onClick={() => setFiltersOpen(true)}
                             className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
@@ -781,49 +778,14 @@ export default function Scout() {
 
           <div className="mt-6 space-y-6">
             <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort & Score</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground">Min Score</label>
-                  <Select value={String(minScore)} onValueChange={(v) => setMinScore(Number(v))} data-testid="filter-score-select">
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">Any Score</SelectItem>
-                      <SelectItem value="60">≥ 60</SelectItem>
-                      <SelectItem value="70">≥ 70</SelectItem>
-                      <SelectItem value="80">≥ 80</SelectItem>
-                      <SelectItem value="90">≥ 90</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] text-muted-foreground">Sort By</label>
-                  <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="score">Best Match</SelectItem>
-                      <SelectItem value="recency">Newest First</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date Range</p>
-              <Select value={dateFilter} onValueChange={setDateFilter} data-testid="select-date">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
+              <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
                 <SelectTrigger className="h-8 text-xs w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Time</SelectItem>
-                  <SelectItem value="30d">Last 30 Days</SelectItem>
-                  <SelectItem value="90d">Last 90 Days</SelectItem>
-                  <SelectItem value="1y">Last Year</SelectItem>
+                  <SelectItem value="score">Best Match</SelectItem>
+                  <SelectItem value="recency">Newest First</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -885,8 +847,6 @@ export default function Scout() {
                   setStageFilter("all");
                   setModalityFilter("all");
                   setInstitutionFilter("all");
-                  setDateFilter("all");
-                  setMinScore(0);
                   setSortMode("score");
                 }}
                 className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-1 border border-dashed border-card-border rounded-md"
