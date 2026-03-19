@@ -344,7 +344,6 @@ export default function Scout() {
       setModalityFilter("all");
       setInstitutionFilter("all");
       setSortMode("score");
-      setDateFilter("all");
       setMinScore(0);
       if (data.assets.length === 0) {
         toast({ title: "No TTO assets matched", description: "Try broader terms or a different indication." });
@@ -662,8 +661,8 @@ export default function Scout() {
           )}
 
           <div className="flex-1 px-4 sm:px-6 pb-10 space-y-6">
-            {/* Assets tab — TTO results */}
-            {(!hasSearched || resultTab === "assets") && !searchMutation.isPending && !(researchSources.length > 0 && researchMutation.isPending) && (
+            {/* Assets tab — TTO results (always shown when no research sources active; else only when assets tab selected) */}
+            {(researchSources.length === 0 || !hasSearched || resultTab === "assets") && !searchMutation.isPending && !(researchSources.length > 0 && researchMutation.isPending) && (
               <>
                 {hasSearched && researchSources.length > 0 && filteredResults.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
@@ -741,10 +740,38 @@ export default function Scout() {
                     </p>
                   </div>
                 ) : (
-                  <>
-                    <p className="text-xs text-muted-foreground">
-                      <span className="font-medium text-foreground">{researchResults.length}</span> research signals found
-                    </p>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm text-muted-foreground" data-testid="research-results-count">
+                        <span className="text-foreground font-semibold">{researchResults.length}</span> research signal{researchResults.length !== 1 ? "s" : ""} found
+                        {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
+                      </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          onClick={() => setFiltersOpen(true)}
+                          className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                          data-testid="button-filters-hint-research"
+                        >
+                          <SlidersHorizontal className="w-3 h-3" />
+                          {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
+                        </button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                          onClick={handleGenerateReport}
+                          disabled={isAnyPending}
+                          data-testid="button-generate-report-research"
+                        >
+                          {reportMutation.isPending ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <FileBarChart2 className="w-3 h-3" />
+                          )}
+                          {reportMutation.isPending ? "Generating..." : "Match Report"}
+                        </Button>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {researchResults.map((asset) => (
                         <AssetCard
@@ -755,7 +782,7 @@ export default function Scout() {
                         />
                       ))}
                     </div>
-                  </>
+                  </div>
                 )}
               </>
             )}
