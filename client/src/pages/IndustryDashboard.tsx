@@ -239,50 +239,77 @@ export default function IndustryDashboard() {
               </div>
             ) : totalAlerts === 0 ? (
               <p className="text-xs text-muted-foreground py-4 text-center">No new alerts in the last 48 hours.</p>
-            ) : (
-              <div className="space-y-2">
-                {alertsData.newAssets.byInstitution.slice(0, 2).map((inst, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2 p-2.5 rounded-lg border border-border/60 bg-background/50"
-                    data-testid={`dashboard-alert-asset-${i}`}
-                  >
-                    <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Package className="w-3 h-3 text-primary" />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate">{inst.institution}</p>
-                      <p className="text-[10px] text-muted-foreground">+{inst.count} new TTO asset{inst.count !== 1 ? "s" : ""}</p>
-                    </div>
+            ) : (() => {
+                type AlertItem = { key: string; icon: React.ElementType; iconBg: string; iconColor: string; title: string; sub: string; href?: string };
+                const items: AlertItem[] = [];
+                for (const inst of alertsData.newAssets.byInstitution) {
+                  items.push({
+                    key: `asset-${inst.institution}`,
+                    icon: Package,
+                    iconBg: "bg-primary/10",
+                    iconColor: "text-primary",
+                    title: inst.institution,
+                    sub: `+${inst.count} new TTO asset${inst.count !== 1 ? "s" : ""}`,
+                  });
+                }
+                for (const c of alertsData.newConcepts.items) {
+                  items.push({
+                    key: `concept-${c.id}`,
+                    icon: Flame,
+                    iconBg: "bg-amber-500/10",
+                    iconColor: "text-amber-500",
+                    title: c.title,
+                    sub: c.therapeuticArea ?? "New concept",
+                    href: `/discovery/concept/${c.id}`,
+                  });
+                }
+                for (const p of alertsData.newProjects.items) {
+                  items.push({
+                    key: `project-${p.id}`,
+                    icon: Bell,
+                    iconBg: "bg-violet-500/10",
+                    iconColor: "text-violet-500",
+                    title: (p as any).discoveryTitle ?? p.title,
+                    sub: (p as any).researchArea ?? "New research project",
+                    href: `/industry/projects`,
+                  });
+                }
+                const shown = items.slice(0, 3);
+                const remaining = totalAlerts - shown.length;
+                return (
+                  <div className="space-y-2">
+                    {shown.map((item) => {
+                      const Icon = item.icon;
+                      const inner = (
+                        <div
+                          className={`flex items-start gap-2 p-2.5 rounded-lg border border-border/60 bg-background/50 ${item.href ? "hover:border-primary/20 cursor-pointer" : ""}`}
+                          data-testid={`dashboard-alert-${item.key}`}
+                        >
+                          <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 mt-0.5 ${item.iconBg}`}>
+                            <Icon className={`w-3 h-3 ${item.iconColor}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{item.title}</p>
+                            <p className="text-[10px] text-muted-foreground">{item.sub}</p>
+                          </div>
+                        </div>
+                      );
+                      return item.href ? (
+                        <Link key={item.key} href={item.href}>{inner}</Link>
+                      ) : (
+                        <div key={item.key}>{inner}</div>
+                      );
+                    })}
+                    {remaining > 0 && (
+                      <Link href="/alerts">
+                        <p className="text-[11px] text-primary hover:underline cursor-pointer text-center pt-1">
+                          +{remaining} more alerts →
+                        </p>
+                      </Link>
+                    )}
                   </div>
-                ))}
-                {alertsData.newConcepts.items.slice(0, 1).map((c) => (
-                  <Link key={c.id} href={`/discovery/concept/${c.id}`}>
-                    <div
-                      className="flex items-start gap-2 p-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-amber-500/20 cursor-pointer"
-                      data-testid={`dashboard-alert-concept-${c.id}`}
-                    >
-                      <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <Flame className="w-3 h-3 text-amber-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium text-foreground truncate">{c.title}</p>
-                        {c.therapeuticArea && (
-                          <p className="text-[10px] text-muted-foreground">{c.therapeuticArea}</p>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                ))}
-                {totalAlerts > 3 && (
-                  <Link href="/alerts">
-                    <p className="text-[11px] text-primary hover:underline cursor-pointer text-center pt-1">
-                      +{totalAlerts - 3} more alerts →
-                    </p>
-                  </Link>
-                )}
-              </div>
-            )}
+                );
+              })()}
           </div>
 
         </div>

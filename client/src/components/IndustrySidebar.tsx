@@ -123,7 +123,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
               >
                 <div className="relative shrink-0">
                   <Icon
-                    className={`w-4 h-4 ${alertsBadge && !isActive ? "text-emerald-500" : ""}`}
+                    className={`w-4 h-4 ${alertsBadge && !isActive && totalAlerts > 0 ? "text-emerald-500" : ""}`}
                   />
                   {showDot && (
                     <span
