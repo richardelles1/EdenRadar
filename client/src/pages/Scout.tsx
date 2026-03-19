@@ -198,7 +198,7 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "clinicaltrials",label: "ClinicalTrials.gov",  desc: "Active trials" },
   { key: "patents",       label: "Patents",              desc: "Patent databases" },
   { key: "nih_reporter",  label: "NIH Reporter",        desc: "Federal grants" },
-  { key: "harvard",       label: "Harvard Catalyst",    desc: "Harvard research database" },
+  { key: "harvard_dataverse", label: "Harvard Catalyst", desc: "Harvard research database" },
 ];
 
 function ScoutSidebar({
@@ -379,7 +379,7 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter", "harvard"];
+  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter", "harvard_dataverse"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");

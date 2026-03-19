@@ -100,7 +100,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
             No TTO assets found for "{query}"
           </h3>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Try broader terms or enable "Include research sources" for wider coverage.
+            Try broader terms or check Research Sources in the sidebar for wider coverage.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mt-1">
