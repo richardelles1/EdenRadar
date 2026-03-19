@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useTheme } from "@/hooks/use-theme";
@@ -3459,6 +3458,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const [instSearch, setInstSearch] = useState("");
   const [instOpen, setInstOpen] = useState(false);
   const [selectedInst, setSelectedInst] = useState("");
+  const instBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showCreateInst, setShowCreateInst] = useState(false);
   const [newInstName, setNewInstName] = useState("");
   const [newInstTtoUrl, setNewInstTtoUrl] = useState("");
@@ -3615,49 +3615,61 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
               <h3 className="font-semibold text-foreground">Institution</h3>
             </div>
 
-            <Popover open={instOpen} onOpenChange={setInstOpen}>
-              <PopoverTrigger asChild>
-                <div className="relative w-full cursor-text">
-                  <Input
-                    placeholder="Search institution…"
-                    value={instSearch}
-                    onChange={(e) => { setInstSearch(e.target.value); setInstOpen(true); setSelectedInst(""); }}
-                    onFocus={() => setInstOpen(true)}
-                    className="pr-8"
-                    data-testid="input-institution-search"
-                  />
-                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <div className="relative w-full">
+              <Input
+                placeholder="Search institution…"
+                value={instSearch}
+                onChange={(e) => { setInstSearch(e.target.value); setInstOpen(true); setSelectedInst(""); }}
+                onFocus={() => setInstOpen(true)}
+                onBlur={() => { instBlurTimer.current = setTimeout(() => setInstOpen(false), 150); }}
+                className="pr-8"
+                data-testid="input-institution-search"
+              />
+              {selectedInst ? (
+                <button
+                  type="button"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 h-5 w-5 flex items-center justify-center rounded-full hover:bg-muted text-muted-foreground transition-colors"
+                  onClick={() => { setSelectedInst(""); setInstSearch(""); setShowCreateInst(false); setInstOpen(false); }}
+                  data-testid="button-clear-institution"
+                  aria-label="Clear institution"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              )}
+              {instOpen && !selectedInst && (
+                <div
+                  className="absolute top-full left-0 right-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-md border border-border bg-popover shadow-md"
+                  data-testid="institution-dropdown"
+                >
+                  {filteredInsts.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                      onClick={() => { if (instBlurTimer.current) clearTimeout(instBlurTimer.current); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
+                      data-testid={`inst-option-${name}`}
+                    >
+                      {name}
+                    </button>
+                  ))}
+                  {instSearch.trim() && !allInstitutions.some((n) => n.toLowerCase() === instSearch.toLowerCase()) && (
+                    <button
+                      type="button"
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted text-primary font-medium transition-colors flex items-center gap-1.5"
+                      onClick={() => { if (instBlurTimer.current) clearTimeout(instBlurTimer.current); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
+                      data-testid="button-create-institution"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Create "{instSearch.trim()}"…
+                    </button>
+                  )}
+                  {filteredInsts.length === 0 && !instSearch.trim() && (
+                    <p className="px-3 py-2 text-sm text-muted-foreground">Start typing to search…</p>
+                  )}
                 </div>
-              </PopoverTrigger>
-              <PopoverContent className="w-[min(400px,calc(100vw-2rem))] p-1 max-h-64 overflow-y-auto" align="start" sideOffset={4} data-testid="institution-dropdown">
-                {filteredInsts.map((name) => (
-                  <button
-                    key={name}
-                    type="button"
-                    className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted transition-colors"
-                    onMouseDown={(e) => { e.preventDefault(); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
-                    onTouchEnd={(e) => { e.preventDefault(); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
-                    data-testid={`inst-option-${name}`}
-                  >
-                    {name}
-                  </button>
-                ))}
-                {instSearch.trim() && !allInstitutions.some((n) => n.toLowerCase() === instSearch.toLowerCase()) && (
-                  <button
-                    type="button"
-                    className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted text-primary font-medium transition-colors flex items-center gap-1.5"
-                    onMouseDown={(e) => { e.preventDefault(); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
-                    onTouchEnd={(e) => { e.preventDefault(); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
-                    data-testid="button-create-institution"
-                  >
-                    <Plus className="h-3.5 w-3.5" /> Create "{instSearch.trim()}"…
-                  </button>
-                )}
-                {filteredInsts.length === 0 && !instSearch.trim() && (
-                  <p className="px-3 py-2 text-sm text-muted-foreground">Start typing to search…</p>
-                )}
-              </PopoverContent>
-            </Popover>
+              )}
+            </div>
 
             {selectedInst && (
               <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid="selected-institution-label">
