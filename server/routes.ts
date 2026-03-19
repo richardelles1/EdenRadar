@@ -1,10 +1,7 @@
 import crypto from "crypto";
-import { createRequire } from "module";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
-const _require = createRequire(import.meta.url);
-const pdfParse: (buf: Buffer) => Promise<{ text: string }> = _require("pdf-parse");
 import { storage } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema } from "@shared/schema";
 import { db } from "./db";
@@ -4163,19 +4160,26 @@ If a field cannot be determined, use "N/A".`
       }
     }
 
-    // Extract text from uploaded documents (no AI cost)
+    // Extract text from uploaded documents (no AI cost — lazy dynamic import for CJS/ESM compat)
     const docTexts: string[] = [];
-    for (const file of docFiles) {
-      try {
-        if (file.mimetype === "application/pdf") {
-          const parsed = await pdfParse(file.buffer);
-          if (parsed.text?.trim()) docTexts.push(parsed.text.trim());
-        } else {
-          const result = await mammoth.extractRawText({ buffer: file.buffer });
-          if (result.value?.trim()) docTexts.push(result.value.trim());
+    if (docFiles.length > 0) {
+      // Dynamic import is safe: esbuild transforms it to require() in CJS bundle; tsx uses native import()
+      const pdfParseMod = await import("pdf-parse");
+      const pdfParseFn: (buf: Buffer) => Promise<{ text: string }> =
+        (pdfParseMod as any).default ?? pdfParseMod;
+
+      for (const file of docFiles) {
+        try {
+          if (file.mimetype === "application/pdf") {
+            const parsed = await pdfParseFn(file.buffer);
+            if (parsed.text?.trim()) docTexts.push(parsed.text.trim());
+          } else {
+            const result = await mammoth.extractRawText({ buffer: file.buffer });
+            if (result.value?.trim()) docTexts.push(result.value.trim());
+          }
+        } catch (e: any) {
+          console.warn(`[manual-import/parse] Could not extract text from ${file.originalname}: ${e?.message}`);
         }
-      } catch (e: any) {
-        console.warn(`[manual-import/parse] Could not extract text from ${file.originalname}: ${e?.message}`);
       }
     }
 

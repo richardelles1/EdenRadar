@@ -7,6 +7,8 @@ import { rm, readFile } from "fs/promises";
 const allowlist = [
   "@google/generative-ai",
   "axios",
+  "mammoth",
+  "pdf-parse",
   "connect-pg-simple",
   "cors",
   "date-fns",
