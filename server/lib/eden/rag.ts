@@ -545,13 +545,10 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     return `There are **${count} distinct${geoLabel} institutions** with relevant assets indexed in the portfolio.`;
   }
 
-  // ── Generic count/total fallback — handles "what's the total", "give me a count", etc. ──
-  if (/what'?s\s+the\s+total|give\s+me\s+(?:a\s+)?count|total\s+count|overall\s+count|how\s+many\s+do\s+you\s+have|how\s+many\s+are\s+there|how\s+large\s+is|size\s+of\s+the/i.test(lower)) {
-    const totalResult = await db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`);
-    const total = Number((totalResult.rows[0] as Record<string, unknown>)?.total ?? 0);
-    if (!total) return null;
-    return `Total relevant assets indexed in the portfolio: **${total.toLocaleString()}**`;
-  }
+  // Note: generic count phrases ("how many do you have", "what's the total", "give me a count")
+  // are intentionally NOT handled here. When session filters are active, the route uses
+  // filteredCount() to return accurate filtered counts. When no filters, RAG answers from
+  // portfolioStats context. resolveAggregationQuery only handles SPECIFIC SQL semantics.
 
   return null;
 }

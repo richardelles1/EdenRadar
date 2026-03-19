@@ -1856,7 +1856,31 @@ export async function registerRoutes(
           assets: [],
         });
       } else if (isAggregationQuery(message.trim())) {
-        // ── Filtered count: if session has active filters, use SQL COUNT ──
+        // ── FIRST: Deterministic SQL aggregation ─────────────────────────
+        // resolveAggregationQuery handles institution counts, breakdowns,
+        // area-specific counts, and generic totals — must run BEFORE filteredCount
+        // so institution-count intents return COUNT(DISTINCT institution) not asset count.
+        const resolvedResult = await resolveAggregationQuery(message.trim()).catch(() => null);
+        if (resolvedResult) {
+          sendEvent("context", { sessionId: sid, assets: [] });
+          let fullResponse = "";
+          for await (const token of aggregationQuery(message.trim(), resolvedResult, history, ctx, portfolioStats, focusContext)) {
+            fullResponse += token;
+            sendEvent("token", { text: token });
+          }
+          await storage.appendEdenMessage(sid, {
+            role: "assistant",
+            content: fullResponse,
+            assetIds: [],
+            assets: [],
+          });
+          sendEvent("done", { sessionId: sid });
+          return;
+        }
+
+        // ── SECOND: Filtered asset count when session has active focus ────
+        // Only reaches here when resolveAggregationQuery returned null (generic
+        // count phrasing with no institution/area/modality anchor in the message).
         if (filtersActive) {
           const count = await storage.filteredCount(
             geoRx,
@@ -1875,10 +1899,10 @@ export async function registerRoutes(
               filters.institution || "",
             ].filter(Boolean).join(", ");
 
-            const queryResult = `Filtered count (${filterDesc || "current focus"}): **${count}** relevant assets match the active filters.`;
+            const filteredCountResult = `Filtered count (${filterDesc || "current focus"}): **${count}** relevant assets match the active filters.`;
             sendEvent("context", { sessionId: sid, assets: [] });
             let fullResponse = "";
-            for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats, focusContext)) {
+            for await (const token of aggregationQuery(message.trim(), filteredCountResult, history, ctx, portfolioStats, focusContext)) {
               fullResponse += token;
               sendEvent("token", { text: token });
             }
@@ -1891,25 +1915,6 @@ export async function registerRoutes(
             sendEvent("done", { sessionId: sid });
             return;
           }
-        }
-
-        // ── Deterministic SQL aggregation (unfiltered) ────────────────────
-        const queryResult = await resolveAggregationQuery(message.trim()).catch(() => null);
-        if (queryResult) {
-          sendEvent("context", { sessionId: sid, assets: [] });
-          let fullResponse = "";
-          for await (const token of aggregationQuery(message.trim(), queryResult, history, ctx, portfolioStats, focusContext)) {
-            fullResponse += token;
-            sendEvent("token", { text: token });
-          }
-          await storage.appendEdenMessage(sid, {
-            role: "assistant",
-            content: fullResponse,
-            assetIds: [],
-            assets: [],
-          });
-          sendEvent("done", { sessionId: sid });
-          return;
         }
 
         // ── Fall through to RAG ───────────────────────────────────────────
