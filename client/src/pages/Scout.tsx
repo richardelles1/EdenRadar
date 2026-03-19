@@ -64,22 +64,25 @@ function parseDateLoose(dateStr: string | undefined): Date | null {
   return null;
 }
 
-const RADAR_FACTS = [
-  "Searching 26,000+ licensed TTO assets",
-  "Matching against your buyer thesis",
-  "Vector similarity across 138+ institutions",
-  "Ranking by relevance and licensing readiness",
-  "Filtering for biotech and pharma relevance",
-  "Checking stage, modality, and indication signals",
-  "Scoring novelty, fit, and licensability",
+const RADAR_FACT_TEMPLATES = [
+  (stats: RadarStats) => `Searching ${stats.total > 0 ? stats.total.toLocaleString() + "+" : "26,000+"} TTO assets`,
+  () => "Matching against your buyer thesis",
+  (stats: RadarStats) => `${stats.institutions > 0 ? stats.institutions : "138"}+ institutions in our network`,
+  () => "Ranking by relevance and licensing readiness",
+  (stats: RadarStats) => stats.topModality ? `Top indexed modality: ${stats.topModality}` : "Filtering for biotech and pharma relevance",
+  () => "Checking stage, modality, and indication signals",
+  () => "Scoring novelty, fit, and licensability",
 ];
 
-function RadarOverlay() {
+type RadarStats = { total: number; institutions: number; topModality: string };
+
+function RadarOverlay({ stats }: { stats: RadarStats }) {
   const [factIdx, setFactIdx] = useState(0);
+  const facts = RADAR_FACT_TEMPLATES.map((fn) => fn(stats));
   useEffect(() => {
-    const iv = setInterval(() => setFactIdx((i) => (i + 1) % RADAR_FACTS.length), 1800);
+    const iv = setInterval(() => setFactIdx((i) => (i + 1) % facts.length), 1800);
     return () => clearInterval(iv);
-  }, []);
+  }, [facts.length]);
   return (
     <div className="flex flex-col items-center gap-4 py-12">
       <div className="relative w-24 h-24 flex items-center justify-center">
@@ -108,10 +111,10 @@ function RadarOverlay() {
       </div>
       <div className="text-center min-h-[2.5rem]">
         <p className="text-sm font-medium text-foreground transition-all duration-500">
-          {RADAR_FACTS[factIdx]}
+          {facts[factIdx]}
         </p>
         <div className="flex justify-center gap-1 mt-2">
-          {RADAR_FACTS.map((_, i) => (
+          {facts.map((_, i) => (
             <span
               key={i}
               className={`block w-1 h-1 rounded-full transition-all duration-300 ${i === factIdx ? "bg-primary" : "bg-primary/20"}`}
@@ -248,6 +251,16 @@ export default function Scout() {
     staleTime: 10 * 60 * 1000,
   });
   const liveInstitutionCount = institutionsData?.total ?? COVERED_INSTITUTIONS.length;
+
+  const { data: dashStats } = useQuery<{ stats: { total: number; byModality: { modality: string; count: number }[] } }>({
+    queryKey: ["/api/dashboard/stats"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const radarStats: RadarStats = {
+    total: dashStats?.stats?.total ?? 0,
+    institutions: liveInstitutionCount,
+    topModality: dashStats?.stats?.byModality?.[0]?.modality ?? "",
+  };
 
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
@@ -546,7 +559,7 @@ export default function Scout() {
 
           {searchMutation.isPending && (
             <div className="px-4 sm:px-6">
-              <RadarOverlay />
+              <RadarOverlay stats={radarStats} />
             </div>
           )}
 

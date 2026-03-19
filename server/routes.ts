@@ -362,7 +362,7 @@ export async function registerRoutes(
     try {
       const schema = z.object({
         query: z.string().min(1).max(500),
-        minSimilarity: z.number().min(0).max(1).default(0.40),
+        minSimilarity: z.number().min(0.40).max(1).default(0.40),
         modality: z.string().optional(),
         stage: z.string().optional(),
         indication: z.string().optional(),
