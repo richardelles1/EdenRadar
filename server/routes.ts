@@ -4131,11 +4131,18 @@ If a field cannot be determined, use "N/A".`
       return res.status(400).json({ error: "Provide rawText or at least one image" });
     }
 
+    const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+    for (const file of files) {
+      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        return res.status(400).json({ error: `File type not supported: ${file.mimetype}. Use PNG, JPG, or WebP.` });
+      }
+    }
+
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     const PARSE_PROMPT = `You are a biotech technology transfer analyst. Extract every distinct licensable asset from the provided TTO (Technology Transfer Office) content for institution: ${institution}.
 
-Return ONLY valid JSON with a single key "assets" containing an array (up to 200 items). Each item must have exactly these fields:
+Return ONLY valid JSON with a single key "assets" containing an array (up to 200 items). Each item must have these fields:
 - name: the technology/asset name as listed (string)
 - description: 2-3 sentence summary of the technology (string, "" if not determinable)
 - sourceUrl: URL of this specific listing if visible (string, "" if not)
@@ -4143,6 +4150,14 @@ Return ONLY valid JSON with a single key "assets" containing an array (up to 200
 - patentStatus: one of "patented", "patent pending", "provisional", "unknown"
 - technologyId: technology ID or case number if visible (string, "" if not)
 - contactEmail: contact email if listed (string, "" if not)
+- target: molecular or biological target if determinable, e.g. "EGFR", "PD-1" ("unknown" if not stated)
+- modality: one of "small molecule", "antibody", "gene therapy", "cell therapy", "peptide", "vaccine", "nanoparticle", "medical device", "diagnostic", "platform technology", "research tool", "unknown"
+- indication: disease or condition being targeted ("unknown" if not stated)
+- developmentStage: one of "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"
+- abstract: full description text from listing if visible (string, "" if not)
+- categories: array of 2-4 therapeutic area tags e.g. ["oncology", "immunotherapy"] ([] if not determinable)
+- innovationClaim: 1-sentence key innovation ("unknown" if not clear)
+- mechanismOfAction: brief MoA description ("unknown" if not stated)
 
 If multiple assets appear, return each as a separate array item. If only one asset, return a one-item array.`;
 
@@ -4181,8 +4196,16 @@ If multiple assets appear, return each as a separate array item. If only one ass
         const patentStatus: string = String(a.patentStatus || "unknown");
         const technologyId: string = String(a.technologyId || "");
         const contactEmail: string = String(a.contactEmail || "");
+        const target: string = String(a.target || "unknown");
+        const modality: string = String(a.modality || "unknown");
+        const indication: string = String(a.indication || "unknown");
+        const developmentStage: string = String(a.developmentStage || "unknown");
+        const abstract: string = String(a.abstract || "");
+        const categories: string[] = Array.isArray(a.categories) ? a.categories.map(String) : [];
+        const innovationClaim: string = String(a.innovationClaim || "unknown");
+        const mechanismOfAction: string = String(a.mechanismOfAction || "unknown");
 
-        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail };
+        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage, abstract, categories, innovationClaim, mechanismOfAction };
       });
 
       return res.json({ assets, institution });

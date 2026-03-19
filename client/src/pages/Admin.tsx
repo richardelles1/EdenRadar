@@ -3382,17 +3382,45 @@ type ParsedImportAsset = {
   patentStatus: string;
   technologyId: string;
   contactEmail: string;
+  target: string;
+  modality: string;
+  indication: string;
+  developmentStage: string;
+  abstract: string;
+  categories: string[];
+  innovationClaim: string;
+  mechanismOfAction: string;
 };
 
+// Mirror of server/lib/pipeline/contentHash.ts computeCompletenessScore — same weights, no server call
 function computeManualAssetScore(a: ParsedImportAsset): number {
   let score = 0;
-  if (a.description && a.description.length > 50) score += 30;
-  else if (a.description && a.description.length > 0) score += 10;
-  if (a.inventors && a.inventors.length > 0) score += 20;
-  if (a.patentStatus && a.patentStatus !== "unknown") score += 20;
-  if (a.sourceUrl && a.sourceUrl.length > 0) score += 15;
-  if (a.technologyId && a.technologyId.length > 0) score += 10;
-  if (a.contactEmail && a.contactEmail.length > 0) score += 5;
+  type FieldKey = "target" | "modality" | "indication" | "developmentStage" | "summary" | "abstract" | "categories" | "innovationClaim" | "mechanismOfAction" | "inventors" | "patentStatus";
+  const checks: [FieldKey, number][] = [
+    ["target", 15], ["modality", 15], ["indication", 15], ["developmentStage", 10],
+    ["summary", 10], ["abstract", 10], ["categories", 5], ["innovationClaim", 5],
+    ["mechanismOfAction", 5], ["inventors", 5], ["patentStatus", 5],
+  ];
+  const mapped: Record<FieldKey, string | string[] | null> = {
+    target: a.target,
+    modality: a.modality,
+    indication: a.indication,
+    developmentStage: a.developmentStage,
+    summary: a.description,
+    abstract: a.abstract,
+    categories: a.categories,
+    innovationClaim: a.innovationClaim,
+    mechanismOfAction: a.mechanismOfAction,
+    inventors: a.inventors,
+    patentStatus: a.patentStatus,
+  };
+  for (const [field, weight] of checks) {
+    const val = mapped[field];
+    if (!val || val === "unknown" || val === "") continue;
+    if (Array.isArray(val) && val.length === 0) continue;
+    if (typeof val === "string" && val.length < 3) continue;
+    score += weight;
+  }
   return score;
 }
 
@@ -3691,11 +3719,20 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                 <div
                   className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
                   onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith("image/")).slice(0, 10);
+                    if (dropped.length > 0) {
+                      setImageFiles(dropped);
+                      setImagePreviews(dropped.map(f => URL.createObjectURL(f)));
+                    }
+                  }}
                   data-testid="dropzone-image-upload"
                 >
                   <Upload className="h-8 w-8 text-muted-foreground/50" />
                   <div className="text-center">
-                    <p className="text-sm font-medium text-foreground">Click to upload screenshots</p>
+                    <p className="text-sm font-medium text-foreground">Drag & drop or click to upload screenshots</p>
                     <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP — up to 10 images</p>
                   </div>
                 </div>
