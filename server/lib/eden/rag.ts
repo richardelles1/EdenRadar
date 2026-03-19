@@ -230,8 +230,15 @@ function extractFocusUpdates(message: string, current: SessionFocusContext): Ses
     return {};
   }
 
-  // Normal accumulation — merge new filters on top of existing context
+  // Normal accumulation — only merge new filters when the user explicitly signals
+  // a focus intent (e.g. "show me X from Y", "focus on Z", "find me X").
+  // Pure informational queries ("what is gene therapy?") should not update focus.
   const newFilters = extractRawFilters(message);
+  if (!Object.keys(newFilters).length) return current; // no new filter signals → preserve
+  // Detect explicit search/filter intent; avoid accumulating on pure information queries
+  const hasExplicitIntent = /\b(?:show me|find me|give me|focus on|filter (?:by|for|to)|narrow|restrict|limit to|only show|let'?s look at|let'?s explore|looking for|searching for|interested in)\b/i.test(message)
+    || /\b(?:from|in|at|by)\s+(?:\w+\s+)?(?:institutions?|universities|europe|european|us|american|uk|british|asian)\b/i.test(message);
+  if (!hasExplicitIntent && Object.keys(current).length > 0) return current; // keep existing focus for info queries
   return { ...current, ...newFilters };
 }
 
