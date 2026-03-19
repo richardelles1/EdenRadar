@@ -3382,9 +3382,23 @@ type ParsedImportAsset = {
   patentStatus: string;
   technologyId: string;
   contactEmail: string;
-  completenessScore: number;
-  grade: "pass" | "revisions" | "incomplete";
 };
+
+function computeManualAssetScore(a: ParsedImportAsset): number {
+  let score = 0;
+  if (a.description && a.description.length > 50) score += 30;
+  else if (a.description && a.description.length > 0) score += 10;
+  if (a.inventors && a.inventors.length > 0) score += 20;
+  if (a.patentStatus && a.patentStatus !== "unknown") score += 20;
+  if (a.sourceUrl && a.sourceUrl.length > 0) score += 15;
+  if (a.technologyId && a.technologyId.length > 0) score += 10;
+  if (a.contactEmail && a.contactEmail.length > 0) score += 5;
+  return score;
+}
+
+function assetGrade(score: number): "pass" | "revisions" | "incomplete" {
+  return score >= 75 ? "pass" : score >= 50 ? "revisions" : "incomplete";
+}
 
 function GradeBadge({ grade, score }: { grade: string; score: number }) {
   if (grade === "pass") return (
@@ -3538,9 +3552,9 @@ function ManualImportTab({ pw }: { pw: string }) {
   };
 
   const selectedCount = checked.filter(Boolean).length;
-  const passCnt = parsedAssets.filter((a) => a.grade === "pass").length;
-  const revCnt = parsedAssets.filter((a) => a.grade === "revisions").length;
-  const incCnt = parsedAssets.filter((a) => a.grade === "incomplete").length;
+  const passCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "pass").length;
+  const revCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "revisions").length;
+  const incCnt = parsedAssets.filter((a) => assetGrade(computeManualAssetScore(a)) === "incomplete").length;
 
   const resetToInput = () => {
     setStage("input");
@@ -3742,38 +3756,42 @@ function ManualImportTab({ pw }: { pw: string }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
-                {parsedAssets.map((asset, i) => (
-                  <tr key={i} className={`transition-colors ${checked[i] ? "bg-card" : "bg-muted/20 opacity-60"}`} data-testid={`preview-row-${i}`}>
-                    <td className="px-3 py-2.5">
-                      <input
-                        type="checkbox"
-                        checked={checked[i] ?? false}
-                        onChange={(e) => { const next = [...checked]; next[i] = e.target.checked; setChecked(next); }}
-                        data-testid={`checkbox-asset-${i}`}
-                      />
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <p className="font-medium text-foreground line-clamp-1">{asset.name}</p>
-                      {asset.sourceUrl && (
-                        <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline line-clamp-1" data-testid={`link-source-${i}`}>
-                          {asset.sourceUrl}
-                        </a>
-                      )}
-                      {asset.patentStatus && asset.patentStatus !== "unknown" && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{asset.patentStatus}</p>
-                      )}
-                    </td>
-                    <td className="px-3 py-2.5 hidden md:table-cell max-w-xs">
-                      <p className="text-xs text-muted-foreground line-clamp-2">{asset.description || "—"}</p>
-                    </td>
-                    <td className="px-3 py-2.5 hidden lg:table-cell">
-                      <p className="text-xs text-muted-foreground">{asset.inventors.length > 0 ? asset.inventors.join(", ") : "—"}</p>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <GradeBadge grade={asset.grade} score={asset.completenessScore} />
-                    </td>
-                  </tr>
-                ))}
+                {parsedAssets.map((asset, i) => {
+                  const score = computeManualAssetScore(asset);
+                  const grade = assetGrade(score);
+                  return (
+                    <tr key={i} className={`transition-colors ${checked[i] ? "bg-card" : "bg-muted/20 opacity-60"}`} data-testid={`preview-row-${i}`}>
+                      <td className="px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={checked[i] ?? false}
+                          onChange={(e) => { const next = [...checked]; next[i] = e.target.checked; setChecked(next); }}
+                          data-testid={`checkbox-asset-${i}`}
+                        />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <p className="font-medium text-foreground line-clamp-1">{asset.name}</p>
+                        {asset.sourceUrl && (
+                          <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline line-clamp-1" data-testid={`link-source-${i}`}>
+                            {asset.sourceUrl}
+                          </a>
+                        )}
+                        {asset.patentStatus && asset.patentStatus !== "unknown" && (
+                          <p className="text-xs text-muted-foreground mt-0.5">{asset.patentStatus}</p>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 hidden md:table-cell max-w-xs">
+                        <p className="text-xs text-muted-foreground line-clamp-2">{asset.description || "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5 hidden lg:table-cell">
+                        <p className="text-xs text-muted-foreground">{asset.inventors.length > 0 ? asset.inventors.join(", ") : "—"}</p>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <GradeBadge grade={grade} score={score} />
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

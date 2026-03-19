@@ -4182,14 +4182,7 @@ If multiple assets appear, return each as a separate array item. If only one ass
         const technologyId: string = String(a.technologyId || "");
         const contactEmail: string = String(a.contactEmail || "");
 
-        const score = computeCompletenessScore({
-          summary: description || null,
-          inventors: inventors.length > 0 ? inventors : null,
-          patentStatus: patentStatus !== "unknown" ? patentStatus : null,
-        });
-        const grade = score >= 75 ? "pass" : score >= 50 ? "revisions" : "incomplete";
-
-        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, completenessScore: score, grade };
+        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail };
       });
 
       return res.json({ assets, institution });
