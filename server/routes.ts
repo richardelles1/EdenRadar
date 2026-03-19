@@ -2,7 +2,7 @@ import crypto from "crypto";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
@@ -378,7 +378,15 @@ export async function registerRoutes(
 
       const assets: ScoredAsset[] = results.map((r) => {
         const sim = r.similarity ?? 0;
-        const score = Math.round(sim * 100);
+        // Remap sim 0.40→0, 1.00→85; completeness bonuses add up to +15
+        const remapped = ((sim - 0.40) / 0.60) * 85;
+        const bonuses =
+          (r.institution && r.institution !== "unknown" ? 3 : 0) +
+          (r.modality && r.modality !== "unknown" ? 3 : 0) +
+          (r.developmentStage && r.developmentStage !== "unknown" ? 3 : 0) +
+          (r.indication && r.indication !== "unknown" ? 3 : 0) +
+          (r.summary && r.summary.length > 50 ? 3 : 0);
+        const score = Math.max(1, Math.min(100, Math.round(remapped + bonuses)));
         return {
           id: String(r.id),
           asset_name: r.assetName,
@@ -441,7 +449,7 @@ export async function registerRoutes(
 
   app.get("/api/dashboard/stats", async (_req, res) => {
     try {
-      const [stats, recentSearches, recentAssets, sourcesResult, reviewCount] = await Promise.all([
+      const [stats, recentSearches, recentAssets, therapyAreaCountResult, institutionCountResult, reviewCount, weeklyNewResult] = await Promise.all([
         fetchPortfolioStats(),
         storage.getSearchHistory(8),
         db.select({
@@ -453,18 +461,49 @@ export async function registerRoutes(
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
         .from(ingestedAssets)
-        .where(sql`${ingestedAssets.relevant} = true`)
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
-        db.execute(sql`SELECT COUNT(DISTINCT source_name)::int AS n FROM ingested_assets WHERE source_name IS NOT NULL AND source_name != ''`),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE needs_review = true`),
+        db.execute(sql`SELECT COUNT(DISTINCT LOWER(indication))::int AS n FROM ingested_assets WHERE indication IS NOT NULL AND indication != '' AND indication != 'unknown'`),
+        db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE institution IS NOT NULL AND institution != ''`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
       ]);
-      const sourcesCount = Number((sourcesResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const therapyAreaCount = Number((therapyAreaCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const assetsInReview = Number((reviewCount.rows[0] as Record<string, unknown>)?.n ?? 0);
-      return res.json({ stats, recentSearches, recentAssets, sourcesCount, assetsInReview });
+      const weeklyNew = Number((weeklyNewResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      return res.json({ stats, recentSearches, recentAssets, therapyAreaCount, institutionCount, assetsInReview, weeklyNew });
     } catch (err: any) {
       console.error("[dashboard/stats] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+    }
+  });
+
+  app.get("/api/pipeline-lists/summary", async (_req, res) => {
+    try {
+      const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
+        db.execute(sql`
+          SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
+          FROM pipeline_lists pl
+          LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
+          GROUP BY pl.id, pl.name
+          ORDER BY pl.created_at DESC
+        `),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets`),
+        db.execute(sql`SELECT COUNT(DISTINCT source_journal)::int AS n FROM saved_assets WHERE source_journal IS NOT NULL AND source_journal != ''`),
+      ]);
+      const pipelineSummaryLists = (lists.rows as Record<string, unknown>[]).map((r) => ({
+        id: Number(r.id),
+        name: String(r.name ?? ""),
+        assetCount: Number(r.asset_count ?? 0),
+      }));
+      const totalPipelines = pipelineSummaryLists.length;
+      const totalSavedAssets = Number((totalSavedResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      return res.json({ lists: pipelineSummaryLists, totalPipelines, totalSavedAssets, institutionCount });
+    } catch (err: any) {
+      console.error("[pipeline-lists/summary] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load pipeline summary" });
     }
   });
 

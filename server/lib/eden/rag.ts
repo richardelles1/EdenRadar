@@ -279,8 +279,9 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
     return _statsCache;
   }
 
-  const [totalRows, modalityRows, stageRows, institutionRows, therapyAreaRows] = await Promise.all([
+  const [totalRows, allTotalRows, modalityRows, stageRows, institutionRows, therapyAreaRows] = await Promise.all([
     db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE relevant = true`),
+    db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets`),
     db.execute(sql`
       SELECT modality, COUNT(*)::int AS count FROM ingested_assets
       WHERE relevant = true AND modality != 'unknown'
@@ -303,7 +304,9 @@ export async function fetchPortfolioStats(): Promise<PortfolioStats> {
       .limit(15),
   ]);
 
-  const total = Number((totalRows.rows[0] as Record<string, unknown>)?.total ?? 0);
+  const relevantTotal = Number((totalRows.rows[0] as Record<string, unknown>)?.total ?? 0);
+  const allTotal = Number((allTotalRows.rows[0] as Record<string, unknown>)?.total ?? 0);
+  const total = relevantTotal > 0 ? relevantTotal : allTotal;
   const byModality = (modalityRows.rows as Record<string, unknown>[]).map((r) => ({
     modality: String(r.modality ?? ""),
     count: Number(r.count ?? 0),

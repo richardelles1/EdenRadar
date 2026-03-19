@@ -308,9 +308,9 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
   const [phase, setPhase] = useState<"letters" | "phrase" | "settle" | "done">("letters");
 
   useEffect(() => {
-    const t1 = setTimeout(() => setPhase("phrase"), 1200);
-    const t2 = setTimeout(() => setPhase("settle"), 2600);
-    const t3 = setTimeout(() => { setPhase("done"); onDone(); }, 3800);
+    const t1 = setTimeout(() => setPhase("phrase"), 1800);
+    const t2 = setTimeout(() => setPhase("settle"), 3000);
+    const t3 = setTimeout(() => { setPhase("done"); onDone(); }, 4200);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, [onDone]);
 
@@ -319,19 +319,23 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
 
   return (
     <div className="flex flex-col items-center justify-center flex-1 px-4 select-none pointer-events-none">
-      <div className={`flex gap-1 sm:gap-2 transition-all duration-700 ease-out ${settled ? "scale-[0.38] opacity-70" : "scale-100"}`}
-        style={{ transformOrigin: "center center" }}>
+      <style>{`
+        @keyframes eden-letter-in {
+          from { opacity: 0; transform: translateY(28px) scale(0.78); }
+          to   { opacity: 1; transform: translateY(0)    scale(1); }
+        }
+      `}</style>
+      <div
+        className={`flex gap-1 sm:gap-2 transition-all duration-700 ease-out ${settled ? "scale-[0.38] opacity-70" : "scale-100"}`}
+        style={{ transformOrigin: "center center" }}
+      >
         {LETTERS.map((letter, i) => (
           <span
             key={i}
-            className="font-black tracking-tight text-foreground leading-none"
+            className="font-black tracking-tight leading-none"
             style={{
               fontSize: "clamp(72px, 18vw, 160px)",
-              opacity: phase === "letters" || phase === "phrase" || phase === "settle" ? 1 : 0,
-              transform: phase === "letters" && i > 0
-                ? `translateY(${i % 2 === 0 ? "12px" : "-12px"}) scale(0.85)`
-                : "translateY(0) scale(1)",
-              transition: `opacity 0.45s ease ${i * 0.12}s, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.12}s`,
+              animation: `eden-letter-in 0.55s cubic-bezier(0.16, 1, 0.3, 1) ${i * 0.28}s both`,
               background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 100%)",
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
@@ -343,21 +347,8 @@ export function EdenIntro({ onDone }: { onDone: () => void }) {
         ))}
       </div>
 
-      <div
-        className="flex gap-2 mt-1 sm:mt-2 transition-all duration-500"
-        style={{
-          opacity: phase === "phrase" || phase === "settle" ? 1 : 0,
-          transform: settled ? "translateY(-60px)" : "translateY(0)",
-          transition: "opacity 0.4s ease 0.1s, transform 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        {["E", "D", "E", "N"].map((l, i) => (
-          <span key={i} className="text-sm font-bold text-muted-foreground/50">·</span>
-        ))}
-      </div>
-
       <p
-        className="text-center font-semibold text-foreground/80 mt-3 sm:mt-4 px-4 max-w-sm sm:max-w-md"
+        className="text-center font-semibold text-foreground/80 mt-4 px-4 max-w-sm sm:max-w-md"
         style={{
           fontSize: "clamp(14px, 3vw, 22px)",
           opacity: phase === "phrase" || phase === "settle" ? 1 : 0,

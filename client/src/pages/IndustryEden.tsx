@@ -5,7 +5,7 @@ import {
   Loader2, Zap, Mic, MicOff, ThumbsUp, ThumbsDown,
   ChevronDown, ChevronRight, Clock, ExternalLink,
 } from "lucide-react";
-import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
+import { EdenAvatar, EdenOrb, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { useEdenChat, type ChatAsset, type EdenSessionSummary, type EdenUserContext } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -126,19 +126,19 @@ function EmptyState({
   const greetName = profile.companyName || null;
 
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4 py-8" data-testid="chat-empty">
-      {/* Avatar + name */}
+    <div className="flex flex-col items-center justify-center flex-1 px-4 py-4" data-testid="chat-empty">
+      {/* EdenOrb + name */}
       <div
-        className="flex flex-col items-center mb-6"
+        className="flex flex-col items-center mb-4 w-full"
         style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
       >
-        <div className="relative mb-4">
-          <EdenAvatar isThinking={streaming} size={52} />
+        <div className="relative w-full max-w-[200px] mx-auto mb-1">
+          <EdenOrb isThinking={streaming} />
           {streaming && (
-            <span className="absolute -bottom-1 -right-1 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />
+            <span className="absolute bottom-6 right-8 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background animate-pulse" />
           )}
         </div>
-        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground leading-none">
+        <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-foreground leading-none mt-1">
           <span style={{
             background: "linear-gradient(135deg, hsl(var(--foreground)) 0%, #10b981 60%, #6ee7b7 100%)",
             WebkitBackgroundClip: "text",
@@ -152,10 +152,10 @@ function EmptyState({
           Engine for Discovery &amp; Emerging Networks
         </p>
         {greetName && (
-          <p className="text-xs text-muted-foreground mt-3" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "80ms" }}>
+          <p className="text-xs text-muted-foreground mt-2" style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "80ms" }}>
             Welcome back, <span className="font-semibold text-foreground">{greetName}</span>
             {profile.therapeuticAreas.length > 0 && (
-              <> · focused on <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" &amp; ")}</span></>
+              <> · focused on <span className="text-emerald-600 dark:text-emerald-400 font-medium">{profile.therapeuticAreas.slice(0, 2).join(" & ")}</span></>
             )}
           </p>
         )}

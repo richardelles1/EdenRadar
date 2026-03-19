@@ -16,7 +16,7 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Building2 as Bldg, Database } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -80,7 +80,7 @@ function RadarOverlay({ stats }: { stats: RadarStats }) {
   const [factIdx, setFactIdx] = useState(0);
   const facts = RADAR_FACT_TEMPLATES.map((fn) => fn(stats));
   useEffect(() => {
-    const iv = setInterval(() => setFactIdx((i) => (i + 1) % facts.length), 1800);
+    const iv = setInterval(() => setFactIdx((i) => (i + 1) % facts.length), 4500);
     return () => clearInterval(iv);
   }, [facts.length]);
   return (
@@ -191,6 +191,182 @@ function TTONetworkSidebar({ onSearch }: { onSearch: (query: string) => void }) 
   );
 }
 
+const RESEARCH_SOURCE_OPTIONS = [
+  { key: "pubmed",        label: "PubMed",          desc: "Biomedical literature" },
+  { key: "biorxiv",       label: "bioRxiv",          desc: "Biology preprints" },
+  { key: "medrxiv",       label: "medRxiv",          desc: "Clinical preprints" },
+  { key: "clinicaltrials",label: "ClinicalTrials",   desc: "Active trials" },
+  { key: "patents",       label: "Patents",           desc: "Patent databases" },
+  { key: "nih_reporter",  label: "NIH Reporter",     desc: "Federal grants" },
+];
+
+function ScoutSidebar({
+  onSearch,
+  researchSources,
+  onSourcesChange,
+  includeResearch,
+  onIncludeResearchChange,
+}: {
+  onSearch: (q: string) => void;
+  researchSources: string[];
+  onSourcesChange: (sources: string[]) => void;
+  includeResearch: boolean;
+  onIncludeResearchChange: (v: boolean) => void;
+}) {
+  const [activeTab, setActiveTab] = useState<"institutions" | "sources">("institutions");
+  const [filter, setFilter] = useState("");
+
+  const { data } = useQuery<InstitutionsResponse>({
+    queryKey: ["/api/scout/institutions"],
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const institutions = data?.institutions ?? [];
+  const total = data?.total ?? 0;
+  const filtered = filter.trim()
+    ? institutions.filter((i) => i.institution.toLowerCase().includes(filter.toLowerCase()))
+    : institutions;
+
+  function toggleSource(key: string) {
+    const next = researchSources.includes(key)
+      ? researchSources.filter((s) => s !== key)
+      : [...researchSources, key];
+    onSourcesChange(next);
+    if (next.length > 0 && !includeResearch) onIncludeResearchChange(true);
+    if (next.length === 0) onIncludeResearchChange(false);
+  }
+
+  return (
+    <div className="flex flex-col h-full" data-testid="scout-sidebar">
+      <div className="flex border-b border-border shrink-0">
+        <button
+          onClick={() => setActiveTab("institutions")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-colors border-b-2 ${
+            activeTab === "institutions"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="scout-tab-institutions"
+        >
+          <Bldg className="h-3 w-3" />
+          TTO Network
+        </button>
+        <button
+          onClick={() => setActiveTab("sources")}
+          className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] font-semibold transition-colors border-b-2 ${
+            activeTab === "sources"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="scout-tab-sources"
+        >
+          <Database className="h-3 w-3" />
+          Research
+          {includeResearch && researchSources.length > 0 && (
+            <span className="ml-0.5 inline-flex items-center justify-center w-3.5 h-3.5 rounded-full bg-primary text-[8px] text-primary-foreground font-bold">
+              {researchSources.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {activeTab === "institutions" && (
+        <div className="flex flex-col h-full min-h-0">
+          <div className="p-3 pb-2 border-b border-border shrink-0">
+            <div className="flex items-center gap-1.5 mb-1">
+              <Globe className="h-3.5 w-3.5 text-primary" />
+              <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">TTO Institutions</span>
+            </div>
+            {total > 0 && (
+              <p className="text-[10px] text-muted-foreground mb-2">
+                <span className="text-foreground font-semibold">{total}</span> institutions indexed
+              </p>
+            )}
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter institutions..."
+              className="w-full h-7 px-2.5 text-[11px] rounded-md border border-border bg-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+              data-testid="tto-institution-filter"
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {filtered.slice(0, 80).map((inst) => (
+              <button
+                key={inst.institution}
+                onClick={() => onSearch(inst.institution)}
+                className="w-full text-left flex items-center justify-between gap-2 px-3 py-2 hover:bg-accent/50 transition-colors group border-b border-border/40 last:border-0"
+                data-testid={`tto-inst-${inst.institution}`}
+              >
+                <span className="text-[11px] text-muted-foreground group-hover:text-foreground transition-colors truncate leading-tight">
+                  {inst.institution}
+                </span>
+                <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">{inst.count}</span>
+              </button>
+            ))}
+            {filtered.length === 0 && filter && (
+              <p className="text-[11px] text-muted-foreground text-center py-6">No institutions match</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === "sources" && (
+        <div className="flex flex-col h-full min-h-0 p-3 gap-3">
+          <div className="space-y-1">
+            <p className="text-[10px] font-semibold text-foreground uppercase tracking-wide mb-2">Research Sources</p>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Enable to run a parallel search across academic databases alongside TTO assets.
+            </p>
+          </div>
+
+          <div className="flex items-center justify-between py-2 border-b border-border">
+            <span className="text-[11px] font-semibold text-foreground">Enable research search</span>
+            <button
+              onClick={() => onIncludeResearchChange(!includeResearch)}
+              className={`relative w-9 h-5 rounded-full transition-colors ${includeResearch ? "bg-primary" : "bg-border"}`}
+              data-testid="sidebar-toggle-research"
+            >
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${includeResearch ? "translate-x-4" : "translate-x-0.5"}`} />
+            </button>
+          </div>
+
+          <div className="space-y-1.5 flex-1 overflow-y-auto min-h-0">
+            {RESEARCH_SOURCE_OPTIONS.map((src) => {
+              const checked = researchSources.includes(src.key);
+              return (
+                <label
+                  key={src.key}
+                  className="flex items-start gap-2.5 p-2 rounded-lg border border-border/50 hover:border-primary/30 hover:bg-primary/3 cursor-pointer transition-all"
+                  data-testid={`source-toggle-${src.key}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSource(src.key)}
+                    className="mt-0.5 accent-primary w-3.5 h-3.5 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-semibold text-foreground">{src.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{src.desc}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+
+          <div className="shrink-0 pt-2 border-t border-border">
+            <p className="text-[10px] text-muted-foreground/70">
+              {researchSources.length} of {RESEARCH_SOURCE_OPTIONS.length} sources selected
+            </p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Scout() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -220,6 +396,13 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [includeResearch, setIncludeResearch] = useState<boolean>(() => ssGet("scout-include-research", false));
+  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter"];
+  const [researchSources, setResearchSources] = useState<string[]>(() => {
+    try {
+      const raw = sessionStorage.getItem("scout-research-sources");
+      return raw ? JSON.parse(raw) : DEFAULT_RESEARCH_SOURCES;
+    } catch { return DEFAULT_RESEARCH_SOURCES; }
+  });
 
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
@@ -242,8 +425,9 @@ export default function Scout() {
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-buyer-profile", JSON.stringify(buyerProfile));
       sessionStorage.setItem("scout-include-research", JSON.stringify(includeResearch));
+      sessionStorage.setItem("scout-research-sources", JSON.stringify(researchSources));
     } catch {}
-  }, [searchResults, researchResults, hasSearched, currentQuery, buyerProfile, includeResearch]);
+  }, [searchResults, researchResults, hasSearched, currentQuery, buyerProfile, includeResearch, researchSources]);
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
   const { data: institutionsData } = useQuery<InstitutionsResponse>({
@@ -300,11 +484,11 @@ export default function Scout() {
   });
 
   const researchMutation = useMutation({
-    mutationFn: async ({ query }: { query: string }) => {
+    mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
       const res = await apiRequest("POST", "/api/search", {
         query,
-        sources: ["pubmed", "biorxiv", "clinicaltrials", "patents"],
-        maxPerSource: 5,
+        sources,
+        maxPerSource: 25,
         buyerProfile,
       });
       if (!res.ok) {
@@ -376,9 +560,23 @@ export default function Scout() {
     setInputQuery(query);
     setResearchResults([]);
     searchMutation.mutate({ query });
-    if (includeResearch) {
-      researchMutation.mutate({ query });
+    if (includeResearch && researchSources.length > 0) {
+      researchMutation.mutate({ query, sources: researchSources });
     }
+  };
+
+  const handleClearSearch = () => {
+    setCurrentQuery("");
+    setInputQuery("");
+    setSearchResults([]);
+    setResearchResults([]);
+    setHasSearched(false);
+    setStageFilter("all");
+    setModalityFilter("all");
+    setInstitutionFilter("all");
+    setSortMode("score");
+    setDateFilter("all");
+    setMinScore(0);
   };
 
   const handleGenerateReport = () => {
@@ -475,36 +673,18 @@ export default function Scout() {
                   onSourceChange={() => {}}
                 />
               </div>
-              <Button
-                variant="outline"
-                className="shrink-0 gap-2 text-sm h-10 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                onClick={handleGenerateReport}
-                disabled={isAnyPending}
-                data-testid="button-generate-report"
-              >
-                {reportMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <FileBarChart2 className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {reportMutation.isPending ? "Generating..." : "Match Report"}
-                </span>
-              </Button>
-              <Button
-                variant="outline"
-                className="shrink-0 relative gap-2 text-sm h-10 border-card-border"
-                onClick={() => setFiltersOpen(true)}
-                data-testid="button-open-filters"
-              >
-                <SlidersHorizontal className="w-4 h-4" />
-                <span className="hidden sm:inline">Filters</span>
-                {activeFilterCount > 0 && (
-                  <Badge className="absolute -top-1.5 -right-1.5 w-4 h-4 p-0 flex items-center justify-center text-[10px] bg-primary text-primary-foreground border-0">
-                    {activeFilterCount}
-                  </Badge>
-                )}
-              </Button>
+              {hasSearched && !searchMutation.isPending && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
+                  onClick={handleClearSearch}
+                  data-testid="button-clear-search"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
             </div>
 
             <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
@@ -536,8 +716,8 @@ export default function Scout() {
                 onClick={() => {
                   const next = !includeResearch;
                   setIncludeResearch(next);
-                  if (next && currentQuery) {
-                    researchMutation.mutate({ query: currentQuery });
+                  if (next && currentQuery && researchSources.length > 0) {
+                    researchMutation.mutate({ query: currentQuery, sources: researchSources });
                   } else if (!next) {
                     setResearchResults([]);
                   }
@@ -576,6 +756,23 @@ export default function Scout() {
                     ? `${activeFilterCount} filter${activeFilterCount !== 1 ? "s" : ""} active`
                     : "Add filters"}
                 </button>
+                <div className="ml-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                    onClick={handleGenerateReport}
+                    disabled={isAnyPending}
+                    data-testid="button-generate-report"
+                  >
+                    {reportMutation.isPending ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <FileBarChart2 className="w-3 h-3" />
+                    )}
+                    {reportMutation.isPending ? "Generating..." : "Match Report"}
+                  </Button>
+                </div>
                 {stageFilter !== "all" && (
                   <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setStageFilter("all")} data-testid="active-filter-stage">
                     Stage: {stageFilter} ×
@@ -658,7 +855,23 @@ export default function Scout() {
         </main>
 
         <div className="hidden lg:flex lg:flex-col w-72 shrink-0 border-l border-border sticky top-0 h-screen overflow-hidden">
-          <TTONetworkSidebar onSearch={(q) => handleSearch(q)} />
+          <ScoutSidebar
+            onSearch={(q) => handleSearch(q)}
+            researchSources={researchSources}
+            onSourcesChange={(sources) => {
+              setResearchSources(sources);
+              if (sources.length === 0) setIncludeResearch(false);
+            }}
+            includeResearch={includeResearch}
+            onIncludeResearchChange={(v) => {
+              setIncludeResearch(v);
+              if (v && currentQuery && researchSources.length > 0) {
+                researchMutation.mutate({ query: currentQuery, sources: researchSources });
+              } else if (!v) {
+                setResearchResults([]);
+              }
+            }}
+          />
         </div>
       </div>
 
