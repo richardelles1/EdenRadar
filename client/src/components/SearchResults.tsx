@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AssetCard } from "./AssetCard";
 import { FlaskConical, SearchX, Microscope } from "lucide-react";
@@ -11,6 +12,7 @@ type SearchResultsProps = {
   savedAssetIds: Set<string>;
   onSave?: (asset: ScoredAsset) => void;
   onUnsave: (id: string, assetName?: string) => void;
+  headerAction?: ReactNode;
 };
 
 function LoadingSkeleton() {
@@ -51,7 +53,7 @@ function LoadingSkeleton() {
   );
 }
 
-export function SearchResults({ assets, isLoading, hasSearched, query, savedAssetIds, onSave, onUnsave }: SearchResultsProps) {
+export function SearchResults({ assets, isLoading, hasSearched, query, savedAssetIds, onSave, onUnsave, headerAction }: SearchResultsProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -114,14 +116,16 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground" data-testid="results-count">
           <span className="text-foreground font-semibold">{assets.length}</span> ranked asset{assets.length !== 1 ? "s" : ""} found
           {query ? <> for "<span className="text-foreground">{query}</span>"</> : ""}
         </p>
-        <p className="text-xs text-muted-foreground hidden sm:block">
-          Sorted by match score ↓
-        </p>
+        {headerAction ?? (
+          <p className="text-xs text-muted-foreground hidden sm:block">
+            Sorted by match score ↓
+          </p>
+        )}
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {assets.map((asset) => (
