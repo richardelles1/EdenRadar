@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -3449,10 +3449,11 @@ function GradeBadge({ grade, score }: { grade: string; score: number }) {
 function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab: string) => void }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   // Stage: "input" → "preview" → "done"
   const [stage, setStage] = useState<"input" | "preview" | "done">("input");
-  const [mode, setMode] = useState<"text" | "image">("text");
+  const [mode, setMode] = useState<"text" | "image" | "document">("text");
 
   // Institution combobox state
   const [instSearch, setInstSearch] = useState("");
@@ -3466,6 +3467,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const [pastedText, setPastedText] = useState("");
   const [imageFiles, setImageFiles] = useState<File[]>([]);
   const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [docFiles, setDocFiles] = useState<File[]>([]);
 
   // Preview stage
   const [parsedAssets, setParsedAssets] = useState<ParsedImportAsset[]>([]);
@@ -3516,14 +3518,19 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
       if (!selectedInst) throw new Error("Select or create an institution first");
       if (mode === "text" && !pastedText.trim()) throw new Error("Paste some text first");
       if (mode === "image" && imageFiles.length === 0) throw new Error("Upload at least one screenshot");
+      if (mode === "document" && docFiles.length === 0) throw new Error("Upload at least one document");
 
       const formData = new FormData();
       formData.append("institution", selectedInst);
       if (mode === "text") {
         formData.append("rawText", pastedText);
-      } else {
+      } else if (mode === "image") {
         for (const file of imageFiles) {
           formData.append("images", file);
+        }
+      } else {
+        for (const file of docFiles) {
+          formData.append("documents", file);
         }
       }
 
@@ -3704,6 +3711,9 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
               <Button size="sm" variant={mode === "image" ? "default" : "outline"} onClick={() => setMode("image")} className="gap-1.5" data-testid="button-mode-image">
                 <ImageIcon className="h-3.5 w-3.5" /> Screenshots
               </Button>
+              <Button size="sm" variant={mode === "document" ? "default" : "outline"} onClick={() => setMode("document")} className="gap-1.5" data-testid="button-mode-document">
+                <BookOpen className="h-3.5 w-3.5" /> Documents
+              </Button>
             </div>
 
             {mode === "text" ? (
@@ -3714,7 +3724,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                 className="min-h-[180px] font-mono text-xs"
                 data-testid="textarea-paste-text"
               />
-            ) : (
+            ) : mode === "image" ? (
               <div className="space-y-3">
                 <div
                   className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
@@ -3743,6 +3753,52 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                       <img key={i} src={src} alt={`Screenshot ${i + 1}`} className="h-24 w-auto rounded border border-border object-cover" data-testid={`image-preview-${i}`} />
                     ))}
                     <p className="w-full text-xs text-muted-foreground">{imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""} ready</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div
+                  className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
+                  onClick={() => docInputRef.current?.click()}
+                  onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                  onDrop={(e) => {
+                    e.preventDefault(); e.stopPropagation();
+                    const allowed = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"];
+                    const dropped = Array.from(e.dataTransfer.files).filter(f => allowed.includes(f.type)).slice(0, 5);
+                    if (dropped.length > 0) setDocFiles(dropped);
+                  }}
+                  data-testid="dropzone-document-upload"
+                >
+                  <Upload className="h-8 w-8 text-muted-foreground/50" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground">Drag & drop or click to upload documents</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF or DOCX — up to 5 files, 20 MB each</p>
+                  </div>
+                </div>
+                <input
+                  ref={docInputRef}
+                  type="file"
+                  accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    const selected = Array.from(e.target.files ?? []).slice(0, 5);
+                    setDocFiles(selected);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-doc-upload"
+                />
+                {docFiles.length > 0 && (
+                  <div className="space-y-1" data-testid="doc-file-list">
+                    {docFiles.map((f, i) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-muted-foreground" data-testid={`doc-file-${i}`}>
+                        <FileText className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">{f.name}</span>
+                        <span className="shrink-0 text-muted-foreground/60">({(f.size / 1024).toFixed(0)} KB)</span>
+                      </div>
+                    ))}
+                    <p className="text-xs text-muted-foreground pt-1">{docFiles.length} document{docFiles.length !== 1 ? "s" : ""} ready</p>
                   </div>
                 )}
               </div>

@@ -1,6 +1,10 @@
 import crypto from "crypto";
+import { createRequire } from "module";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import mammoth from "mammoth";
+const _require = createRequire(import.meta.url);
+const pdfParse: (buf: Buffer) => Promise<{ text: string }> = _require("pdf-parse");
 import { storage } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema } from "@shared/schema";
 import { db } from "./db";
@@ -4115,9 +4119,18 @@ If a field cannot be determined, use "N/A".`
   });
 
   // ── Manual Import — Parse (multipart form-data, returns asset array) ──────
-  const manualImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 10 } });
+  const manualImportUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 20 * 1024 * 1024, files: 15 },
+  });
 
-  app.post("/api/admin/manual-import/parse", manualImportUpload.array("images", 10), async (req: any, res) => {
+  app.post(
+    "/api/admin/manual-import/parse",
+    manualImportUpload.fields([
+      { name: "images", maxCount: 10 },
+      { name: "documents", maxCount: 5 },
+    ]),
+    async (req: any, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
@@ -4125,18 +4138,48 @@ If a field cannot be determined, use "N/A".`
     if (!institution) return res.status(400).json({ error: "institution is required" });
 
     const rawText: string = (req.body?.rawText ?? "").trim();
-    const files: Express.Multer.File[] = Array.isArray(req.files) ? req.files : [];
+    const filesMap: Record<string, Express.Multer.File[]> = (req.files as any) ?? {};
+    const imageFiles: Express.Multer.File[] = filesMap["images"] ?? [];
+    const docFiles: Express.Multer.File[] = filesMap["documents"] ?? [];
 
-    if (!rawText && files.length === 0) {
-      return res.status(400).json({ error: "Provide rawText or at least one image" });
+    if (!rawText && imageFiles.length === 0 && docFiles.length === 0) {
+      return res.status(400).json({ error: "Provide rawText, at least one image, or at least one document" });
     }
 
-    const ALLOWED_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-    for (const file of files) {
-      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-        return res.status(400).json({ error: `File type not supported: ${file.mimetype}. Use PNG, JPG, or WebP.` });
+    const ALLOWED_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+    for (const file of imageFiles) {
+      if (!ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
+        return res.status(400).json({ error: `Image type not supported: ${file.mimetype}. Use PNG, JPG, or WebP.` });
       }
     }
+
+    const ALLOWED_DOC_TYPES = new Set([
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]);
+    for (const file of docFiles) {
+      if (!ALLOWED_DOC_TYPES.has(file.mimetype)) {
+        return res.status(400).json({ error: `Document type not supported: ${file.mimetype}. Use PDF or DOCX.` });
+      }
+    }
+
+    // Extract text from uploaded documents (no AI cost)
+    const docTexts: string[] = [];
+    for (const file of docFiles) {
+      try {
+        if (file.mimetype === "application/pdf") {
+          const parsed = await pdfParse(file.buffer);
+          if (parsed.text?.trim()) docTexts.push(parsed.text.trim());
+        } else {
+          const result = await mammoth.extractRawText({ buffer: file.buffer });
+          if (result.value?.trim()) docTexts.push(result.value.trim());
+        }
+      } catch (e: any) {
+        console.warn(`[manual-import/parse] Could not extract text from ${file.originalname}: ${e?.message}`);
+      }
+    }
+
+    const combinedText = [rawText, ...docTexts].filter(Boolean).join("\n\n---\n\n");
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -4164,13 +4207,13 @@ If multiple assets appear, return each as a separate array item. If only one ass
     try {
       const messageParts: any[] = [{ type: "text", text: PARSE_PROMPT }];
 
-      for (const file of files) {
+      for (const file of imageFiles) {
         const b64 = file.buffer.toString("base64");
         messageParts.push({ type: "image_url", image_url: { url: `data:${file.mimetype};base64,${b64}`, detail: "high" as const } });
       }
 
-      if (rawText) {
-        messageParts.push({ type: "text", text: `\n\n---\nContent:\n${rawText.slice(0, 8000)}` });
+      if (combinedText) {
+        messageParts.push({ type: "text", text: `\n\n---\nContent:\n${combinedText.slice(0, 16000)}` });
       }
 
       const response = await openai.chat.completions.create({
