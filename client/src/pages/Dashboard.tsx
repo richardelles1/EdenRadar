@@ -1,9 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame } from "lucide-react";
+import { Search, TrendingUp, Building2, FlaskConical, Clock, ArrowRight, Flame, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
+
+const STORAGE_KEY = "edenLastSeenAlerts";
 
 type PortfolioStats = {
   total: number;
@@ -29,6 +32,21 @@ type ConvergenceSignal = {
   assetCount: number;
 };
 
+interface DeltaInstitution {
+  institution: string;
+  count: number;
+  sampleAssets: string[];
+}
+
+interface AlertDeltaResponse {
+  newAssets: {
+    total: number;
+    byInstitution: DeltaInstitution[];
+  };
+  windowHours: number;
+  since?: string;
+}
+
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
   return (
     <div className="rounded-xl border border-border bg-card p-5">
@@ -48,6 +66,159 @@ function MiniBar({ label, count, max, color = "bg-primary" }: { label: string; c
         <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
       </div>
       <span className="text-xs tabular-nums text-muted-foreground w-10 text-right shrink-0">{count.toLocaleString()}</span>
+    </div>
+  );
+}
+
+function useRotatingTicker<T>(items: T[], intervalMs = 5000) {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const timer = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % items.length);
+        setVisible(true);
+      }, 250);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [items.length, intervalMs]);
+
+  return { item: items[idx] ?? null, idx, visible };
+}
+
+function NewlyIndexedCard({
+  assets,
+  onViewAll,
+}: {
+  assets: Array<{ id: number; assetName: string; institution: string; modality: string; indication: string; firstSeenAt: string }>;
+  onViewAll: () => void;
+}) {
+  const { item, idx, visible } = useRotatingTicker(assets, 5000);
+
+  if (assets.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-3 min-h-[200px] flex flex-col" data-testid="dashboard-recent-assets">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Newly Indexed</h2>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+        >
+          View all <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center min-h-[100px]">
+        {item ? (
+          <div
+            className="transition-opacity duration-200"
+            style={{ opacity: visible ? 1 : 0 }}
+            data-testid={`dashboard-asset-${item.id}`}
+          >
+            <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.assetName}</p>
+            <p className="text-xs text-muted-foreground mt-1 truncate">{item.institution}</p>
+            {item.modality && item.modality !== "unknown" && (
+              <span className="inline-block mt-2 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">
+                {item.modality}
+              </span>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+        <span className="text-[10px] text-muted-foreground">
+          {idx + 1} of {assets.length} new assets
+        </span>
+        <div className="flex gap-1">
+          {assets.slice(0, Math.min(assets.length, 8)).map((_, i) => (
+            <span
+              key={i}
+              className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
+  const sinceParam = typeof window !== "undefined"
+    ? (localStorage.getItem(STORAGE_KEY) ?? "")
+    : "";
+
+  const { data, isLoading } = useQuery<AlertDeltaResponse>({
+    queryKey: ["/api/industry/alerts/delta", sinceParam],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const institutions = data?.newAssets.byInstitution ?? [];
+  const { item, idx, visible } = useRotatingTicker(institutions, 5000);
+  const total = data?.newAssets.total ?? 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-3 min-h-[200px] flex flex-col" data-testid="dashboard-new-alerts">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">New Alerts</h2>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+        >
+          View all <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center min-h-[100px]">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ) : total === 0 ? (
+          <p className="text-xs text-muted-foreground">No new activity since your last visit.</p>
+        ) : item ? (
+          <div
+            className="transition-opacity duration-200"
+            style={{ opacity: visible ? 1 : 0 }}
+          >
+            <div className="flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <p className="text-sm font-medium text-foreground truncate">{item.institution}</p>
+            </div>
+            <p className="text-xs text-primary font-semibold mt-1">+{item.count} new assets</p>
+            {item.sampleAssets[0] && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{item.sampleAssets[0]}</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {!isLoading && total > 0 && (
+        <div className="flex items-center justify-between pt-1 border-t border-border/50">
+          <span className="text-[10px] text-muted-foreground">
+            {institutions.length} institution{institutions.length !== 1 ? "s" : ""} with new activity
+          </span>
+          <div className="flex gap-1">
+            {institutions.slice(0, Math.min(institutions.length, 8)).map((_, i) => (
+              <span
+                key={i}
+                className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -139,7 +310,6 @@ export default function Dashboard() {
         ) : null}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
           {stats && stats.byModality.length > 0 && (
             <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-4" data-testid="dashboard-modality-chart">
               <div className="flex items-center justify-between">
@@ -213,74 +383,45 @@ export default function Dashboard() {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
           {recentAssets.length > 0 && (
-            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-assets">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  <h2 className="text-sm font-semibold text-foreground">Newly Indexed</h2>
-                </div>
-                <button
-                  onClick={() => navigate("/scout")}
-                  className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
-                >
-                  View all <ArrowRight className="w-3 h-3" />
-                </button>
-              </div>
-              <div className="space-y-2.5">
-                {recentAssets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="flex items-start gap-2 py-1.5 border-b border-border/50 last:border-0"
-                    data-testid={`dashboard-asset-${asset.id}`}
+            <NewlyIndexedCard
+              assets={recentAssets}
+              onViewAll={() => navigate("/scout")}
+            />
+          )}
+          <NewAlertsCard onViewAll={() => navigate("/alerts")} />
+        </div>
+
+        {recentSearches.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-searches">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-primary" />
+              <h2 className="text-sm font-semibold text-foreground">Recent Searches</h2>
+            </div>
+            <div className="space-y-1.5">
+              {recentSearches
+                .filter((s) => s.query && s.query !== "scout_tto")
+                .slice(0, 8)
+                .map((s) => (
+                  <button
+                    key={s.id}
+                    onClick={() => navigate(`/scout?q=${encodeURIComponent(s.query)}`)}
+                    className="w-full text-left flex items-center justify-between gap-3 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors group"
+                    data-testid={`dashboard-search-${s.id}`}
                   >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground leading-snug line-clamp-1">{asset.assetName}</p>
-                      <p className="text-[10px] text-muted-foreground mt-0.5 truncate">{asset.institution}</p>
-                    </div>
-                    {asset.modality && asset.modality !== "unknown" && (
-                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 shrink-0 capitalize">
-                        {asset.modality}
+                    <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors truncate">
+                      {s.query}
+                    </span>
+                    {s.resultCount > 0 && (
+                      <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
+                        {s.resultCount} results
                       </span>
                     )}
-                  </div>
+                  </button>
                 ))}
-              </div>
             </div>
-          )}
-
-          {recentSearches.length > 0 && (
-            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-searches">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-primary" />
-                <h2 className="text-sm font-semibold text-foreground">Recent Searches</h2>
-              </div>
-              <div className="space-y-1.5">
-                {recentSearches
-                  .filter((s) => s.query && s.query !== "scout_tto")
-                  .slice(0, 8)
-                  .map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => navigate(`/scout?q=${encodeURIComponent(s.query)}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-2 py-1.5 rounded-md hover:bg-muted/50 transition-colors group"
-                      data-testid={`dashboard-search-${s.id}`}
-                    >
-                      <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors truncate">
-                        {s.query}
-                      </span>
-                      {s.resultCount > 0 && (
-                        <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">
-                          {s.resultCount} results
-                        </span>
-                      )}
-                    </button>
-                  ))}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {stats && stats.topInstitutions.length > 0 && (
           <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-top-institutions">

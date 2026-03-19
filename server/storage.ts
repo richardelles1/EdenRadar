@@ -16,6 +16,7 @@ import {
   reviewQueue,
   edenSessions, type EdenSession,
   edenMessageFeedback,
+  userAlerts, type UserAlert, type InsertUserAlert,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike } from "drizzle-orm";
@@ -200,6 +201,10 @@ export interface IStorage {
   listEdenSessions(limit?: number): Promise<EdenSession[]>;
   createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
+
+  createUserAlert(data: InsertUserAlert): Promise<UserAlert>;
+  listUserAlerts(): Promise<UserAlert[]>;
+  deleteUserAlert(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1459,6 +1464,19 @@ export class DatabaseStorage implements IStorage {
       .from(edenSessions)
       .orderBy(desc(edenSessions.updatedAt))
       .limit(limit);
+  }
+
+  async createUserAlert(data: InsertUserAlert): Promise<UserAlert> {
+    const [row] = await db.insert(userAlerts).values(data).returning();
+    return row;
+  }
+
+  async listUserAlerts(): Promise<UserAlert[]> {
+    return db.select().from(userAlerts).orderBy(desc(userAlerts.createdAt));
+  }
+
+  async deleteUserAlert(id: number): Promise<void> {
+    await db.delete(userAlerts).where(eq(userAlerts.id, id));
   }
 }
 

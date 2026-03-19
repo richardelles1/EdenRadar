@@ -510,6 +510,18 @@ export const edenMessageFeedback = pgTable("eden_message_feedback", {
 });
 export type EdenMessageFeedback = typeof edenMessageFeedback.$inferSelect;
 
+export const userAlerts = pgTable("user_alerts", {
+  id: serial("id").primaryKey(),
+  name: text("name"),
+  query: text("query"),
+  modalities: text("modalities").array(),
+  stages: text("stages").array(),
+  institutions: text("institutions").array(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type UserAlert = typeof userAlerts.$inferSelect;
+export type InsertUserAlert = typeof userAlerts.$inferInsert;
+
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),

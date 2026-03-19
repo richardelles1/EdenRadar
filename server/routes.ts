@@ -3943,10 +3943,66 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  app.get("/api/industry/alerts/delta", async (_req, res) => {
+  app.get("/api/alerts", async (_req, res) => {
+    try {
+      const alerts = await storage.listUserAlerts();
+      res.json(alerts);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/alerts", async (req, res) => {
+    try {
+      const { query, modalities, stages, institutions, name } = req.body ?? {};
+      if (!query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
+        return res.status(400).json({ error: "At least one filter must be set" });
+      }
+      const alert = await storage.createUserAlert({
+        name: name ?? null,
+        query: query ?? null,
+        modalities: modalities ?? null,
+        stages: stages ?? null,
+        institutions: institutions ?? null,
+      });
+      res.status(201).json(alert);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/alerts/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      await storage.deleteUserAlert(id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/ingest/institutions/names", async (_req, res) => {
+    try {
+      const rows = await db
+        .selectDistinct({ institution: ingestedAssets.institution })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.institution} IS NOT NULL AND ${ingestedAssets.institution} != ''`)
+        .orderBy(ingestedAssets.institution)
+        .limit(500);
+      res.json(rows.map((r) => r.institution).filter(Boolean));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/industry/alerts/delta", async (req, res) => {
     try {
       const WINDOW_HOURS = 48;
-      const since = new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
+      const sinceParam = req.query.since as string | undefined;
+      const since = sinceParam && !isNaN(Date.parse(sinceParam))
+        ? new Date(sinceParam)
+        : new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
 
       const [newAssetRows, newConceptRows, newProjectRows] = await Promise.all([
         db
@@ -4013,11 +4069,13 @@ If a field cannot be determined, use "N/A".`
         .map(([institution, { count, sampleAssets }]) => ({ institution, count, sampleAssets }))
         .sort((a, b) => b.count - a.count);
 
+      const windowHours = Math.round((Date.now() - since.getTime()) / 3600000);
       res.json({
         newAssets: { total: newAssetRows.length, byInstitution },
         newConcepts: { total: newConceptRows.length, items: newConceptRows },
         newProjects: { total: newProjectRows.length, items: newProjectRows },
-        windowHours: WINDOW_HOURS,
+        windowHours,
+        since: since.toISOString(),
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });

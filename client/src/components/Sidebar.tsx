@@ -20,7 +20,15 @@ import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
 import { useState } from "react";
 
+const STORAGE_KEY = "edenLastSeenAlerts";
+
 type SavedAssetsResponse = { assets: SavedAsset[] };
+
+interface AlertDeltaResponse {
+  newAssets: { total: number };
+  newConcepts: { total: number };
+  newProjects: { total: number };
+}
 
 const NAV_ITEMS = [
   { href: "/scout", label: "Scout", icon: Search },
@@ -36,10 +44,24 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { signOut } = useAuth();
   const [location] = useLocation();
 
-  const { data } = useQuery<SavedAssetsResponse>({
+  const sinceParam = typeof window !== "undefined"
+    ? (localStorage.getItem(STORAGE_KEY) ?? "")
+    : "";
+
+  const { data: savedData } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
   });
-  const savedCount = data?.assets?.length ?? 0;
+
+  const { data: alertData } = useQuery<AlertDeltaResponse>({
+    queryKey: ["/api/industry/alerts/delta", sinceParam],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const savedCount = savedData?.assets?.length ?? 0;
+  const alertCount =
+    (alertData?.newAssets.total ?? 0) +
+    (alertData?.newConcepts.total ?? 0) +
+    (alertData?.newProjects.total ?? 0);
 
   async function handleSignOut() {
     await signOut();
@@ -94,6 +116,11 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 {label === "Pipelines" && savedCount > 0 && (
                   <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-none">
                     {savedCount}
+                  </span>
+                )}
+                {label === "Alerts" && alertCount > 0 && (
+                  <span className="ml-auto text-[11px] font-semibold bg-primary text-primary-foreground rounded-full px-1.5 py-0.5 min-w-[20px] text-center leading-none" data-testid="sidebar-alert-badge">
+                    {alertCount.toLocaleString()}
                   </span>
                 )}
               </div>
