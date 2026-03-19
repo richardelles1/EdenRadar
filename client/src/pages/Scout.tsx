@@ -155,9 +155,19 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "openaire",         label: "OpenAIRE",             desc: "European open research" },
   { key: "ieee",             label: "IEEE Xplore",          desc: "Engineering & biomedical" },
   { key: "core",             label: "CORE",                 desc: "Open access research" },
+  { key: "base",             label: "BASE",                 desc: "Academic search engine" },
+  { key: "eric",             label: "ERIC",                 desc: "Education research" },
+  { key: "hal",              label: "HAL",                  desc: "French academic repository" },
+  { key: "isrctn",           label: "ISRCTN",               desc: "Clinical trial registry" },
+  { key: "socarxiv",         label: "SocArXiv",             desc: "Social science preprints" },
+  { key: "psyarxiv",         label: "PsyArXiv",             desc: "Psychology preprints" },
+  { key: "eartharxiv",       label: "EarthArXiv",           desc: "Earth science preprints" },
+  { key: "engrxiv",          label: "EngrXiv",              desc: "Engineering preprints" },
   { key: "figshare",         label: "Figshare",             desc: "Research data & figures" },
   { key: "dryad",            label: "Dryad",                desc: "Scientific data repository" },
   { key: "biostudies",       label: "BioStudies",           desc: "Biological study data" },
+  { key: "techtransfer",     label: "Tech Transfer",        desc: "TTO licensing database" },
+  { key: "lab_discoveries",  label: "Lab Discoveries",      desc: "Research lab discoveries" },
 ];
 
 function ScoutSidebar({
