@@ -1,0 +1,16 @@
+Initial desktop feedback:
+The overall problem is that you are using the search function as the dashboard, and thats not what i asked for. We need a dashboard that summarizes all of these things like the research side has where there are highlights in linked boxes and alerts. We need a home dash, not just a scout page. Scout is its own search page. 
+
+Scout:
+No need for an emdash anywhere and there are two.
+We dont need 6 pills for examples, especially with additional instructions in the search bar sample text. I think we’re just wasting space and page hygiene
+We dont need the asset pipeline always visible on the right. It probably should be the sources list on the scout tab like it is on the other portals. The source pills look unorganized and we need to find a better way to separate tech transfers outside of this list given their value.
+My concern is research doesnt have much of a place in asset discovery, and thats why im struggling to reconcile it with tech transfers. But perhaps it does. Need your opinion.
+Tech transfer should be its own attraction within the search function. What do you think?
+Because we need a dashboard, the bottom (TTO, Concepts) makes no sense on the scout page.
+This needs to feel more cohesive, andthe buyer active thesis is a nice touch. The number of institutions should be 275 right now, and we have a ton of sources
+The radar scan needs industry & platform facts cycling through like on the research side below the spinning radar graphic.
+The scan took infinitely long.
+I searched pediatric cancer and got the following results, which were terribly unrelated.
+The tab order should be “Dashboard”, Eden, Scout, Institutions, Alerts (with a green plant icon on it when there are alerts), Pipelines, EdenLab (will be research projects inside), EdenDiscovery (will be concepts inside), Profile.
+I dont know what match report is, but it was stuck on generating for more than a minute. Seems useless, especially that slow. Finally loaded, composed of the bad results from the search.
