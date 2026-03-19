@@ -365,7 +365,11 @@ export default function Scout() {
       const q = qParam.trim();
       setInputQuery(q);
       setCurrentQuery(q);
+      setResearchResults([]);
       searchMutation.mutate({ query: q });
+      if (researchSources.length > 0) {
+        researchMutation.mutate({ query: q, sources: researchSources });
+      }
       setLocation("/scout", { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
