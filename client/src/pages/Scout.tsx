@@ -310,17 +310,28 @@ export default function Scout() {
 
   const reportMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
-      const res = await apiRequest("POST", "/api/report", {
-        query,
-        sources: ["tech_transfer"],
-        maxPerSource: 6,
-        buyerProfile,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Report generation failed");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 60_000);
+      try {
+        const res = await fetch("/api/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, sources: ["tech_transfer"], maxPerSource: 6, buyerProfile }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Report generation failed");
+        }
+        return res.json() as Promise<ReportPayload>;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          throw new Error("Report timed out after 60 seconds. Try a more specific query.");
+        }
+        throw err;
       }
-      return res.json() as Promise<ReportPayload>;
     },
     onSuccess: (report) => {
       sessionStorage.setItem("current-report", JSON.stringify(report));

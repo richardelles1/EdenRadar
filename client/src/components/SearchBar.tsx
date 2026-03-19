@@ -49,7 +49,7 @@ export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sour
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search biotech assets by target, indication, or modality"
+            placeholder="Search biotech assets..."
             className="pl-10 h-11 bg-card border-card-border focus:border-primary/60 text-sm"
             data-testid="input-search"
             disabled={isLoading}

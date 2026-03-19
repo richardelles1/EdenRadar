@@ -95,10 +95,10 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         </div>
         <div>
           <h3 className="text-base font-semibold text-foreground mb-1">
-            No TTO assets found matching "{query}"
+            No TTO assets found for "{query}"
           </h3>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Try broader terms or a different indication. Enable "Include research sources" above for wider coverage.
+            Try broader terms or enable "Include research sources" for wider coverage.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mt-1">
