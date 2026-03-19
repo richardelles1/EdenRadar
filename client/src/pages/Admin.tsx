@@ -3418,7 +3418,7 @@ function GradeBadge({ grade, score }: { grade: string; score: number }) {
   );
 }
 
-function ManualImportTab({ pw }: { pw: string }) {
+function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab: string) => void }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -3831,12 +3831,22 @@ function ManualImportTab({ pw }: { pw: string }) {
               )}
             </div>
             <p className="text-xs text-emerald-600 dark:text-emerald-500">
-              AI classification is running in the background. Go to the Indexing Queue tab to push assets to Scout.
+              AI classification is running in the background. Assets remain in Indexing Queue until you push them to Scout.
             </p>
           </div>
-          <Button variant="outline" onClick={resetToInput} data-testid="button-import-more">
-            Import more assets
-          </Button>
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setActiveTab("indexing-queue")}
+              className="gap-1.5"
+              data-testid="button-go-to-queue"
+            >
+              <PackagePlus className="h-4 w-4" /> Go to Indexing Queue
+            </Button>
+            <Button variant="ghost" onClick={resetToInput} data-testid="button-import-more">
+              Import more assets
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -4032,7 +4042,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Manual Import</h2>
                 <p className="text-sm text-muted-foreground mt-1">Upload a screenshot or paste text from any TTO listing — AI extracts structured fields and adds the asset to the Indexing Queue.</p>
               </div>
-              <ManualImportTab pw={pw} />
+              <ManualImportTab pw={pw} setActiveTab={setActiveTab} />
             </>
           )}
 

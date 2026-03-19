@@ -4255,6 +4255,8 @@ If multiple assets appear, return each as a separate array item. If only one ass
           abstract: undefined as string | undefined,
         }));
 
+        // Enrich only — never change relevant or delete; manual imports stay in Indexing Queue
+        // until the operator explicitly pushes them via the normal push flow.
         classifyBatch(classifyInputs, 5, async (id, classification) => {
           try {
             const score = computeCompletenessScore({
@@ -4266,11 +4268,22 @@ If multiple assets appear, return each as a separate array item. If only one ass
               innovationClaim: classification.innovationClaim,
               mechanismOfAction: classification.mechanismOfAction,
             });
-            if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
-              await storage.deleteIngestedAsset(id);
-            } else {
-              await storage.updateIngestedAssetEnrichment(id, { ...classification, completenessScore: score });
-            }
+            // Update enrichment fields only — do NOT touch relevant (keep false) or delete records
+            await db
+              .update(ingestedAssets)
+              .set({
+                target: classification.target,
+                modality: classification.modality,
+                indication: classification.indication,
+                developmentStage: classification.developmentStage,
+                ...(classification.categories ? { categories: classification.categories } : {}),
+                ...(classification.categoryConfidence !== undefined ? { categoryConfidence: classification.categoryConfidence } : {}),
+                ...(classification.innovationClaim ? { innovationClaim: classification.innovationClaim } : {}),
+                ...(classification.mechanismOfAction ? { mechanismOfAction: classification.mechanismOfAction } : {}),
+                completenessScore: score,
+                enrichedAt: new Date(),
+              })
+              .where(eq(ingestedAssets.id, id));
           } catch (e: any) {
             console.error(`[manual-import/commit] classify error id=${id}: ${e?.message}`);
           }
