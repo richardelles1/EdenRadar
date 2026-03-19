@@ -3459,6 +3459,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const [instOpen, setInstOpen] = useState(false);
   const [selectedInst, setSelectedInst] = useState("");
   const instBlurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (instBlurTimer.current) clearTimeout(instBlurTimer.current); }, []);
   const [showCreateInst, setShowCreateInst] = useState(false);
   const [newInstName, setNewInstName] = useState("");
   const [newInstTtoUrl, setNewInstTtoUrl] = useState("");
