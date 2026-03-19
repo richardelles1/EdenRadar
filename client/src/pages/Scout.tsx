@@ -4,6 +4,7 @@ import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
+import { AssetCard } from "@/components/AssetCard";
 import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -203,6 +204,7 @@ export default function Scout() {
   }
 
   const [searchResults, setSearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-results", []));
+  const [researchResults, setResearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-research-results", []));
   const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
   const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
@@ -214,6 +216,7 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [includeResearch, setIncludeResearch] = useState<boolean>(() => ssGet("scout-include-research", false));
 
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
@@ -231,11 +234,13 @@ export default function Scout() {
   useEffect(() => {
     try {
       sessionStorage.setItem("scout-results", JSON.stringify(searchResults));
+      sessionStorage.setItem("scout-research-results", JSON.stringify(researchResults));
       sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-buyer-profile", JSON.stringify(buyerProfile));
+      sessionStorage.setItem("scout-include-research", JSON.stringify(includeResearch));
     } catch {}
-  }, [searchResults, hasSearched, currentQuery, buyerProfile]);
+  }, [searchResults, researchResults, hasSearched, currentQuery, buyerProfile, includeResearch]);
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
   const { data: institutionsData } = useQuery<InstitutionsResponse>({
@@ -248,12 +253,14 @@ export default function Scout() {
     mutationFn: async ({ query }: { query: string }) => {
       const profileModality = buyerProfile.modalities.length === 1 ? buyerProfile.modalities[0] : undefined;
       const profileStage = buyerProfile.preferred_stages.length === 1 ? buyerProfile.preferred_stages[0] : undefined;
+      const profileIndication = buyerProfile.indication_keywords.length === 1 ? buyerProfile.indication_keywords[0] : undefined;
       const res = await apiRequest("POST", "/api/scout/search", {
         query,
         minSimilarity: 0.40,
         limit: 50,
         ...(profileModality ? { modality: profileModality } : {}),
         ...(profileStage ? { stage: profileStage } : {}),
+        ...(profileIndication ? { indication: profileIndication } : {}),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -276,6 +283,28 @@ export default function Scout() {
     },
     onError: (err: any) => {
       toast({ title: "Search failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const researchMutation = useMutation({
+    mutationFn: async ({ query }: { query: string }) => {
+      const res = await apiRequest("POST", "/api/search", {
+        query,
+        sources: ["pubmed", "biorxiv", "clinicaltrials", "patents"],
+        maxPerSource: 5,
+        buyerProfile,
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Research search failed");
+      }
+      return res.json() as Promise<SearchResponse>;
+    },
+    onSuccess: (data) => {
+      setResearchResults(data.assets ?? []);
+    },
+    onError: () => {
+      setResearchResults([]);
     },
   });
 
@@ -321,7 +350,11 @@ export default function Scout() {
   const handleSearch = (query: string) => {
     setCurrentQuery(query);
     setInputQuery(query);
+    setResearchResults([]);
     searchMutation.mutate({ query });
+    if (includeResearch) {
+      researchMutation.mutate({ query });
+    }
   };
 
   const handleGenerateReport = () => {
@@ -379,7 +412,7 @@ export default function Scout() {
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, dateFilter, sortMode, minScore]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
-  const isAnyPending = searchMutation.isPending || reportMutation.isPending;
+  const isAnyPending = searchMutation.isPending || researchMutation.isPending || reportMutation.isPending;
 
   const activeFilterCount = [
     stageFilter !== "all",
@@ -450,7 +483,7 @@ export default function Scout() {
               </Button>
             </div>
 
-            <div className="max-w-3xl mx-auto flex items-center justify-end">
+            <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -465,7 +498,7 @@ export default function Scout() {
                   <TooltipContent side="bottom" className="max-w-[300px] p-3">
                     <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      {COVERED_INSTITUTIONS.map((inst) => (
+                      {COVERED_INSTITUTIONS.slice(0, 20).map((inst) => (
                         <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
                       ))}
                     </div>
@@ -473,6 +506,28 @@ export default function Scout() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
+
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !includeResearch;
+                  setIncludeResearch(next);
+                  if (next && currentQuery) {
+                    researchMutation.mutate({ query: currentQuery });
+                  } else if (!next) {
+                    setResearchResults([]);
+                  }
+                }}
+                className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1 rounded-full border transition-all duration-150 ${
+                  includeResearch
+                    ? "bg-primary/10 text-primary border-primary/30"
+                    : "text-muted-foreground border-border hover:text-foreground hover:border-muted-foreground/50"
+                }`}
+                data-testid="toggle-include-research"
+              >
+                <span className={`inline-block w-2 h-2 rounded-full ${includeResearch ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                Include research sources
+              </button>
             </div>
 
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
@@ -526,7 +581,7 @@ export default function Scout() {
             </div>
           )}
 
-          <div className="flex-1 px-4 sm:px-6 pb-10 space-y-4">
+          <div className="flex-1 px-4 sm:px-6 pb-10 space-y-6">
             {!searchMutation.isPending && (
               <SearchResults
                 assets={filteredResults}
@@ -536,6 +591,44 @@ export default function Scout() {
                 savedAssetIds={savedAssetIds}
                 onUnsave={handleUnsave}
               />
+            )}
+
+            {includeResearch && hasSearched && !searchMutation.isPending && (
+              <div className="space-y-3" data-testid="research-sources-section">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-border" />
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-widest px-2">
+                    Research Sources
+                  </span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                {researchMutation.isPending ? (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-6 justify-center">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    <span>Scanning research databases...</span>
+                  </div>
+                ) : researchResults.length > 0 ? (
+                  <>
+                    <p className="text-xs text-muted-foreground">
+                      <span className="font-medium text-foreground">{researchResults.length}</span> supplementary research signals
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {researchResults.map((asset) => (
+                        <AssetCard
+                          key={asset.id + "-research"}
+                          asset={asset}
+                          isSaved={savedAssetIds.has(asset.id)}
+                          onUnsave={handleUnsave}
+                        />
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    No supplementary research signals found.
+                  </p>
+                )}
+              </div>
             )}
           </div>
         </main>

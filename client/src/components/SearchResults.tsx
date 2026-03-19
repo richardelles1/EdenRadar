@@ -98,11 +98,11 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
             No TTO assets found matching "{query}"
           </h3>
           <p className="text-muted-foreground text-sm max-w-xs">
-            Try broader terms, a different indication, or browse by institution in the panel on the right.
+            Try broader terms or a different indication. Enable "Include research sources" above for wider coverage.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 mt-1">
-          {["oncology", "gene therapy", "CRISPR", "immunotherapy"].map((sug) => (
+          {["oncology", "gene therapy", "immunotherapy"].map((sug) => (
             <span key={sug} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
               Try: {sug}
             </span>
