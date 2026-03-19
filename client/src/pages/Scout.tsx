@@ -508,6 +508,7 @@ export default function Scout() {
     modalityFilter !== "all",
     institutionFilter !== "all",
     sortMode !== "score",
+    minScore !== 0,
   ].filter(Boolean).length;
 
   return (
