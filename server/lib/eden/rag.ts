@@ -392,38 +392,56 @@ export function isAggregationQuery(query: string): boolean {
 }
 
 type AggResult = Record<string, unknown>[];
+type ExtraSQL = ReturnType<typeof sql>;
 
-async function runCountByInstitution(area?: string): Promise<AggResult> {
+// Build a SQL AND-fragment from session filters (does NOT include `relevant = true`).
+// Returns undefined when no filters are active (no extra WHERE clause needed).
+function buildExtraSQL(filters: QueryFilters, geoRx?: string): ExtraSQL | undefined {
+  const parts: ExtraSQL[] = [];
+  if (geoRx) parts.push(sql`institution ~* ${geoRx}`);
+  if (filters.modality) parts.push(sql`modality ILIKE ${`%${filters.modality}%`}`);
+  if (filters.stage) parts.push(sql`development_stage ILIKE ${`%${filters.stage}%`}`);
+  if (filters.indication) parts.push(sql`indication ILIKE ${`%${filters.indication}%`}`);
+  if (filters.institution) parts.push(sql`institution ILIKE ${`%${filters.institution}%`}`);
+  if (!parts.length) return undefined;
+  return parts.reduce((acc, cond) => sql`${acc} AND ${cond}`);
+}
+
+async function runCountByInstitution(area?: string, extra?: ExtraSQL): Promise<AggResult> {
+  const baseWhere = area
+    ? sql`${ingestedAssets.relevant} = true AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"} OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
+    : sql`${ingestedAssets.relevant} = true`;
+  const finalWhere = extra ? sql`${baseWhere} AND ${extra}` : baseWhere;
   const rows = await db
     .select({ institution: ingestedAssets.institution, count: sql<number>`count(*)::int` })
     .from(ingestedAssets)
-    .where(
-      area
-        ? sql`${ingestedAssets.relevant} = true AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"} OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
-        : sql`${ingestedAssets.relevant} = true`
-    )
+    .where(finalWhere)
     .groupBy(ingestedAssets.institution)
     .orderBy(sql`count(*) DESC`)
     .limit(15);
   return rows as AggResult;
 }
 
-async function runCountByModality(): Promise<AggResult> {
+async function runCountByModality(extra?: ExtraSQL): Promise<AggResult> {
+  const baseWhere = sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.modality} != 'unknown'`;
+  const finalWhere = extra ? sql`${baseWhere} AND ${extra}` : baseWhere;
   const rows = await db
     .select({ modality: ingestedAssets.modality, count: sql<number>`count(*)::int` })
     .from(ingestedAssets)
-    .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.modality} != 'unknown'`)
+    .where(finalWhere)
     .groupBy(ingestedAssets.modality)
     .orderBy(sql`count(*) DESC`)
     .limit(15);
   return rows as AggResult;
 }
 
-async function runCountByStage(): Promise<AggResult> {
+async function runCountByStage(extra?: ExtraSQL): Promise<AggResult> {
+  const baseWhere = sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.developmentStage} != 'unknown'`;
+  const finalWhere = extra ? sql`${baseWhere} AND ${extra}` : baseWhere;
   const rows = await db
     .select({ stage: ingestedAssets.developmentStage, count: sql<number>`count(*)::int` })
     .from(ingestedAssets)
-    .where(sql`${ingestedAssets.relevant} = true AND ${ingestedAssets.developmentStage} != 'unknown'`)
+    .where(finalWhere)
     .groupBy(ingestedAssets.developmentStage)
     .orderBy(sql`count(*) DESC`)
     .limit(12);
@@ -432,20 +450,22 @@ async function runCountByStage(): Promise<AggResult> {
 
 async function runCountForInstitution(
   institution: string,
-  area?: string
+  area?: string,
+  extra?: ExtraSQL
 ): Promise<{ name: string; count: number } | null> {
   const instPattern = "%" + institution.toLowerCase() + "%";
+  const baseWhere =
+    area && area.length > 2
+      ? sql`${ingestedAssets.relevant} = true
+          AND lower(${ingestedAssets.institution}) LIKE ${instPattern}
+          AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"}
+            OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
+      : sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${instPattern}`;
+  const finalWhere = extra ? sql`${baseWhere} AND ${extra}` : baseWhere;
   const rows = await db
     .select({ institution: ingestedAssets.institution, count: sql<number>`count(*)::int` })
     .from(ingestedAssets)
-    .where(
-      area && area.length > 2
-        ? sql`${ingestedAssets.relevant} = true
-            AND lower(${ingestedAssets.institution}) LIKE ${instPattern}
-            AND (lower(${ingestedAssets.indication}) LIKE ${"%" + area.toLowerCase() + "%"}
-              OR lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"})`
-        : sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${instPattern}`
-    )
+    .where(finalWhere)
     .groupBy(ingestedAssets.institution)
     .orderBy(sql`count(*) DESC`)
     .limit(1);
@@ -453,7 +473,9 @@ async function runCountForInstitution(
   return { name: String(rows[0].institution), count: rows[0].count as number };
 }
 
-async function runNewestByInstitution(institution: string): Promise<AggResult> {
+async function runNewestByInstitution(institution: string, extra?: ExtraSQL): Promise<AggResult> {
+  const baseWhere = sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${"%" + institution.toLowerCase() + "%"}`;
+  const finalWhere = extra ? sql`${baseWhere} AND ${extra}` : baseWhere;
   const rows = await db
     .select({
       assetName: ingestedAssets.assetName,
@@ -463,48 +485,57 @@ async function runNewestByInstitution(institution: string): Promise<AggResult> {
       firstSeenAt: ingestedAssets.firstSeenAt,
     })
     .from(ingestedAssets)
-    .where(sql`${ingestedAssets.relevant} = true AND lower(${ingestedAssets.institution}) LIKE ${"%" + institution.toLowerCase() + "%"}`)
+    .where(finalWhere)
     .orderBy(desc(ingestedAssets.firstSeenAt))
     .limit(8);
   return rows as AggResult;
 }
 
-async function resolveAggregationQuery(query: string): Promise<string | null> {
+// resolveAggregationQuery accepts parsed session filters + geoRx so ALL SQL
+// branches (stage breakdown, modality breakdown, institution counts, etc.) are
+// constrained by accumulated session context — not global across the full portfolio.
+async function resolveAggregationQuery(
+  query: string,
+  filters: QueryFilters = {},
+  geoRx?: string
+): Promise<string | null> {
   const lower = query.toLowerCase();
+  const extra = buildExtraSQL(filters, geoRx);
+  const focusLabel = extra ? " (filtered by active session focus)" : "";
 
   if (/stage|phases?\s+break/i.test(lower) && !/which|who|what assets/i.test(lower)) {
-    const rows = await runCountByStage();
+    const rows = await runCountByStage(extra);
     if (!rows.length) return null;
     const lines = rows.map((r) => `  • ${r["stage"]}: ${r["count"]} assets`).join("\n");
-    return `**Development stage breakdown** across all relevant assets:\n${lines}`;
+    return `**Development stage breakdown**${focusLabel}:\n${lines}`;
   }
 
   // Only trigger modality breakdown for EXPLICIT breakdown/split requests.
   // "how many gene therapy assets" is intentionally excluded here — it routes to
   // filteredCount() via parseQueryFilters() modality detection in the chat route.
   if (/modali|small molecule|antibod|gene therapy|cell therapy/i.test(lower) && /breakdown|split by|distribution of/i.test(lower)) {
-    const rows = await runCountByModality();
+    const rows = await runCountByModality(extra);
     if (!rows.length) return null;
     const lines = rows.map((r) => `  • ${r["modality"]}: ${r["count"]} assets`).join("\n");
-    return `**Modality breakdown** across the indexed portfolio:\n${lines}`;
+    return `**Modality breakdown**${focusLabel}:\n${lines}`;
   }
 
   const instMatch = lower.match(/newest|latest|recent.*(?:from|at|out of)\s+([a-z\s]+?)(?:\s+tto|\s+university|\s+institute|\s+college|$)/i);
   if (instMatch?.[1]) {
     const inst = instMatch[1].trim();
-    const rows = await runNewestByInstitution(inst);
+    const rows = await runNewestByInstitution(inst, extra);
     if (!rows.length) return null;
     const lines = rows.map((r) => `  • ${r["assetName"]} (${r["modality"]}, ${r["developmentStage"]}, ${r["indication"]})`).join("\n");
-    return `**Most recent assets from ${inst.replace(/\b\w/g, (c) => c.toUpperCase())}** in the database:\n${lines}`;
+    return `**Most recent assets from ${inst.replace(/\b\w/g, (c) => c.toUpperCase())}**${focusLabel}:\n${lines}`;
   }
 
   const areaMatch = lower.match(/(?:top\s+institutions?|who(?:'s|\s+is|\s+are)?\s+(?:most active|leading|doing the most(?:\s+work)?)|which institutions?)\s+(?:in|for|working on)\s+(.+?)(?:\?|$)/i);
   if (areaMatch?.[1]) {
     const area = areaMatch[1].trim().replace(/\?$/, "");
-    const rows = await runCountByInstitution(area);
+    const rows = await runCountByInstitution(area, extra);
     if (!rows.length) return null;
     const lines = rows.slice(0, 10).map((r) => `  • ${r["institution"]}: ${r["count"]} assets`).join("\n");
-    return `**Top institutions** in ${area}:\n${lines}`;
+    return `**Top institutions in ${area}**${focusLabel}:\n${lines}`;
   }
 
   const instCountRx = /how many\s+([\w\s]+?)\s*(?:assets?|technologies?|programs?)?\s*(?:does|from|at|by)\s+([\w\s]+?)(?:\s+(?:tto|university|institute|college|tech transfer))?(?:\s+have|\?|$)/i;
@@ -513,10 +544,10 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
     const areaRaw = icm[1].trim().replace(/^(?:the|all|total)\s+/i, "");
     const instHint = icm[2].trim();
     const isGeneric = /^(?:assets?|technologies?|programs?|compounds?|the)$/i.test(areaRaw) || areaRaw.length < 2;
-    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw);
+    const result = await runCountForInstitution(instHint, isGeneric ? undefined : areaRaw, extra);
     if (result) {
       const label = isGeneric ? "" : `${areaRaw} `;
-      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio.`;
+      return `**${result.name}** has **${result.count} ${label}assets** in the indexed portfolio${focusLabel ? " " + focusLabel.trim() : ""}.`;
     }
   }
 
@@ -526,23 +557,27 @@ async function resolveAggregationQuery(query: string): Promise<string | null> {
   // ── Institution-count intent: "how many institutions", "how many US universities" ──
   if (/how many\s+(?:\w+\s+)?(?:institutions?|universities|ttlos?|tech transfer offices?|schools?)/i.test(lower)) {
     const geoHint = detectGeographyFromText(lower);
-    const geoRxStr = geoHint ? GEO_INSTITUTION_REGEX[geoHint] : undefined;
+    const geoRxStr = geoHint ? GEO_INSTITUTION_REGEX[geoHint] : geoRx;
+    // Build full WHERE with geo + all session filters applied
+    const condParts: ExtraSQL[] = [sql`relevant = true`];
+    if (geoRxStr) condParts.push(sql`institution ~* ${geoRxStr}`);
+    if (filters.modality) condParts.push(sql`modality ILIKE ${`%${filters.modality}%`}`);
+    if (filters.stage) condParts.push(sql`development_stage ILIKE ${`%${filters.stage}%`}`);
+    if (filters.indication) condParts.push(sql`indication ILIKE ${`%${filters.indication}%`}`);
+    const whereSQL = condParts.reduce((acc, cond) => sql`${acc} AND ${cond}`);
     const countResult = await db.execute(
-      geoRxStr
-        ? sql`SELECT COUNT(DISTINCT institution)::int AS count FROM ingested_assets WHERE relevant = true AND institution ~* ${geoRxStr}`
-        : sql`SELECT COUNT(DISTINCT institution)::int AS count FROM ingested_assets WHERE relevant = true`
+      sql`SELECT COUNT(DISTINCT institution)::int AS count FROM ingested_assets WHERE ${whereSQL}`
     );
     const count = Number((countResult.rows[0] as Record<string, unknown>)?.count ?? 0);
     if (!count) return null;
     const geoLabel = geoHint ? ` ${geoHint.toUpperCase()}` : "";
-    return `There are **${count} distinct${geoLabel} institutions** with relevant assets indexed in the portfolio.`;
+    const focusSuffix = extra ? " (filtered by active session focus)" : "";
+    return `There are **${count} distinct${geoLabel} institutions** with relevant assets indexed in the portfolio${focusSuffix}.`;
   }
 
   // Note: generic count phrases ("how many do you have", "what's the total", "give me a count")
-  // are intentionally NOT handled here. When session filters are active, the route uses
-  // filteredCount() to return accurate filtered counts. When no filters, RAG answers from
-  // portfolioStats context. resolveAggregationQuery only handles SPECIFIC SQL semantics.
-
+  // are intentionally NOT handled here — filteredCount() in the chat route handles them
+  // with full session filter application.
   return null;
 }
 

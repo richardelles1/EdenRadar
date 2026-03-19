@@ -1862,7 +1862,7 @@ export async function registerRoutes(
         // Generic count phrases ("how many do you have", "what's the total") and
         // modality scalar counts ("how many gene therapy assets") intentionally
         // return null here — they are handled by filteredCount in Step 2.
-        const resolvedResult = await resolveAggregationQuery(message.trim()).catch(() => null);
+        const resolvedResult = await resolveAggregationQuery(message.trim(), filters, geoRx).catch(() => null);
         if (resolvedResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
           let fullResponse = "";
