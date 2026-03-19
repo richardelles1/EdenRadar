@@ -11,7 +11,6 @@ import { Progress } from "@/components/ui/progress";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import type { ManualInstitution } from "@shared/schema";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
@@ -3376,39 +3375,31 @@ export default function Admin() {
 }
 
 type ParsedImportAsset = {
-  assetName: string; target: string; modality: string; indication: string;
-  developmentStage: string; summary: string; abstract: string;
-  patentStatus: string; licensingStatus: string; innovationClaim: string;
-  mechanismOfAction: string; categories: string[]; inventors: string[];
-  sourceUrl: string; technologyId: string; institution: string;
+  name: string;
+  description: string;
+  sourceUrl: string;
+  inventors: string[];
+  patentStatus: string;
+  technologyId: string;
+  contactEmail: string;
+  completenessScore: number;
+  grade: "pass" | "revisions" | "incomplete";
 };
-type ManualParseResult = {
-  parsed: ParsedImportAsset; completenessScore: number; grade: "pass" | "revisions" | "incomplete";
-};
-
-const MODALITY_OPTIONS = [
-  "small molecule","antibody","bispecific antibody","car-t","gene therapy","gene editing",
-  "mrna therapy","cell therapy","peptide","sirna","adc","protac","vaccine","nanoparticle",
-  "medical device","diagnostic","platform technology","research tool","unknown",
-];
-const STAGE_OPTIONS = ["discovery","preclinical","phase 1","phase 2","phase 3","approved","unknown"];
-const PATENT_OPTIONS = ["patented","patent pending","provisional","unknown"];
-const LICENSING_OPTIONS = ["available","exclusively licensed","non-exclusively licensed","optioned","startup formed","unknown"];
 
 function GradeBadge({ grade, score }: { grade: string; score: number }) {
   if (grade === "pass") return (
     <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200">
-      ✓ Pass ({score}/100)
+      Pass ({score})
     </Badge>
   );
   if (grade === "revisions") return (
     <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200">
-      ⚠ Needs Revisions ({score}/100)
+      Revisions ({score})
     </Badge>
   );
   return (
     <Badge className="bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 border-red-200">
-      ✗ Incomplete ({score}/100)
+      Incomplete ({score})
     </Badge>
   );
 }
@@ -3417,31 +3408,47 @@ function ManualImportTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Stage: "input" → "preview" → "done"
+  const [stage, setStage] = useState<"input" | "preview" | "done">("input");
   const [mode, setMode] = useState<"text" | "image">("text");
+
+  // Institution combobox state
+  const [instSearch, setInstSearch] = useState("");
+  const [instOpen, setInstOpen] = useState(false);
   const [selectedInst, setSelectedInst] = useState("");
   const [showCreateInst, setShowCreateInst] = useState(false);
   const [newInstName, setNewInstName] = useState("");
   const [newInstTtoUrl, setNewInstTtoUrl] = useState("");
-  const [pastedText, setPastedText] = useState("");
-  const [imageBase64s, setImageBase64s] = useState<string[]>([]);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
-  const [parseResult, setParseResult] = useState<ManualParseResult | null>(null);
-  const [editedAsset, setEditedAsset] = useState<ParsedImportAsset | null>(null);
-  const [committed, setCommitted] = useState(false);
 
-  const { data: instData } = useQuery<{ institutions: ManualInstitution[] }>({
-    queryKey: ["/api/admin/manual-institutions", pw],
+  // Input content
+  const [pastedText, setPastedText] = useState("");
+  const [imageFiles, setImageFiles] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+
+  // Preview stage
+  const [parsedAssets, setParsedAssets] = useState<ParsedImportAsset[]>([]);
+  const [checked, setChecked] = useState<boolean[]>([]);
+  const [parsedInstitution, setParsedInstitution] = useState("");
+
+  // Done stage
+  const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  const { data: instData } = useQuery<{ institutions: string[]; manual: { name: string; ttoUrl: string }[] }>({
+    queryKey: ["/api/admin/institutions", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/manual-institutions", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/institutions", { headers: { "x-admin-password": pw } });
       if (!res.ok) throw new Error("Failed to load institutions");
       return res.json();
     },
   });
 
+  const allInstitutions: string[] = instData?.institutions ?? [];
+  const filteredInsts = allInstitutions.filter((n) => n.toLowerCase().includes(instSearch.toLowerCase())).slice(0, 20);
+
   const createInstMutation = useMutation({
     mutationFn: async () => {
       if (!newInstName.trim()) throw new Error("Institution name is required");
-      const res = await fetch("/api/admin/manual-institutions", {
+      const res = await fetch("/api/admin/institutions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
         body: JSON.stringify({ name: newInstName.trim(), ttoUrl: newInstTtoUrl.trim() || undefined }),
@@ -3451,8 +3458,9 @@ function ManualImportTab({ pw }: { pw: string }) {
       return d;
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/manual-institutions", pw] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/institutions", pw] });
       setSelectedInst(data.institution.name);
+      setInstSearch(data.institution.name);
       setShowCreateInst(false);
       setNewInstName("");
       setNewInstTtoUrl("");
@@ -3464,400 +3472,353 @@ function ManualImportTab({ pw }: { pw: string }) {
   const parseMutation = useMutation({
     mutationFn: async () => {
       if (!selectedInst) throw new Error("Select or create an institution first");
-      const body: Record<string, unknown> = { institution: selectedInst };
+      if (mode === "text" && !pastedText.trim()) throw new Error("Paste some text first");
+      if (mode === "image" && imageFiles.length === 0) throw new Error("Upload at least one screenshot");
+
+      const formData = new FormData();
+      formData.append("institution", selectedInst);
       if (mode === "text") {
-        if (!pastedText.trim()) throw new Error("Paste some text first");
-        body.pastedText = pastedText;
+        formData.append("rawText", pastedText);
       } else {
-        if (imageBase64s.length === 0) throw new Error("Upload at least one screenshot");
-        body.imageBase64s = imageBase64s;
+        for (const file of imageFiles) {
+          formData.append("images", file);
+        }
       }
+
       const res = await fetch("/api/admin/manual-import/parse", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify(body),
+        headers: { "x-admin-password": pw },
+        body: formData,
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Parse failed");
-      return d as ManualParseResult;
+      return d as { assets: ParsedImportAsset[]; institution: string };
     },
     onSuccess: (data) => {
-      setParseResult(data);
-      setEditedAsset({ ...data.parsed });
-      setCommitted(false);
+      setParsedAssets(data.assets);
+      setChecked(data.assets.map(() => true));
+      setParsedInstitution(data.institution);
+      setStage("preview");
     },
     onError: (err: Error) => toast({ title: "Parse failed", description: err.message, variant: "destructive" }),
   });
 
   const commitMutation = useMutation({
     mutationFn: async () => {
-      if (!editedAsset) throw new Error("Nothing to commit");
+      const selected = parsedAssets.filter((_, i) => checked[i]);
+      if (selected.length === 0) throw new Error("Select at least one asset to import");
       const res = await fetch("/api/admin/manual-import/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify(editedAsset),
+        body: JSON.stringify({
+          institution: parsedInstitution,
+          assets: selected.map(({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail }) =>
+            ({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail })
+          ),
+        }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Commit failed");
-      return d;
+      return d as { imported: number; skipped: number };
     },
     onSuccess: (data) => {
-      setCommitted(true);
-      toast({ title: "Added to Indexing Queue", description: data.message });
+      setImportResult(data);
+      setStage("done");
       queryClient.invalidateQueries({ queryKey: ["/api/ingest/new-arrivals"] });
+      toast({ title: `Imported ${data.imported} assets`, description: data.skipped > 0 ? `${data.skipped} skipped (duplicates)` : undefined });
     },
-    onError: (err: Error) => toast({ title: "Commit failed", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => toast({ title: "Import failed", description: err.message, variant: "destructive" }),
   });
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []).slice(0, 8);
-    const previews: string[] = [];
-    const base64s: string[] = [];
-    for (const file of files) {
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-      });
-      previews.push(dataUrl);
-      base64s.push(dataUrl);
-    }
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []).slice(0, 10);
+    setImageFiles(files);
+    const previews = files.map((f) => URL.createObjectURL(f));
     setImagePreviews(previews);
-    setImageBase64s(base64s);
   };
 
-  const updateField = (field: keyof ParsedImportAsset, value: string | string[]) => {
-    if (!editedAsset) return;
-    setEditedAsset({ ...editedAsset, [field]: value });
-  };
+  const selectedCount = checked.filter(Boolean).length;
+  const passCnt = parsedAssets.filter((a) => a.grade === "pass").length;
+  const revCnt = parsedAssets.filter((a) => a.grade === "revisions").length;
+  const incCnt = parsedAssets.filter((a) => a.grade === "incomplete").length;
 
-  const manualInsts = instData?.institutions ?? [];
-  const scoreColor = (parseResult?.completenessScore ?? 0) >= 75 ? "bg-emerald-500" : (parseResult?.completenessScore ?? 0) >= 50 ? "bg-amber-500" : "bg-red-500";
+  const resetToInput = () => {
+    setStage("input");
+    setParsedAssets([]);
+    setChecked([]);
+    setImportResult(null);
+    setPastedText("");
+    setImageFiles([]);
+    setImagePreviews([]);
+  };
 
   return (
     <div className="space-y-6 max-w-4xl" data-testid="manual-import-tab">
 
-      {/* ── Institution Selector ──────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-muted-foreground" />
-          <h3 className="font-semibold text-foreground">Institution</h3>
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
-            <Select value={selectedInst} onValueChange={(v) => { setSelectedInst(v); setShowCreateInst(false); }}>
-              <SelectTrigger data-testid="select-institution">
-                <SelectValue placeholder="Select institution…" />
-              </SelectTrigger>
-              <SelectContent>
-                {manualInsts.map((inst) => (
-                  <SelectItem key={inst.id} value={inst.name} data-testid={`inst-option-${inst.id}`}>
-                    {inst.name}
-                  </SelectItem>
-                ))}
-                {manualInsts.length === 0 && (
-                  <SelectItem value="__none__" disabled>No saved institutions yet</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => { setShowCreateInst((p) => !p); setSelectedInst(""); }}
-            className="gap-1.5 shrink-0"
-            data-testid="button-create-institution"
-          >
-            <Plus className="h-4 w-4" />
-            New institution
-          </Button>
-        </div>
-
-        {showCreateInst && (
-          <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3" data-testid="create-institution-form">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Create New Institution</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <Input
-                placeholder="Institution name *"
-                value={newInstName}
-                onChange={(e) => setNewInstName(e.target.value)}
-                data-testid="input-new-inst-name"
-              />
-              <Input
-                placeholder="TTO URL (optional)"
-                value={newInstTtoUrl}
-                onChange={(e) => setNewInstTtoUrl(e.target.value)}
-                data-testid="input-new-inst-url"
-              />
+      {/* ── Stage 1: Institution + Input ────────────────────── */}
+      {stage === "input" && (
+        <>
+          {/* Institution searchable combobox */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-muted-foreground" />
+              <h3 className="font-semibold text-foreground">Institution</h3>
             </div>
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                onClick={() => createInstMutation.mutate()}
-                disabled={createInstMutation.isPending || !newInstName.trim()}
-                data-testid="button-save-institution"
-              >
-                {createInstMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
-                Save & select
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setShowCreateInst(false)} data-testid="button-cancel-create-inst">
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
 
-        {selectedInst && (
-          <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid="selected-institution-label">
-            <CheckCircle2 className="h-3.5 w-3.5" />
-            Institution: <strong>{selectedInst}</strong>
-          </p>
-        )}
-      </div>
-
-      {/* ── Input Mode ───────────────────────────────────────── */}
-      <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Pencil className="h-5 w-5 text-muted-foreground" />
-          <h3 className="font-semibold text-foreground">Asset Content</h3>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant={mode === "text" ? "default" : "outline"}
-            onClick={() => setMode("text")}
-            className="gap-1.5"
-            data-testid="button-mode-text"
-          >
-            <FileText className="h-3.5 w-3.5" /> Paste text
-          </Button>
-          <Button
-            size="sm"
-            variant={mode === "image" ? "default" : "outline"}
-            onClick={() => setMode("image")}
-            className="gap-1.5"
-            data-testid="button-mode-image"
-          >
-            <ImageIcon className="h-3.5 w-3.5" /> Upload screenshot
-          </Button>
-        </div>
-
-        {mode === "text" ? (
-          <Textarea
-            placeholder="Paste the full TTO listing text here — title, description, inventors, patent info, etc."
-            value={pastedText}
-            onChange={(e) => setPastedText(e.target.value)}
-            className="min-h-[180px] font-mono text-xs"
-            data-testid="textarea-paste-text"
-          />
-        ) : (
-          <div className="space-y-3">
-            <div
-              className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              data-testid="dropzone-image-upload"
-            >
-              <Upload className="h-8 w-8 text-muted-foreground/50" />
-              <div className="text-center">
-                <p className="text-sm font-medium text-foreground">Click to upload screenshots</p>
-                <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP — up to 8 images</p>
-              </div>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              multiple
-              className="hidden"
-              onChange={handleFileChange}
-              data-testid="input-file-upload"
-            />
-            {imagePreviews.length > 0 && (
-              <div className="flex flex-wrap gap-2" data-testid="image-preview-grid">
-                {imagePreviews.map((src, i) => (
-                  <img
-                    key={i}
-                    src={src}
-                    alt={`Screenshot ${i + 1}`}
-                    className="h-24 w-auto rounded border border-border object-cover"
-                    data-testid={`image-preview-${i}`}
+            <Popover open={instOpen} onOpenChange={setInstOpen}>
+              <PopoverTrigger asChild>
+                <div className="relative w-full cursor-text">
+                  <Input
+                    placeholder="Search institution…"
+                    value={instSearch}
+                    onChange={(e) => { setInstSearch(e.target.value); setInstOpen(true); setSelectedInst(""); }}
+                    onFocus={() => setInstOpen(true)}
+                    className="pr-8"
+                    data-testid="input-institution-search"
                   />
+                  <ChevronDown className="absolute right-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                </div>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-1 max-h-64 overflow-y-auto" align="start" data-testid="institution-dropdown">
+                {filteredInsts.map((name) => (
+                  <button
+                    key={name}
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted transition-colors"
+                    onMouseDown={(e) => { e.preventDefault(); setSelectedInst(name); setInstSearch(name); setInstOpen(false); setShowCreateInst(false); }}
+                    data-testid={`inst-option-${name}`}
+                  >
+                    {name}
+                  </button>
                 ))}
-                <p className="w-full text-xs text-muted-foreground">{imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""} ready</p>
+                {instSearch.trim() && !allInstitutions.some((n) => n.toLowerCase() === instSearch.toLowerCase()) && (
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 text-sm rounded hover:bg-muted text-primary font-medium transition-colors flex items-center gap-1.5"
+                    onMouseDown={(e) => { e.preventDefault(); setNewInstName(instSearch.trim()); setShowCreateInst(true); setInstOpen(false); }}
+                    data-testid="button-create-institution"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Create "{instSearch.trim()}"…
+                  </button>
+                )}
+                {filteredInsts.length === 0 && !instSearch.trim() && (
+                  <p className="px-3 py-2 text-sm text-muted-foreground">Start typing to search…</p>
+                )}
+              </PopoverContent>
+            </Popover>
+
+            {selectedInst && (
+              <p className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1" data-testid="selected-institution-label">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                Selected: <strong>{selectedInst}</strong>
+              </p>
+            )}
+
+            {showCreateInst && (
+              <div className="rounded-lg border border-dashed border-border bg-muted/30 p-4 space-y-3" data-testid="create-institution-form">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Register New Institution</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Input
+                    placeholder="Institution name *"
+                    value={newInstName}
+                    onChange={(e) => setNewInstName(e.target.value)}
+                    data-testid="input-new-inst-name"
+                  />
+                  <Input
+                    placeholder="TTO website URL (optional)"
+                    value={newInstTtoUrl}
+                    onChange={(e) => setNewInstTtoUrl(e.target.value)}
+                    data-testid="input-new-inst-url"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => createInstMutation.mutate()}
+                    disabled={createInstMutation.isPending || !newInstName.trim()}
+                    data-testid="button-save-institution"
+                  >
+                    {createInstMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />}
+                    Save & select
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setShowCreateInst(false)} data-testid="button-cancel-create-inst">
+                    Cancel
+                  </Button>
+                </div>
               </div>
             )}
           </div>
-        )}
 
-        <Button
-          onClick={() => parseMutation.mutate()}
-          disabled={parseMutation.isPending || !selectedInst}
-          className="gap-2"
-          data-testid="button-parse"
-        >
-          {parseMutation.isPending ? (
-            <><Loader2 className="h-4 w-4 animate-spin" /> Parsing with AI…</>
-          ) : (
-            <><Zap className="h-4 w-4" /> Parse with AI</>
-          )}
-        </Button>
-      </div>
-
-      {/* ── Parse Result Preview ─────────────────────────────── */}
-      {parseResult && editedAsset && (
-        <div className="rounded-xl border border-border bg-card p-5 space-y-5" data-testid="parse-result-panel">
-          <div className="flex items-center justify-between">
+          {/* Input mode */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-              <h3 className="font-semibold text-foreground">Parsed Preview</h3>
+              <Pencil className="h-5 w-5 text-muted-foreground" />
+              <h3 className="font-semibold text-foreground">TTO Content</h3>
             </div>
-            <GradeBadge grade={parseResult.grade} score={parseResult.completenessScore} />
+            <div className="flex gap-2">
+              <Button size="sm" variant={mode === "text" ? "default" : "outline"} onClick={() => setMode("text")} className="gap-1.5" data-testid="button-mode-text">
+                <FileText className="h-3.5 w-3.5" /> Paste text
+              </Button>
+              <Button size="sm" variant={mode === "image" ? "default" : "outline"} onClick={() => setMode("image")} className="gap-1.5" data-testid="button-mode-image">
+                <ImageIcon className="h-3.5 w-3.5" /> Screenshots
+              </Button>
+            </div>
+
+            {mode === "text" ? (
+              <Textarea
+                placeholder="Paste the TTO listing text — titles, descriptions, inventors, patent info…"
+                value={pastedText}
+                onChange={(e) => setPastedText(e.target.value)}
+                className="min-h-[180px] font-mono text-xs"
+                data-testid="textarea-paste-text"
+              />
+            ) : (
+              <div className="space-y-3">
+                <div
+                  className="flex flex-col items-center justify-center gap-3 border-2 border-dashed border-border rounded-lg p-8 cursor-pointer hover:bg-muted/20 transition-colors"
+                  onClick={() => fileInputRef.current?.click()}
+                  data-testid="dropzone-image-upload"
+                >
+                  <Upload className="h-8 w-8 text-muted-foreground/50" />
+                  <div className="text-center">
+                    <p className="text-sm font-medium text-foreground">Click to upload screenshots</p>
+                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP — up to 10 images</p>
+                  </div>
+                </div>
+                <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} data-testid="input-file-upload" />
+                {imagePreviews.length > 0 && (
+                  <div className="flex flex-wrap gap-2" data-testid="image-preview-grid">
+                    {imagePreviews.map((src, i) => (
+                      <img key={i} src={src} alt={`Screenshot ${i + 1}`} className="h-24 w-auto rounded border border-border object-cover" data-testid={`image-preview-${i}`} />
+                    ))}
+                    <p className="w-full text-xs text-muted-foreground">{imagePreviews.length} image{imagePreviews.length !== 1 ? "s" : ""} ready</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Button onClick={() => parseMutation.mutate()} disabled={parseMutation.isPending || !selectedInst} className="gap-2" data-testid="button-parse">
+              {parseMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Parsing with AI…</> : <><Zap className="h-4 w-4" /> Parse with AI</>}
+            </Button>
+          </div>
+        </>
+      )}
+
+      {/* ── Stage 2: Preview table ─────────────────────────── */}
+      {stage === "preview" && (
+        <div className="space-y-4" data-testid="preview-stage">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-foreground">{parsedAssets.length} asset{parsedAssets.length !== 1 ? "s" : ""} extracted</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                <span className="text-emerald-600 dark:text-emerald-400">{passCnt} Pass</span>
+                {" · "}
+                <span className="text-amber-600 dark:text-amber-400">{revCnt} Revisions needed</span>
+                {" · "}
+                <span className="text-red-600 dark:text-red-400">{incCnt} Incomplete</span>
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={resetToInput} data-testid="button-back-to-input">
+              ← Back
+            </Button>
           </div>
 
-          {/* Completeness bar */}
-          <div className="space-y-1.5" data-testid="completeness-bar">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Completeness score</span>
-              <span>{parseResult.completenessScore}/100</span>
+          <div className="rounded-xl border border-border overflow-hidden" data-testid="preview-table">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b border-border">
+                <tr>
+                  <th className="w-8 px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={selectedCount === parsedAssets.length}
+                      onChange={(e) => setChecked(parsedAssets.map(() => e.target.checked))}
+                      data-testid="checkbox-select-all"
+                    />
+                  </th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Name</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground hidden md:table-cell">Description</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground hidden lg:table-cell">Inventors</th>
+                  <th className="px-3 py-2 text-left font-medium text-muted-foreground">Grade</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {parsedAssets.map((asset, i) => (
+                  <tr key={i} className={`transition-colors ${checked[i] ? "bg-card" : "bg-muted/20 opacity-60"}`} data-testid={`preview-row-${i}`}>
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="checkbox"
+                        checked={checked[i] ?? false}
+                        onChange={(e) => { const next = [...checked]; next[i] = e.target.checked; setChecked(next); }}
+                        data-testid={`checkbox-asset-${i}`}
+                      />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-foreground line-clamp-1">{asset.name}</p>
+                      {asset.sourceUrl && (
+                        <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline line-clamp-1" data-testid={`link-source-${i}`}>
+                          {asset.sourceUrl}
+                        </a>
+                      )}
+                      {asset.patentStatus && asset.patentStatus !== "unknown" && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{asset.patentStatus}</p>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 hidden md:table-cell max-w-xs">
+                      <p className="text-xs text-muted-foreground line-clamp-2">{asset.description || "—"}</p>
+                    </td>
+                    <td className="px-3 py-2.5 hidden lg:table-cell">
+                      <p className="text-xs text-muted-foreground">{asset.inventors.length > 0 ? asset.inventors.join(", ") : "—"}</p>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <GradeBadge grade={asset.grade} score={asset.completenessScore} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={() => commitMutation.mutate()}
+              disabled={commitMutation.isPending || selectedCount === 0}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+              data-testid="button-import"
+            >
+              {commitMutation.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Importing…</> : <><PackagePlus className="h-4 w-4" /> Import {selectedCount} selected</>}
+            </Button>
+            <p className="text-xs text-muted-foreground">{selectedCount} of {parsedAssets.length} selected</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Stage 3: Done summary ──────────────────────────── */}
+      {stage === "done" && importResult && (
+        <div className="space-y-4" data-testid="done-stage">
+          <div className="rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 p-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-6 w-6 text-emerald-500" />
+              <h3 className="font-semibold text-emerald-700 dark:text-emerald-400">Import complete</h3>
             </div>
-            <div className="h-2 rounded-full bg-muted overflow-hidden">
-              <div
-                className={`h-2 rounded-full transition-all ${scoreColor}`}
-                style={{ width: `${parseResult.completenessScore}%` }}
-              />
+            <div className="flex gap-6 text-sm">
+              <div data-testid="text-imported-count">
+                <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{importResult.imported}</p>
+                <p className="text-xs text-emerald-600 dark:text-emerald-400">Assets added to Indexing Queue</p>
+              </div>
+              {importResult.skipped > 0 && (
+                <div data-testid="text-skipped-count">
+                  <p className="text-2xl font-bold text-muted-foreground">{importResult.skipped}</p>
+                  <p className="text-xs text-muted-foreground">Skipped (duplicates)</p>
+                </div>
+              )}
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              {parseResult.grade === "pass" && "Ready to commit — all key fields populated."}
-              {parseResult.grade === "revisions" && "Consider filling in missing fields before committing."}
-              {parseResult.grade === "incomplete" && "Several key fields are missing — review before committing."}
+            <p className="text-xs text-emerald-600 dark:text-emerald-500">
+              AI classification is running in the background. Go to the Indexing Queue tab to push assets to Scout.
             </p>
           </div>
-
-          {/* Editable fields */}
-          <div className="space-y-3" data-testid="editable-fields">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Asset Name *</label>
-                <Input value={editedAsset.assetName} onChange={(e) => updateField("assetName", e.target.value)} data-testid="field-asset-name" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Target</label>
-                <Input value={editedAsset.target} onChange={(e) => updateField("target", e.target.value)} data-testid="field-target" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Modality</label>
-                <Select value={editedAsset.modality} onValueChange={(v) => updateField("modality", v)}>
-                  <SelectTrigger data-testid="field-modality">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MODALITY_OPTIONS.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Indication</label>
-                <Input value={editedAsset.indication} onChange={(e) => updateField("indication", e.target.value)} data-testid="field-indication" />
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Development Stage</label>
-                <Select value={editedAsset.developmentStage} onValueChange={(v) => updateField("developmentStage", v)}>
-                  <SelectTrigger data-testid="field-stage">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {STAGE_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Patent Status</label>
-                <Select value={editedAsset.patentStatus} onValueChange={(v) => updateField("patentStatus", v)}>
-                  <SelectTrigger data-testid="field-patent-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PATENT_OPTIONS.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Licensing Status</label>
-                <Select value={editedAsset.licensingStatus} onValueChange={(v) => updateField("licensingStatus", v)}>
-                  <SelectTrigger data-testid="field-licensing-status">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LICENSING_OPTIONS.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">Source URL</label>
-                <Input value={editedAsset.sourceUrl} onChange={(e) => updateField("sourceUrl", e.target.value)} placeholder="https://…" data-testid="field-source-url" />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Summary</label>
-              <Textarea value={editedAsset.summary} onChange={(e) => updateField("summary", e.target.value)} className="min-h-[80px] text-sm" data-testid="field-summary" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Innovation Claim</label>
-              <Input value={editedAsset.innovationClaim} onChange={(e) => updateField("innovationClaim", e.target.value)} data-testid="field-innovation-claim" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Mechanism of Action</label>
-              <Input value={editedAsset.mechanismOfAction} onChange={(e) => updateField("mechanismOfAction", e.target.value)} data-testid="field-moa" />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Categories (comma-separated)</label>
-              <Input
-                value={editedAsset.categories.join(", ")}
-                onChange={(e) => updateField("categories", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                placeholder="oncology, immunotherapy"
-                data-testid="field-categories"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Inventors (comma-separated)</label>
-              <Input
-                value={editedAsset.inventors.join(", ")}
-                onChange={(e) => updateField("inventors", e.target.value.split(",").map((s) => s.trim()).filter(Boolean))}
-                placeholder="Jane Smith, John Doe"
-                data-testid="field-inventors"
-              />
-            </div>
-          </div>
-
-          {/* Commit */}
-          {committed ? (
-            <div className="flex items-center gap-3 p-4 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="commit-success">
-              <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Asset added to Indexing Queue</p>
-                <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">Go to the Indexing Queue tab to push it to Scout.</p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-center gap-3 pt-2 border-t border-border">
-              <Button
-                onClick={() => commitMutation.mutate()}
-                disabled={commitMutation.isPending || !editedAsset.assetName.trim()}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                data-testid="button-commit"
-              >
-                {commitMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Committing…</>
-                ) : (
-                  <><PackagePlus className="h-4 w-4" /> Commit to Indexing Queue</>
-                )}
-              </Button>
-              <p className="text-xs text-muted-foreground">Asset will appear in the Indexing Queue as unindexed.</p>
-            </div>
-          )}
+          <Button variant="outline" onClick={resetToInput} data-testid="button-import-more">
+            Import more assets
+          </Button>
         </div>
       )}
     </div>

@@ -7,7 +7,9 @@ import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { makeFingerprint } from "./lib/ingestion";
+import { classifyBatch } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
+import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
@@ -4081,19 +4083,22 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // ── Manual Institution CRUD ──────────────────────────────────────────────
-  app.get("/api/admin/manual-institutions", async (req, res) => {
+  // ── Institutions — merged scraped + manual list ──────────────────────────
+  app.get("/api/admin/institutions", async (req, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
-      const rows = await storage.getManualInstitutions();
-      return res.json({ institutions: rows });
+      const manual = await storage.getManualInstitutions();
+      const scraperNames = ALL_SCRAPERS.map((s) => s.institution);
+      const manualNames = manual.map((m) => m.name);
+      const merged = Array.from(new Set([...scraperNames, ...manualNames])).sort((a, b) => a.localeCompare(b));
+      return res.json({ institutions: merged, manual: manual.map((m) => ({ name: m.name, ttoUrl: m.ttoUrl })) });
     } catch (err: any) {
       return res.status(500).json({ error: err.message });
     }
   });
 
-  app.post("/api/admin/manual-institutions", async (req, res) => {
+  app.post("/api/admin/institutions", async (req, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
@@ -4102,200 +4107,184 @@ If a field cannot be determined, use "N/A".`
       const row = await storage.createManualInstitution(parsed.data);
       return res.json({ institution: row });
     } catch (err: any) {
-      if (err.message?.includes("unique")) return res.status(409).json({ error: "Institution already exists" });
+      if (err.message?.includes("unique") || err.message?.includes("duplicate")) {
+        return res.status(409).json({ error: "Institution already exists" });
+      }
       return res.status(500).json({ error: err.message });
     }
   });
 
-  // ── Manual Import — Parse ────────────────────────────────────────────────
-  app.post("/api/admin/manual-import/parse", async (req, res) => {
+  // ── Manual Import — Parse (multipart form-data, returns asset array) ──────
+  const manualImportUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 10 } });
+
+  app.post("/api/admin/manual-import/parse", manualImportUpload.array("images", 10), async (req: any, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-    const schema = z.object({
-      institution: z.string().min(1),
-      pastedText: z.string().optional(),
-      imageBase64s: z.array(z.string()).max(8).optional(),
-    });
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const { institution, pastedText, imageBase64s } = parsed.data;
+    const institution: string = (req.body?.institution ?? "").trim();
+    if (!institution) return res.status(400).json({ error: "institution is required" });
 
-    if (!pastedText && (!imageBase64s || imageBase64s.length === 0)) {
-      return res.status(400).json({ error: "Provide either pastedText or at least one image" });
+    const rawText: string = (req.body?.rawText ?? "").trim();
+    const files: Express.Multer.File[] = Array.isArray(req.files) ? req.files : [];
+
+    if (!rawText && files.length === 0) {
+      return res.status(400).json({ error: "Provide rawText or at least one image" });
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const PARSE_PROMPT = `You are a biotech technology transfer analyst. Extract structured asset data from the provided TTO (Technology Transfer Office) content.
 
-Return ONLY valid JSON with these exact fields:
-- assetName: the technology/drug/platform name as listed (string)
-- target: molecular or biological target — e.g. "EGFR", "PD-1" ("unknown" if not stated)
-- modality: one of: "small molecule", "antibody", "bispecific antibody", "car-t", "gene therapy", "gene editing", "mrna therapy", "cell therapy", "peptide", "sirna", "adc", "protac", "vaccine", "nanoparticle", "medical device", "diagnostic", "platform technology", "research tool", "unknown"
-- indication: disease or condition being targeted ("unknown" if not stated)
-- developmentStage: one of: "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"
-- summary: 2-3 sentence summary of the technology and its commercial significance
-- abstract: full description text from the listing if visible (otherwise "")
-- patentStatus: one of: "patented", "patent pending", "provisional", "unknown"
-- licensingStatus: one of: "available", "exclusively licensed", "non-exclusively licensed", "optioned", "startup formed", "unknown"
-- innovationClaim: 1 sentence on the key innovation ("unknown" if not clear)
-- mechanismOfAction: brief mechanism description ("unknown" if not stated)
-- categories: array of 2-5 therapeutic area tags (e.g. ["oncology", "immunotherapy"])
-- inventors: array of inventor/author names if visible (empty array if not stated)
-- sourceUrl: URL of this listing if visible (empty string if not)
-- technologyId: technology ID or case number if visible (empty string if not)
+    const PARSE_PROMPT = `You are a biotech technology transfer analyst. Extract every distinct licensable asset from the provided TTO (Technology Transfer Office) content for institution: ${institution}.
 
-Institution: ${institution}`;
+Return ONLY valid JSON with a single key "assets" containing an array (up to 200 items). Each item must have exactly these fields:
+- name: the technology/asset name as listed (string)
+- description: 2-3 sentence summary of the technology (string, "" if not determinable)
+- sourceUrl: URL of this specific listing if visible (string, "" if not)
+- inventors: array of inventor names if listed (string[], [] if none stated)
+- patentStatus: one of "patented", "patent pending", "provisional", "unknown"
+- technologyId: technology ID or case number if visible (string, "" if not)
+- contactEmail: contact email if listed (string, "" if not)
+
+If multiple assets appear, return each as a separate array item. If only one asset, return a one-item array.`;
 
     try {
-      let content: string | null = null;
+      const messageParts: any[] = [{ type: "text", text: PARSE_PROMPT }];
 
-      if (imageBase64s && imageBase64s.length > 0) {
-        const imageParts = imageBase64s.map((b64) => {
-          const mimeMatch = b64.match(/^data:(image\/[a-z]+);base64,/);
-          const mime = mimeMatch ? mimeMatch[1] : "image/png";
-          const data = b64.replace(/^data:image\/[a-z]+;base64,/, "");
-          return {
-            type: "image_url" as const,
-            image_url: { url: `data:${mime};base64,${data}`, detail: "high" as const },
-          };
-        });
-
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "user",
-              content: [
-                { type: "text", text: PARSE_PROMPT },
-                ...imageParts,
-              ],
-            },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.1,
-        });
-        content = response.choices[0]?.message?.content ?? null;
-      } else {
-        const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
-          messages: [
-            {
-              role: "user",
-              content: `${PARSE_PROMPT}\n\n---\n${pastedText!.slice(0, 8000)}`,
-            },
-          ],
-          response_format: { type: "json_object" },
-          temperature: 0.1,
-        });
-        content = response.choices[0]?.message?.content ?? null;
+      for (const file of files) {
+        const b64 = file.buffer.toString("base64");
+        messageParts.push({ type: "image_url", image_url: { url: `data:${file.mimetype};base64,${b64}`, detail: "high" as const } });
       }
 
-      if (!content) return res.status(500).json({ error: "No response from AI" });
+      if (rawText) {
+        messageParts.push({ type: "text", text: `\n\n---\nContent:\n${rawText.slice(0, 8000)}` });
+      }
 
-      let p: Record<string, any>;
-      try { p = JSON.parse(content); } catch { return res.status(500).json({ error: "AI returned invalid JSON" }); }
-
-      const assetName: string = p.assetName || p.asset_name || "Unknown Asset";
-      const target: string = p.target || "unknown";
-      const modality: string = p.modality || "unknown";
-      const indication: string = p.indication || "unknown";
-      const developmentStage: string = p.developmentStage || p.development_stage || "unknown";
-      const summary: string = p.summary || "";
-      const abstract: string = p.abstract || "";
-      const patentStatus: string = p.patentStatus || p.patent_status || "unknown";
-      const licensingStatus: string = p.licensingStatus || p.licensing_status || "available";
-      const innovationClaim: string = p.innovationClaim || p.innovation_claim || "unknown";
-      const mechanismOfAction: string = p.mechanismOfAction || p.mechanism_of_action || "unknown";
-      const categories: string[] = Array.isArray(p.categories) ? p.categories : [];
-      const inventors: string[] = Array.isArray(p.inventors) ? p.inventors : [];
-      const sourceUrl: string = p.sourceUrl || p.source_url || "";
-      const technologyId: string = p.technologyId || p.technology_id || "";
-
-      const completenessScore = computeCompletenessScore({
-        target, modality, indication, developmentStage, summary, abstract,
-        categories, innovationClaim, mechanismOfAction, inventors,
-        patentStatus,
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: messageParts }],
+        response_format: { type: "json_object" },
+        temperature: 0.1,
+        max_tokens: 4096,
       });
 
-      const grade = completenessScore >= 75 ? "pass" : completenessScore >= 50 ? "revisions" : "incomplete";
+      const aiContent = response.choices[0]?.message?.content ?? "";
+      let parsedJson: any;
+      try { parsedJson = JSON.parse(aiContent); } catch { return res.status(500).json({ error: "AI returned invalid JSON" }); }
 
-      return res.json({
-        parsed: {
-          assetName, target, modality, indication, developmentStage,
-          summary, abstract, patentStatus, licensingStatus,
-          innovationClaim, mechanismOfAction, categories, inventors,
-          sourceUrl, technologyId, institution,
-        },
-        completenessScore,
-        grade,
+      const rawAssets: any[] = Array.isArray(parsedJson?.assets) ? parsedJson.assets
+        : Array.isArray(parsedJson) ? parsedJson : [];
+
+      const assets = rawAssets.slice(0, 200).map((a: any) => {
+        const name: string = String(a.name || "Unknown Asset");
+        const description: string = String(a.description || "");
+        const sourceUrl: string = String(a.sourceUrl || "");
+        const inventors: string[] = Array.isArray(a.inventors) ? a.inventors.map(String) : [];
+        const patentStatus: string = String(a.patentStatus || "unknown");
+        const technologyId: string = String(a.technologyId || "");
+        const contactEmail: string = String(a.contactEmail || "");
+
+        const score = computeCompletenessScore({
+          summary: description || null,
+          inventors: inventors.length > 0 ? inventors : null,
+          patentStatus: patentStatus !== "unknown" ? patentStatus : null,
+        });
+        const grade = score >= 75 ? "pass" : score >= 50 ? "revisions" : "incomplete";
+
+        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, completenessScore: score, grade };
       });
+
+      return res.json({ assets, institution });
     } catch (err: any) {
       console.error("[manual-import/parse] Error:", err);
       return res.status(500).json({ error: err.message ?? "Parse failed" });
     }
   });
 
-  // ── Manual Import — Commit to Indexing Queue ─────────────────────────────
+  // ── Manual Import — Batch Commit to Indexing Queue ───────────────────────
   app.post("/api/admin/manual-import/commit", async (req, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-    const schema = z.object({
-      assetName: z.string().min(1),
-      institution: z.string().min(1),
-      target: z.string().default("unknown"),
-      modality: z.string().default("unknown"),
-      indication: z.string().default("unknown"),
-      developmentStage: z.string().default("unknown"),
-      summary: z.string().default(""),
-      abstract: z.string().optional(),
-      patentStatus: z.string().optional(),
-      licensingStatus: z.string().optional(),
-      innovationClaim: z.string().optional(),
-      mechanismOfAction: z.string().optional(),
-      categories: z.array(z.string()).optional(),
-      inventors: z.array(z.string()).optional(),
-      sourceUrl: z.string().optional(),
-      technologyId: z.string().optional(),
+    const assetSchema = z.object({
+      name: z.string().min(1),
+      description: z.string().default(""),
+      sourceUrl: z.string().default(""),
+      inventors: z.array(z.string()).default([]),
+      patentStatus: z.string().default("unknown"),
+      technologyId: z.string().default(""),
+      contactEmail: z.string().default(""),
     });
 
-    const parsed = schema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: "Invalid request" });
-    const d = parsed.data;
+    const bodySchema = z.object({
+      institution: z.string().min(1),
+      assets: z.array(assetSchema).min(1).max(200),
+    });
+
+    const bodyParsed = bodySchema.safeParse(req.body);
+    if (!bodyParsed.success) return res.status(400).json({ error: "Invalid request body" });
+    const { institution, assets } = bodyParsed.data;
 
     try {
-      const fingerprint = makeFingerprint(d.assetName, d.institution);
-      const { asset, isNew } = await storage.upsertIngestedAsset(fingerprint, {
-        assetName: d.assetName,
-        institution: d.institution,
-        target: d.target,
-        modality: d.modality,
-        indication: d.indication,
-        developmentStage: d.developmentStage,
-        summary: d.summary || d.assetName,
-        abstract: d.abstract || null,
-        sourceType: "tech_transfer",
-        sourceName: "manual_import",
-        sourceUrl: d.sourceUrl || null,
-        technologyId: d.technologyId || null,
-        patentStatus: d.patentStatus || null,
-        licensingStatus: d.licensingStatus || null,
-        innovationClaim: d.innovationClaim || null,
-        mechanismOfAction: d.mechanismOfAction || null,
-        categories: d.categories || null,
-        inventors: d.inventors || null,
-        relevant: false,
-        runId: 0,
-      });
+      const run = await storage.createIngestionRun();
 
-      return res.json({
-        id: asset.id,
-        isNew,
-        message: isNew
-          ? `"${d.assetName}" added to Indexing Queue`
-          : `"${d.assetName}" already exists — updated metadata`,
-      });
+      const listings = assets.map((a) => ({
+        fingerprint: makeFingerprint(a.name, institution),
+        assetName: a.name,
+        institution,
+        target: "unknown",
+        modality: "unknown",
+        indication: "unknown",
+        developmentStage: "unknown",
+        summary: a.description || a.name,
+        abstract: null as string | null,
+        sourceType: "tech_transfer" as const,
+        sourceName: "manual",
+        sourceUrl: a.sourceUrl || null,
+        technologyId: a.technologyId || null,
+        patentStatus: a.patentStatus !== "unknown" ? a.patentStatus : null,
+        inventors: a.inventors.length > 0 ? a.inventors : null,
+        contactEmail: a.contactEmail || null,
+        relevant: false,
+        runId: run.id,
+      }));
+
+      const { newAssets, totalProcessed } = await storage.bulkUpsertIngestedAssets(listings);
+      const imported = newAssets.length;
+      const skipped = totalProcessed - imported;
+
+      await storage.updateIngestionRun(run.id, { status: "completed", totalFound: totalProcessed, newCount: imported });
+
+      if (newAssets.length > 0) {
+        const listingMap = new Map(listings.map((l) => [l.fingerprint, l]));
+        const classifyInputs = newAssets.map((a) => ({
+          id: a.id,
+          title: a.assetName,
+          description: listingMap.get(makeFingerprint(a.assetName, institution))?.summary ?? a.assetName,
+          abstract: undefined as string | undefined,
+        }));
+
+        classifyBatch(classifyInputs, 5, async (id, classification) => {
+          try {
+            const score = computeCompletenessScore({
+              target: classification.target,
+              modality: classification.modality,
+              indication: classification.indication,
+              developmentStage: classification.developmentStage,
+              categories: classification.categories,
+              innovationClaim: classification.innovationClaim,
+              mechanismOfAction: classification.mechanismOfAction,
+            });
+            if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
+              await storage.deleteIngestedAsset(id);
+            } else {
+              await storage.updateIngestedAssetEnrichment(id, { ...classification, completenessScore: score });
+            }
+          } catch (e: any) {
+            console.error(`[manual-import/commit] classify error id=${id}: ${e?.message}`);
+          }
+        }).catch((e: any) => console.error("[manual-import/commit] classifyBatch error:", e?.message));
+      }
+
+      return res.json({ imported, skipped });
     } catch (err: any) {
       console.error("[manual-import/commit] Error:", err);
       return res.status(500).json({ error: err.message ?? "Commit failed" });
