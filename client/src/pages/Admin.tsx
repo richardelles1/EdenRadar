@@ -199,7 +199,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
       if (!res.ok) throw new Error("Failed to load sync status");
       return res.json();
     },
-    refetchInterval: polling ? 2000 : false,
+    refetchInterval: polling ? 2000 : 8000,
   });
 
   const { data: historyData } = useQuery<{ sessions: SyncSessionData[] }>({
@@ -219,11 +219,11 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   useEffect(() => {
     const status = statusData?.session?.status;
     const isTerminal = status === "enriched" || status === "pushed" || status === "failed";
-    if (isTerminal && !syncForThisInst) {
+    if (isTerminal) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
       queryClient.invalidateQueries({ queryKey: ["/api/ingest/sync/history", institution, pw] });
-    } else if (syncForThisInst && !polling) {
+    } else if ((syncForThisInst || status === "running") && !polling) {
       setPolling(true);
     }
   }, [statusData?.session?.status, syncForThisInst]);
@@ -643,6 +643,8 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const [pendingSyncInst, setPendingSyncInst] = useState<string | null>(null);
+
   const syncMutation = useMutation({
     mutationFn: async (institution: string) => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, {
@@ -657,9 +659,11 @@ function DataHealth({ pw }: { pw: string }) {
     },
     onSuccess: (_d, institution) => {
       toast({ title: "Sync started", description: `Syncing ${institution}...` });
+      setPendingSyncInst(null);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
     onError: (err: Error) => {
+      setPendingSyncInst(null);
       toast({ title: "Sync failed", description: err.message, variant: "destructive" });
     },
   });
@@ -866,6 +870,7 @@ function DataHealth({ pw }: { pw: string }) {
   const syncedToday = data.syncedToday ?? 0;
 
   const handleSyncClick = (institution: string) => {
+    setPendingSyncInst(institution);
     setExpandedInstitution(institution);
     syncMutation.mutate(institution);
   };
@@ -1148,7 +1153,17 @@ function DataHealth({ pw }: { pw: string }) {
                         )}
                       </td>
                       <td className="text-left py-2 px-3" data-testid={`error-${instSlug}`}>
-                        {row.lastSyncError ? (
+                        {row.health === "syncing" ? (
+                          <div className="w-full max-w-[180px]">
+                            <div className="text-[10px] text-blue-500 font-medium mb-1">{row.phase ?? "starting…"}</div>
+                            <div className="h-1.5 rounded-full bg-blue-500/15 overflow-hidden">
+                              <div
+                                className="h-full rounded-full bg-blue-500 animate-pulse transition-all duration-700"
+                                style={{ width: row.phase === "scraping" ? "33%" : row.phase === "comparing" ? "55%" : row.phase === "enriching" ? "75%" : row.phase === "done" ? "95%" : "12%" }}
+                              />
+                            </div>
+                          </div>
+                        ) : row.lastSyncError ? (
                           <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
                             {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
                           </span>
@@ -1189,11 +1204,11 @@ function DataHealth({ pw }: { pw: string }) {
                                 size="sm"
                                 className="h-7 w-7 p-0"
                                 onClick={() => handleSyncClick(row.institution)}
-                                disabled={syncMutation.isPending}
+                                disabled={pendingSyncInst === row.institution}
                                 title={`Sync ${row.institution}`}
                                 data-testid={`button-sync-${instSlug}`}
                               >
-                                <RefreshCw className={`h-3.5 w-3.5 ${syncMutation.isPending ? "animate-spin" : ""}`} />
+                                <RefreshCw className={`h-3.5 w-3.5 ${pendingSyncInst === row.institution ? "animate-spin" : ""}`} />
                               </Button>
                               {sched.state === "running" && (
                                 <Button
