@@ -21,13 +21,14 @@ function scoreColor(score: number): { bg: string; text: string; ring: string } {
 }
 
 const BREAKDOWN_LABELS: Record<string, string> = {
-  novelty: "Novelty",
-  freshness: "Freshness",
+  fit: "Buyer Fit",
+  novelty: "Quality Bonus",
   readiness: "Readiness",
   licensability: "Licensability",
-  fit: "Buyer Fit",
-  competition: "Low Competition",
 };
+
+const MEANINGFUL_DIMS = ["fit", "novelty", "readiness", "licensability"] as const;
+type MeaningfulDim = typeof MEANINGFUL_DIMS[number];
 
 export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
   const { bg, text, ring } = scoreColor(score);
@@ -45,9 +46,11 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
 
   if (!breakdown) return badge;
 
-  const dims = (["novelty", "freshness", "readiness", "licensability", "fit", "competition"] as const).filter(
-    (k) => k in breakdown
+  const dims = MEANINGFUL_DIMS.filter(
+    (k): k is MeaningfulDim => k in breakdown && (breakdown as Record<string, number>)[k] > 0
   );
+
+  if (dims.length === 0) return badge;
 
   return (
     <Tooltip>
@@ -56,7 +59,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
         <p className="text-xs font-semibold text-foreground mb-2">Score Breakdown</p>
         <div className="space-y-1.5">
           {dims.map((k) => {
-            const val = breakdown[k];
+            const val = (breakdown as Record<string, number>)[k];
             const { text: t, bg: b } = scoreColor(val);
             return (
               <div key={k} className="flex items-center gap-2">
