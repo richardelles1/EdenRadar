@@ -3436,7 +3436,7 @@ function GradeBadge({ grade, score }: { grade: string; score: number }) {
   );
   if (grade === "revisions") return (
     <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200">
-      Revisions ({score})
+      Revisions needed ({score})
     </Badge>
   );
   return (

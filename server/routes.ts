@@ -4280,8 +4280,10 @@ If multiple assets appear, return each as a separate array item. If only one ass
 
         // Enrich only — never change relevant or delete; manual imports stay in Indexing Queue
         // until the operator explicitly pushes them via the normal push flow.
+        const newAssetById = new Map(newAssets.map((a) => [a.id, a]));
         classifyBatch(classifyInputs, 5, async (id, classification) => {
           try {
+            const stored = newAssetById.get(id);
             const score = computeCompletenessScore({
               target: classification.target,
               modality: classification.modality,
@@ -4290,6 +4292,10 @@ If multiple assets appear, return each as a separate array item. If only one ass
               categories: classification.categories,
               innovationClaim: classification.innovationClaim,
               mechanismOfAction: classification.mechanismOfAction,
+              summary: stored?.summary ?? null,
+              abstract: stored?.abstract ?? null,
+              inventors: stored?.inventors ?? null,
+              patentStatus: stored?.patentStatus ?? null,
             });
             // Update enrichment fields only — do NOT touch relevant (keep false) or delete records
             await db
