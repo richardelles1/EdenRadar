@@ -81,7 +81,7 @@ function useRotatingTicker<T>(items: T[], intervalMs = 5000) {
       setTimeout(() => {
         setIdx((i) => (i + 1) % items.length);
         setVisible(true);
-      }, 250);
+      }, 200);
     }, intervalMs);
     return () => clearInterval(timer);
   }, [items.length, intervalMs]);
@@ -122,7 +122,7 @@ function NewlyIndexedCard({
             style={{ opacity: visible ? 1 : 0 }}
             data-testid={`dashboard-asset-${item.id}`}
           >
-            <p className="text-sm font-medium text-foreground leading-snug line-clamp-2">{item.assetName}</p>
+            <p className="text-sm font-medium text-foreground leading-snug line-clamp-1">{item.assetName}</p>
             <p className="text-xs text-muted-foreground mt-1 truncate">{item.institution}</p>
             {item.modality && item.modality !== "unknown" && (
               <span className="inline-block mt-2 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">
@@ -211,7 +211,7 @@ function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
       {!isLoading && total > 0 && (
         <div className="flex items-center justify-between pt-1 border-t border-border/50">
           <span className="text-[10px] text-muted-foreground">
-            {institutions.length} institution{institutions.length !== 1 ? "s" : ""} with new activity
+            {idx + 1} of {institutions.length} institution{institutions.length !== 1 ? "s" : ""} with new activity
           </span>
           <div className="flex gap-1">
             {institutions.slice(0, Math.min(institutions.length, 8)).map((_, i) => (
