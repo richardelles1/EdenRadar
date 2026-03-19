@@ -4,7 +4,6 @@ import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
-import { SavedAssetsPanel } from "@/components/SavedAssetsPanel";
 import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -28,12 +27,8 @@ type SearchResponse = {
   assets: ScoredAsset[];
   query: string;
   sources: string[];
-  signalsFound: number;
   assetsFound: number;
-};
-
-type SourcesResponse = {
-  sources: { id: string; label: string; description: string }[];
+  signalsFound?: number;
 };
 
 type SavedAssetsResponse = {
@@ -208,7 +203,6 @@ export default function Scout() {
   const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
   const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
-  const [savedPanelOpen, setSavedPanelOpen] = useState(false);
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
@@ -216,9 +210,7 @@ export default function Scout() {
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
-  const [selectedSources, setSelectedSources] = useState<string[]>(() => ssGet("scout-sources", ALL_SOURCE_KEYS));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [contentType, setContentType] = useState<"assets" | "concepts" | "projects">("assets");
 
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
@@ -239,28 +231,17 @@ export default function Scout() {
       sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-buyer-profile", JSON.stringify(buyerProfile));
-      sessionStorage.setItem("scout-sources", JSON.stringify(selectedSources));
     } catch {}
-  }, [searchResults, hasSearched, currentQuery, buyerProfile, selectedSources]);
+  }, [searchResults, hasSearched, currentQuery, buyerProfile]);
 
-  const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
-  const { data: conceptsData } = useQuery<{ concepts: Array<{ id: number; title: string; oneLiner: string; therapeuticArea: string; modality: string; stage: number; credibilityScore: number | null; submitterAffiliation: string | null; seeking: string[] | null }> }>({
-    queryKey: ["/api/discovery/concepts"],
-    staleTime: 5 * 60 * 1000,
-  });
-  const { data: projectsData } = useQuery<{ projects: Array<{ id: number; title: string; discoveryTitle: string | null; description: string | null; discoverySummary: string | null; researchArea: string | null; status: string; openForCollaboration: boolean | null; keywords: string[] | null }> }>({
-    queryKey: ["/api/industry/projects"],
-    staleTime: 5 * 60 * 1000,
-  });
 
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
-      const res = await apiRequest("POST", "/api/search", {
+      const res = await apiRequest("POST", "/api/scout/search", {
         query,
-        sources: selectedSources,
-        maxPerSource: 8,
-        buyerProfile,
+        minSimilarity: 0.35,
+        limit: 40,
       });
       if (!res.ok) {
         const err = await res.json();
@@ -278,7 +259,7 @@ export default function Scout() {
       setDateFilter("all");
       setMinScore(0);
       if (data.assets.length === 0) {
-        toast({ title: "No assets found", description: "Try a different query or enable more sources." });
+        toast({ title: "No TTO assets matched", description: "Try broader terms or a different indication." });
       }
     },
     onError: (err: any) => {
@@ -323,8 +304,6 @@ export default function Scout() {
   });
 
   const savedAssets = savedData?.assets ?? [];
-  const sources = sourcesData?.sources ?? ALL_SOURCE_KEYS.map((id) => ({ id, label: id }));
-
   const savedAssetIds = new Set(savedAssets.map((a) => a.pmid ?? a.assetName).filter(Boolean) as string[]);
 
   const handleSearch = (query: string) => {
@@ -345,41 +324,6 @@ export default function Scout() {
   const handleUnsave = (id: string) => {
     const found = savedAssets.find((a) => (a.pmid ?? a.assetName) === id);
     if (found) deleteMutation.mutate(found.id);
-  };
-
-  const handleToggleSource = (id: string) => {
-    setSelectedSources((prev) =>
-      prev.includes(id)
-        ? prev.length === 1 ? prev : prev.filter((s) => s !== id)
-        : [...prev, id]
-    );
-  };
-
-  const handleExportJson = () => {
-    const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "edenradar-assets.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportCsv = () => {
-    if (savedAssets.length === 0) return;
-    const headers = ["Asset Name", "Target", "Modality", "Stage", "Disease", "Summary", "Journal", "Year", "Source", "URL"];
-    const rows = savedAssets.map((a) => [
-      a.assetName, a.target, a.modality, a.developmentStage, a.diseaseIndication,
-      `"${a.summary.replace(/"/g, '""')}"`, a.sourceJournal, a.publicationYear, a.sourceName, a.sourceUrl ?? "",
-    ]);
-    const csv = [headers.join(","), ...rows.map((r) => r.join(","))].join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "edenradar-assets.csv";
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   const availableStages = useMemo(
@@ -432,7 +376,6 @@ export default function Scout() {
     dateFilter !== "all",
     minScore !== 0,
     sortMode !== "score",
-    selectedSources.length !== ALL_SOURCE_KEYS.length,
   ].filter(Boolean).length;
 
   return (
@@ -447,7 +390,7 @@ export default function Scout() {
                 </span>
               </h1>
               <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-                Multi-source biotech intelligence — scored, ranked, and matched to your buyer thesis.
+                Semantic search across indexed TTO assets from leading research institutions, matched to your buyer thesis.
               </p>
             </div>
 
@@ -504,7 +447,7 @@ export default function Scout() {
                       data-testid="coverage-indicator"
                     >
                       <Globe className="w-3 h-3 shrink-0" />
-                      <span>{COVERED_INSTITUTIONS.length} institutions · {ALL_SOURCE_KEYS.length} sources covered</span>
+                      <span>{COVERED_INSTITUTIONS.length} institutions indexed</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[300px] p-3">
@@ -525,7 +468,7 @@ export default function Scout() {
 
           {searchMutation.isPending && (
             <div className="px-4 sm:px-6">
-              <RadarOverlay sources={selectedSources} />
+              <RadarOverlay sources={["tech_transfer"]} />
             </div>
           )}
 
@@ -572,35 +515,7 @@ export default function Scout() {
           )}
 
           <div className="flex-1 px-4 sm:px-6 pb-10 space-y-4">
-            <div className="flex items-center gap-1 border-b border-border pb-0" data-testid="content-type-tabs">
-              {([
-                { key: "assets", label: "TTO Assets", count: filteredResults.length },
-                { key: "concepts", label: "Concepts", count: conceptsData?.concepts.length ?? 0 },
-                { key: "projects", label: "Research Projects", count: projectsData?.projects.length ?? 0 },
-              ] as const).map(({ key, label, count }) => (
-                <button
-                  key={key}
-                  onClick={() => setContentType(key)}
-                  className={`relative flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                    contentType === key
-                      ? "border-primary text-primary"
-                      : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
-                  }`}
-                  data-testid={`tab-${key}`}
-                >
-                  {label}
-                  {count > 0 && (
-                    <span className={`text-[10px] tabular-nums px-1.5 py-0.5 rounded-full font-medium ${
-                      contentType === key ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                    }`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {contentType === "assets" && !searchMutation.isPending && (
+            {!searchMutation.isPending && (
               <SearchResults
                 assets={filteredResults}
                 isLoading={false}
@@ -610,139 +525,21 @@ export default function Scout() {
                 onUnsave={handleUnsave}
               />
             )}
-
-            {contentType === "concepts" && (
-              <div className="space-y-3">
-                {!conceptsData ? (
-                  <div className="text-sm text-muted-foreground text-center py-10">Loading concepts...</div>
-                ) : conceptsData.concepts.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center py-10">No concepts published yet.</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {conceptsData.concepts.map((c) => (
-                      <a
-                        key={c.id}
-                        href={`/discovery/concept/${c.id}`}
-                        className="rounded-lg border border-card-border bg-card hover:border-amber-500/30 p-4 transition-colors block"
-                        data-testid={`scout-concept-card-${c.id}`}
-                      >
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <span className="text-[10px] px-2 py-0.5 rounded-full border bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 font-medium">
-                            {c.therapeuticArea}
-                          </span>
-                          {c.credibilityScore != null && (
-                            <span className="text-[10px] text-muted-foreground">Score {c.credibilityScore}</span>
-                          )}
-                        </div>
-                        <p className="text-sm font-semibold text-foreground leading-snug">{c.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.oneLiner}</p>
-                        {c.submitterAffiliation && (
-                          <p className="text-[10px] text-muted-foreground mt-2 border-t border-border/60 pt-1.5">{c.submitterAffiliation}</p>
-                        )}
-                      </a>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {contentType === "projects" && (
-              <div className="space-y-3">
-                {!projectsData ? (
-                  <div className="text-sm text-muted-foreground text-center py-10">Loading research projects...</div>
-                ) : projectsData.projects.length === 0 ? (
-                  <div className="text-sm text-muted-foreground text-center py-10">No research projects published for industry yet.</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {projectsData.projects.map((p) => (
-                      <div
-                        key={p.id}
-                        className="rounded-lg border border-card-border bg-card hover:border-violet-500/30 p-4 transition-colors"
-                        data-testid={`scout-project-card-${p.id}`}
-                      >
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          {p.researchArea && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20 font-medium">
-                              {p.researchArea}
-                            </span>
-                          )}
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium capitalize ${
-                            p.status === "active"
-                              ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20"
-                              : "bg-slate-500/10 text-slate-500 border-slate-500/20"
-                          }`}>
-                            {p.status}
-                          </span>
-                        </div>
-                        <p className="text-sm font-semibold text-foreground leading-snug">{p.discoveryTitle || p.title}</p>
-                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{p.discoverySummary || p.description}</p>
-                        {(p.keywords ?? []).length > 0 && (
-                          <div className="flex flex-wrap gap-1 mt-2">
-                            {(p.keywords ?? []).slice(0, 3).map((k) => (
-                              <span key={k} className="text-[10px] px-1.5 py-0.5 rounded-full bg-muted/60 text-muted-foreground">{k}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </main>
 
         <div className="hidden lg:block w-80 shrink-0 border-l border-border sticky top-0 h-screen overflow-y-auto">
           <HotAreasSidebar onSearchArea={(q) => handleSearch(q)} />
-          <SavedAssetsPanel
-            assets={savedAssets}
-            isOpen={true}
-            onClose={() => {}}
-            onDelete={(id) => deleteMutation.mutate(id)}
-            onExportJson={handleExportJson}
-            onExportCsv={handleExportCsv}
-          />
         </div>
-      </div>
-
-      <div className="lg:hidden">
-        <SavedAssetsPanel
-          assets={savedAssets}
-          isOpen={savedPanelOpen}
-          onClose={() => setSavedPanelOpen(false)}
-          onDelete={(id) => deleteMutation.mutate(id)}
-          onExportJson={handleExportJson}
-          onExportCsv={handleExportCsv}
-        />
       </div>
 
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
         <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
           <SheetHeader>
-            <SheetTitle>Filters & Sources</SheetTitle>
+            <SheetTitle>Filters</SheetTitle>
           </SheetHeader>
 
           <div className="mt-6 space-y-6">
-            <div className="space-y-3">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sources</p>
-              <div className="flex flex-wrap gap-2">
-                {sources.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleToggleSource(s.id)}
-                    className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
-                      selectedSources.includes(s.id)
-                        ? "border-primary bg-primary/15 text-primary font-medium"
-                        : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-                    }`}
-                    data-testid={`source-toggle-${s.id}`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort & Score</p>
               <div className="grid grid-cols-2 gap-3">
@@ -851,7 +648,6 @@ export default function Scout() {
                   setDateFilter("all");
                   setMinScore(0);
                   setSortMode("score");
-                  setSelectedSources(ALL_SOURCE_KEYS);
                 }}
                 className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-1 border border-dashed border-card-border rounded-md"
                 data-testid="button-reset-filters"

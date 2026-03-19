@@ -36,6 +36,7 @@ import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
 import IndustryEden from "@/pages/IndustryEden";
+import Dashboard from "@/pages/Dashboard";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -69,6 +70,11 @@ function Router() {
         <Redirect to="/assets" />
       </Route>
 
+      <Route path="/dashboard">
+        <DashboardLayout>
+          <Dashboard />
+        </DashboardLayout>
+      </Route>
       <Route path="/scout">
         <DashboardLayout>
           <Scout />

@@ -358,6 +358,87 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/scout/search", async (req, res) => {
+    try {
+      const schema = z.object({
+        query: z.string().min(1).max(500),
+        minSimilarity: z.number().min(0).max(1).default(0.35),
+        modality: z.string().optional(),
+        stage: z.string().optional(),
+        indication: z.string().optional(),
+        institution: z.string().optional(),
+        limit: z.number().int().min(1).max(100).default(40),
+      });
+      const { query, minSimilarity, modality, stage, indication, institution, limit } = schema.parse(req.body);
+
+      const embedding = await embedQuery(query);
+      const results = await storage.scoutVectorSearch(embedding, {
+        modality, stage, indication, institution, limit, minSimilarity,
+      });
+
+      const assets: ScoredAsset[] = results.map((r) => {
+        const sim = r.similarity ?? 0;
+        const score = Math.round(sim * 100);
+        return {
+          id: String(r.id),
+          asset_name: r.assetName,
+          target: r.target,
+          modality: r.modality,
+          indication: r.indication,
+          development_stage: r.developmentStage,
+          institution: r.institution,
+          summary: r.summary ?? "",
+          why_it_matters: r.innovationClaim ?? "",
+          source_urls: r.sourceUrl ? [r.sourceUrl] : [],
+          source_types: ["tech_transfer"],
+          score,
+          score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: score },
+          latest_signal_date: "",
+          matching_tags: [],
+          evidence_count: 1,
+          confidence: sim >= 0.70 ? "high" : sim >= 0.50 ? "medium" : "low",
+          signals: [],
+          owner_name: r.institution,
+          owner_type: "university" as const,
+          patent_status: "unknown",
+          licensing_status: r.licensingReadiness ?? "unknown",
+        };
+      });
+
+      await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length });
+
+      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"] });
+    } catch (err: any) {
+      console.error("[scout/search] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Search failed" });
+    }
+  });
+
+  app.get("/api/dashboard/stats", async (_req, res) => {
+    try {
+      const [stats, recentSearches, recentAssets] = await Promise.all([
+        fetchPortfolioStats(),
+        storage.getSearchHistory(8),
+        db.select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          institution: ingestedAssets.institution,
+          modality: ingestedAssets.modality,
+          indication: ingestedAssets.indication,
+          firstSeenAt: ingestedAssets.firstSeenAt,
+        })
+        .from(ingestedAssets)
+        .where(sql`${ingestedAssets.relevant} = true`)
+        .orderBy(desc(ingestedAssets.firstSeenAt))
+        .limit(8),
+      ]);
+      return res.json({ stats, recentSearches, recentAssets });
+    } catch (err: any) {
+      console.error("[dashboard/stats] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load stats" });
+    }
+  });
+
   app.post("/api/report", async (req, res) => {
     try {
       const { query, sources, maxPerSource, buyerProfile } = reportBodySchema.parse(req.body);

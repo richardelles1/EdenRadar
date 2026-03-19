@@ -15,6 +15,7 @@ import {
   Menu,
   X,
   Radar,
+  LayoutDashboard,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -22,13 +23,14 @@ import { useState } from "react";
 import { getIndustryProfile } from "@/hooks/use-industry";
 
 const NAV_ITEMS = [
-  { href: "/scout", label: "Scout", icon: Search, exact: true },
-  { href: "/industry/concepts", label: "Concepts", icon: Lightbulb },
-  { href: "/industry/projects", label: "Research Projects", icon: FlaskConical },
-  { href: "/institutions", label: "Institutions", icon: Building2 },
-  { href: "/alerts", label: "Alerts", icon: Bell },
-  { href: "/assets", label: "Pipelines", icon: Layers },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
   { href: "/industry/eden", label: "Eden", icon: Sparkles },
+  { href: "/scout", label: "Scout", icon: Search, exact: true },
+  { href: "/institutions", label: "Institutions", icon: Building2 },
+  { href: "/alerts", label: "Alerts", icon: Bell, accent: true },
+  { href: "/assets", label: "Pipelines", icon: Layers },
+  { href: "/industry/projects", label: "EdenLab", icon: FlaskConical },
+  { href: "/industry/concepts", label: "EdenDiscovery", icon: Lightbulb },
   { href: "/industry/profile", label: "Profile", icon: User },
 ];
 
@@ -53,7 +55,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   return (
     <div className="flex flex-col h-full">
       <div className="h-14 flex items-center px-4 border-b border-border shrink-0">
-        <Link href="/scout">
+        <Link href="/dashboard">
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none"
             data-testid="industry-sidebar-logo"
@@ -86,7 +88,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
       </div>
 
       <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
+        {NAV_ITEMS.map(({ href, label, icon: Icon, exact, accent }) => {
           const isActive = exact
             ? location === href
             : location === href || location.startsWith(href + "/");
@@ -101,7 +103,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
                 data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
                 onClick={onClose}
               >
-                <Icon className="w-4 h-4 shrink-0" />
+                <Icon className={`w-4 h-4 shrink-0 ${accent && !isActive ? "text-emerald-500" : ""}`} />
                 <span>{label}</span>
               </div>
             </Link>
