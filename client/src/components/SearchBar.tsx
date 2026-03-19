@@ -26,11 +26,8 @@ type SearchBarProps = {
 
 const EXAMPLE_QUERIES = [
   "KRAS inhibitor pancreatic cancer",
-  "solid tumor CAR-T therapy",
-  "GLP-1 receptor agonist obesity",
-  "mRNA cancer vaccine",
-  "EGFR tyrosine kinase inhibitor lung cancer",
-  "PD-1 checkpoint inhibitor melanoma",
+  "CAR-T solid tumor",
+  "GLP-1 obesity",
 ];
 
 export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sources, selectedSource, onSourceChange }: SearchBarProps) {
@@ -52,7 +49,7 @@ export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sour
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="Search biotech assets (e.g. KRAS inhibitors pancreatic cancer)"
+            placeholder="Search TTO assets by target, indication, or modality"
             className="pl-10 h-11 bg-card border-card-border focus:border-primary/60 text-sm"
             data-testid="input-search"
             disabled={isLoading}

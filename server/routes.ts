@@ -362,12 +362,12 @@ export async function registerRoutes(
     try {
       const schema = z.object({
         query: z.string().min(1).max(500),
-        minSimilarity: z.number().min(0).max(1).default(0.35),
+        minSimilarity: z.number().min(0).max(1).default(0.40),
         modality: z.string().optional(),
         stage: z.string().optional(),
         indication: z.string().optional(),
         institution: z.string().optional(),
-        limit: z.number().int().min(1).max(100).default(40),
+        limit: z.number().int().min(1).max(100).default(50),
       });
       const { query, minSimilarity, modality, stage, indication, institution, limit } = schema.parse(req.body);
 
@@ -411,6 +411,31 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
       return res.status(500).json({ error: err.message ?? "Search failed" });
+    }
+  });
+
+  app.get("/api/scout/institutions", async (_req, res) => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT institution, COUNT(*)::int AS count
+        FROM ingested_assets
+        WHERE relevant = true AND institution IS NOT NULL AND institution != ''
+        GROUP BY institution
+        ORDER BY count DESC
+        LIMIT 200
+      `);
+      const institutions = (rows.rows as Record<string, unknown>[]).map((r) => ({
+        institution: String(r.institution ?? ""),
+        count: Number(r.count ?? 0),
+      }));
+      const totalCount = await db.execute(sql`
+        SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE relevant = true
+      `);
+      const total = Number((totalCount.rows[0] as Record<string, unknown>)?.n ?? institutions.length);
+      return res.json({ institutions, total });
+    } catch (err: any) {
+      console.error("[scout/institutions] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load institutions" });
     }
   });
 

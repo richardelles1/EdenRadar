@@ -73,11 +73,11 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         <div>
           <h3 className="text-lg font-semibold text-foreground mb-1">Start Your Discovery</h3>
           <p className="text-muted-foreground text-sm max-w-sm">
-            Search across PubMed, preprint servers, ClinicalTrials.gov, patents, and tech transfer offices — scored and ranked for your buyer thesis.
+            Search 26,000+ exclusive TTO assets from leading research institutions, ranked for your acquisition thesis.
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-          {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity", "NLRP3 inflammasome", "AAV gene therapy"].map((area) => (
+          {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity"].map((area) => (
             <span key={area} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
               {area}
             </span>
@@ -94,11 +94,19 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           <SearchX className="w-7 h-7 text-muted-foreground" />
         </div>
         <div>
-          <h3 className="text-base font-semibold text-foreground mb-1">No assets found</h3>
-          <p className="text-muted-foreground text-sm">
-            No extractable drug assets found for <span className="text-foreground font-medium">"{query}"</span>.
-            Try refining your query.
+          <h3 className="text-base font-semibold text-foreground mb-1">
+            No TTO assets found matching "{query}"
+          </h3>
+          <p className="text-muted-foreground text-sm max-w-xs">
+            Try broader terms, a different indication, or browse by institution in the panel on the right.
           </p>
+        </div>
+        <div className="flex flex-wrap justify-center gap-2 mt-1">
+          {["oncology", "gene therapy", "CRISPR", "immunotherapy"].map((sug) => (
+            <span key={sug} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
+              Try: {sug}
+            </span>
+          ))}
         </div>
       </div>
     );
