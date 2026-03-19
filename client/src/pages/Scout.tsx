@@ -360,7 +360,7 @@ export default function Scout() {
       const res = await apiRequest("POST", "/api/search", {
         query,
         sources: backendSources,
-        maxPerSource: 25,
+        maxPerSource: 50,
         buyerProfile,
       });
       if (!res.ok) {

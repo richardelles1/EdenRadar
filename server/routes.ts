@@ -273,7 +273,7 @@ export async function registerRoutes(
       let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
 
       signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
-      signals = applyRelevanceFilter(signals, query);
+      signals = signals.slice(0, 150);
 
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });

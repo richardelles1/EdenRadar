@@ -157,5 +157,5 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
     }
   });
 
-  return runWithConcurrency(tasks, 3);
+  return runWithConcurrency(tasks, 10);
 }
