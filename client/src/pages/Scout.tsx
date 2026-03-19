@@ -131,13 +131,33 @@ type InstitutionsResponse = {
 };
 
 const RESEARCH_SOURCE_OPTIONS = [
-  { key: "pubmed",        label: "PubMed",             desc: "Biomedical literature" },
-  { key: "biorxiv",       label: "bioRxiv",             desc: "Biology preprints" },
-  { key: "medrxiv",       label: "medRxiv",             desc: "Clinical preprints" },
-  { key: "clinicaltrials",label: "ClinicalTrials.gov",  desc: "Active trials" },
-  { key: "patents",       label: "Patents",              desc: "Patent databases" },
-  { key: "nih_reporter",  label: "NIH Reporter",        desc: "Federal grants" },
-  { key: "harvard_dataverse", label: "Harvard Catalyst", desc: "Harvard research database" },
+  { key: "pubmed",           label: "PubMed",              desc: "Biomedical literature" },
+  { key: "biorxiv",          label: "bioRxiv",              desc: "Biology preprints" },
+  { key: "medrxiv",          label: "medRxiv",              desc: "Clinical preprints" },
+  { key: "clinicaltrials",   label: "ClinicalTrials.gov",   desc: "Active trials" },
+  { key: "patents",          label: "Patents",               desc: "Patent databases" },
+  { key: "nih_reporter",     label: "NIH Reporter",         desc: "Federal grants" },
+  { key: "harvard",          label: "Harvard Catalyst",     desc: "Harvard research database" },
+  { key: "openalex",         label: "OpenAlex",             desc: "Academic publications" },
+  { key: "semantic_scholar", label: "Semantic Scholar",     desc: "Research papers" },
+  { key: "europepmc",        label: "Europe PMC",           desc: "European biomedical literature" },
+  { key: "arxiv",            label: "arXiv",                desc: "Physics & biology preprints" },
+  { key: "chemrxiv",         label: "ChemRxiv",             desc: "Chemistry preprints" },
+  { key: "zenodo",           label: "Zenodo",               desc: "Open research data" },
+  { key: "pdb",              label: "PDB",                  desc: "Protein structures" },
+  { key: "geo",              label: "GEO",                  desc: "Genomics expression data" },
+  { key: "nsf_awards",       label: "NSF Awards",           desc: "National Science Foundation" },
+  { key: "grants_gov",       label: "Grants.gov",           desc: "Federal grant database" },
+  { key: "eu_clinicaltrials",label: "EU Clinical Trials",   desc: "EU trial registry" },
+  { key: "eu_cordis",        label: "EU Cordis",            desc: "EU research programs" },
+  { key: "lens",             label: "Lens.org",             desc: "Patents + literature" },
+  { key: "doaj",             label: "DOAJ",                 desc: "Open access journals" },
+  { key: "openaire",         label: "OpenAIRE",             desc: "European open research" },
+  { key: "ieee",             label: "IEEE Xplore",          desc: "Engineering & biomedical" },
+  { key: "core",             label: "CORE",                 desc: "Open access research" },
+  { key: "figshare",         label: "Figshare",             desc: "Research data & figures" },
+  { key: "dryad",            label: "Dryad",                desc: "Scientific data repository" },
+  { key: "biostudies",       label: "BioStudies",           desc: "Biological study data" },
 ];
 
 function ScoutSidebar({
@@ -320,7 +340,7 @@ export default function Scout() {
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter", "harvard_dataverse"];
+  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter", "harvard"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");
@@ -408,9 +428,10 @@ export default function Scout() {
 
   const researchMutation = useMutation({
     mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
+      const backendSources = sources.map((k) => k === "harvard" ? "harvard_dataverse" : k);
       const res = await apiRequest("POST", "/api/search", {
         query,
-        sources,
+        sources: backendSources,
         maxPerSource: 25,
         buyerProfile,
       });
