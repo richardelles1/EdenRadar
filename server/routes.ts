@@ -1262,14 +1262,12 @@ export async function registerRoutes(
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const hours = Math.max(1, Math.min(parseInt(String(req.query.hours ?? "24"), 10) || 24, 168));
-      const groups = await storage.getNewArrivals(hours);
-      const totalAssets = groups.reduce((s, g) => s + g.count, 0);
-      const totalIndexed = groups.reduce((s, g) => s + g.indexedCount, 0);
+      const groups = await storage.getNewArrivals();
+      const totalUnindexed = groups.reduce((s, g) => s + g.count, 0);
       const totalInstitutions = groups.length;
-      res.json({ hours, totalAssets, totalIndexed, totalInstitutions, groups });
+      res.json({ totalUnindexed, totalInstitutions, groups });
     } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to fetch new arrivals" });
+      res.status(500).json({ error: err.message ?? "Failed to fetch indexing queue" });
     }
   });
 
@@ -1277,11 +1275,9 @@ export async function registerRoutes(
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const body = req.body as { hours?: unknown; institution?: unknown };
-      const hours = Math.max(1, Math.min(parseInt(String(body.hours ?? "24"), 10) || 24, 168));
+      const body = req.body as { institution?: unknown };
       const institution: string | undefined = typeof body.institution === "string" ? body.institution : undefined;
-      const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-      const result = await storage.pushNewArrivals(since, institution);
+      const result = await storage.pushNewArrivals(institution);
       res.json({ updated: result.updated, message: `Marked ${result.updated} asset${result.updated !== 1 ? "s" : ""} as indexed` });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Push failed" });

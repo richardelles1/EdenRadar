@@ -2250,34 +2250,29 @@ type NewArrivalAsset = {
   id: number;
   assetName: string;
   firstSeenAt: string;
-  relevant: boolean;
   sourceUrl: string | null;
 };
 
 type NewArrivalGroup = {
   institution: string;
   count: number;
-  indexedCount: number;
   assets: NewArrivalAsset[];
 };
 
 type NewArrivalsData = {
-  hours: number;
-  totalAssets: number;
-  totalIndexed: number;
+  totalUnindexed: number;
   totalInstitutions: number;
   groups: NewArrivalGroup[];
 };
 
 function NewArrivals({ pw }: { pw: string }) {
-  const [hours, setHours] = useState(24);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<NewArrivalsData>({
-    queryKey: ["/api/admin/new-arrivals", hours],
+    queryKey: ["/api/admin/new-arrivals"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/new-arrivals?hours=${hours}`, {
+      const res = await fetch("/api/admin/new-arrivals", {
         headers: { "x-admin-password": pw },
       });
       if (!res.ok) throw new Error("Failed to fetch");
@@ -2292,7 +2287,7 @@ function NewArrivals({ pw }: { pw: string }) {
       const res = await fetch("/api/admin/new-arrivals/push", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ hours, institution }),
+        body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Push failed");
       return res.json() as Promise<{ updated: number; message: string }>;
@@ -2318,38 +2313,16 @@ function NewArrivals({ pw }: { pw: string }) {
     });
   };
 
-  const windowOptions = [
-    { label: "Last 24h", value: 24 },
-    { label: "Last 48h", value: 48 },
-    { label: "Last 7d", value: 168 },
-  ];
-
-  const pendingCount = (data?.totalAssets ?? 0) - (data?.totalIndexed ?? 0);
+  const totalUnindexed = data?.totalUnindexed ?? 0;
 
   return (
     <div className="space-y-6" data-testid="new-arrivals-panel">
       {/* Header row */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div className="flex items-center gap-2">
-          {windowOptions.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setHours(opt.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
-                hours === opt.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid={`button-window-${opt.value}`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+      <div className="flex items-center justify-end">
         <Button
           size="sm"
           onClick={() => pushMutation.mutate({})}
-          disabled={pushMutation.isPending || pendingCount === 0}
+          disabled={pushMutation.isPending || totalUnindexed === 0}
           data-testid="button-push-all-new"
         >
           {pushMutation.isPending ? (
@@ -2357,7 +2330,7 @@ function NewArrivals({ pw }: { pw: string }) {
           ) : (
             <PackagePlus className="h-4 w-4 mr-2" />
           )}
-          Push all new
+          Push all to pipeline
         </Button>
       </div>
 
@@ -2367,22 +2340,14 @@ function NewArrivals({ pw }: { pw: string }) {
           <Loader2 className="h-4 w-4 animate-spin" /> Loading…
         </div>
       ) : (
-        <div className="grid grid-cols-4 gap-4">
-          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-total-assets">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">New assets</p>
-            <p className="text-3xl font-bold text-foreground mt-1">{data?.totalAssets ?? 0}</p>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-total-unindexed">
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Unindexed assets</p>
+            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">{totalUnindexed}</p>
           </div>
           <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-institutions">
             <p className="text-xs text-muted-foreground uppercase tracking-wide">Institutions</p>
             <p className="text-3xl font-bold text-foreground mt-1">{data?.totalInstitutions ?? 0}</p>
-          </div>
-          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-indexed">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Already indexed</p>
-            <p className="text-3xl font-bold text-green-600 dark:text-green-400 mt-1">{data?.totalIndexed ?? 0}</p>
-          </div>
-          <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-pending">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending push</p>
-            <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">{pendingCount}</p>
           </div>
         </div>
       )}
@@ -2392,13 +2357,12 @@ function NewArrivals({ pw }: { pw: string }) {
         data.groups.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground" data-testid="text-no-arrivals">
             <Inbox className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No new assets in the last {hours === 168 ? "7 days" : `${hours} hours`}.</p>
+            <p className="text-sm font-medium">No unindexed assets — queue is clear.</p>
           </div>
         ) : (
           <div className="space-y-2">
             {data.groups.map((group) => {
               const isOpen = expanded.has(group.institution);
-              const pending = group.count - group.indexedCount;
               return (
                 <div
                   key={group.institution}
@@ -2421,24 +2385,18 @@ function NewArrivals({ pw }: { pw: string }) {
                       <span className="font-medium text-sm text-foreground truncate">{group.institution}</span>
                     </button>
                     <div className="flex items-center gap-3 shrink-0">
-                      <span className="text-xs text-muted-foreground">
-                        {group.count} asset{group.count !== 1 ? "s" : ""}
-                        {group.indexedCount > 0 && `, ${group.indexedCount} indexed`}
+                      <span className="text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-full px-2 py-0.5" data-testid={`badge-unindexed-${group.institution}`}>
+                        {group.count} unindexed
                       </span>
-                      {pending > 0 && (
-                        <span className="text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5" data-testid={`badge-pending-${group.institution}`}>
-                          {pending} pending
-                        </span>
-                      )}
                       <Button
                         size="sm"
                         variant="outline"
                         onClick={() => pushMutation.mutate({ institution: group.institution })}
-                        disabled={pushMutation.isPending || pending === 0}
+                        disabled={pushMutation.isPending}
                         className="h-7 text-xs"
                         data-testid={`button-push-${group.institution}`}
                       >
-                        {pushMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Push all"}
+                        {pushMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Push"}
                       </Button>
                     </div>
                   </div>
@@ -2449,7 +2407,7 @@ function NewArrivals({ pw }: { pw: string }) {
                       {group.assets.map((asset) => (
                         <div
                           key={asset.id}
-                          className="flex items-start justify-between px-4 py-2.5 gap-3"
+                          className="flex items-center px-4 py-2.5 gap-3"
                           data-testid={`row-asset-${asset.id}`}
                         >
                           <div className="min-w-0 flex-1">
@@ -2466,21 +2424,10 @@ function NewArrivals({ pw }: { pw: string }) {
                             ) : (
                               <span className="text-sm text-foreground line-clamp-1">{asset.assetName}</span>
                             )}
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <Clock className="h-3 w-3 text-muted-foreground" />
-                              <span className="text-xs text-muted-foreground">{formatDate(asset.firstSeenAt)}</span>
-                            </div>
                           </div>
-                          <div className="shrink-0">
-                            {asset.relevant ? (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-green-700 dark:text-green-400 bg-green-100 dark:bg-green-900/30 px-1.5 py-0.5 rounded-full" data-testid={`badge-indexed-${asset.id}`}>
-                                <CheckCircle2 className="h-3 w-3" /> Indexed
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded-full" data-testid={`badge-pending-asset-${asset.id}`}>
-                                <AlertCircle className="h-3 w-3" /> Pending
-                              </span>
-                            )}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <Clock className="h-3 w-3 text-muted-foreground" />
+                            <span className="text-xs text-muted-foreground">{formatDate(asset.firstSeenAt)}</span>
                           </div>
                         </div>
                       ))}
@@ -3472,7 +3419,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               data-testid="nav-new-arrivals"
             >
               <Inbox className="h-4 w-4" />
-              New Arrivals
+              Indexing Queue
             </button>
             <button
               onClick={() => setActiveTab("data-health")}
@@ -3574,8 +3521,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
           {activeTab === "new-arrivals" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">New Arrivals</h2>
-                <p className="text-sm text-muted-foreground mt-1">Assets ingested since the last scan, grouped by institution. Use Push to make them visible in Scout.</p>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Indexing Queue</h2>
+                <p className="text-sm text-muted-foreground mt-1">All discovered assets not yet pushed to the pipeline, grouped by institution. Push to make them visible in Scout.</p>
               </div>
               <NewArrivals pw={pw} />
             </>

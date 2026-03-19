@@ -174,13 +174,12 @@ export interface IStorage {
   updateSavedGrant(id: number, userId: string, data: Partial<InsertSavedGrant>): Promise<SavedGrant>;
   deleteSavedGrant(id: number, userId: string): Promise<void>;
 
-  getNewArrivals(hours: number): Promise<Array<{
+  getNewArrivals(): Promise<Array<{
     institution: string;
     count: number;
-    indexedCount: number;
-    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>>;
-  pushNewArrivals(since: Date, institution?: string): Promise<{ updated: number }>;
+  pushNewArrivals(institution?: string): Promise<{ updated: number }>;
 
   getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
   getAssetsNeedingEmbedding(): Promise<Array<{
@@ -1076,26 +1075,23 @@ export class DatabaseStorage implements IStorage {
     await db.delete(savedGrants).where(and(eq(savedGrants.id, id), eq(savedGrants.userId, userId)));
   }
 
-  async getNewArrivals(hours: number): Promise<Array<{
+  async getNewArrivals(): Promise<Array<{
     institution: string;
     count: number;
-    indexedCount: number;
-    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+    assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>> {
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
     const rows = await db
       .select({
         id: ingestedAssets.id,
         assetName: ingestedAssets.assetName,
         institution: ingestedAssets.institution,
         firstSeenAt: ingestedAssets.firstSeenAt,
-        relevant: ingestedAssets.relevant,
         sourceUrl: ingestedAssets.sourceUrl,
       })
       .from(ingestedAssets)
       .where(
         and(
-          gte(ingestedAssets.firstSeenAt, since),
+          eq(ingestedAssets.relevant, false),
           eq(ingestedAssets.sourceType, "tech_transfer"),
         )
       )
@@ -1104,22 +1100,19 @@ export class DatabaseStorage implements IStorage {
     const grouped = new Map<string, {
       institution: string;
       count: number;
-      indexedCount: number;
-      assets: Array<{ id: number; assetName: string; firstSeenAt: Date; relevant: boolean; sourceUrl: string | null }>;
+      assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
     }>();
 
     for (const row of rows) {
       if (!grouped.has(row.institution)) {
-        grouped.set(row.institution, { institution: row.institution, count: 0, indexedCount: 0, assets: [] });
+        grouped.set(row.institution, { institution: row.institution, count: 0, assets: [] });
       }
       const entry = grouped.get(row.institution)!;
       entry.count += 1;
-      if (row.relevant) entry.indexedCount += 1;
       entry.assets.push({
         id: row.id,
         assetName: row.assetName,
         firstSeenAt: row.firstSeenAt,
-        relevant: row.relevant,
         sourceUrl: row.sourceUrl,
       });
     }
@@ -1127,9 +1120,8 @@ export class DatabaseStorage implements IStorage {
     return Array.from(grouped.values()).sort((a, b) => b.count - a.count);
   }
 
-  async pushNewArrivals(since: Date, institution?: string): Promise<{ updated: number }> {
+  async pushNewArrivals(institution?: string): Promise<{ updated: number }> {
     const conditions = [
-      gte(ingestedAssets.firstSeenAt, since),
       eq(ingestedAssets.relevant, false),
       eq(ingestedAssets.sourceType, "tech_transfer"),
     ];
