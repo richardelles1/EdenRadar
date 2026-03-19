@@ -516,7 +516,7 @@ export default function Scout() {
   ].filter(Boolean).length;
 
   return (
-    <div className="min-h-full bg-background flex flex-col">
+    <div className="min-h-full flex flex-col">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="px-4 sm:px-6 pt-8 pb-5 space-y-4">

@@ -453,7 +453,7 @@ export default function IndustryDashboard() {
   const recentAssets = data?.recentAssets ?? [];
 
   return (
-    <div className="min-h-full bg-background relative overflow-hidden">
+    <div className="min-h-full relative overflow-hidden">
       <style>{`
         @keyframes dash-fade-up {
           from { opacity: 0; transform: translateY(8px); }

@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { getIndustryProfile } from "@/hooks/use-industry";
+
+const STORAGE_KEY = "edenLastSeenAlerts";
 
 type AlertsBadgeData = {
   newAssets: { total: number };
@@ -54,8 +56,22 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const [location] = useLocation();
   const profile = getIndustryProfile();
 
+  const [sinceParam, setSinceParam] = useState(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
+  );
+
+  useEffect(() => {
+    const handler = () => setSinceParam(localStorage.getItem(STORAGE_KEY) ?? "");
+    window.addEventListener("eden-alerts-seen", handler);
+    return () => window.removeEventListener("eden-alerts-seen", handler);
+  }, []);
+
+  const deltaSidebarUrl = sinceParam
+    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
+    : "/api/industry/alerts/delta";
+
   const { data: alertsData } = useQuery<AlertsBadgeData>({
-    queryKey: ["/api/industry/alerts/delta"],
+    queryKey: [deltaSidebarUrl],
     staleTime: 5 * 60 * 1000,
   });
 
