@@ -275,6 +275,7 @@ export default function Scout() {
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
     const qParam = params.get("q");
+    const draftParam = params.get("draft");
     if (qParam && qParam.trim()) {
       const q = qParam.trim();
       setInputQuery(q);
@@ -284,6 +285,9 @@ export default function Scout() {
       if (researchSources.length > 0) {
         researchMutation.mutate({ query: q, sources: researchSources });
       }
+      setLocation("/scout", { replace: true });
+    } else if (draftParam && draftParam.trim()) {
+      setInputQuery(draftParam.trim());
       setLocation("/scout", { replace: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps

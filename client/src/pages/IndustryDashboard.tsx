@@ -12,10 +12,14 @@ import {
   Plus,
   BarChart3,
   BookOpen,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
+import { INSTITUTIONS } from "@/lib/institutions";
+
+const STORAGE_KEY = "edenLastSeenAlerts";
 
 type PortfolioStats = {
   total: number;
@@ -42,6 +46,48 @@ type PipelineSummaryData = {
   totalSavedAssets: number;
   institutionCount: number;
 };
+
+interface DeltaInstitution {
+  institution: string;
+  count: number;
+  sampleAssets: string[];
+}
+
+interface AlertDeltaResponse {
+  newAssets: {
+    total: number;
+    byInstitution: DeltaInstitution[];
+  };
+  windowHours: number;
+  since?: string;
+}
+
+function useRotatingTicker<T>(items: T[], intervalMs = 8000, fadeDurationMs = 600) {
+  const [idx, setIdx] = useState(0);
+  const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    if (items.length <= 1) return;
+    const timer = setInterval(() => {
+      setVisible(false);
+      setTimeout(() => {
+        setIdx((i) => (i + 1) % items.length);
+        setVisible(true);
+      }, fadeDurationMs);
+    }, intervalMs);
+    return () => clearInterval(timer);
+  }, [items.length, intervalMs, fadeDurationMs]);
+
+  return { item: items[idx] ?? null, idx, visible };
+}
+
+function slugifyInstitutionName(name: string): string {
+  const found = INSTITUTIONS.find(
+    (inst) => inst.name.toLowerCase() === name.toLowerCase()
+  );
+  if (found) return found.slug;
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
 
 function KpiCard({
   icon: Icon,
@@ -135,10 +181,10 @@ function SegmentedTabs({
 
 function RotatingInstitutionCards({
   institutions,
-  onSearch,
+  onNavigate,
 }: {
   institutions: { institution: string; count: number }[];
-  onSearch: (q: string) => void;
+  onNavigate: (slug: string) => void;
 }) {
   const [windowStart, setWindowStart] = useState(0);
   const [visible, setVisible] = useState(true);
@@ -153,8 +199,8 @@ function RotatingInstitutionCards({
       setTimeout(() => {
         setWindowStart((prev) => (prev + WINDOW) % total);
         setVisible(true);
-      }, 400);
-    }, 4000);
+      }, 700);
+    }, 8000);
     return () => clearInterval(iv);
   }, [total]);
 
@@ -168,13 +214,13 @@ function RotatingInstitutionCards({
       className="space-y-2"
       style={{
         opacity: visible ? 1 : 0,
-        transition: "opacity 0.35s ease",
+        transition: "opacity 0.7s ease",
       }}
     >
       {shown.map((inst, i) => (
         <button
           key={`${inst.institution}-${windowStart}-${i}`}
-          onClick={() => onSearch(inst.institution)}
+          onClick={() => onNavigate(slugifyInstitutionName(inst.institution))}
           className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
           data-testid={`dashboard-inst-card-${i}`}
         >
@@ -203,11 +249,11 @@ function RotatingInstitutionCards({
 function CategoryRows({
   areas,
   label,
-  onSearch,
+  onDraft,
 }: {
   areas: { area: string; count: number }[];
   label?: string;
-  onSearch: (q: string) => void;
+  onDraft: (q: string) => void;
 }) {
   if (areas.length === 0) {
     return (
@@ -227,7 +273,7 @@ function CategoryRows({
       {areas.slice(0, 6).map((area) => (
         <button
           key={area.area}
-          onClick={() => onSearch(area.area)}
+          onClick={() => onDraft(area.area)}
           className="w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 hover:border-primary/20 border border-border/40 transition-all group"
           data-testid={`dashboard-category-${area.area}`}
         >
@@ -250,6 +296,169 @@ function CategoryRows({
     </div>
   );
 }
+
+function NewlyIndexedCard({
+  assets,
+  onViewAll,
+}: {
+  assets: Array<{ id: number; assetName: string; institution: string; modality: string; indication: string; firstSeenAt: string }>;
+  onViewAll: () => void;
+}) {
+  const { item, idx, visible } = useRotatingTicker(assets, 8000, 600);
+
+  if (assets.length === 0) return null;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-3 min-h-[200px] flex flex-col" data-testid="dashboard-recent-assets">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">Newly Indexed</h2>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+        >
+          View all <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center min-h-[100px]">
+        {item ? (
+          <div
+            className="transition-opacity duration-600"
+            style={{ opacity: visible ? 1 : 0, transition: "opacity 600ms ease" }}
+            data-testid={`dashboard-asset-${item.id}`}
+          >
+            <p className="text-sm font-medium text-foreground leading-snug line-clamp-1">{item.assetName}</p>
+            <p className="text-xs text-muted-foreground mt-1 truncate">{item.institution}</p>
+            {item.modality && item.modality !== "unknown" && (
+              <span className="inline-block mt-2 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">
+                {item.modality}
+              </span>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex items-center justify-between pt-1 border-t border-border/50">
+        <span className="text-[10px] text-muted-foreground">
+          {idx + 1} of {assets.length} new assets
+        </span>
+        <div className="flex gap-1">
+          {assets.slice(0, Math.min(assets.length, 8)).map((_, i) => (
+            <span
+              key={i}
+              className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
+            />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
+  const sinceParam = typeof window !== "undefined"
+    ? (localStorage.getItem(STORAGE_KEY) ?? "")
+    : "";
+
+  const deltaUrl = sinceParam
+    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
+    : "/api/industry/alerts/delta";
+
+  const { data, isLoading } = useQuery<AlertDeltaResponse>({
+    queryKey: [deltaUrl],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const institutions = data?.newAssets.byInstitution ?? [];
+  const { item, idx, visible } = useRotatingTicker(institutions, 8000, 600);
+  const total = data?.newAssets.total ?? 0;
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 space-y-3 min-h-[200px] flex flex-col" data-testid="dashboard-new-alerts">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-primary" />
+          <h2 className="text-sm font-semibold text-foreground">New Alerts</h2>
+        </div>
+        <button
+          onClick={onViewAll}
+          className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
+        >
+          View all <ArrowRight className="w-3 h-3" />
+        </button>
+      </div>
+
+      <div className="flex-1 flex flex-col justify-center min-h-[100px]">
+        {isLoading ? (
+          <div className="space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/2" />
+          </div>
+        ) : total === 0 ? (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">No new activity since your last visit.</p>
+            <Link href="/alerts">
+              <span className="text-xs text-primary hover:underline cursor-pointer">Set up alerts →</span>
+            </Link>
+          </div>
+        ) : item ? (
+          <div
+            style={{ opacity: visible ? 1 : 0, transition: "opacity 600ms ease" }}
+          >
+            <div className="flex items-center gap-2">
+              <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <p className="text-sm font-medium text-foreground truncate">{item.institution}</p>
+            </div>
+            <p className="text-xs text-primary font-semibold mt-1">+{item.count} new assets</p>
+            {item.sampleAssets[0] && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{item.sampleAssets[0]}</p>
+            )}
+          </div>
+        ) : null}
+      </div>
+
+      {!isLoading && total > 0 && (
+        <div className="flex items-center justify-between pt-1 border-t border-border/50">
+          <span className="text-[10px] text-muted-foreground">
+            {idx + 1} of {institutions.length} institution{institutions.length !== 1 ? "s" : ""} with new activity
+          </span>
+          <div className="flex gap-1">
+            {institutions.slice(0, Math.min(institutions.length, 8)).map((_, i) => (
+              <span
+                key={i}
+                className={`w-1 h-1 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/30"}`}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const PARTICLES = [
+  { top: "8%",  left: "5%",  size: 8,  dur: 28, delay: 0   },
+  { top: "15%", left: "88%", size: 5,  dur: 34, delay: 3   },
+  { top: "22%", left: "42%", size: 10, dur: 22, delay: 7   },
+  { top: "35%", left: "72%", size: 6,  dur: 38, delay: 1   },
+  { top: "48%", left: "12%", size: 7,  dur: 26, delay: 5   },
+  { top: "55%", left: "60%", size: 4,  dur: 32, delay: 9   },
+  { top: "62%", left: "28%", size: 9,  dur: 30, delay: 2   },
+  { top: "70%", left: "80%", size: 5,  dur: 40, delay: 6   },
+  { top: "78%", left: "50%", size: 12, dur: 24, delay: 4   },
+  { top: "85%", left: "18%", size: 6,  dur: 36, delay: 8   },
+  { top: "90%", left: "90%", size: 8,  dur: 29, delay: 11  },
+  { top: "5%",  left: "65%", size: 5,  dur: 33, delay: 13  },
+  { top: "30%", left: "95%", size: 7,  dur: 27, delay: 15  },
+  { top: "42%", left: "35%", size: 4,  dur: 37, delay: 10  },
+  { top: "58%", left: "7%",  size: 6,  dur: 23, delay: 12  },
+  { top: "73%", left: "55%", size: 11, dur: 31, delay: 16  },
+  { top: "18%", left: "22%", size: 5,  dur: 35, delay: 14  },
+  { top: "92%", left: "40%", size: 7,  dur: 25, delay: 17  },
+];
 
 export default function IndustryDashboard() {
   const [, navigate] = useLocation();
@@ -275,7 +484,6 @@ export default function IndustryDashboard() {
   const therapyAreaCount = data?.therapyAreaCount ?? 0;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
   const weeklyNew = data?.weeklyNew ?? 0;
-  const assetsInReview = data?.assetsInReview ?? 0;
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -284,9 +492,11 @@ export default function IndustryDashboard() {
     return "Good evening";
   })();
 
-  const greetingText = profile.companyName
-    ? `${greeting}, ${profile.companyName}!`
+  const firstName = profile.userName?.trim().split(/\s+/)[0] ?? "";
+  const greetingLine = firstName
+    ? `${greeting}, ${firstName}!`
     : `${greeting}!`;
+  const subtitleLine = profile.companyName || "Your TTO asset intelligence dashboard";
 
   const topInstitutions = stats?.topInstitutions ?? institutionsData?.institutions ?? [];
   const categoryAreas = (stats?.byTherapyArea && stats.byTherapyArea.length > 0)
@@ -294,27 +504,57 @@ export default function IndustryDashboard() {
     : (stats?.byModality ?? []).map((m) => ({ area: m.modality, count: m.count }));
   const categoryLabel = (stats?.byTherapyArea && stats.byTherapyArea.length > 0) ? undefined : "By Modality";
 
+  const recentAssets = data?.recentAssets ?? [];
+
   return (
-    <div className="min-h-full bg-background">
+    <div className="min-h-full bg-background relative overflow-hidden">
       <style>{`
         @keyframes dash-fade-up {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes particle-float {
+          0%   { transform: translateY(0px) translateX(0px); opacity: var(--p-op-start); }
+          33%  { transform: translateY(-18px) translateX(8px); }
+          66%  { transform: translateY(-8px) translateX(-6px); }
+          100% { transform: translateY(0px) translateX(0px); opacity: var(--p-op-start); }
+        }
       `}</style>
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+      {/* Green dot particle background */}
+      {PARTICLES.map((p, i) => (
+        <div
+          key={i}
+          aria-hidden="true"
+          style={{
+            position: "absolute",
+            top: p.top,
+            left: p.left,
+            width: p.size,
+            height: p.size,
+            borderRadius: "50%",
+            background: "hsl(var(--primary))",
+            opacity: 0.08 + (i % 5) * 0.015,
+            animation: `particle-float ${p.dur}s ease-in-out ${p.delay}s infinite`,
+            zIndex: 0,
+            pointerEvents: "none",
+          }}
+        />
+      ))}
+
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
         {/* Header */}
         <div
           className="flex flex-col sm:flex-row sm:items-end justify-between gap-4"
           style={{ animation: "dash-fade-up 400ms ease both" }}
         >
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             <h1 className="text-2xl font-bold text-foreground" data-testid="dashboard-greeting">
-              {greetingText}
+              {greetingLine}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Your TTO asset intelligence dashboard
+              {subtitleLine}
             </p>
           </div>
           <Button
@@ -401,16 +641,31 @@ export default function IndustryDashboard() {
             ) : (
               <RotatingInstitutionCards
                 institutions={topInstitutions}
-                onSearch={(q) => navigate(`/scout?q=${encodeURIComponent(q)}`)}
+                onNavigate={(slug) => navigate(`/institutions/${slug}`)}
               />
             )
           ) : (
             <CategoryRows
               areas={categoryAreas}
               label={categoryLabel}
-              onSearch={(q) => navigate(`/scout?q=${encodeURIComponent(q)}`)}
+              onDraft={(q) => navigate(`/scout?draft=${encodeURIComponent(q)}`)}
             />
           )}
+        </div>
+
+        {/* Newly Indexed + New Alerts rotating ticker row */}
+        <div
+          className="grid grid-cols-1 lg:grid-cols-2 gap-4"
+          style={{ animation: "dash-fade-up 400ms ease 160ms both" }}
+          data-testid="dashboard-ticker-row"
+        >
+          {recentAssets.length > 0 && (
+            <NewlyIndexedCard
+              assets={recentAssets}
+              onViewAll={() => navigate("/scout")}
+            />
+          )}
+          <NewAlertsCard onViewAll={() => navigate("/alerts")} />
         </div>
 
         {/* Pipeline Summary */}
@@ -472,9 +727,8 @@ export default function IndustryDashboard() {
               )}
             </div>
 
-            {/* Right: Status stats */}
+            {/* Right: Pipeline stats (no "Status" heading) */}
             <div className="space-y-2.5">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
               <div className="space-y-2">
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-background/50" data-testid="pipeline-stat-pipelines">
                   <span className="text-xs text-muted-foreground">Total pipelines</span>
@@ -523,7 +777,7 @@ export default function IndustryDashboard() {
               {categoryAreas.slice(0, 12).map((a) => (
                 <button
                   key={a.area}
-                  onClick={() => navigate(`/scout?q=${encodeURIComponent(a.area)}`)}
+                  onClick={() => navigate(`/scout?draft=${encodeURIComponent(a.area)}`)}
                   className="text-[10px] px-2.5 py-1 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
                   data-testid={`dashboard-area-${a.area}`}
                 >

@@ -46,6 +46,7 @@ const DEAL_STAGES = [
 ];
 
 const formSchema = z.object({
+  userName: z.string().optional(),
   companyName: z.string().min(1, "Required"),
   companyType: z.string().optional(),
 });
@@ -190,6 +191,7 @@ export default function IndustryProfile() {
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      userName: profile.userName ?? "",
       companyName: profile.companyName,
       companyType: profile.companyType || "",
     },
@@ -197,6 +199,7 @@ export default function IndustryProfile() {
 
   function onSubmit(values: FormValues) {
     saveIndustryProfile({
+      userName: values.userName ?? "",
       companyName: values.companyName,
       companyType: values.companyType ?? "",
       therapeuticAreas,
@@ -223,6 +226,20 @@ export default function IndustryProfile() {
 
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+          <FormField
+            control={form.control}
+            name="userName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Your Name <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., Alex" {...field} data-testid="input-user-name" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="companyName"

@@ -1,4 +1,5 @@
 export type IndustryProfile = {
+  userName: string;
   companyName: string;
   companyType: string;
   therapeuticAreas: string[];
@@ -8,6 +9,7 @@ export type IndustryProfile = {
 };
 
 const DEFAULT_PROFILE: IndustryProfile = {
+  userName: "",
   companyName: "",
   companyType: "",
   therapeuticAreas: [],

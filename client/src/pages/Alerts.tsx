@@ -193,6 +193,13 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
                         <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
                       ))}
                     </div>
+                    {alert.query && (
+                      <Link href={`/scout?draft=${encodeURIComponent(alert.query)}`}>
+                        <span className="text-[10px] text-primary hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
+                          Explore matches →
+                        </span>
+                      </Link>
+                    )}
                   </div>
                   <button
                     onClick={() => deleteMutation.mutate(alert.id)}
@@ -554,7 +561,7 @@ function InstitutionCombobox({
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
-        <Command>
+        <Command shouldFilter={false}>
           <CommandInput
             placeholder="Type to search institutions..."
             value={search}
