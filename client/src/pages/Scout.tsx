@@ -327,7 +327,7 @@ export default function Scout() {
     const now = Date.now();
     if (filter === "6m") return { since: new Date(now - 183 * 24 * 60 * 60 * 1000).toISOString() };
     if (filter === "2024") return { since: new Date("2024-01-01").toISOString() };
-    if (filter === "2023") return { since: new Date("2023-01-01").toISOString(), before: new Date("2024-01-01").toISOString() };
+    if (filter === "2023") return { since: new Date("2023-01-01").toISOString() };
     if (filter === "2022") return { before: new Date("2023-01-01").toISOString() };
     return {};
   }
