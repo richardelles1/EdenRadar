@@ -45,7 +45,7 @@ function ConceptCard({ card }: { card: ConceptCard }) {
   const seekingItems = (card.seeking ?? []).slice(0, 2);
 
   return (
-    <Link href={`/discovery/concept/${card.id}`}>
+    <Link href={`/discovery/concept/${card.id}?from=industry`}>
       <div
         className="group rounded-xl border border-card-border bg-card hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/5 transition-all duration-200 cursor-pointer p-5 flex flex-col gap-3"
         data-testid={`concept-card-${card.id}`}

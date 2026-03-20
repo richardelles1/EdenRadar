@@ -797,6 +797,41 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/pipeline/brief", async (req, res) => {
+    try {
+      const { stage } = z.object({ stage: z.string().min(1) }).parse(req.body);
+      const result = await db.execute(sql`
+        SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage, sa.source_name, sa.source_journal
+        FROM saved_assets sa
+        WHERE LOWER(TRIM(COALESCE(sa.development_stage, 'unknown'))) = ${stage.toLowerCase().trim()}
+        ORDER BY sa.id DESC
+        LIMIT 50
+      `);
+      const assets = result.rows as Record<string, unknown>[];
+      if (assets.length === 0) {
+        return res.json({ brief: "No assets in this pipeline stage.", assetCount: 0 });
+      }
+      const assetList = assets.map((a, i) =>
+        `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Disease: ${String(a.disease_indication ?? "—")} | Source: ${String(a.source_name || a.source_journal || "—")}`
+      ).join("\n");
+      const stageLabel = stage.charAt(0).toUpperCase() + stage.slice(1);
+      const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets at the ${stageLabel} stage from a curated pipeline tracker.\n\nGenerate a concise pipeline brief with the following sections:\nAsset Overview: Count and general description\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance of this pipeline stage\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
+      const { default: OpenAI } = await import("openai");
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 700,
+        temperature: 0.4,
+      });
+      const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
+      return res.json({ brief, assetCount: assets.length });
+    } catch (err: any) {
+      console.error("[pipeline/brief] Error:", err);
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
   app.get("/api/pipelines", async (_req, res) => {
     try {
       const lists = await storage.getPipelineLists();

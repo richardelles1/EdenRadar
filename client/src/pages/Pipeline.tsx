@@ -1,7 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -12,6 +14,10 @@ import {
   ExternalLink,
   ArrowRight,
   Beaker,
+  Loader2,
+  FileText,
+  Copy,
+  Check,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
 
@@ -127,13 +133,47 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
   );
 }
 
+type BriefModal = { stage: string; label: string; brief: string; assetCount: number };
+
 export default function Pipeline() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [briefLoading, setBriefLoading] = useState<string | null>(null);
+  const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const { data, isLoading } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
   });
+
+  const briefMutation = useMutation({
+    mutationFn: async ({ stage }: { stage: string }) => {
+      const res = await apiRequest("POST", "/api/pipeline/brief", { stage });
+      return res.json() as Promise<{ brief: string; assetCount: number }>;
+    },
+    onSuccess: (result, vars) => {
+      const stageInfo = STAGES.find((s) => s.key === vars.stage);
+      setBriefModal({ stage: vars.stage, label: stageInfo?.label ?? vars.stage, brief: result.brief, assetCount: result.assetCount });
+      setBriefLoading(null);
+    },
+    onError: (err: any) => {
+      toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
+      setBriefLoading(null);
+    },
+  });
+
+  const handleBrief = (stageKey: string) => {
+    setBriefLoading(stageKey);
+    briefMutation.mutate({ stage: stageKey });
+  };
+
+  const handleCopy = () => {
+    if (!briefModal) return;
+    navigator.clipboard.writeText(briefModal.brief).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -269,9 +309,27 @@ export default function Pipeline() {
                         <div className={`w-2 h-2 rounded-full ${stage.dotClass}`} />
                         <span className="text-sm font-semibold text-foreground">{stage.label}</span>
                       </div>
-                      <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">
-                        {stage.assets.length}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">
+                          {stage.assets.length}
+                        </span>
+                        {stage.key !== "unknown" && stage.assets.length > 0 && (
+                          <button
+                            onClick={() => handleBrief(stage.key)}
+                            disabled={briefLoading === stage.key}
+                            className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+                            data-testid={`button-pipeline-brief-${stage.key.replace(" ", "-")}`}
+                            title="Generate pipeline brief"
+                          >
+                            {briefLoading === stage.key ? (
+                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                            ) : (
+                              <FileText className="w-2.5 h-2.5" />
+                            )}
+                            Brief
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <ScrollArea className="flex-1 max-h-[calc(100vh-16rem)]">
@@ -298,6 +356,37 @@ export default function Pipeline() {
           </div>
         )}
       </main>
+
+      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); } }}>
+        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col" data-testid="dialog-pipeline-brief">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileText className="w-4 h-4 text-primary" />
+                {briefModal?.label} Pipeline Brief
+              </DialogTitle>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-muted-foreground">{briefModal?.assetCount} asset{briefModal?.assetCount !== 1 ? "s" : ""}</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopy}
+                  className="h-7 text-xs gap-1.5 border-card-border"
+                  data-testid="button-brief-copy"
+                >
+                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+          <ScrollArea className="flex-1 mt-2">
+            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">
+              {briefModal?.brief}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

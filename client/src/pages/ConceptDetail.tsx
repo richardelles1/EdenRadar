@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { useRoute, Link } from "wouter";
+import { useRoute, Link, useSearch } from "wouter";
 import type { ConceptCard } from "@shared/schema";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -172,6 +172,8 @@ export default function ConceptDetail() {
   const hasSidebar = session && role === "concept";
   const [, params] = useRoute("/discovery/concept/:id");
   const id = params?.id;
+  const searchStr = useSearch();
+  const fromIndustry = new URLSearchParams(searchStr).get("from") === "industry";
   const { toast } = useToast();
   const [showContact, setShowContact] = useState(false);
 
@@ -294,12 +296,21 @@ export default function ConceptDetail() {
       {!hasSidebar && <DiscoveryDetailNav />}
 
       <div className="p-6 md:p-8 max-w-3xl mx-auto">
-        <Link href="/discovery">
-          <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground cursor-pointer mb-6 transition-colors" data-testid="link-back-feed">
-            <ArrowLeft className="w-4 h-4" />
-            Back to feed
-          </div>
-        </Link>
+        {fromIndustry ? (
+          <Link href="/industry/concepts">
+            <div className="inline-flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 cursor-pointer mb-6 transition-colors" data-testid="link-back-industry">
+              <ArrowLeft className="w-4 h-4" />
+              Back to Industry Portal
+            </div>
+          </Link>
+        ) : (
+          <Link href="/discovery">
+            <div className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground cursor-pointer mb-6 transition-colors" data-testid="link-back-feed">
+              <ArrowLeft className="w-4 h-4" />
+              Back to feed
+            </div>
+          </Link>
+        )}
 
         <div className="flex items-start gap-4 mb-6">
           <div className="w-11 h-11 rounded-lg bg-amber-500/10 flex items-center justify-center shrink-0 mt-1">
