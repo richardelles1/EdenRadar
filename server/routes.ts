@@ -4505,7 +4505,6 @@ If multiple assets appear, return each as a separate array item. If only one ass
                 ...(classification.innovationClaim ? { innovationClaim: classification.innovationClaim } : {}),
                 ...(classification.mechanismOfAction ? { mechanismOfAction: classification.mechanismOfAction } : {}),
                 completenessScore: score,
-                enrichedAt: new Date(),
               })
               .where(eq(ingestedAssets.id, id));
           } catch (e: any) {
