@@ -12,12 +12,18 @@ type NavProps = {
 
 const PUBLIC_PATHS = ["/", "/about", "/what-we-do", "/how-it-works"];
 
+function normalizePath(path: string) {
+  const stripped = path.split("?")[0].split("#")[0];
+  return stripped.length > 1 ? stripped.replace(/\/+$/, "") : stripped;
+}
+
 export function Nav({ onOpenSaved }: NavProps) {
   const { theme, toggleTheme } = useTheme();
   const [location] = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const isPublic = PUBLIC_PATHS.includes(location);
+  const normalizedLocation = normalizePath(location);
+  const isPublic = PUBLIC_PATHS.includes(normalizedLocation);
 
   const { data } = useQuery<{ assets: SavedAsset[] }>({
     queryKey: ["/api/saved-assets"],
@@ -59,7 +65,7 @@ export function Nav({ onOpenSaved }: NavProps) {
           {/* Desktop nav links */}
           <nav className="hidden sm:flex items-center gap-1">
             {navLinks.map((link) => {
-              const isActive = location === link.href;
+              const isActive = normalizedLocation === link.href;
               return (
                 <Link key={link.href} href={link.href}>
                   <button
@@ -167,7 +173,7 @@ export function Nav({ onOpenSaved }: NavProps) {
       {isPublic && mobileOpen && (
         <div className="sm:hidden border-t border-border bg-background/95 backdrop-blur-md px-4 py-3 flex flex-col gap-1">
           {publicNavLinks.map((link) => {
-            const isActive = location === link.href;
+            const isActive = normalizedLocation === link.href;
             return (
               <Link key={link.href} href={link.href}>
                 <button

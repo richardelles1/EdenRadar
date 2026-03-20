@@ -131,30 +131,30 @@ function PricingCards() {
             </div>
           )}
 
-          {/* Colored header */}
+          {/* Colored header — solid tier color */}
           <div
             className="px-6 py-5"
-            style={{ background: tier.colorDim }}
+            style={{ background: tier.headerBg }}
           >
             <div className="flex items-center gap-3 mb-3">
               <div
                 className="w-9 h-9 rounded-lg flex items-center justify-center"
-                style={{ background: tier.color }}
+                style={{ background: "rgba(255,255,255,0.2)" }}
               >
                 <tier.icon className="w-4 h-4 text-white" />
               </div>
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: tier.color }}>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
                   {tier.tier}
                 </p>
-                <h3 className="text-base font-bold text-foreground leading-tight">{tier.name}</h3>
+                <h3 className="text-base font-bold text-white leading-tight">{tier.name}</h3>
               </div>
             </div>
             <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-3xl font-black text-foreground">{tier.price}</span>
-              <span className="text-sm text-muted-foreground">{tier.period}</span>
+              <span className="text-3xl font-black text-white">{tier.price}</span>
+              <span className="text-sm text-white/70">{tier.period}</span>
             </div>
-            <p className="text-xs text-muted-foreground leading-snug">{tier.tagline}</p>
+            <p className="text-xs text-white/75 leading-snug">{tier.tagline}</p>
           </div>
 
           {/* Feature checklist */}
