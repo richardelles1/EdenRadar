@@ -1472,6 +1472,22 @@ function Enrichment({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
   });
 
+  const dismissError = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/reset", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to dismiss"); }
+      return res.json();
+    },
+    onSuccess: () => {
+      refetchStatus();
+      toast({ title: "Error dismissed", description: "Enrichment status cleared" });
+    },
+    onError: (err: Error) => toast({ title: "Failed to dismiss", description: err.message, variant: "destructive" }),
+  });
+
   const isRunning = status?.status === "running";
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
@@ -1625,10 +1641,20 @@ function Enrichment({ pw }: { pw: string }) {
       {status?.status === "error" && (
         <div className="flex items-start gap-3 p-4 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
           <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-red-700 dark:text-red-400">Enrichment failed</p>
-            <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "Unknown error"}</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-red-700 dark:text-red-400">Last enrichment job failed</p>
+            <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "The job ended with an error. Dismiss to return to idle."}</p>
           </div>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 shrink-0"
+            onClick={() => dismissError.mutate()}
+            disabled={dismissError.isPending}
+            data-testid="button-dismiss-enrichment-error"
+          >
+            {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+          </Button>
         </div>
       )}
 
@@ -2470,7 +2496,7 @@ function NewArrivals({ pw }: { pw: string }) {
           ) : (
             <PackagePlus className="h-4 w-4 mr-2" />
           )}
-          Push all to pipeline
+          Mark all as enriched
         </Button>
       </div>
 
@@ -2482,7 +2508,7 @@ function NewArrivals({ pw }: { pw: string }) {
       ) : (
         <div className="grid grid-cols-2 gap-4">
           <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-total-unindexed">
-            <p className="text-xs text-muted-foreground uppercase tracking-wide">Unindexed assets</p>
+            <p className="text-xs text-muted-foreground uppercase tracking-wide">Pending enrichment</p>
             <p className="text-3xl font-bold text-amber-600 dark:text-amber-400 mt-1">{totalUnindexed}</p>
           </div>
           <div className="border border-border rounded-lg p-4 bg-card" data-testid="banner-institutions">
@@ -2497,7 +2523,7 @@ function NewArrivals({ pw }: { pw: string }) {
         data.groups.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground" data-testid="text-no-arrivals">
             <Inbox className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No unindexed assets — queue is clear.</p>
+            <p className="text-sm font-medium">No assets pending enrichment — queue is clear.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -2526,7 +2552,7 @@ function NewArrivals({ pw }: { pw: string }) {
                     </button>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-full px-2 py-0.5" data-testid={`badge-unindexed-${group.institution}`}>
-                        {group.count} unindexed
+                        {group.count} pending
                       </span>
                       <Button
                         size="sm"

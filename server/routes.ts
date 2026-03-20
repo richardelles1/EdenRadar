@@ -1656,6 +1656,20 @@ export async function registerRoutes(
     res.json({ status: "idle", processed: 0, total: 0, improved: 0, resumed: false });
   });
 
+  app.post("/api/admin/enrichment/reset", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (liveEnrichment) {
+        return res.status(409).json({ error: "Cannot reset while enrichment is running" });
+      }
+      await storage.resetLatestEnrichmentJob();
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to reset enrichment status" });
+    }
+  });
+
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

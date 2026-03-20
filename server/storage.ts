@@ -124,6 +124,7 @@ export interface IStorage {
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
+  resetLatestEnrichmentJob(): Promise<void>;
   stampEnrichedAt(assetId: number): Promise<void>;
 
   getDeepEnrichmentCoverage(): Promise<{
@@ -771,6 +772,13 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
+  async resetLatestEnrichmentJob(): Promise<void> {
+    const [latest] = await db.select().from(enrichmentJobs).orderBy(desc(enrichmentJobs.startedAt)).limit(1);
+    if (latest) {
+      await db.update(enrichmentJobs).set({ status: "completed", completedAt: new Date() }).where(eq(enrichmentJobs.id, latest.id));
+    }
+  }
+
   async stampEnrichedAt(assetId: number): Promise<void> {
     await db.update(ingestedAssets).set({ enrichedAt: new Date() }).where(eq(ingestedAssets.id, assetId));
   }
@@ -1095,8 +1103,9 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .where(
         and(
-          eq(ingestedAssets.relevant, false),
+          eq(ingestedAssets.relevant, true),
           eq(ingestedAssets.sourceType, "tech_transfer"),
+          isNull(ingestedAssets.enrichedAt),
         )
       )
       .orderBy(desc(ingestedAssets.firstSeenAt));
@@ -1126,15 +1135,16 @@ export class DatabaseStorage implements IStorage {
 
   async pushNewArrivals(institution?: string): Promise<{ updated: number }> {
     const conditions = [
-      eq(ingestedAssets.relevant, false),
+      eq(ingestedAssets.relevant, true),
       eq(ingestedAssets.sourceType, "tech_transfer"),
+      isNull(ingestedAssets.enrichedAt),
     ];
     if (institution) {
       conditions.push(eq(ingestedAssets.institution, institution));
     }
     const updated = await db
       .update(ingestedAssets)
-      .set({ relevant: true })
+      .set({ enrichedAt: new Date() })
       .where(and(...conditions))
       .returning({ id: ingestedAssets.id });
     return { updated: updated.length };
