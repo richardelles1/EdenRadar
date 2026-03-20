@@ -387,7 +387,7 @@ export function getSource(key: string): DataSource {
   return dataSources.pubmed;
 }
 
-const SOURCE_TIMEOUT_MS = 7000;
+const SOURCE_TIMEOUT_MS = 3500;
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([

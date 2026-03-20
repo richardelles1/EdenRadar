@@ -146,7 +146,8 @@ export default function ResearchAlerts() {
     queryFn: () =>
       fetch("/api/research/discoveries", { headers: researcherHeaders }).then(r => r.json()),
     enabled: !!researcherId,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const discoveryCards = discoveriesData?.cards ?? [];
@@ -290,7 +291,8 @@ function TopicSection({
       return r.json();
     },
     enabled: !!topic,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
@@ -305,7 +307,8 @@ function TopicSection({
       return r.json();
     },
     enabled: !!topic,
-    staleTime: 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const researchSignals = useMemo(() =>

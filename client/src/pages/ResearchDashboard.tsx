@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useState, useEffect } from "react";
 import {
   Bell,
   FolderOpen,
@@ -37,12 +36,6 @@ export default function ResearchDashboard() {
   const profile = getResearcherProfile();
   const [, navigate] = useLocation();
 
-  const [deferredReady, setDeferredReady] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setDeferredReady(true), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
   const allAreas = profile.researchAreas.length > 0 ? profile.researchAreas : ["CRISPR gene editing"];
   const spotlightQuery = allAreas.join(" OR ");
 
@@ -72,12 +65,14 @@ export default function ResearchDashboard() {
       const r = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: spotlightQuery, sources: ["grants_gov", "nih_reporter", "nsf_awards", "eu_cordis"], maxPerSource: 3 }),
+        body: JSON.stringify({ query: spotlightQuery, sources: ["nih_reporter"], maxPerSource: 3 }),
       });
       if (!r.ok) throw new Error("Failed to fetch grants");
       return r.json();
     },
-    enabled: !!spotlightQuery && deferredReady,
+    enabled: !!spotlightQuery,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const primaryArea = allAreas[0];
@@ -93,7 +88,9 @@ export default function ResearchDashboard() {
       if (!r.ok) throw new Error("Failed to fetch alerts");
       return r.json();
     },
-    enabled: !!primaryArea && deferredReady,
+    enabled: !!primaryArea,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const projects = projectsData?.projects ?? [];
@@ -104,8 +101,8 @@ export default function ResearchDashboard() {
   const publishedCount = discoveries.filter((c) => c.published).length;
   const latestSignal = alertData?.assets?.[0]?.signals?.[0];
   const grantSignals = grantData?.assets?.flatMap((a) => a.signals ?? []) ?? [];
-  const grantsPending = !deferredReady || grantLoading;
-  const alertsPending = !deferredReady || alertLoading;
+  const grantsPending = grantLoading;
+  const alertsPending = alertLoading;
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-8">

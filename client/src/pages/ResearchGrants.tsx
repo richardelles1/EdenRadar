@@ -458,6 +458,8 @@ export default function ResearchGrants() {
       return r.json();
     },
     enabled: !!builtQuery,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 10 * 60 * 1000,
   });
 
   const rawResults = useMemo(() => searchData?.assets?.flatMap((a) => a.signals ?? []) ?? [], [searchData]);
