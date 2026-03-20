@@ -7,14 +7,18 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import {
   Lightbulb, TrendingUp, Clock, Sparkles, PlusCircle, Loader2,
-  Users, DollarSign, GraduationCap, ChevronDown, ChevronUp, Mail, Trash2, AlertTriangle,
+  Users, DollarSign, GraduationCap, ChevronDown, ChevronUp, Mail, Trash2, AlertTriangle, ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Sheet, SheetContent, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
 
 const INTEREST_TYPE_META: Record<string, { label: string; icon: typeof Users; color: string }> = {
   collaborating: { label: "Collaborate", icon: Users, color: "text-violet-600 dark:text-violet-400" },
@@ -102,6 +106,7 @@ function InterestInbox({ conceptId }: { conceptId: number }) {
 
 export default function MyConcepts() {
   const { toast } = useToast();
+  const [selectedConcept, setSelectedConcept] = useState<ConceptCard | null>(null);
   const { data, isLoading } = useQuery<{ concepts: ConceptCard[] }>({
     queryKey: ["/api/discovery/my-concepts"],
     queryFn: async () => {
@@ -190,11 +195,11 @@ export default function MyConcepts() {
               <div key={c.id} data-testid={`card-my-concept-${c.id}`}>
                 <div className="group p-5 rounded-xl border border-border bg-card hover:border-amber-500/40 hover:shadow-md transition-all duration-200">
                   <div className="flex items-start justify-between gap-4 mb-2">
-                    <Link href={`/discovery/concept/${c.id}`}>
+                    <button onClick={() => setSelectedConcept(c)} className="text-left">
                       <h3 className="font-semibold text-foreground text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors cursor-pointer">
                         {c.title}
                       </h3>
-                    </Link>
+                    </button>
                     <div className="flex items-center gap-2 shrink-0">
                       {c.credibilityScore !== null && (
                         <span className={`inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full ${
@@ -249,9 +254,9 @@ export default function MyConcepts() {
                       </AlertDialog>
                     </div>
                   </div>
-                  <Link href={`/discovery/concept/${c.id}`}>
+                  <button onClick={() => setSelectedConcept(c)} className="text-left w-full">
                     <p className="text-sm text-muted-foreground line-clamp-1 mb-3 cursor-pointer">{c.oneLiner}</p>
-                  </Link>
+                  </button>
 
                   <div className="flex items-center gap-4 text-xs text-muted-foreground mb-1">
                     <span className="px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 font-medium">
@@ -286,6 +291,87 @@ export default function MyConcepts() {
           })}
         </div>
       )}
+
+      <Sheet open={!!selectedConcept} onOpenChange={(o) => { if (!o) setSelectedConcept(null); }}>
+        <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
+          {selectedConcept && (
+            <>
+              <SheetHeader className="mb-5">
+                <SheetTitle className="text-base font-semibold leading-snug pr-4">
+                  {selectedConcept.title}
+                </SheetTitle>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <Badge variant="secondary" className="text-[10px]">
+                    Stage {selectedConcept.stage}
+                  </Badge>
+                  <Badge variant="secondary" className="text-[10px] bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30">
+                    {selectedConcept.therapeuticArea}
+                  </Badge>
+                  {selectedConcept.credibilityScore !== null && (
+                    <Badge
+                      variant="secondary"
+                      className={`text-[10px] ${
+                        selectedConcept.credibilityScore >= 70
+                          ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/30"
+                          : selectedConcept.credibilityScore >= 40
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                            : "bg-red-500/10 text-red-700 dark:text-red-400 border-red-500/30"
+                      }`}
+                    >
+                      <Sparkles className="w-2.5 h-2.5 mr-0.5" />
+                      {selectedConcept.credibilityScore}/100
+                    </Badge>
+                  )}
+                  {(selectedConcept.seeking ?? []).map((s) => (
+                    <Badge key={s} variant="outline" className="text-[10px]">{s}</Badge>
+                  ))}
+                </div>
+              </SheetHeader>
+
+              <div className="space-y-5 text-sm">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                    One-liner
+                  </p>
+                  <p className="text-foreground">{selectedConcept.oneLiner}</p>
+                </div>
+
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                    Problem
+                  </p>
+                  <p className="text-foreground whitespace-pre-wrap">{selectedConcept.problem}</p>
+                </div>
+
+                {selectedConcept.hypothesis && (
+                  <div>
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                      Hypothesis
+                    </p>
+                    <p className="text-foreground whitespace-pre-wrap">{selectedConcept.hypothesis}</p>
+                  </div>
+                )}
+
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-1">
+                    Proposed Approach
+                  </p>
+                  <p className="text-foreground whitespace-pre-wrap">{selectedConcept.proposedApproach}</p>
+                </div>
+
+                <div className="pt-3 border-t border-border">
+                  <Link href={`/discovery/concept/${selectedConcept.id}`}>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs" data-testid="button-open-full-concept">
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      Open full page
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }

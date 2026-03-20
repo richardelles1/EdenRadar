@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { User, Plus, X, Camera, Loader2, CheckCircle2, ExternalLink } from "lucide-react";
+import { User, Plus, X, Camera, Loader2, CheckCircle2, ExternalLink, Check } from "lucide-react";
 import { getResearcherProfile, saveResearcherProfile, getProfileCompleteness } from "@/hooks/use-researcher";
 import { useResearcherHeaders } from "@/hooks/use-researcher";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +186,8 @@ export default function ResearchProfile() {
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [, forceUpdate] = useState(0);
+  const [justSaved, setJustSaved] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -244,6 +246,9 @@ export default function ResearchProfile() {
     });
     forceUpdate(n => n + 1);
     toast({ title: "Profile saved" });
+    setJustSaved(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => setJustSaved(false), 1500);
   }
 
   return (
@@ -453,10 +458,21 @@ export default function ResearchProfile() {
 
           <Button
             type="submit"
-            className="w-full bg-violet-600 hover:bg-violet-700 text-white"
+            className={`w-full text-white active:scale-95 transition-all duration-75 ${
+              justSaved
+                ? "bg-emerald-600 hover:bg-emerald-600"
+                : "bg-violet-600 hover:bg-violet-700"
+            }`}
             data-testid="button-save-profile"
           >
-            Save Profile
+            {justSaved ? (
+              <>
+                <Check className="w-4 h-4 mr-1.5" />
+                Saved!
+              </>
+            ) : (
+              "Save Profile"
+            )}
           </Button>
         </form>
       </Form>

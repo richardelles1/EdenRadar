@@ -5,7 +5,7 @@ import {
   FolderOpen,
   Bell,
   FlaskConical,
-  Database,
+  Search,
   Library,
   User,
   Moon,
@@ -23,12 +23,12 @@ import { getResearcherProfile } from "@/hooks/use-researcher";
 
 const NAV_ITEMS = [
   { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
+  { href: "/research/data-sources", label: "Database Search", icon: Search },
   { href: "/research/projects", label: "Projects", icon: FolderOpen },
   { href: "/research/my-discoveries", label: "Discoveries", icon: FlaskConical },
   { href: "/research/grants", label: "Grants", icon: BadgeDollarSign },
   { href: "/research/alerts", label: "Alerts", icon: Bell },
-  { href: "/research/library", label: "My Library", icon: Library },
-  { href: "/research/data-sources", label: "Database Search", icon: Database },
+  { href: "/research/library", label: "Saved Literature", icon: Library },
   { href: "/research/profile", label: "Profile", icon: User },
 ];
 

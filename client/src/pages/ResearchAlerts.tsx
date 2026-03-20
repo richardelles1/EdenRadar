@@ -278,6 +278,8 @@ function TopicSection({
 }) {
   const [showAllResearch, setShowAllResearch] = useState(false);
   const [showAllGrants, setShowAllGrants] = useState(false);
+  const [showResearchSection, setShowResearchSection] = useState(true);
+  const [showGrantSection, setShowGrantSection] = useState(true);
   const { data: researchData, isLoading: researchLoading } = useQuery<SearchResponse>({
     queryKey: ["/api/search", topic, "research-alerts-topic"],
     queryFn: async () => {
@@ -312,9 +314,13 @@ function TopicSection({
   });
 
   const researchSignals = useMemo(() =>
-    researchData?.assets?.flatMap(a => a.signals ?? []) ?? [], [researchData]);
+    (researchData?.assets?.flatMap(a => a.signals ?? []) ?? [])
+      .filter(s => RESEARCH_SOURCES.includes(s.source_key ?? "")),
+    [researchData]);
   const grantSignals = useMemo(() =>
-    grantData?.assets?.flatMap(a => a.signals ?? []) ?? [], [grantData]);
+    (grantData?.assets?.flatMap(a => a.signals ?? []) ?? [])
+      .filter(s => GRANT_SOURCES.includes(s.source_key ?? "")),
+    [grantData]);
 
   const filterList = useCallback((items: SearchResult[], prefix: string): Array<SearchResult & { dismissKey: string }> => {
     const withKeys = items.map((s, i) => ({
@@ -384,75 +390,91 @@ function TopicSection({
             <>
               {filteredResearch.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs text-blue-500 font-medium">
+                  <button
+                    onClick={() => setShowResearchSection(v => !v)}
+                    className="flex items-center gap-1.5 text-xs text-blue-500 font-medium w-full"
+                    data-testid={`toggle-research-section-${topic}`}
+                  >
                     <FlaskConical className="w-3.5 h-3.5" />
-                    Research ({filteredResearch.length > ALERTS_CAP && !showAllResearch
-                      ? `${ALERTS_CAP} of ${filteredResearch.length}`
-                      : filteredResearch.length})
-                  </div>
-                  {(showAllResearch ? filteredResearch : filteredResearch.slice(0, ALERTS_CAP)).map((signal, i) => (
-                    <AlertCard
-                      key={signal.dismissKey}
-                      signal={signal}
-                      index={i}
-                      colorClass="hover:border-blue-500/30"
-                      onDismiss={() => onDismiss(signal.dismissKey)}
-                    />
-                  ))}
-                  {filteredResearch.length > ALERTS_CAP && !showAllResearch && (
-                    <button
-                      onClick={() => setShowAllResearch(true)}
-                      className="w-full text-xs text-blue-500 hover:text-blue-400 font-medium py-1.5 transition-colors"
-                      data-testid={`show-more-research-${topic}`}
-                    >
-                      Show {filteredResearch.length - ALERTS_CAP} more research alerts
-                    </button>
-                  )}
-                  {showAllResearch && filteredResearch.length > ALERTS_CAP && (
-                    <button
-                      onClick={() => setShowAllResearch(false)}
-                      className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
-                      data-testid={`show-less-research-${topic}`}
-                    >
-                      Show less
-                    </button>
+                    Research
+                    <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredResearch.length}</Badge>
+                    {showResearchSection ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+                  </button>
+                  {showResearchSection && (
+                    <>
+                      {(showAllResearch ? filteredResearch : filteredResearch.slice(0, ALERTS_CAP)).map((signal, i) => (
+                        <AlertCard
+                          key={signal.dismissKey}
+                          signal={signal}
+                          index={i}
+                          colorClass="hover:border-blue-500/30"
+                          onDismiss={() => onDismiss(signal.dismissKey)}
+                        />
+                      ))}
+                      {filteredResearch.length > ALERTS_CAP && !showAllResearch && (
+                        <button
+                          onClick={() => setShowAllResearch(true)}
+                          className="w-full text-xs text-blue-500 hover:text-blue-400 font-medium py-1.5 transition-colors"
+                          data-testid={`show-more-research-${topic}`}
+                        >
+                          Show {filteredResearch.length - ALERTS_CAP} more research alerts
+                        </button>
+                      )}
+                      {showAllResearch && filteredResearch.length > ALERTS_CAP && (
+                        <button
+                          onClick={() => setShowAllResearch(false)}
+                          className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
+                          data-testid={`show-less-research-${topic}`}
+                        >
+                          Show less
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}
               {filteredGrants.length > 0 && (
                 <div className="space-y-2">
-                  <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+                  <button
+                    onClick={() => setShowGrantSection(v => !v)}
+                    className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium w-full"
+                    data-testid={`toggle-grant-section-${topic}`}
+                  >
                     <DollarSign className="w-3.5 h-3.5" />
-                    Grants ({filteredGrants.length > ALERTS_CAP && !showAllGrants
-                      ? `${ALERTS_CAP} of ${filteredGrants.length}`
-                      : filteredGrants.length})
-                  </div>
-                  {(showAllGrants ? filteredGrants : filteredGrants.slice(0, ALERTS_CAP)).map((signal, i) => (
-                    <AlertCard
-                      key={signal.dismissKey}
-                      signal={signal}
-                      index={i}
-                      colorClass="hover:border-emerald-500/30"
-                      onDismiss={() => onDismiss(signal.dismissKey)}
-                    />
-                  ))}
-                  {filteredGrants.length > ALERTS_CAP && !showAllGrants && (
-                    <button
-                      onClick={() => setShowAllGrants(true)}
-                      className="w-full text-xs text-emerald-500 hover:text-emerald-400 font-medium py-1.5 transition-colors"
-                      data-testid={`show-more-grants-${topic}`}
-                    >
-                      Show {filteredGrants.length - ALERTS_CAP} more grant alerts
-                    </button>
-                  )}
-                  {showAllGrants && filteredGrants.length > ALERTS_CAP && (
-                    <button
-                      onClick={() => setShowAllGrants(false)}
-                      className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
-                      data-testid={`show-less-grants-${topic}`}
-                    >
-                      Show less
-                    </button>
+                    Grants
+                    <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredGrants.length}</Badge>
+                    {showGrantSection ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+                  </button>
+                  {showGrantSection && (
+                    <>
+                      {(showAllGrants ? filteredGrants : filteredGrants.slice(0, ALERTS_CAP)).map((signal, i) => (
+                        <AlertCard
+                          key={signal.dismissKey}
+                          signal={signal}
+                          index={i}
+                          colorClass="hover:border-emerald-500/30"
+                          onDismiss={() => onDismiss(signal.dismissKey)}
+                        />
+                      ))}
+                      {filteredGrants.length > ALERTS_CAP && !showAllGrants && (
+                        <button
+                          onClick={() => setShowAllGrants(true)}
+                          className="w-full text-xs text-emerald-500 hover:text-emerald-400 font-medium py-1.5 transition-colors"
+                          data-testid={`show-more-grants-${topic}`}
+                        >
+                          Show {filteredGrants.length - ALERTS_CAP} more grant alerts
+                        </button>
+                      )}
+                      {showAllGrants && filteredGrants.length > ALERTS_CAP && (
+                        <button
+                          onClick={() => setShowAllGrants(false)}
+                          className="w-full text-xs text-muted-foreground hover:text-foreground font-medium py-1.5 transition-colors"
+                          data-testid={`show-less-grants-${topic}`}
+                        >
+                          Show less
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               )}
