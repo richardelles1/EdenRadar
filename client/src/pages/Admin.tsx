@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -4112,6 +4112,182 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   );
 }
 
+function SubscriptionData() {
+  const tiers = [
+    { name: "EdenDiscovery", price: 14.99, subscribers: 8, color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
+    { name: "EdenLab", price: 29.99, subscribers: 5, color: "bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800" },
+    { name: "TechTransfer Pro", price: 34.99, subscribers: 3, color: "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800" },
+    { name: "EdenRadar", price: 49.99, subscribers: 2, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
+    { name: "EdenSignal", price: 99.99, subscribers: 1, color: "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-800" },
+  ];
+  const totalMRR = tiers.reduce((sum, t) => sum + t.price * t.subscribers, 0);
+  const totalSubs = tiers.reduce((sum, t) => sum + t.subscribers, 0);
+  const ARR = totalMRR * 12;
+
+  return (
+    <div className="space-y-6" data-testid="section-subscription-data">
+      <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        Preview data — connect billing provider to activate live metrics.
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        {[
+          { label: "Total MRR", value: `$${totalMRR.toFixed(2)}`, icon: DollarSign, testid: "stat-total-mrr" },
+          { label: "ARR Projection", value: `$${ARR.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, icon: TrendingUp, testid: "stat-arr" },
+          { label: "Active Subscribers", value: totalSubs.toString(), icon: Users, testid: "stat-total-subscribers" },
+          { label: "Monthly Churn", value: "3.2%", icon: Activity, testid: "stat-churn" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1" data-testid={s.testid}>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <s.icon className="h-4 w-4" />
+              <span className="text-xs">{s.label}</span>
+            </div>
+            <p className="text-2xl font-semibold text-foreground">{s.value}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-3">
+        {tiers.map((t) => {
+          const rev = t.price * t.subscribers;
+          const pct = totalMRR > 0 ? (rev / totalMRR) * 100 : 0;
+          return (
+            <div key={t.name} className={`rounded-lg border p-4 ${t.color}`} data-testid={`card-tier-${t.name.toLowerCase().replace(/\s+/g, "-")}`}>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div>
+                  <p className="font-semibold text-sm">{t.name}</p>
+                  <p className="text-xs opacity-75">${t.price.toFixed(2)}/mo per seat</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-sm">${rev.toFixed(2)}/mo</p>
+                  <p className="text-xs opacity-75">{t.subscribers} subscriber{t.subscribers !== 1 ? "s" : ""} · {pct.toFixed(1)}% of MRR</p>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 rounded-full bg-black/10 dark:bg-white/10">
+                <div className="h-1.5 rounded-full bg-current opacity-50" style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {[
+          { label: "Avg Subscription Age", value: "2.4 mo", testid: "stat-avg-age" },
+          { label: "Net New Subs This Month", value: "+3", testid: "stat-net-new" },
+          { label: "Avg Revenue Per User", value: `$${(totalMRR / Math.max(totalSubs, 1)).toFixed(2)}`, testid: "stat-arpu" },
+        ].map((s) => (
+          <div key={s.label} className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1" data-testid={s.testid}>
+            <p className="text-xs text-muted-foreground">{s.label}</p>
+            <p className="text-xl font-semibold text-foreground">{s.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlatformInfo({ pw }: { pw: string }) {
+  const { data, isLoading } = useQuery<{
+    totalUsers: number;
+    totalAssets: number;
+    relevantAssets: number;
+    totalInstitutions: number;
+    edenSessionsAllTime: number;
+    edenSessions24h: number;
+    edenSessions7d: number;
+    edenSessions30d: number;
+    conceptCards: number;
+    researchProjects: number;
+    publishedDiscoveryCards: number;
+    savedAssets: number;
+    enrichmentJobsProcessed: number;
+  }>({
+    queryKey: ["/api/admin/platform-stats"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/platform-stats", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 60000,
+    enabled: !!pw,
+  });
+
+  const aiCalls24h = data ? Math.round(data.edenSessions24h * 4 + (data.enrichmentJobsProcessed / Math.max(data.totalAssets, 1)) * 50) : 0;
+  const aiCalls7d = data ? Math.round(data.edenSessions7d * 4 + (data.enrichmentJobsProcessed / Math.max(data.totalAssets, 1)) * 300) : 0;
+  const aiCalls30d = data ? Math.round(data.edenSessions30d * 4 + data.enrichmentJobsProcessed) : 0;
+  const costPer = 0.0003;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-muted-foreground gap-2">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        <span>Loading platform stats…</span>
+      </div>
+    );
+  }
+
+  const StatCard = ({ label, value, sub, icon: Icon, testid }: { label: string; value: string | number; sub?: string; icon: any; testid: string }) => (
+    <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1" data-testid={testid}>
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <Icon className="h-4 w-4" />
+        <span className="text-xs">{label}</span>
+      </div>
+      <p className="text-2xl font-semibold text-foreground">{typeof value === "number" ? value.toLocaleString() : value}</p>
+      {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+    </div>
+  );
+
+  return (
+    <div className="space-y-8" data-testid="section-platform-info">
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Data & Coverage</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard label="Registered Users" value={data?.totalUsers ?? 0} icon={Users} testid="stat-total-users" />
+          <StatCard label="Total Assets" value={data?.totalAssets ?? 0} icon={Database} testid="stat-total-assets" />
+          <StatCard label="Biotech-Relevant" value={data?.relevantAssets ?? 0} sub={data ? `${((data.relevantAssets / Math.max(data.totalAssets, 1)) * 100).toFixed(1)}% of total` : undefined} icon={FlaskConical} testid="stat-relevant-assets" />
+          <StatCard label="Institutions Indexed" value={data?.totalInstitutions ?? 0} icon={Globe} testid="stat-total-institutions" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Eden AI Conversations</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard label="Last 24 Hours" value={data?.edenSessions24h ?? 0} icon={MessageSquare} testid="stat-eden-24h" />
+          <StatCard label="Last 7 Days" value={data?.edenSessions7d ?? 0} icon={MessageSquare} testid="stat-eden-7d" />
+          <StatCard label="Last 30 Days" value={data?.edenSessions30d ?? 0} icon={MessageSquare} testid="stat-eden-30d" />
+          <StatCard label="All Time" value={data?.edenSessionsAllTime ?? 0} icon={MessageSquare} testid="stat-eden-alltime" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">
+          AI Usage <span className="normal-case tracking-normal font-normal text-muted-foreground/60 text-xs ml-1">(est.)</span>
+        </h3>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <StatCard label="Est. AI Calls (24h)" value={aiCalls24h.toLocaleString()} sub="est." icon={Zap} testid="stat-ai-calls-24h" />
+          <StatCard label="Est. AI Calls (7d)" value={aiCalls7d.toLocaleString()} sub="est." icon={Zap} testid="stat-ai-calls-7d" />
+          <StatCard label="Est. AI Calls (30d)" value={aiCalls30d.toLocaleString()} sub="est." icon={Zap} testid="stat-ai-calls-30d" />
+          <StatCard label="Est. Cost (24h)" value={`$${(aiCalls24h * costPer).toFixed(4)}`} sub="est. @ $0.0003/call" icon={DollarSign} testid="stat-ai-cost-24h" />
+          <StatCard label="Est. Cost (7d)" value={`$${(aiCalls7d * costPer).toFixed(3)}`} sub="est. @ $0.0003/call" icon={DollarSign} testid="stat-ai-cost-7d" />
+          <StatCard label="Enrichment Calls Total" value={(data?.enrichmentJobsProcessed ?? 0).toLocaleString()} sub="cumulative enrichment" icon={Sparkles} testid="stat-enrichment-total" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Content & Engagement</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard label="Concept Cards" value={data?.conceptCards ?? 0} icon={Lightbulb} testid="stat-concept-cards" />
+          <StatCard label="Research Projects" value={data?.researchProjects ?? 0} icon={Microscope} testid="stat-research-projects" />
+          <StatCard label="Published Discoveries" value={data?.publishedDiscoveryCards ?? 0} icon={BookOpen} testid="stat-published-discoveries" />
+          <StatCard label="Saved Assets" value={data?.savedAssets ?? 0} icon={Bookmark} testid="stat-saved-assets" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
   pw: string;
   setAuthed: (v: boolean) => void;
@@ -4163,37 +4339,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
 
       <div className="max-w-screen-2xl mx-auto flex flex-col lg:flex-row">
         <aside className="shrink-0 border-b lg:border-b-0 lg:w-56 lg:border-r border-border lg:min-h-[calc(100vh-57px)]">
-          <nav className="flex flex-row overflow-x-auto gap-1 p-2 lg:flex-col lg:overflow-x-visible lg:space-y-1 lg:p-4 lg:gap-0">
-            <button
-              onClick={() => setActiveTab("new-arrivals")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "new-arrivals"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-new-arrivals"
-            >
-              <Inbox className="h-4 w-4" />
-              Indexing Queue
-            </button>
-            <button
-              onClick={() => setActiveTab("manual-import")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "manual-import"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-manual-import"
-            >
-              <PackagePlus className="h-4 w-4" />
-              Manual Import
-            </button>
+          <nav className="flex flex-row overflow-x-auto gap-1 p-2 lg:flex-col lg:overflow-x-visible lg:p-4 lg:gap-0">
+
+            {/* ── DATA CONTROLS ── */}
+            <div className="hidden lg:block pt-1 pb-1.5" data-testid="nav-section-data-controls">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Data Controls</p>
+            </div>
             <button
               onClick={() => setActiveTab("data-health")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "data-health"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "data-health" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-data-health"
             >
@@ -4203,9 +4358,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <button
               onClick={() => setActiveTab("enrichment")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "enrichment"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "enrichment" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-enrichment"
             >
@@ -4213,11 +4366,19 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Enrichment
             </button>
             <button
+              onClick={() => setActiveTab("manual-import")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "manual-import" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-manual-import"
+            >
+              <PackagePlus className="h-4 w-4" />
+              Manual Import
+            </button>
+            <button
               onClick={() => setActiveTab("pipeline-review")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "pipeline-review"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "pipeline-review" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-pipeline-review"
             >
@@ -4225,16 +4386,30 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Pipeline Review
             </button>
             <button
+              onClick={() => setActiveTab("new-arrivals")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "new-arrivals" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-new-arrivals"
+            >
+              <Inbox className="h-4 w-4" />
+              Indexing Queue
+            </button>
+
+            {/* ── PRODUCT CONTROLS ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-product-controls">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Product Controls</p>
+            </div>
+            <div className="hidden lg:block h-2" />
+            <button
               onClick={() => setActiveTab("research-queue")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "research-queue"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "research-queue" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-research-queue"
             >
               <Microscope className="h-4 w-4" />
-              <span>Research Queue</span>
+              <span>Research Review</span>
               {pendingCount > 0 && (
                 <span className="ml-auto text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center" data-testid="badge-pending-count">
                   {pendingCount}
@@ -4244,22 +4419,17 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <button
               onClick={() => setActiveTab("concept-queue")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "concept-queue"
-                  ? "bg-amber-500/10 text-amber-600"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "concept-queue" ? "bg-amber-500/10 text-amber-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-concept-queue"
             >
               <Lightbulb className="h-4 w-4" />
-              Concept Queue
+              Concept Review
             </button>
-
             <button
               onClick={() => setActiveTab("eden")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "eden"
-                  ? "bg-emerald-500/10 text-emerald-600"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "eden" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-eden"
             >
@@ -4267,19 +4437,40 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               EDEN
             </button>
 
-            <div className="hidden lg:block border-t border-border my-2" />
-
+            {/* ── ADMIN CONTROLS ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-admin-controls">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Admin Controls</p>
+            </div>
+            <div className="hidden lg:block h-2" />
             <button
               onClick={() => setActiveTab("account-center")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "account-center"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "account-center" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
               data-testid="nav-account-center"
             >
               <Users className="h-4 w-4" />
               Account Center
+            </button>
+            <button
+              onClick={() => setActiveTab("subscription-data")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "subscription-data" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-subscription-data"
+            >
+              <CreditCard className="h-4 w-4" />
+              Subscription Data
+            </button>
+            <button
+              onClick={() => setActiveTab("platform-info")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "platform-info" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-platform-info"
+            >
+              <Server className="h-4 w-4" />
+              Platform Info
             </button>
           </nav>
         </aside>
@@ -4332,7 +4523,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
           {activeTab === "research-queue" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Research Queue</h2>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Research Review</h2>
                 <p className="text-sm text-muted-foreground mt-1">Review researcher-submitted Discovery Cards. Approved cards enter Scout as the "Lab Discoveries" source.</p>
               </div>
               <ResearchQueue pw={pw} />
@@ -4342,7 +4533,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
           {activeTab === "concept-queue" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Concept Queue</h2>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Concept Review</h2>
                 <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the EdenDiscovery portal with AI credibility scores.</p>
               </div>
               <ConceptQueue pw={pw} />
@@ -4356,6 +4547,26 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">Manage user accounts, assign portal roles, and invite new users to the platform.</p>
               </div>
               <AccountCenter pw={pw} />
+            </>
+          )}
+
+          {activeTab === "subscription-data" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Subscription Data</h2>
+                <p className="text-sm text-muted-foreground mt-1">Revenue by tier, MRR, and subscriber metrics. Preview data — connect a billing provider to activate live figures.</p>
+              </div>
+              <SubscriptionData />
+            </>
+          )}
+
+          {activeTab === "platform-info" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Platform Info</h2>
+                <p className="text-sm text-muted-foreground mt-1">Live platform metrics: asset coverage, user activity, AI usage, and content health.</p>
+              </div>
+              <PlatformInfo pw={pw} />
             </>
           )}
 

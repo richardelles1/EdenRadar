@@ -4412,5 +4412,16 @@ If multiple assets appear, return each as a separate array item. If only one ass
     }
   });
 
+  app.get("/api/admin/platform-stats", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const stats = await storage.getPlatformStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch platform stats" });
+    }
+  });
+
   return httpServer;
 }

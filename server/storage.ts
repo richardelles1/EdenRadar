@@ -11,6 +11,7 @@ import {
   enrichmentJobs, type EnrichmentJob,
   researchProjects, type ResearchProject, type InsertResearchProject,
   discoveryCards, type DiscoveryCard, type InsertDiscoveryCard,
+  conceptCards,
   savedReferences, type SavedReference, type InsertSavedReference,
   savedGrants, type SavedGrant, type InsertSavedGrant,
   reviewQueue,
@@ -209,6 +210,22 @@ export interface IStorage {
 
   getManualInstitutions(): Promise<ManualInstitution[]>;
   createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
+
+  getPlatformStats(): Promise<{
+    totalUsers: number;
+    totalAssets: number;
+    relevantAssets: number;
+    totalInstitutions: number;
+    edenSessionsAllTime: number;
+    edenSessions24h: number;
+    edenSessions7d: number;
+    edenSessions30d: number;
+    conceptCards: number;
+    researchProjects: number;
+    publishedDiscoveryCards: number;
+    savedAssets: number;
+    enrichmentJobsProcessed: number;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1492,6 +1509,73 @@ export class DatabaseStorage implements IStorage {
   async createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution> {
     const [row] = await db.insert(manualInstitutions).values(data).returning();
     return row;
+  }
+
+  async getPlatformStats(): Promise<{
+    totalUsers: number;
+    totalAssets: number;
+    relevantAssets: number;
+    totalInstitutions: number;
+    edenSessionsAllTime: number;
+    edenSessions24h: number;
+    edenSessions7d: number;
+    edenSessions30d: number;
+    conceptCards: number;
+    researchProjects: number;
+    publishedDiscoveryCards: number;
+    savedAssets: number;
+    enrichmentJobsProcessed: number;
+  }> {
+    const now = new Date();
+    const ago24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      [usersRow],
+      [assetsRow],
+      [relevantRow],
+      [instRow],
+      [sessionsAllRow],
+      [sessions24hRow],
+      [sessions7dRow],
+      [sessions30dRow],
+      [conceptsRow],
+      [projectsRow],
+      [discRow],
+      [savedRow],
+      [enrichRow],
+    ] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` }).from(users),
+      db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets),
+      db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.relevant, true)),
+      db.select({ count: sql<number>`count(distinct institution)::int` }).from(ingestedAssets),
+      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions),
+      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago24h)),
+      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago7d)),
+      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago30d)),
+      db.select({ count: sql<number>`count(*)::int` }).from(conceptCards),
+      db.select({ count: sql<number>`count(*)::int` }).from(researchProjects),
+      db.select({ count: sql<number>`count(*)::int` }).from(discoveryCards).where(eq(discoveryCards.published, true)),
+      db.select({ count: sql<number>`count(*)::int` }).from(savedAssets),
+      db.select({ total: sql<number>`coalesce(sum(processed), 0)::int` }).from(enrichmentJobs),
+    ]);
+
+    return {
+      totalUsers: usersRow?.count ?? 0,
+      totalAssets: assetsRow?.count ?? 0,
+      relevantAssets: relevantRow?.count ?? 0,
+      totalInstitutions: instRow?.count ?? 0,
+      edenSessionsAllTime: sessionsAllRow?.count ?? 0,
+      edenSessions24h: sessions24hRow?.count ?? 0,
+      edenSessions7d: sessions7dRow?.count ?? 0,
+      edenSessions30d: sessions30dRow?.count ?? 0,
+      conceptCards: conceptsRow?.count ?? 0,
+      researchProjects: projectsRow?.count ?? 0,
+      publishedDiscoveryCards: discRow?.count ?? 0,
+      savedAssets: savedRow?.count ?? 0,
+      enrichmentJobsProcessed: enrichRow?.total ?? 0,
+    };
   }
 }
 
