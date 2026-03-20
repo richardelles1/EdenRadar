@@ -701,6 +701,18 @@ export default function Scout() {
                         </button>
                       ))}
                     </div>
+                    <Select value={sinceFilter} onValueChange={setSinceFilter} data-testid="filter-since-inline">
+                      <SelectTrigger className="h-7 text-[11px] w-[110px] border-border">
+                        <SelectValue placeholder="Any time" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="any">Any time</SelectItem>
+                        <SelectItem value="6m">Last 6 months</SelectItem>
+                        <SelectItem value="2024">From 2024</SelectItem>
+                        <SelectItem value="2023">From 2023</SelectItem>
+                        <SelectItem value="2022">2022 and older</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <button
                       onClick={() => setFiltersOpen(true)}
                       className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
@@ -833,7 +845,7 @@ export default function Scout() {
                   <SelectItem value="6m">Last 6 months</SelectItem>
                   <SelectItem value="2024">From 2024</SelectItem>
                   <SelectItem value="2023">From 2023</SelectItem>
-                  <SelectItem value="2022">From 2022</SelectItem>
+                  <SelectItem value="2022">2022 and older</SelectItem>
                 </SelectContent>
               </Select>
             </div>

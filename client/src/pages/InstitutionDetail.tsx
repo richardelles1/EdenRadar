@@ -108,6 +108,13 @@ function AssetRow({ asset, index, savedIngestedIds }: {
             </span>
           )}
           <ScoreBadge score={score} />
+          <Link
+            href={`/asset/${asset.id}`}
+            className="hidden sm:inline text-[11px] font-medium text-primary hover:underline"
+            data-testid={`link-dossier-header-${index}`}
+          >
+            Dossier →
+          </Link>
           {expanded
             ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" />
             : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
