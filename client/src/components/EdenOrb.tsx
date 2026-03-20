@@ -151,7 +151,7 @@ export function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
         { rx: 40, ry: 10, tilt: 40,  anim: "eden-nuc-counter",  dur: isThinking ? "4.8s" : "12.0s", op: 0.28, stroke: "#6ee7b7", sw: 0.8 },
         { rx: 32, ry: 8,  tilt: 80,  anim: "eden-nuc-rotate",   dur: isThinking ? "2.4s" : "6.0s",  op: 0.40, stroke: "#10b981", sw: 0.8 },
         { rx: 24, ry: 6,  tilt: 120, anim: "eden-nuc-counter",  dur: isThinking ? "3.8s" : "9.5s",  op: 0.32, stroke: "#6ee7b7", sw: 0.7 },
-        { rx: 17, ry: 4,  tilt: 160, anim: "eden-nuc-rotate",   dur: isThinking ? "5.0s" : "13.0s", op: 0.44, stroke: "#a7f3d0", sw: 0.7 },
+        { rx: 20, ry: 6,  tilt: 160, anim: "eden-nuc-rotate",   dur: isThinking ? "5.0s" : "13.0s", op: 0.44, stroke: "#a7f3d0", sw: 0.7 },
       ].map((nr, i) => (
         <g key={i} style={{ transformOrigin: `${cx}px ${cy}px`, animation: `${nr.anim} ${nr.dur} linear infinite` }}>
           <g transform={`rotate(${nr.tilt}, ${cx}, ${cy})`}>
