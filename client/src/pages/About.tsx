@@ -61,7 +61,6 @@ const FOUNDERS = [
     name: "Wafick Mohamed",
     title: "Co-Founder & Chief Executive Officer",
     photo: wafickPhoto,
-    credentials: ["D.Sc.", "M.S.", "CQA", "PMP", "CLSSBB"],
     bio: [
       "Dr. Wafick Mohamed is a biotech executive, entrepreneur, and educator dedicated to advancing science for patient impact. With extensive experience across global pharma and emerging biotech, he specializes in building quality systems, scaling operations, and leading organizations from the ground up.",
       "As Founder and CEO of WKM Consulting Services LLC, Dr. Mohamed has launched and shaped multiple innovative companies. He also serves as a professor of research and entrepreneurship, mentoring the next generation of scientific and business leaders.",
@@ -73,7 +72,6 @@ const FOUNDERS = [
     name: "Richard Elles",
     title: "Co-Founder & Chief Operating Officer",
     photo: richardPhoto,
-    credentials: ["M.P.A.", "B.S. Business", "PMP", "Drexel", "Villanova"],
     bio: [
       "Richard Elles is a dynamic healthcare leader with a diverse background in strategy development, corporate leadership, patient advocacy, and process improvement. A dedicated and PMP-certified Project Manager, Rich has deployed extensive management systems across consulting firms, healthtech startups, academic institutions, and research teams.",
       "As the founder of Oriva, Inc., Rich has harnessed the power of cutting-edge technology to redefine philanthropic development. He is a two-time Ironman and leverages his experience in endurance sports to connect with corporate wellness initiatives to power new giving trends. Rich completed his Bachelor's Degree in Business at Drexel University before earning a Master's Degree in Public Administration from Villanova University.",
@@ -92,7 +90,7 @@ const VALUES = [
   {
     icon: Globe,
     title: "Built to Scale",
-    desc: "From 150 tech transfer offices to global research ecosystems, we architect platforms that grow with the industry.",
+    desc: "From 300+ tech transfer offices to global research ecosystems, we architect platforms that grow with the industry.",
   },
   {
     icon: Users,
@@ -167,7 +165,7 @@ export default function About() {
               Accelerate science to patient impact by eliminating the discovery gap between university research and industry development.
             </h2>
             <p className="text-muted-foreground text-base leading-relaxed max-w-2xl mx-auto">
-              Every year, thousands of licensable technologies sit quietly inside research institutions while industry teams spend months and millions searching through fragmented databases and cold calls. EdenRadar changes that with AI-powered discovery, enriched intelligence, and a connected ecosystem designed for the modern biotech deal.
+              Every year, thousands of licensable technologies sit quietly inside research institutions while industry teams spend months and millions searching through fragmented databases and cold calls. EdenRadar changes that with EDEN-enriched discovery, structured intelligence, and a connected ecosystem designed for the modern biotech deal.
             </p>
           </div>
         </section>
@@ -219,23 +217,7 @@ export default function About() {
                         }}
                       />
                     </div>
-                    {/* Credential pills */}
-                    <div className="flex flex-wrap gap-1.5 justify-center max-w-[150px]">
-                      {founder.credentials.map((c) => (
-                        <span
-                          key={c}
-                          className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
-                          style={{
-                            background: "hsl(142 52% 36% / 0.12)",
-                            color: "hsl(142 65% 55%)",
-                            border: "1px solid hsl(142 52% 36% / 0.2)",
-                          }}
-                        >
-                          {c}
-                        </span>
-                      ))}
                     </div>
-                  </div>
 
                   {/* Bio text */}
                   <div className="flex-1 min-w-0">

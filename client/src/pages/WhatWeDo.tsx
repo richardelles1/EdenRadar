@@ -78,9 +78,9 @@ const PIPELINE_STEPS = [
     colorDim: "hsl(142 65% 48% / 0.1)",
     step: "01",
     title: "Continuous Monitoring",
-    desc: "EdenRadar's AI-powered scrapers continuously crawl 200+ university tech transfer offices, government databases, and academic publication feeds. Every asset is collected, timestamped, and queued for analysis the moment it appears.",
+    desc: "EdenRadar's automated scrapers continuously crawl 300+ university tech transfer offices, government databases, and academic publication feeds. Every asset is collected, timestamped, and queued for analysis the moment it appears.",
     bullets: [
-      "200+ TTO portals monitored",
+      "300+ TTO portals monitored",
       "Daily refresh on all sources",
       "Patent filing alerts included",
     ],
@@ -90,12 +90,12 @@ const PIPELINE_STEPS = [
     color: "hsl(265 60% 60%)",
     colorDim: "hsl(265 60% 60% / 0.1)",
     step: "02",
-    title: "AI Classification and Enrichment",
-    desc: "Each asset passes through EDEN, our proprietary AI engine, which classifies therapy area, disease target, development stage, and modality. EDEN also scores each asset 0 to 100 for licensing readiness, scientific credibility, and commercial potential.",
+    title: "EDEN Classification and Enrichment",
+    desc: "Each asset passes through EDEN, which classifies therapy area, disease target, development stage, and modality. EDEN scores each asset 0 to 100 for licensing readiness, scientific credibility, and commercial potential.",
     bullets: [
       "Therapy area classification",
       "Modality and target extraction",
-      "0-100 AI readiness score",
+      "0-100 EDEN readiness score",
     ],
   },
   {
@@ -119,7 +119,7 @@ const PIPELINE_STEPS = [
     title: "Dossier Generation",
     desc: "For each asset you want to explore, EdenRadar auto-generates a structured intelligence dossier: competitive landscape, key scientific claims, patent coverage, inventor details, and a deal-readiness summary, formatted for BD review.",
     bullets: [
-      "Full AI-written dossier",
+      "Full EDEN-compiled dossier",
       "Competitive cross-reference",
       "Export to PDF or CSV",
     ],
@@ -138,7 +138,7 @@ const PORTALS = [
     forLabel: "For: Concept Creators, Early-Stage Innovators",
     features: [
       "Submit early-stage hypotheses before research begins",
-      "AI credibility scoring on a 0-100 scale",
+      "EDEN credibility scoring on a 0-100 scale",
       "Surface to industry scouts and collaborators",
       "Graduate promising concepts into EdenLab projects",
       "Concept registry with timestamped provenance",
@@ -157,7 +157,7 @@ const PORTALS = [
     forLabel: "For: Academic Researchers, Lab Leaders, PhD Teams",
     features: [
       "Structured 11-section project canvas",
-      "AI literature synthesis across 40+ data sources",
+      "Literature synthesis across 40+ data sources",
       "Evidence extraction and citation management",
       "Visibility to industry partners and collaborators",
       "Grants discovery matched to your research profile",
@@ -175,14 +175,14 @@ const PORTALS = [
     borderColor: "hsl(142 65% 48% / 0.25)",
     forLabel: "For: BD Teams, Licensing Executives, Pharma Strategy",
     features: [
-      "Live feed of 46,000+ enriched licensable assets",
-      "Natural language AI queries via EDEN chat",
+      "Continuously refreshed catalog of licensable biotech assets",
+      "Natural language queries via EDEN chat",
       "Competing asset cross-reference by target and modality",
       "Institution intelligence and researcher profiles",
-      "Auto-generated dossiers and board-ready reports",
+      "EDEN-compiled dossiers and board-ready reports",
     ],
     vision:
-      "EdenRadar is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously updated, AI-organized window into every major TTO on the planet.",
+      "EdenRadar is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously enriched window into every major TTO on the planet.",
   },
 ];
 
@@ -190,7 +190,7 @@ const WHO_ITS_FOR = [
   {
     icon: Building2,
     title: "Pharma and Biotech BD Teams",
-    desc: "Replace manual TTO outreach and fragmented databases with a single AI-powered platform that surfaces the assets you actually need.",
+    desc: "Replace manual TTO outreach and fragmented databases with a single platform that surfaces the assets you actually need.",
   },
   {
     icon: Users,
@@ -205,14 +205,14 @@ const WHO_ITS_FOR = [
   {
     icon: Shield,
     title: "Life Science Investors and Funds",
-    desc: "Surface early-stage assets before they reach the market. Use AI scoring to prioritize your deal flow and focus your diligence time.",
+    desc: "Surface early-stage assets before they reach the market. Use EDEN scoring to prioritize your deal flow and focus your diligence time.",
   },
 ];
 
 const STATS = [
-  { value: "46,000+", label: "Licensable Assets Indexed" },
-  { value: "200+", label: "TTO Sources Monitored" },
-  { value: "0-100", label: "AI Readiness Score" },
+  { value: "10,000+", label: "Biotech Assets Covered" },
+  { value: "300+", label: "TTO Sources Monitored" },
+  { value: "0-100", label: "EDEN Score" },
   { value: "Real-Time", label: "Continuous Data Refresh" },
 ];
 
@@ -238,7 +238,7 @@ export default function WhatWeDo() {
           >
             <Zap className="w-3.5 h-3.5 text-primary" />
             <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-              AI-Powered Asset Discovery
+              EDEN Asset Discovery
             </span>
           </div>
 
@@ -247,7 +247,7 @@ export default function WhatWeDo() {
             <span className="gradient-text">to the industry ready to build it.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-10">
-            EdenRadar is a three-portal intelligence platform that monitors tech transfer offices, enriches every asset with AI, and delivers them directly to the business development teams that need them.
+            EdenRadar is a three-portal intelligence platform that monitors tech transfer offices, EDEN-enriches every asset, and delivers them directly to the business development teams that need them.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button

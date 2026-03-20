@@ -257,7 +257,7 @@ const INDUSTRY_TILES = [
   {
     icon: TrendingUp,
     title: "Market Intelligence",
-    desc: "AI-scanned signals from 150+ TTOs, patent filings, and live academic publications, structured and scored.",
+    desc: "EDEN-enriched signals from 300+ TTOs, patent filings, and live academic publications, structured and scored.",
   },
   {
     icon: GitMerge,
@@ -289,8 +289,8 @@ const RESEARCH_TILES = [
   },
   {
     icon: BookOpen,
-    title: "AI Literature Review",
-    desc: "Query millions of papers and receive AI-structured summaries, key findings, and citation-ready insights.",
+    title: "Literature Synthesis",
+    desc: "Query millions of papers and receive structured summaries, key findings, and citation-ready insights.",
   },
   {
     icon: Award,
@@ -307,8 +307,8 @@ const DISCOVERY_TILES = [
   },
   {
     icon: Sparkles,
-    title: "AI Credibility Scoring",
-    desc: "Every concept is automatically evaluated by AI for scientific plausibility, feasibility, and biotech relevance on a 0-100 scale.",
+    title: "EDEN Credibility Scoring",
+    desc: "Every concept is automatically evaluated by EDEN for scientific plausibility, feasibility, and biotech relevance on a 0-100 scale.",
   },
   {
     icon: Target,
@@ -544,9 +544,9 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
 /* ─────────────────────────── Main Landing ────────────────────── */
 
 const STATS = [
-  { value: "150+",   label: "Tech Transfer Offices" },
-  { value: "10M+",   label: "Papers Indexed" },
-  { value: "AI",     label: "Enriched Signals" },
+  { value: "300+",    label: "Tech Transfer Offices" },
+  { value: "10M+",    label: "Papers Indexed" },
+  { value: "EDEN",    label: "Enriched Signals" },
   { value: "3-Sided", label: "Ecosystem" },
 ];
 
@@ -594,7 +594,7 @@ export default function Landing() {
             >
               <Zap className="w-3.5 h-3.5 text-primary" />
               <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-                AI-Powered Biotech Asset Matchmaking
+                Biotech Asset Discovery Platform
               </span>
             </div>
 
@@ -607,7 +607,7 @@ export default function Landing() {
             </h1>
 
             <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-10">
-              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by AI that reads the science so you don't have to.
+              EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
@@ -683,7 +683,7 @@ export default function Landing() {
                 {
                   icon: TrendingUp,
                   title: "Discover before the crowd",
-                  desc: "Surface pre-clinical assets from 150+ tech transfer offices the moment they're published, enriched by AI with target, modality, and stage.",
+                  desc: "Surface pre-clinical assets from 300+ tech transfer offices the moment they're published, EDEN-enriched with target, modality, and stage.",
                 },
                 {
                   icon: Layers,

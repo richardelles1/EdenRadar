@@ -54,21 +54,6 @@ function PageBackground() {
   );
 }
 
-const FEATURE_ROWS = [
-  "EDEN AI chat (natural language queries)",
-  "Full asset dossiers with competitive cross-reference",
-  "Semantic search across all 46,000+ assets",
-  "Therapy area and stage filters",
-  "Institution intelligence and TTO profiles",
-  "Saved assets and watchlists",
-  "Portfolio-grade CSV and PDF export",
-  "AI readiness scoring (0-100 per asset)",
-  "Researcher contact information",
-  "Custom alerts for new matching assets",
-  "Team collaboration workspace",
-  "Priority onboarding and support",
-];
-
 const TIERS = [
   {
     name: "EdenDiscovery",
@@ -78,10 +63,17 @@ const TIERS = [
     colorDim: "hsl(38 92% 50% / 0.08)",
     borderColor: "hsl(38 92% 50% / 0.3)",
     headerBg: "hsl(38 92% 50%)",
-    price: "$14.99",
+    price: "$9.99",
     period: "/mo",
     tagline: "Ideal for early discovery and concept validation",
-    included: [true, false, false, true, false, true, false, false, false, false, false, false],
+    popular: false,
+    features: [
+      "Submit early-stage concepts before research begins",
+      "EDEN credibility scoring for concepts (0-100 scale)",
+      "Browse the public concept community feed",
+      "Save concepts to a personal watchlist",
+      "Surface your concepts to industry collaborators",
+    ],
   },
   {
     name: "EdenLab",
@@ -91,11 +83,18 @@ const TIERS = [
     colorDim: "hsl(265 60% 60% / 0.08)",
     borderColor: "hsl(265 60% 60% / 0.3)",
     headerBg: "hsl(265 60% 60%)",
-    price: "$49.99",
+    price: "$24.99",
     period: "/mo",
     tagline: "For research teams and active deal flow exploration",
-    included: [true, true, true, true, true, true, true, true, false, false, false, false],
     popular: true,
+    features: [
+      "Everything in EdenDiscovery",
+      "11-section structured research project canvas",
+      "Literature synthesis across 40+ academic sources",
+      "Evidence extraction and citation management",
+      "Grants discovery matched to your research profile",
+      "Industry visibility for your published research",
+    ],
   },
   {
     name: "EdenRadar",
@@ -105,10 +104,22 @@ const TIERS = [
     colorDim: "hsl(142 65% 48% / 0.08)",
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
-    price: "$99.99",
+    price: "$44.99",
     period: "/mo",
     tagline: "Full platform access for serious BD teams",
-    included: [true, true, true, true, true, true, true, true, true, true, true, true],
+    popular: false,
+    features: [
+      "Everything in EdenLab",
+      "EDEN natural language queries across 300+ TTO database",
+      "EDEN-enriched asset dossiers with competitive cross-reference",
+      "Therapy area, stage, and modality filters",
+      "Institution intelligence and TTO profiles",
+      "Saved asset lists and pipeline tracking",
+      "EDEN readiness scoring per asset (0-100)",
+      "Researcher contact information",
+      "Custom alerts for new matching assets",
+      "PDF and CSV pipeline export",
+    ],
   },
 ];
 
@@ -131,7 +142,7 @@ function PricingCards() {
             </div>
           )}
 
-          {/* Colored header — solid tier color */}
+          {/* Colored header */}
           <div
             className="px-6 py-5"
             style={{ background: tier.headerBg }}
@@ -157,26 +168,28 @@ function PricingCards() {
             <p className="text-xs text-white/75 leading-snug">{tier.tagline}</p>
           </div>
 
-          {/* Feature checklist */}
+          {/* Per-tier feature checklist */}
           <div className="flex-1 px-6 py-4 bg-card">
             <ul className="space-y-2.5">
-              {FEATURE_ROWS.map((feature, fi) => {
-                const isIncluded = tier.included[fi];
+              {tier.features.map((feature, fi) => {
+                const isEscalator = feature.startsWith("Everything in");
                 return (
                   <li key={fi} className="flex items-start gap-2.5 text-xs">
                     <span
                       className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
                       style={{
-                        background: isIncluded ? tier.color.replace(")", " / 0.15)") : "hsl(var(--muted))",
+                        background: isEscalator
+                          ? "hsl(var(--muted))"
+                          : tier.color.replace(")", " / 0.15)"),
                       }}
                     >
-                      {isIncluded ? (
-                        <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
+                      {isEscalator ? (
+                        <ChevronRight className="w-2.5 h-2.5 text-muted-foreground" />
                       ) : (
-                        <span className="w-1 h-0.5 rounded-full bg-muted-foreground/30 block" />
+                        <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
                       )}
                     </span>
-                    <span className={isIncluded ? "text-foreground" : "text-muted-foreground/50"}>
+                    <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
                       {feature}
                     </span>
                   </li>
@@ -268,7 +281,7 @@ const DEMO_ASSETS: AssetCardData[] = [
 const CHAT_MESSAGES: ChatMessage[] = [
   {
     role: "eden",
-    text: "Hello. I'm EDEN, your AI research intelligence assistant. I have access to 46,766 enriched assets from 200+ tech transfer offices. How can I help your BD team today?",
+    text: "I'm EDEN, EdenRadar's research intelligence engine. I monitor and enrich biotech assets across 300+ tech transfer offices in real time. How can I help your team today?",
     delay: 400,
   },
   {
@@ -278,7 +291,7 @@ const CHAT_MESSAGES: ChatMessage[] = [
   },
   {
     role: "eden",
-    text: "As of today, EdenRadar has 46,766 enriched and indexed licensable assets across 200+ academic and research institutions globally. All assets are continuously refreshed and scored by our AI engine.",
+    text: "EdenRadar continuously monitors 300+ research institutions globally. All assets are EDEN-enriched and scored for licensing readiness. What would you like to explore?",
     delay: 3200,
   },
   {
@@ -288,7 +301,7 @@ const CHAT_MESSAGES: ChatMessage[] = [
   },
   {
     role: "eden",
-    text: "Johns Hopkins Technology Ventures currently has 312 oncology assets in the index. These span cell therapy, small molecule, antibody, and gene therapy modalities. Would you like me to surface the top-ranked assets by AI readiness score?",
+    text: "Johns Hopkins Technology Ventures has a significant oncology portfolio in the index, spanning cell therapy, small molecule, antibody, and gene therapy modalities. Would you like me to surface the top-ranked assets by EDEN readiness score?",
     delay: 6600,
   },
   {
@@ -298,7 +311,7 @@ const CHAT_MESSAGES: ChatMessage[] = [
   },
   {
     role: "eden",
-    text: "Here are the top 3 Johns Hopkins oncology assets ranked by AI readiness score:",
+    text: "Here are the top 3 Johns Hopkins oncology assets ranked by EDEN readiness score:",
     assetCards: DEMO_ASSETS,
     delay: 9800,
   },
@@ -351,9 +364,11 @@ function EdenChatDemo() {
       CHAT_MESSAGES.forEach((msg, i) => {
         setTimeout(() => {
           setVisibleCount(i + 1);
-          if (chatRef.current) {
-            chatRef.current.scrollTop = chatRef.current.scrollHeight;
-          }
+          requestAnimationFrame(() => {
+            if (chatRef.current) {
+              chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
+            }
+          });
         }, msg.delay);
       });
     };
@@ -384,7 +399,6 @@ function EdenChatDemo() {
       className="flex flex-col rounded-2xl overflow-hidden"
       style={{
         background: "hsl(var(--card))",
-        border: "1px solid hsl(var(--border))",
         height: 480,
       }}
     >
@@ -396,7 +410,7 @@ function EdenChatDemo() {
         <EdenAvatar size={28} />
         <div>
           <p className="text-sm font-semibold text-foreground leading-tight">EDEN</p>
-          <p className="text-[10px] text-primary">AI Research Intelligence</p>
+          <p className="text-[10px] text-primary">Research Intelligence</p>
         </div>
         <div className="ml-auto flex gap-1">
           {["bg-red-500/50", "bg-amber-500/50", "bg-green-500/50"].map((c, i) => (
@@ -500,12 +514,12 @@ const HOW_STEPS = [
   {
     number: "02",
     title: "Tell EDEN what you're looking for",
-    desc: "Ask EDEN a plain English question. 'Show me CNS assets from MIT in preclinical stage.' EDEN searches across 46,000+ enriched records instantly and presents ranked results.",
+    desc: "Ask EDEN a plain English question. 'Show me CNS assets from MIT in preclinical stage.' EDEN searches across thousands of EDEN-enriched records instantly and presents ranked results.",
   },
   {
     number: "03",
     title: "Explore enriched dossiers",
-    desc: "Drill into any asset to see the full AI-generated dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
+    desc: "Drill into any asset to see the full EDEN-compiled dossier: scientific summary, competitive landscape, inventor details, patent coverage, and deal readiness score.",
   },
   {
     number: "04",
@@ -577,7 +591,7 @@ export default function HowItWorks() {
               See EDEN in action
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto">
-              A real conversation with EDEN, EdenRadar's AI intelligence layer, using the Johns Hopkins TTO as an example.
+              A real conversation with EDEN, EdenRadar's intelligence layer, using the Johns Hopkins TTO as an example.
             </p>
           </div>
 
@@ -588,7 +602,7 @@ export default function HowItWorks() {
                 <EdenOrb />
               </div>
               <div className="text-center mt-6 max-w-xs mx-auto">
-                <h3 className="font-bold text-foreground mb-2">EDEN AI Engine</h3>
+                <h3 className="font-bold text-foreground mb-2">EDEN Intelligence Engine</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
                   The intelligence core of EdenRadar. EDEN processes, classifies, and reasons over every asset in the database, giving you instant, accurate, cited answers in plain English.
                 </p>
