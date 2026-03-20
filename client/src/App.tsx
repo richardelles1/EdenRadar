@@ -32,6 +32,9 @@ import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
 import PitchDeck from "@/pages/PitchDeck";
+import About from "@/pages/About";
+import WhatWeDo from "@/pages/WhatWeDo";
+import HowItWorks from "@/pages/HowItWorks";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
@@ -200,6 +203,9 @@ function Router() {
       </Route>
 
       <Route path="/pitch" component={PitchDeck} />
+      <Route path="/about" component={About} />
+      <Route path="/what-we-do" component={WhatWeDo} />
+      <Route path="/how-it-works" component={HowItWorks} />
 
       <Route path="/discovery">
         <DiscoveryLayout requireAuth={false}>
