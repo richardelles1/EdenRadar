@@ -708,8 +708,8 @@ export default function Scout() {
                       <SelectContent>
                         <SelectItem value="any">Any time</SelectItem>
                         <SelectItem value="6m">Last 6 months</SelectItem>
-                        <SelectItem value="2024">From 2024</SelectItem>
-                        <SelectItem value="2023">From 2023</SelectItem>
+                        <SelectItem value="2024">2024</SelectItem>
+                        <SelectItem value="2023">2023</SelectItem>
                         <SelectItem value="2022">2022 and older</SelectItem>
                       </SelectContent>
                     </Select>
@@ -843,8 +843,8 @@ export default function Scout() {
                 <SelectContent>
                   <SelectItem value="any">Any time</SelectItem>
                   <SelectItem value="6m">Last 6 months</SelectItem>
-                  <SelectItem value="2024">From 2024</SelectItem>
-                  <SelectItem value="2023">From 2023</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2023">2023</SelectItem>
                   <SelectItem value="2022">2022 and older</SelectItem>
                 </SelectContent>
               </Select>
