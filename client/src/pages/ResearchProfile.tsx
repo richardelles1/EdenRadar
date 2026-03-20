@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -188,6 +188,7 @@ export default function ResearchProfile() {
   const [, forceUpdate] = useState(0);
   const [justSaved, setJustSaved] = useState(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); }, []);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),

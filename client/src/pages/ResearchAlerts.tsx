@@ -392,13 +392,15 @@ function TopicSection({
                 <div className="space-y-2">
                   <button
                     onClick={() => setShowResearchSection(v => !v)}
-                    className="flex items-center gap-1.5 text-xs text-blue-500 font-medium w-full"
+                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-muted/20 hover:bg-muted/40 transition-colors"
                     data-testid={`toggle-research-section-${topic}`}
                   >
-                    <FlaskConical className="w-3.5 h-3.5" />
-                    Research
-                    <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredResearch.length}</Badge>
-                    {showResearchSection ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+                    <div className="flex items-center gap-1.5 text-xs text-blue-500 font-medium">
+                      <FlaskConical className="w-3.5 h-3.5" />
+                      Research Articles
+                      <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredResearch.length}</Badge>
+                    </div>
+                    {showResearchSection ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
                   </button>
                   {showResearchSection && (
                     <>
@@ -437,13 +439,15 @@ function TopicSection({
                 <div className="space-y-2">
                   <button
                     onClick={() => setShowGrantSection(v => !v)}
-                    className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium w-full"
+                    className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded bg-muted/20 hover:bg-muted/40 transition-colors"
                     data-testid={`toggle-grant-section-${topic}`}
                   >
-                    <DollarSign className="w-3.5 h-3.5" />
-                    Grants
-                    <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredGrants.length}</Badge>
-                    {showGrantSection ? <ChevronUp className="w-3 h-3 ml-auto" /> : <ChevronDown className="w-3 h-3 ml-auto" />}
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-500 font-medium">
+                      <DollarSign className="w-3.5 h-3.5" />
+                      Grant Opportunities
+                      <Badge variant="secondary" className="text-[9px] ml-0.5">{filteredGrants.length}</Badge>
+                    </div>
+                    {showGrantSection ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
                   </button>
                   {showGrantSection && (
                     <>

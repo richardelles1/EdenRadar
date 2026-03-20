@@ -363,7 +363,7 @@ export default function MyConcepts() {
                   <Link href={`/discovery/concept/${selectedConcept.id}`}>
                     <Button variant="outline" size="sm" className="gap-1.5 text-xs" data-testid="button-open-full-concept">
                       <ExternalLink className="w-3.5 h-3.5" />
-                      Open full page
+                      Open full page →
                     </Button>
                   </Link>
                 </div>
