@@ -365,9 +365,13 @@ function EdenChatDemo() {
         setTimeout(() => {
           setVisibleCount(i + 1);
           requestAnimationFrame(() => {
-            if (chatRef.current) {
-              chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
-            }
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                if (chatRef.current) {
+                  chatRef.current.scrollTo({ top: chatRef.current.scrollHeight, behavior: "smooth" });
+                }
+              });
+            });
           });
         }, msg.delay);
       });
