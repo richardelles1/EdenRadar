@@ -160,6 +160,7 @@ function PipelineSidebar({
   onSelect,
   onCreatePipeline,
   onBrief,
+  briefLoadingId,
   isLoading,
 }: {
   pipelines: PipelineWithCount[];
@@ -168,6 +169,7 @@ function PipelineSidebar({
   onSelect: (id: number | null | "all") => void;
   onCreatePipeline: (name: string) => void;
   onBrief?: (id: number) => void;
+  briefLoadingId?: number | null;
   isLoading: boolean;
 }) {
   const qc = useQueryClient();
@@ -285,11 +287,15 @@ function PipelineSidebar({
                   {onBrief && p.assetCount > 0 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); onBrief(p.id); }}
-                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-primary"
+                      disabled={briefLoadingId === p.id}
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-primary disabled:opacity-50"
                       title="Pipeline brief"
                       data-testid={`button-pipeline-brief-${p.id}`}
                     >
-                      <FileText className="w-2.5 h-2.5" />
+                      {briefLoadingId === p.id
+                        ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                        : <FileText className="w-2.5 h-2.5" />
+                      }
                     </button>
                   )}
                   <button
@@ -367,7 +373,7 @@ export default function Assets() {
   const qc = useQueryClient();
   const [selectedPipeline, setSelectedPipeline] = useState<number | null | "all">("all");
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
-  const [briefLoading, setBriefLoading] = useState(false);
+  const [briefLoading, setBriefLoading] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
 
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
@@ -446,18 +452,18 @@ export default function Assets() {
     },
     onSuccess: (result) => {
       setBriefModal({ pipelineName: result.pipelineName, brief: result.brief, assetCount: result.assetCount });
-      setBriefLoading(false);
+      setBriefLoading(null);
     },
     onError: (err: any) => {
       toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
-      setBriefLoading(false);
+      setBriefLoading(null);
     },
   });
 
   const handleBrief = (listId?: number) => {
     const id = listId ?? (typeof selectedPipeline === "number" ? selectedPipeline : null);
     if (!id) return;
-    setBriefLoading(true);
+    setBriefLoading(id);
     briefMutation.mutate(id);
   };
 
@@ -583,6 +589,7 @@ export default function Assets() {
               onSelect={setSelectedPipeline}
               onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
               onBrief={handleBrief}
+              briefLoadingId={briefLoading}
               isLoading={pipelinesLoading}
             />
           </div>
@@ -614,6 +621,7 @@ export default function Assets() {
                           onSelect={setSelectedPipeline}
                           onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
                           onBrief={handleBrief}
+                          briefLoadingId={briefLoading}
                           isLoading={pipelinesLoading}
                         />
                       </SheetContent>
@@ -626,12 +634,12 @@ export default function Assets() {
                 {typeof selectedPipeline === "number" && displayedAssets.length > 0 && (
                   <button
                     onClick={handleBrief}
-                    disabled={briefLoading}
+                    disabled={briefLoading !== null}
                     className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
                     data-testid="button-pipeline-brief"
                     title="Generate AI pipeline brief"
                   >
-                    {briefLoading ? (
+                    {briefLoading === selectedPipeline ? (
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     ) : (
                       <FileText className="w-3.5 h-3.5" />
