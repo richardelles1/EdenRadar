@@ -99,18 +99,29 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
         <p className="text-[10px] text-muted-foreground truncate">
           {asset.sourceJournal} · {asset.publicationYear}
         </p>
-        {asset.sourceUrl && (
-          <a
-            href={asset.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
-            data-testid={`link-pipeline-source-${asset.id}`}
-          >
-            <ExternalLink className="w-2.5 h-2.5" />
-            View
-          </a>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {asset.ingestedAssetId && (
+            <Link
+              href={`/asset/${asset.ingestedAssetId}`}
+              className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
+              data-testid={`link-pipeline-dossier-${asset.id}`}
+            >
+              Dossier →
+            </Link>
+          )}
+          {asset.sourceUrl && (
+            <a
+              href={asset.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+              data-testid={`link-pipeline-source-${asset.id}`}
+            >
+              <ExternalLink className="w-2.5 h-2.5" />
+              Source
+            </a>
+          )}
+        </div>
       </div>
     </div>
   );

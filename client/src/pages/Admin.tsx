@@ -3712,8 +3712,8 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
         body: JSON.stringify({
           institution: parsedInstitution,
-          assets: selected.map(({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail }) =>
-            ({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail })
+          assets: selected.map(({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage }) =>
+            ({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage })
           ),
         }),
       });

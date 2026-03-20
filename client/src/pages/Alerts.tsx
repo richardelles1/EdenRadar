@@ -49,7 +49,7 @@ const STORAGE_KEY = "edenLastSeenAlerts";
 interface DeltaInstitution {
   institution: string;
   count: number;
-  sampleAssets: string[];
+  sampleAssets: Array<{ id: number; name: string }>;
 }
 
 interface IndustryDeltaResponse {
@@ -297,15 +297,15 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
       {open && inst.sampleAssets.length > 0 && (
         <div className="px-3 pb-3 border-t border-card-border/60">
           <ul className="space-y-1 pt-2">
-            {inst.sampleAssets.map((name, i) => (
+            {inst.sampleAssets.map((asset, i) => (
               <li key={i} className="flex items-start gap-2 text-[11px]">
                 <span className="w-1 h-1 rounded-full bg-primary/50 mt-1.5 shrink-0" />
                 <Link
-                  href={`/scout?q=${encodeURIComponent(name)}`}
+                  href={`/asset/${asset.id}`}
                   className="truncate text-primary/80 hover:text-primary hover:underline transition-colors"
                   data-testid={`alert-asset-link-${i}`}
                 >
-                  {name}
+                  {asset.name}
                 </Link>
               </li>
             ))}

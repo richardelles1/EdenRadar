@@ -259,6 +259,7 @@ export default function Scout() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
+  const [sinceFilter, setSinceFilter] = useState<string>("any");
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [minScore, setMinScore] = useState<number>(0);
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
@@ -322,11 +323,21 @@ export default function Scout() {
     topModality: dashStats?.stats?.byModality?.[0]?.modality ?? "",
   };
 
+  function getSinceISO(filter: string): string | undefined {
+    const now = Date.now();
+    if (filter === "6m") return new Date(now - 183 * 24 * 60 * 60 * 1000).toISOString();
+    if (filter === "2024") return new Date("2024-01-01").toISOString();
+    if (filter === "2023") return new Date("2023-01-01").toISOString();
+    if (filter === "2022") return new Date("2022-01-01").toISOString();
+    return undefined;
+  }
+
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
       const profileModality = buyerProfile.modalities.length === 1 ? buyerProfile.modalities[0] : undefined;
       const profileStage = buyerProfile.preferred_stages.length === 1 ? buyerProfile.preferred_stages[0] : undefined;
       const profileIndication = buyerProfile.indication_keywords.length === 1 ? buyerProfile.indication_keywords[0] : undefined;
+      const since = getSinceISO(sinceFilter);
       const res = await apiRequest("POST", "/api/scout/search", {
         query,
         minSimilarity: 0.40,
@@ -334,6 +345,7 @@ export default function Scout() {
         ...(profileModality ? { modality: profileModality } : {}),
         ...(profileStage ? { stage: profileStage } : {}),
         ...(profileIndication ? { indication: profileIndication } : {}),
+        ...(since ? { since } : {}),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -511,6 +523,7 @@ export default function Scout() {
     stageFilter !== "all",
     modalityFilter !== "all",
     institutionFilter !== "all",
+    sinceFilter !== "any",
     sortMode !== "score",
     minScore !== 0,
   ].filter(Boolean).length;
@@ -810,6 +823,22 @@ export default function Scout() {
 
           <div className="mt-6 space-y-6">
             <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Freshness (re-search to apply)</p>
+              <Select value={sinceFilter} onValueChange={setSinceFilter} data-testid="filter-since-select">
+                <SelectTrigger className="h-8 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any time</SelectItem>
+                  <SelectItem value="6m">Last 6 months</SelectItem>
+                  <SelectItem value="2024">From 2024</SelectItem>
+                  <SelectItem value="2023">From 2023</SelectItem>
+                  <SelectItem value="2022">From 2022</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
               <Select value={sortMode} onValueChange={(v) => setSortMode(v as "score" | "recency")} data-testid="select-sort">
                 <SelectTrigger className="h-8 text-xs w-full">
@@ -879,6 +908,7 @@ export default function Scout() {
                   setStageFilter("all");
                   setModalityFilter("all");
                   setInstitutionFilter("all");
+                  setSinceFilter("any");
                   setSortMode("score");
                   setMinScore(0);
                 }}

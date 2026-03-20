@@ -146,19 +146,29 @@ function AssetRow({ asset, index, savedIngestedIds }: {
             </div>
           )}
 
-          {asset.sourceUrl && (
-            <a
-              href={asset.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline"
-              data-testid={`link-view-tto-${index}`}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Link
+              href={`/asset/${asset.id}`}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              data-testid={`link-dossier-${index}`}
               onClick={(e) => e.stopPropagation()}
             >
-              <ExternalLink className="w-3 h-3" />
-              Open at TTO →
-            </a>
-          )}
+              Dossier →
+            </Link>
+            {asset.sourceUrl && (
+              <a
+                href={asset.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary hover:underline"
+                data-testid={`link-view-tto-${index}`}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <ExternalLink className="w-3 h-3" />
+                Open at TTO →
+              </a>
+            )}
+          </div>
         </div>
       )}
     </div>

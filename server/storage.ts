@@ -194,7 +194,7 @@ export interface IStorage {
 
   semanticSearch(queryEmbedding: number[], limit?: number): Promise<RetrievedAsset[]>;
   filteredSemanticSearch(queryEmbedding: number[], geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string, limit?: number): Promise<RetrievedAsset[]>;
-  scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number }): Promise<RetrievedAsset[]>;
+  scoutVectorSearch(queryEmbedding: number[], opts?: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number; since?: Date }): Promise<RetrievedAsset[]>;
   filteredCount(geoRegex?: string, modality?: string, stage?: string, indication?: string, institutionPattern?: string): Promise<number>;
   searchIngestedAssetsByInstitution(name: string, limit?: number): Promise<RetrievedAsset[]>;
   getOrCreateEdenSession(sessionId: string): Promise<EdenSession>;
@@ -1328,9 +1328,9 @@ export class DatabaseStorage implements IStorage {
 
   async scoutVectorSearch(
     queryEmbedding: number[],
-    opts: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number } = {}
+    opts: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number; since?: Date } = {}
   ): Promise<RetrievedAsset[]> {
-    const { modality, stage, indication, institution, limit = 40, minSimilarity = 0.35 } = opts;
+    const { modality, stage, indication, institution, limit = 40, minSimilarity = 0.35, since } = opts;
     const vectorStr = `[${queryEmbedding.join(",")}]`;
     const filterConditions: ReturnType<typeof sql>[] = [
       sql`embedding IS NOT NULL AND relevant = true`,
@@ -1340,6 +1340,7 @@ export class DatabaseStorage implements IStorage {
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
 
     const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
 

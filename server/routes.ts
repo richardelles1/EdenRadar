@@ -374,12 +374,14 @@ export async function registerRoutes(
         indication: z.string().optional(),
         institution: z.string().optional(),
         limit: z.number().int().min(1).max(100).default(50),
+        since: z.string().optional(),
       });
-      const { query, minSimilarity, modality, stage, indication, institution, limit } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, limit, since } = schema.parse(req.body);
+      const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
 
       const embedding = await embedQuery(query);
       const results = await storage.scoutVectorSearch(embedding, {
-        modality, stage, indication, institution, limit, minSimilarity,
+        modality, stage, indication, institution, limit, minSimilarity, since: sinceDate,
       });
 
       const TIER1_UNIVERSITIES = ["MIT", "Stanford", "Harvard", "UCSF", "Johns Hopkins", "Columbia", "Yale", "Penn", "Duke", "Cornell"];
@@ -4043,11 +4045,17 @@ If a field cannot be determined, use "N/A".`
       const [newAssetRows, newConceptRows, newProjectRows] = await Promise.all([
         db
           .select({
+            id: ingestedAssets.id,
             institution: ingestedAssets.institution,
             assetName: ingestedAssets.assetName,
           })
           .from(ingestedAssets)
-          .where(sql`${ingestedAssets.firstSeenAt} >= ${since}`)
+          .where(
+            and(
+              eq(ingestedAssets.relevant, true),
+              sql`${ingestedAssets.firstSeenAt} >= ${since}`,
+            )
+          )
           .orderBy(desc(ingestedAssets.firstSeenAt)),
 
         db
@@ -4092,12 +4100,12 @@ If a field cannot be determined, use "N/A".`
           .limit(20),
       ]);
 
-      const institutionMap = new Map<string, { count: number; sampleAssets: string[] }>();
+      const institutionMap = new Map<string, { count: number; sampleAssets: Array<{ id: number; name: string }> }>();
       for (const row of newAssetRows) {
         const inst = row.institution || "Unknown";
         const existing = institutionMap.get(inst) ?? { count: 0, sampleAssets: [] };
         existing.count++;
-        if (existing.sampleAssets.length < 5) existing.sampleAssets.push(row.assetName);
+        if (existing.sampleAssets.length < 5) existing.sampleAssets.push({ id: row.id, name: row.assetName });
         institutionMap.set(inst, existing);
       }
 
@@ -4314,6 +4322,10 @@ If multiple assets appear, return each as a separate array item. If only one ass
       patentStatus: z.string().default("unknown"),
       technologyId: z.string().default(""),
       contactEmail: z.string().default(""),
+      target: z.string().default("unknown"),
+      modality: z.string().default("unknown"),
+      indication: z.string().default("unknown"),
+      developmentStage: z.string().default("unknown"),
     });
 
     const bodySchema = z.object({
@@ -4332,10 +4344,10 @@ If multiple assets appear, return each as a separate array item. If only one ass
         fingerprint: makeFingerprint(a.name, institution),
         assetName: a.name,
         institution,
-        target: "unknown",
-        modality: "unknown",
-        indication: "unknown",
-        developmentStage: "unknown",
+        target: a.target && a.target !== "unknown" ? a.target : "unknown",
+        modality: a.modality && a.modality !== "unknown" ? a.modality : "unknown",
+        indication: a.indication && a.indication !== "unknown" ? a.indication : "unknown",
+        developmentStage: a.developmentStage && a.developmentStage !== "unknown" ? a.developmentStage : "unknown",
         summary: a.description || a.name,
         abstract: null as string | null,
         sourceType: "tech_transfer" as const,
@@ -4345,7 +4357,7 @@ If multiple assets appear, return each as a separate array item. If only one ass
         patentStatus: a.patentStatus !== "unknown" ? a.patentStatus : null,
         inventors: a.inventors.length > 0 ? a.inventors : null,
         contactEmail: a.contactEmail || null,
-        relevant: false,
+        relevant: true,
         runId: run.id,
       }));
 
@@ -4364,17 +4376,22 @@ If multiple assets appear, return each as a separate array item. If only one ass
           abstract: undefined as string | undefined,
         }));
 
-        // Enrich only — never change relevant or delete; manual imports stay in Indexing Queue
-        // until the operator explicitly pushes them via the normal push flow.
+        // Re-classify to fill any remaining unknown fields; preserve values already set from parse step
         const newAssetById = new Map(newAssets.map((a) => [a.id, a]));
         classifyBatch(classifyInputs, 5, async (id, classification) => {
           try {
             const stored = newAssetById.get(id);
+            const listing = listingMap.get(makeFingerprint(stored?.assetName ?? "", institution));
+            // Prefer parse-extracted values; only use classifier result when parse had "unknown"
+            const finalTarget = (listing?.target && listing.target !== "unknown") ? listing.target : classification.target;
+            const finalModality = (listing?.modality && listing.modality !== "unknown") ? listing.modality : classification.modality;
+            const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : classification.indication;
+            const finalStage = (listing?.developmentStage && listing.developmentStage !== "unknown") ? listing.developmentStage : classification.developmentStage;
             const score = computeCompletenessScore({
-              target: classification.target,
-              modality: classification.modality,
-              indication: classification.indication,
-              developmentStage: classification.developmentStage,
+              target: finalTarget,
+              modality: finalModality,
+              indication: finalIndication,
+              developmentStage: finalStage,
               categories: classification.categories,
               innovationClaim: classification.innovationClaim,
               mechanismOfAction: classification.mechanismOfAction,
@@ -4383,14 +4400,13 @@ If multiple assets appear, return each as a separate array item. If only one ass
               inventors: stored?.inventors ?? null,
               patentStatus: stored?.patentStatus ?? null,
             });
-            // Update enrichment fields only — do NOT touch relevant (keep false) or delete records
             await db
               .update(ingestedAssets)
               .set({
-                target: classification.target,
-                modality: classification.modality,
-                indication: classification.indication,
-                developmentStage: classification.developmentStage,
+                target: finalTarget,
+                modality: finalModality,
+                indication: finalIndication,
+                developmentStage: finalStage,
                 ...(classification.categories ? { categories: classification.categories } : {}),
                 ...(classification.categoryConfidence !== undefined ? { categoryConfidence: classification.categoryConfidence } : {}),
                 ...(classification.innovationClaim ? { innovationClaim: classification.innovationClaim } : {}),
