@@ -159,6 +159,7 @@ function PipelineSidebar({
   selectedId,
   onSelect,
   onCreatePipeline,
+  onBrief,
   isLoading,
 }: {
   pipelines: PipelineWithCount[];
@@ -166,6 +167,7 @@ function PipelineSidebar({
   selectedId: number | null | "all";
   onSelect: (id: number | null | "all") => void;
   onCreatePipeline: (name: string) => void;
+  onBrief?: (id: number) => void;
   isLoading: boolean;
 }) {
   const qc = useQueryClient();
@@ -280,6 +282,16 @@ function PipelineSidebar({
                 <span className="flex-1 text-left truncate">{p.name}</span>
                 <span className="text-[10px] tabular-nums text-muted-foreground group-hover:hidden">{p.assetCount}</span>
                 <div className="hidden group-hover:flex items-center gap-0.5">
+                  {onBrief && p.assetCount > 0 && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onBrief(p.id); }}
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-primary"
+                      title="Pipeline brief"
+                      data-testid={`button-pipeline-brief-${p.id}`}
+                    >
+                      <FileText className="w-2.5 h-2.5" />
+                    </button>
+                  )}
                   <button
                     onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditName(p.name); }}
                     className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50"
@@ -442,10 +454,11 @@ export default function Assets() {
     },
   });
 
-  const handleBrief = () => {
-    if (typeof selectedPipeline !== "number") return;
+  const handleBrief = (listId?: number) => {
+    const id = listId ?? (typeof selectedPipeline === "number" ? selectedPipeline : null);
+    if (!id) return;
     setBriefLoading(true);
-    briefMutation.mutate(selectedPipeline);
+    briefMutation.mutate(id);
   };
 
   const handleCopy = () => {
@@ -569,6 +582,7 @@ export default function Assets() {
               selectedId={selectedPipeline}
               onSelect={setSelectedPipeline}
               onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
+              onBrief={handleBrief}
               isLoading={pipelinesLoading}
             />
           </div>
@@ -599,6 +613,7 @@ export default function Assets() {
                           selectedId={selectedPipeline}
                           onSelect={setSelectedPipeline}
                           onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
+                          onBrief={handleBrief}
                           isLoading={pipelinesLoading}
                         />
                       </SheetContent>

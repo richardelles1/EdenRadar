@@ -537,11 +537,13 @@ export async function registerRoutes(
       const [listResult, assetsResult] = await Promise.all([
         db.execute(sql`SELECT name FROM pipeline_lists WHERE id = ${listId} LIMIT 1`),
         db.execute(sql`
-          SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage, sa.source_name, sa.source_journal
+          SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage,
+                 sa.source_name, sa.source_journal,
+                 COALESCE(ia.institution, '') AS institution
           FROM saved_assets sa
+          LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
           WHERE sa.pipeline_list_id = ${listId}
           ORDER BY sa.id DESC
-          LIMIT 60
         `),
       ]);
 
@@ -554,9 +556,10 @@ export async function registerRoutes(
         return res.json({ brief: `No assets in the "${pipelineName}" pipeline yet.`, assetCount: 0, pipelineName });
       }
 
-      const assetList = assets.map((a, i) =>
-        `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Stage: ${String(a.development_stage ?? "—")} | Disease: ${String(a.disease_indication ?? "—")} | Source: ${String(a.source_name || a.source_journal || "—")}`
-      ).join("\n");
+      const assetList = assets.map((a, i) => {
+        const institution = String(a.institution ?? "").trim() || String(a.source_name || a.source_journal || "—");
+        return `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Institution: ${institution} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Stage: ${String(a.development_stage ?? "—")} | Disease: ${String(a.disease_indication ?? "—")}`;
+      }).join("\n");
 
       const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets from a curated pipeline named "${pipelineName}".\n\nGenerate a concise pipeline dossier with the following sections:\nAsset Overview: Count and general description of the portfolio\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDevelopment Stage Spread: Breakdown of where assets sit in development\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance and positioning of this pipeline\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
 
