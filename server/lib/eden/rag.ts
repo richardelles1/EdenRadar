@@ -627,7 +627,8 @@ const FUN_FACT_PATTERNS = [
   /\bcool fact\b/i,
   /\bsurprising fact\b/i,
   /\bfun factoid\b/i,
-  /\btell me something (interesting|surprising|cool|fun|unusual) about/i,
+  // Must reference the portfolio/dataset itself, not a biotech topic
+  /\btell me something (interesting|surprising|cool|fun|unusual) about (your data|the data|your portfolio|the portfolio|your dataset|the dataset|what you have)\b/i,
   /\bwhat.s (interesting|unusual|surprising|cool|fun) about (your data|the data|your portfolio|the portfolio)\b/i,
   /\bgive me an? (interesting|surprising|fun|cool) fact\b/i,
 ];

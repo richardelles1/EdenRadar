@@ -19,12 +19,15 @@ const SITE_PW = "quality";
 function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
   if (!assets.length || !content) return assets;
   const lower = content.toLowerCase();
+  const UNMENTIONED = 999999;
   return [...assets].sort((a, b) => {
     const nameA = a.assetName.toLowerCase().slice(0, 30);
     const nameB = b.assetName.toLowerCase().slice(0, 30);
     const posA = lower.indexOf(nameA);
     const posB = lower.indexOf(nameB);
-    return (posA === -1 ? Infinity : posA) - (posB === -1 ? Infinity : posB);
+    const ia = posA === -1 ? UNMENTIONED : posA;
+    const ib = posB === -1 ? UNMENTIONED : posB;
+    return ia - ib;
   });
 }
 
