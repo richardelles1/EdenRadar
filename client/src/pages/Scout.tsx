@@ -710,7 +710,7 @@ export default function Scout() {
                         <SelectItem value="6m">Last 6 months</SelectItem>
                         <SelectItem value="2024">From 2024</SelectItem>
                         <SelectItem value="2023">From 2023</SelectItem>
-                        <SelectItem value="2022">2022 and older</SelectItem>
+                        <SelectItem value="2022">From 2022</SelectItem>
                       </SelectContent>
                     </Select>
                     <button
@@ -845,7 +845,7 @@ export default function Scout() {
                   <SelectItem value="6m">Last 6 months</SelectItem>
                   <SelectItem value="2024">From 2024</SelectItem>
                   <SelectItem value="2023">From 2023</SelectItem>
-                  <SelectItem value="2022">2022 and older</SelectItem>
+                  <SelectItem value="2022">From 2022</SelectItem>
                 </SelectContent>
               </Select>
             </div>
