@@ -1531,50 +1531,51 @@ export class DatabaseStorage implements IStorage {
     const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const [
-      [usersRow],
-      [assetsRow],
-      [relevantRow],
-      [instRow],
-      [sessionsAllRow],
-      [sessions24hRow],
-      [sessions7dRow],
-      [sessions30dRow],
-      [conceptsRow],
-      [projectsRow],
-      [discRow],
-      [savedRow],
-      [enrichRow],
-    ] = await Promise.all([
-      db.select({ count: sql<number>`count(*)::int` }).from(users),
-      db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets),
-      db.select({ count: sql<number>`count(*)::int` }).from(ingestedAssets).where(eq(ingestedAssets.relevant, true)),
-      db.select({ count: sql<number>`count(distinct institution)::int` }).from(ingestedAssets),
-      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions),
-      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago24h)),
-      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago7d)),
-      db.select({ count: sql<number>`count(*)::int` }).from(edenSessions).where(gte(edenSessions.createdAt, ago30d)),
-      db.select({ count: sql<number>`count(*)::int` }).from(conceptCards),
-      db.select({ count: sql<number>`count(*)::int` }).from(researchProjects),
-      db.select({ count: sql<number>`count(*)::int` }).from(discoveryCards).where(eq(discoveryCards.published, true)),
-      db.select({ count: sql<number>`count(*)::int` }).from(savedAssets),
-      db.select({ total: sql<number>`coalesce(sum(processed), 0)::int` }).from(enrichmentJobs),
-    ]);
+    const [row] = await db.execute<{
+      total_users: number;
+      total_assets: number;
+      relevant_assets: number;
+      total_institutions: number;
+      eden_sessions_all: number;
+      eden_sessions_24h: number;
+      eden_sessions_7d: number;
+      eden_sessions_30d: number;
+      concept_cards: number;
+      research_projects: number;
+      published_discovery_cards: number;
+      saved_assets: number;
+      enrichment_processed: number;
+    }>(sql`
+      SELECT
+        (SELECT count(*)::int FROM users)                                                         AS total_users,
+        (SELECT count(*)::int FROM ingested_assets)                                              AS total_assets,
+        (SELECT count(*)::int FROM ingested_assets WHERE relevant = true)                        AS relevant_assets,
+        (SELECT count(DISTINCT institution)::int FROM ingested_assets)                           AS total_institutions,
+        (SELECT count(*)::int FROM eden_sessions)                                                AS eden_sessions_all,
+        (SELECT count(*)::int FROM eden_sessions WHERE created_at >= ${ago24h})                 AS eden_sessions_24h,
+        (SELECT count(*)::int FROM eden_sessions WHERE created_at >= ${ago7d})                  AS eden_sessions_7d,
+        (SELECT count(*)::int FROM eden_sessions WHERE created_at >= ${ago30d})                 AS eden_sessions_30d,
+        (SELECT count(*)::int FROM concept_cards)                                                AS concept_cards,
+        (SELECT count(*)::int FROM research_projects)                                            AS research_projects,
+        (SELECT count(*)::int FROM discovery_cards WHERE published = true)                       AS published_discovery_cards,
+        (SELECT count(*)::int FROM saved_assets)                                                 AS saved_assets,
+        (SELECT coalesce(sum(processed), 0)::int FROM enrichment_jobs)                          AS enrichment_processed
+    `);
 
     return {
-      totalUsers: usersRow?.count ?? 0,
-      totalAssets: assetsRow?.count ?? 0,
-      relevantAssets: relevantRow?.count ?? 0,
-      totalInstitutions: instRow?.count ?? 0,
-      edenSessionsAllTime: sessionsAllRow?.count ?? 0,
-      edenSessions24h: sessions24hRow?.count ?? 0,
-      edenSessions7d: sessions7dRow?.count ?? 0,
-      edenSessions30d: sessions30dRow?.count ?? 0,
-      conceptCards: conceptsRow?.count ?? 0,
-      researchProjects: projectsRow?.count ?? 0,
-      publishedDiscoveryCards: discRow?.count ?? 0,
-      savedAssets: savedRow?.count ?? 0,
-      enrichmentJobsProcessed: enrichRow?.total ?? 0,
+      totalUsers: Number(row?.total_users ?? 0),
+      totalAssets: Number(row?.total_assets ?? 0),
+      relevantAssets: Number(row?.relevant_assets ?? 0),
+      totalInstitutions: Number(row?.total_institutions ?? 0),
+      edenSessionsAllTime: Number(row?.eden_sessions_all ?? 0),
+      edenSessions24h: Number(row?.eden_sessions_24h ?? 0),
+      edenSessions7d: Number(row?.eden_sessions_7d ?? 0),
+      edenSessions30d: Number(row?.eden_sessions_30d ?? 0),
+      conceptCards: Number(row?.concept_cards ?? 0),
+      researchProjects: Number(row?.research_projects ?? 0),
+      publishedDiscoveryCards: Number(row?.published_discovery_cards ?? 0),
+      savedAssets: Number(row?.saved_assets ?? 0),
+      enrichmentJobsProcessed: Number(row?.enrichment_processed ?? 0),
     };
   }
 }
