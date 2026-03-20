@@ -104,6 +104,8 @@ export function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
       <style>{`
         @keyframes eden-orb-rotate  { from { transform: rotate(0deg);    } to { transform: rotate(360deg);   } }
         @keyframes eden-orb-counter { from { transform: rotate(0deg);    } to { transform: rotate(-360deg);  } }
+        @keyframes eden-nuc-rotate  { from { transform: rotate(0deg);    } to { transform: rotate(360deg);   } }
+        @keyframes eden-nuc-counter { from { transform: rotate(0deg);    } to { transform: rotate(-360deg);  } }
       `}</style>
 
       <ellipse cx={cx} cy={cy} rx="240" ry="240" fill="url(#eo-bg1-i)"/>
@@ -142,6 +144,23 @@ export function EdenOrb({ isThinking = false }: { isThinking?: boolean }) {
             style={{ animation: `eden-orb-counter ${pt.dur * 0.7}s ease-in-out infinite`, animationDelay: `${pt.delay}s` }} />
         ))}
       </g>
+
+      {/* ── Nucleus floating rings — small tilted ellipses orbiting the center ── */}
+      {[
+        { rx: 48, ry: 12, tilt: 0,   anim: "eden-nuc-rotate",   dur: isThinking ? "3.2s" : "8.0s",  op: 0.35, stroke: "#10b981", sw: 0.9 },
+        { rx: 40, ry: 10, tilt: 40,  anim: "eden-nuc-counter",  dur: isThinking ? "4.8s" : "12.0s", op: 0.28, stroke: "#6ee7b7", sw: 0.8 },
+        { rx: 32, ry: 8,  tilt: 80,  anim: "eden-nuc-rotate",   dur: isThinking ? "2.4s" : "6.0s",  op: 0.40, stroke: "#10b981", sw: 0.8 },
+        { rx: 24, ry: 6,  tilt: 120, anim: "eden-nuc-counter",  dur: isThinking ? "3.8s" : "9.5s",  op: 0.32, stroke: "#6ee7b7", sw: 0.7 },
+        { rx: 17, ry: 4,  tilt: 160, anim: "eden-nuc-rotate",   dur: isThinking ? "5.0s" : "13.0s", op: 0.44, stroke: "#a7f3d0", sw: 0.7 },
+      ].map((nr, i) => (
+        <g key={i} style={{ transformOrigin: `${cx}px ${cy}px`, animation: `${nr.anim} ${nr.dur} linear infinite` }}>
+          <g transform={`rotate(${nr.tilt}, ${cx}, ${cy})`}>
+            <ellipse cx={cx} cy={cy} rx={nr.rx} ry={nr.ry}
+              fill="none" stroke={nr.stroke} strokeWidth={nr.sw} strokeOpacity={nr.op}
+              filter="url(#eo-glow-i)" />
+          </g>
+        </g>
+      ))}
 
       <circle cx={cx} cy={cy} r="14" fill="#10b981" fillOpacity="0.18" filter="url(#eo-halo-i)"/>
       <circle cx={cx} cy={cy} r="8"  fill="#10b981" fillOpacity="0.55" filter="url(#eo-glow-i)"/>
