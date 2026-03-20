@@ -4131,9 +4131,8 @@ function SubscriptionData() {
         Preview data — connect billing provider to activate live metrics.
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {[
-          { label: "Total MRR", value: `$${totalMRR.toFixed(2)}`, icon: DollarSign, testid: "stat-total-mrr" },
           { label: "ARR Projection", value: `$${ARR.toLocaleString("en-US", { maximumFractionDigits: 0 })}`, icon: TrendingUp, testid: "stat-arr" },
           { label: "Active Subscribers", value: totalSubs.toString(), icon: Users, testid: "stat-total-subscribers" },
           { label: "Monthly Churn", value: "3.2%", icon: Activity, testid: "stat-churn" },
@@ -4144,6 +4143,7 @@ function SubscriptionData() {
               <span className="text-xs">{s.label}</span>
             </div>
             <p className="text-2xl font-semibold text-foreground">{s.value}</p>
+            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">preview</p>
           </div>
         ))}
       </div>
@@ -4181,8 +4181,27 @@ function SubscriptionData() {
           <div key={s.label} className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1" data-testid={s.testid}>
             <p className="text-xs text-muted-foreground">{s.label}</p>
             <p className="text-xl font-semibold text-foreground">{s.value}</p>
+            <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide">preview</p>
           </div>
         ))}
+      </div>
+
+      {/* Prominent Total MRR bottom summary */}
+      <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-6 flex flex-col sm:flex-row items-center justify-between gap-4" data-testid="stat-total-mrr">
+        <div className="flex items-center gap-3">
+          <div className="rounded-full bg-primary/10 p-3">
+            <DollarSign className="h-6 w-6 text-primary" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Total Monthly Recurring Revenue</p>
+            <p className="text-4xl font-bold text-foreground mt-0.5">${totalMRR.toFixed(2)}</p>
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="text-xs text-muted-foreground">Annualised</p>
+          <p className="text-xl font-semibold text-foreground">${ARR.toLocaleString("en-US", { maximumFractionDigits: 0 })}/yr</p>
+          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1">preview — connect billing to activate</p>
+        </div>
       </div>
     </div>
   );
