@@ -1285,8 +1285,9 @@ export async function registerRoutes(
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const groups = await storage.getNewArrivals();
       const totalUnindexed = groups.reduce((s, g) => s + g.count, 0);
+      const totalPendingEnrichment = totalUnindexed;
       const totalInstitutions = groups.length;
-      res.json({ totalUnindexed, totalInstitutions, groups });
+      res.json({ totalUnindexed, totalPendingEnrichment, totalInstitutions, groups });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch indexing queue" });
     }
@@ -1299,7 +1300,7 @@ export async function registerRoutes(
       const body = req.body as { institution?: unknown };
       const institution: string | undefined = typeof body.institution === "string" ? body.institution : undefined;
       const result = await storage.pushNewArrivals(institution);
-      res.json({ updated: result.updated, message: `Marked ${result.updated} asset${result.updated !== 1 ? "s" : ""} as indexed` });
+      res.json({ updated: result.updated, message: `Marked ${result.updated} asset${result.updated !== 1 ? "s" : ""} as enrichment done` });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Push failed" });
     }
