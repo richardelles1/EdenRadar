@@ -1613,6 +1613,7 @@ export async function registerRoutes(
             developmentStage: staged.developmentStage,
             biotechRelevant: true,
           });
+          await storage.stampEnrichedAt(asset.id);
         }
       }
 

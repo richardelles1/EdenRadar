@@ -438,7 +438,6 @@ export class DatabaseStorage implements IStorage {
       indication: data.indication,
       developmentStage: data.developmentStage,
       relevant: data.biotechRelevant,
-      enrichedAt: new Date(),
     };
     if (data.categories) updateData.categories = data.categories;
     if (data.categoryConfidence !== undefined) updateData.categoryConfidence = data.categoryConfidence;
@@ -923,7 +922,6 @@ export class DatabaseStorage implements IStorage {
       comparableDrugs: data.comparableDrugs || null,
       licensingReadiness: data.licensingReadiness,
       completenessScore: data.completenessScore,
-      enrichedAt: new Date(),
     }).where(eq(ingestedAssets.id, id));
   }
 
@@ -933,7 +931,6 @@ export class DatabaseStorage implements IStorage {
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
   }>): Promise<number> {
     if (batch.length === 0) return 0;
-    const now = new Date();
     let written = 0;
     await db.transaction(async (tx) => {
       for (const data of batch) {
@@ -953,7 +950,6 @@ export class DatabaseStorage implements IStorage {
             comparableDrugs: data.comparableDrugs || null,
             licensingReadiness: data.licensingReadiness,
             completenessScore: data.completenessScore,
-            enrichedAt: now,
           }).where(eq(ingestedAssets.id, data.id));
           written++;
         } catch (e) {
@@ -1109,23 +1105,17 @@ export class DatabaseStorage implements IStorage {
     count: number;
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>> {
-    const rows = await db
-      .select({
-        id: ingestedAssets.id,
-        assetName: ingestedAssets.assetName,
-        institution: ingestedAssets.institution,
-        firstSeenAt: ingestedAssets.firstSeenAt,
-        sourceUrl: ingestedAssets.sourceUrl,
-      })
-      .from(ingestedAssets)
-      .where(
-        and(
-          eq(ingestedAssets.relevant, true),
-          eq(ingestedAssets.sourceType, "tech_transfer"),
-          isNull(ingestedAssets.enrichedAt),
-        )
-      )
-      .orderBy(desc(ingestedAssets.firstSeenAt));
+    const result = await db.execute(sql`
+      SELECT id, asset_name, institution, first_seen_at, source_url
+      FROM ingested_assets
+      WHERE relevant = true
+        AND source_type = 'tech_transfer'
+        AND enriched_at IS NULL
+      ORDER BY first_seen_at DESC
+    `);
+    const rows = result.rows as Array<{
+      id: number; asset_name: string; institution: string; first_seen_at: string; source_url: string | null;
+    }>;
 
     const grouped = new Map<string, {
       institution: string;
@@ -1140,10 +1130,10 @@ export class DatabaseStorage implements IStorage {
       const entry = grouped.get(row.institution)!;
       entry.count += 1;
       entry.assets.push({
-        id: row.id,
-        assetName: row.assetName,
-        firstSeenAt: row.firstSeenAt,
-        sourceUrl: row.sourceUrl,
+        id: Number(row.id),
+        assetName: row.asset_name,
+        firstSeenAt: new Date(row.first_seen_at),
+        sourceUrl: row.source_url,
       });
     }
 
@@ -1151,20 +1141,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async pushNewArrivals(institution?: string): Promise<{ updated: number }> {
-    const conditions = [
-      eq(ingestedAssets.relevant, true),
-      eq(ingestedAssets.sourceType, "tech_transfer"),
-      isNull(ingestedAssets.enrichedAt),
-    ];
+    let result;
     if (institution) {
-      conditions.push(eq(ingestedAssets.institution, institution));
+      result = await db.execute(sql`
+        UPDATE ingested_assets
+        SET enriched_at = NOW()
+        WHERE relevant = true
+          AND source_type = 'tech_transfer'
+          AND enriched_at IS NULL
+          AND institution = ${institution}
+        RETURNING id
+      `);
+    } else {
+      result = await db.execute(sql`
+        UPDATE ingested_assets
+        SET enriched_at = NOW()
+        WHERE relevant = true
+          AND source_type = 'tech_transfer'
+          AND enriched_at IS NULL
+        RETURNING id
+      `);
     }
-    const updated = await db
-      .update(ingestedAssets)
-      .set({ enrichedAt: new Date() })
-      .where(and(...conditions))
-      .returning({ id: ingestedAssets.id });
-    return { updated: updated.length };
+    return { updated: result.rows.length };
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
