@@ -1741,11 +1741,18 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
     const isPending = project.adminStatus === "pending";
     const isPublished = project.adminStatus === "published";
     const isRejected = project.adminStatus === "rejected";
+    const statusBadge = isPublished
+      ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+      : isRejected
+      ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+      : "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30";
+    const statusLabel = isPublished ? "Published" : isRejected ? "Rejected" : "Pending";
     return (
       <div className="p-4 border-b border-border last:border-0" data-testid={`industry-project-row-${project.id}`}>
         <div className="flex items-start gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className={`text-[10px] px-1.5 py-0.5 rounded-full border font-semibold ${statusBadge}`} data-testid={`badge-project-status-${project.id}`}>{statusLabel}</span>
               <span className="text-sm font-semibold text-foreground">{project.discoveryTitle || project.title}</span>
               {project.researchArea && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400">{project.researchArea}</span>
