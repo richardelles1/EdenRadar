@@ -323,13 +323,13 @@ export default function Scout() {
     topModality: dashStats?.stats?.byModality?.[0]?.modality ?? "",
   };
 
-  function getSinceISO(filter: string): string | undefined {
+  function getDateBounds(filter: string): { since?: string; before?: string } {
     const now = Date.now();
-    if (filter === "6m") return new Date(now - 183 * 24 * 60 * 60 * 1000).toISOString();
-    if (filter === "2024") return new Date("2024-01-01").toISOString();
-    if (filter === "2023") return new Date("2023-01-01").toISOString();
-    if (filter === "2022") return new Date("2022-01-01").toISOString();
-    return undefined;
+    if (filter === "6m") return { since: new Date(now - 183 * 24 * 60 * 60 * 1000).toISOString() };
+    if (filter === "2024") return { since: new Date("2024-01-01").toISOString() };
+    if (filter === "2023") return { since: new Date("2023-01-01").toISOString(), before: new Date("2024-01-01").toISOString() };
+    if (filter === "2022") return { before: new Date("2023-01-01").toISOString() };
+    return {};
   }
 
   const searchMutation = useMutation({
@@ -337,7 +337,7 @@ export default function Scout() {
       const profileModality = buyerProfile.modalities.length === 1 ? buyerProfile.modalities[0] : undefined;
       const profileStage = buyerProfile.preferred_stages.length === 1 ? buyerProfile.preferred_stages[0] : undefined;
       const profileIndication = buyerProfile.indication_keywords.length === 1 ? buyerProfile.indication_keywords[0] : undefined;
-      const since = getSinceISO(sinceFilter);
+      const dateBounds = getDateBounds(sinceFilter);
       const res = await apiRequest("POST", "/api/scout/search", {
         query,
         minSimilarity: 0.40,
@@ -345,7 +345,7 @@ export default function Scout() {
         ...(profileModality ? { modality: profileModality } : {}),
         ...(profileStage ? { stage: profileStage } : {}),
         ...(profileIndication ? { indication: profileIndication } : {}),
-        ...(since ? { since } : {}),
+        ...dateBounds,
       });
       if (!res.ok) {
         const err = await res.json();
@@ -710,7 +710,7 @@ export default function Scout() {
                         <SelectItem value="6m">Last 6 months</SelectItem>
                         <SelectItem value="2024">From 2024</SelectItem>
                         <SelectItem value="2023">From 2023</SelectItem>
-                        <SelectItem value="2022">From 2022</SelectItem>
+                        <SelectItem value="2022">2022 and older</SelectItem>
                       </SelectContent>
                     </Select>
                     <button
@@ -845,7 +845,7 @@ export default function Scout() {
                   <SelectItem value="6m">Last 6 months</SelectItem>
                   <SelectItem value="2024">From 2024</SelectItem>
                   <SelectItem value="2023">From 2023</SelectItem>
-                  <SelectItem value="2022">From 2022</SelectItem>
+                  <SelectItem value="2022">2022 and older</SelectItem>
                 </SelectContent>
               </Select>
             </div>

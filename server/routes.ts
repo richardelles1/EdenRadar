@@ -375,13 +375,15 @@ export async function registerRoutes(
         institution: z.string().optional(),
         limit: z.number().int().min(1).max(100).default(50),
         since: z.string().optional(),
+        before: z.string().optional(),
       });
-      const { query, minSimilarity, modality, stage, indication, institution, limit, since } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, limit, since, before } = schema.parse(req.body);
       const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
+      const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
       const embedding = await embedQuery(query);
       const results = await storage.scoutVectorSearch(embedding, {
-        modality, stage, indication, institution, limit, minSimilarity, since: sinceDate,
+        modality, stage, indication, institution, limit, minSimilarity, since: sinceDate, before: beforeDate,
       });
 
       const TIER1_UNIVERSITIES = ["MIT", "Stanford", "Harvard", "UCSF", "Johns Hopkins", "Columbia", "Yale", "Penn", "Duke", "Cornell"];
