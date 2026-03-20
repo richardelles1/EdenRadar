@@ -251,6 +251,106 @@ app.use((req, res, next) => {
     log(`[startup] manual_institutions migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Ensure research_projects + related tables exist ───────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS research_projects (
+        id serial PRIMARY KEY,
+        researcher_id text NOT NULL,
+        title text NOT NULL,
+        description text,
+        research_area text,
+        hypothesis text,
+        status text NOT NULL DEFAULT 'planning',
+        objectives text,
+        methodology text,
+        target_completion date,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_edited_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        research_domain text,
+        keywords jsonb,
+        primary_research_question text,
+        scientific_rationale text,
+        key_papers jsonb,
+        conflicting_evidence text,
+        literature_gap text,
+        experimental_design text,
+        key_technologies jsonb,
+        datasets_used jsonb,
+        preliminary_data text,
+        supporting_evidence_links jsonb,
+        confidence_level text,
+        potential_applications text,
+        industry_relevance text,
+        patent_status text,
+        startup_potential text,
+        project_contributors jsonb,
+        open_for_collaboration boolean,
+        collaboration_type jsonb,
+        funding_status text,
+        funding_sources jsonb,
+        estimated_budget integer,
+        technical_risk text,
+        regulatory_risk text,
+        key_scientific_unknowns text,
+        next_experiments jsonb,
+        expected_timeline text,
+        success_criteria text,
+        discovery_title text,
+        discovery_summary text,
+        technology_type text,
+        development_stage text,
+        project_seeking jsonb,
+        publish_to_industry boolean,
+        admin_status text NOT NULL DEFAULT 'pending',
+        project_url text,
+        evidence_tables jsonb,
+        potential_partners jsonb,
+        section4_files jsonb,
+        section5_files jsonb,
+        section8_files jsonb,
+        general_files jsonb,
+        hypotheses jsonb DEFAULT '[]'::jsonb,
+        fishbone jsonb,
+        milestones jsonb DEFAULT '[]'::jsonb,
+        pico jsonb,
+        protocol_checklist jsonb
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS saved_grants (
+        id serial PRIMARY KEY,
+        user_id text NOT NULL,
+        project_id integer REFERENCES research_projects(id),
+        title text NOT NULL,
+        url text,
+        agency_name text NOT NULL DEFAULT '',
+        deadline text,
+        amount text,
+        notes text,
+        status text NOT NULL DEFAULT 'not_started',
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS saved_references (
+        id serial PRIMARY KEY,
+        user_id text NOT NULL,
+        project_id integer REFERENCES research_projects(id),
+        title text NOT NULL,
+        url text NOT NULL,
+        source_type text NOT NULL DEFAULT 'paper',
+        date text NOT NULL DEFAULT '',
+        institution text NOT NULL DEFAULT '',
+        notes text,
+        created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] research_projects + saved_grants + saved_references tables ready", "startup");
+  } catch (err: any) {
+    log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"

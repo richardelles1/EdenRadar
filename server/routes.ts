@@ -3419,10 +3419,14 @@ If a field cannot be determined, use "N/A".`
           discoverySummary: researchProjects.discoverySummary,
           projectUrl: researchProjects.projectUrl,
           lastEditedAt: researchProjects.lastEditedAt,
+          openForCollaboration: researchProjects.openForCollaboration,
+          developmentStage: researchProjects.developmentStage,
         })
         .from(researchProjects)
-        .where(eq(researchProjects.publishToIndustry, true))
-        .orderBy(desc(researchProjects.lastEditedAt));
+        .orderBy(
+          sql`CASE WHEN ${researchProjects.adminStatus} = 'pending' THEN 0 WHEN ${researchProjects.adminStatus} = 'published' THEN 1 ELSE 2 END`,
+          desc(researchProjects.lastEditedAt),
+        );
       res.json({ projects: results });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -3436,11 +3440,12 @@ If a field cannot be determined, use "N/A".`
       const { id } = req.params;
       const schema = z.object({ adminStatus: z.enum(["pending", "published", "rejected"]) });
       const { adminStatus } = schema.parse(req.body);
+      const publishToIndustry = adminStatus === "published" ? true : adminStatus === "rejected" ? false : null;
       await db
         .update(researchProjects)
-        .set({ adminStatus })
+        .set({ adminStatus, ...(publishToIndustry !== null ? { publishToIndustry } : {}) })
         .where(eq(researchProjects.id, Number(id)));
-      res.json({ ok: true, id: Number(id), adminStatus });
+      res.json({ ok: true, id: Number(id), adminStatus, publishToIndustry });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

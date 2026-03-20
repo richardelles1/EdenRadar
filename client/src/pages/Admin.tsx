@@ -1669,6 +1669,198 @@ function Enrichment({ pw }: { pw: string }) {
   );
 }
 
+function IndustryProjectsQueue({ pw }: { pw: string }) {
+  const { toast } = useToast();
+
+  type IndustryProject = {
+    id: number;
+    title: string;
+    discoveryTitle: string | null;
+    researchArea: string | null;
+    status: string;
+    adminStatus: string;
+    publishToIndustry: boolean | null;
+    discoverySummary: string | null;
+    projectUrl: string | null;
+    lastEditedAt: string;
+    openForCollaboration: boolean | null;
+    developmentStage: string | null;
+  };
+
+  const { data, isLoading, refetch } = useQuery<{ projects: IndustryProject[] }>({
+    queryKey: ["/api/admin/industry-projects"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/industry-projects", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
+    staleTime: 0,
+  });
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, adminStatus }: { id: number; adminStatus: string }) => {
+      const res = await fetch(`/api/admin/industry-projects/${id}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminStatus }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      return res.json();
+    },
+    onSuccess: (_, vars) => {
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/industry/projects"] });
+      const label = vars.adminStatus === "published" ? "Published to EdenLab" : vars.adminStatus === "rejected" ? "Rejected" : "Reset to Pending";
+      toast({ title: label, description: "Project status updated." });
+    },
+    onError: () => toast({ title: "Error", description: "Could not update status.", variant: "destructive" }),
+  });
+
+  const projects = data?.projects ?? [];
+  const pending = projects.filter((p) => p.adminStatus === "pending");
+  const published = projects.filter((p) => p.adminStatus === "published");
+  const rejected = projects.filter((p) => p.adminStatus === "rejected");
+
+  if (isLoading) {
+    return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Loading projects...</div>;
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="text-center py-16 text-muted-foreground" data-testid="industry-projects-empty">
+        <FlaskConical className="h-10 w-10 mx-auto mb-3 opacity-30" />
+        <p className="text-base font-medium">No research projects yet</p>
+        <p className="text-sm mt-1">Projects created in the EdenLab research portal will appear here for review.</p>
+      </div>
+    );
+  }
+
+  function ProjectRow({ project }: { project: IndustryProject }) {
+    const isPending = project.adminStatus === "pending";
+    const isPublished = project.adminStatus === "published";
+    const isRejected = project.adminStatus === "rejected";
+    return (
+      <div className="p-4 border-b border-border last:border-0" data-testid={`industry-project-row-${project.id}`}>
+        <div className="flex items-start gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap mb-1">
+              <span className="text-sm font-semibold text-foreground">{project.discoveryTitle || project.title}</span>
+              {project.researchArea && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-600 dark:text-violet-400">{project.researchArea}</span>
+              )}
+              {project.developmentStage && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{project.developmentStage}</span>
+              )}
+              {project.openForCollaboration && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">Open to Collab</span>
+              )}
+            </div>
+            {project.discoverySummary && (
+              <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{project.discoverySummary}</p>
+            )}
+            <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+              <span className="capitalize">{project.status}</span>
+              <span>·</span>
+              <span>{new Date(project.lastEditedAt).toLocaleDateString()}</span>
+              {project.projectUrl && (
+                <>
+                  <span>·</span>
+                  <a href={project.projectUrl} target="_blank" rel="noopener noreferrer" className="hover:underline text-primary">Source</a>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="shrink-0 flex items-center gap-2">
+            {isPending && (
+              <>
+                <Button
+                  size="sm"
+                  className="h-7 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                  onClick={() => updateStatus.mutate({ id: project.id, adminStatus: "published" })}
+                  disabled={updateStatus.isPending}
+                  data-testid={`button-publish-project-${project.id}`}
+                >
+                  <CheckCircle2 className="h-3 w-3 mr-1" /> Publish
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
+                  onClick={() => updateStatus.mutate({ id: project.id, adminStatus: "rejected" })}
+                  disabled={updateStatus.isPending}
+                  data-testid={`button-reject-project-${project.id}`}
+                >
+                  <XCircle className="h-3 w-3 mr-1" /> Reject
+                </Button>
+              </>
+            )}
+            {isPublished && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => updateStatus.mutate({ id: project.id, adminStatus: "pending" })}
+                disabled={updateStatus.isPending}
+                data-testid={`button-unpublish-project-${project.id}`}
+              >
+                <XCircle className="h-3 w-3 mr-1" /> Unpublish
+              </Button>
+            )}
+            {isRejected && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => updateStatus.mutate({ id: project.id, adminStatus: "pending" })}
+                disabled={updateStatus.isPending}
+                data-testid={`button-restore-project-${project.id}`}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" /> Restore
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6" data-testid="industry-projects-queue">
+      {pending.length > 0 && (
+        <div className="rounded-lg border border-amber-200 dark:border-amber-900 bg-card overflow-hidden" data-testid="section-pending-projects">
+          <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 flex items-center gap-2">
+            <Clock className="h-3.5 w-3.5 text-amber-600" />
+            <span className="text-xs font-semibold text-amber-700 dark:text-amber-400">Pending Review ({pending.length})</span>
+          </div>
+          {pending.map((p) => <ProjectRow key={p.id} project={p} />)}
+        </div>
+      )}
+
+      {published.length > 0 && (
+        <div className="rounded-lg border border-emerald-200 dark:border-emerald-900 bg-card overflow-hidden" data-testid="section-published-projects">
+          <div className="px-4 py-2.5 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30 flex items-center gap-2">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Published to EdenLab ({published.length})</span>
+          </div>
+          {published.map((p) => <ProjectRow key={p.id} project={p} />)}
+        </div>
+      )}
+
+      {rejected.length > 0 && (
+        <div className="rounded-lg border border-border bg-card overflow-hidden" data-testid="section-rejected-projects">
+          <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center gap-2">
+            <XCircle className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="text-xs font-semibold text-muted-foreground">Rejected ({rejected.length})</span>
+          </div>
+          {rejected.map((p) => <ProjectRow key={p.id} project={p} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PipelineReviewQueue({ pw }: { pw: string }) {
   const { toast } = useToast();
 
@@ -4446,6 +4638,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Concept Review
             </button>
             <button
+              onClick={() => setActiveTab("edenlab-review")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "edenlab-review" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-edenlab-review"
+            >
+              <FlaskConical className="h-4 w-4" />
+              EdenLab Review
+            </button>
+            <button
               onClick={() => setActiveTab("eden")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "eden" ? "bg-emerald-500/10 text-emerald-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -4556,6 +4758,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">View all submitted concepts from the EdenDiscovery portal with AI credibility scores.</p>
               </div>
               <ConceptQueue pw={pw} />
+            </>
+          )}
+
+          {activeTab === "edenlab-review" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">EdenLab Review</h2>
+                <p className="text-sm text-muted-foreground mt-1">Approve community research projects for the industry EdenLab tab. Published projects are immediately visible to industry buyers.</p>
+              </div>
+              <IndustryProjectsQueue pw={pw} />
             </>
           )}
 
