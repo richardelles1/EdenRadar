@@ -529,6 +529,53 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/pipeline-lists/:id/brief", async (req, res) => {
+    try {
+      const listId = parseInt(req.params.id, 10);
+      if (isNaN(listId)) return res.status(400).json({ error: "Invalid pipeline list ID" });
+
+      const [listResult, assetsResult] = await Promise.all([
+        db.execute(sql`SELECT name FROM pipeline_lists WHERE id = ${listId} LIMIT 1`),
+        db.execute(sql`
+          SELECT sa.asset_name, sa.target, sa.modality, sa.disease_indication, sa.development_stage, sa.source_name, sa.source_journal
+          FROM saved_assets sa
+          WHERE sa.pipeline_list_id = ${listId}
+          ORDER BY sa.id DESC
+          LIMIT 60
+        `),
+      ]);
+
+      const listRow = listResult.rows[0] as Record<string, unknown> | undefined;
+      if (!listRow) return res.status(404).json({ error: "Pipeline list not found" });
+      const pipelineName = String(listRow.name ?? "Pipeline");
+
+      const assets = assetsResult.rows as Record<string, unknown>[];
+      if (assets.length === 0) {
+        return res.json({ brief: `No assets in the "${pipelineName}" pipeline yet.`, assetCount: 0, pipelineName });
+      }
+
+      const assetList = assets.map((a, i) =>
+        `${i + 1}. ${String(a.asset_name ?? "Unknown")} | Target: ${String(a.target ?? "—")} | Modality: ${String(a.modality ?? "—")} | Stage: ${String(a.development_stage ?? "—")} | Disease: ${String(a.disease_indication ?? "—")} | Source: ${String(a.source_name || a.source_journal || "—")}`
+      ).join("\n");
+
+      const prompt = `You are a biotech intelligence analyst. Below is a list of drug development assets from a curated pipeline named "${pipelineName}".\n\nGenerate a concise pipeline dossier with the following sections:\nAsset Overview: Count and general description of the portfolio\nTherapeutic Targets & Mechanisms: Common targets and mechanisms of action\nModality Mix: Types of modalities represented (small molecules, biologics, etc.)\nDevelopment Stage Spread: Breakdown of where assets sit in development\nDisease Focus: Key indications and disease areas\nStrategic Summary: 2-3 sentences on the strategic significance and positioning of this pipeline\n\nAssets:\n${assetList}\n\nRespond with well-formatted plain text. Do not use markdown symbols or headers with #. Use clear labeled sections separated by blank lines.`;
+
+      const { default: OpenAI } = await import("openai");
+      const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: prompt }],
+        max_tokens: 800,
+        temperature: 0.4,
+      });
+      const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
+      return res.json({ brief, assetCount: assets.length, pipelineName });
+    } catch (err: any) {
+      console.error("[pipeline-lists/brief] Error:", err);
+      return res.status(500).json({ error: friendlyOpenAIError(err) });
+    }
+  });
+
   app.post("/api/report", async (req, res) => {
     try {
       const { query, sources, maxPerSource, buyerProfile } = reportBodySchema.parse(req.body);

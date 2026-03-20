@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -19,6 +21,9 @@ import {
   X,
   FolderOpen,
   ChevronDown,
+  FileText,
+  Copy,
+  Loader2,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -343,10 +348,15 @@ function PipelineSidebar({
   );
 }
 
+type BriefModal = { pipelineName: string; brief: string; assetCount: number };
+
 export default function Assets() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [selectedPipeline, setSelectedPipeline] = useState<number | null | "all">("all");
+  const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
+  const [briefLoading, setBriefLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
@@ -416,6 +426,35 @@ export default function Assets() {
       toast({ title: "Create failed", description: err.message, variant: "destructive" });
     },
   });
+
+  const briefMutation = useMutation({
+    mutationFn: async (listId: number) => {
+      const res = await apiRequest("POST", `/api/pipeline-lists/${listId}/brief`, {});
+      return res.json() as Promise<{ brief: string; assetCount: number; pipelineName: string }>;
+    },
+    onSuccess: (result) => {
+      setBriefModal({ pipelineName: result.pipelineName, brief: result.brief, assetCount: result.assetCount });
+      setBriefLoading(false);
+    },
+    onError: (err: any) => {
+      toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
+      setBriefLoading(false);
+    },
+  });
+
+  const handleBrief = () => {
+    if (typeof selectedPipeline !== "number") return;
+    setBriefLoading(true);
+    briefMutation.mutate(selectedPipeline);
+  };
+
+  const handleCopy = () => {
+    if (!briefModal) return;
+    navigator.clipboard.writeText(briefModal.brief).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
 
   const pipelines = pipelinesData?.pipelines ?? [];
   const uncategorisedCount = pipelinesData?.uncategorisedCount ?? 0;
@@ -569,6 +608,22 @@ export default function Assets() {
                     {displayedAssets.length} asset{displayedAssets.length !== 1 ? "s" : ""}
                   </p>
                 </div>
+                {typeof selectedPipeline === "number" && displayedAssets.length > 0 && (
+                  <button
+                    onClick={handleBrief}
+                    disabled={briefLoading}
+                    className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
+                    data-testid="button-pipeline-brief"
+                    title="Generate AI pipeline brief"
+                  >
+                    {briefLoading ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <FileText className="w-3.5 h-3.5" />
+                    )}
+                    Pipeline Brief
+                  </button>
+                )}
               </div>
 
               {displayedAssets.length === 0 ? (
@@ -599,6 +654,39 @@ export default function Assets() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); } }}>
+        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col" data-testid="dialog-pipeline-brief">
+          <DialogHeader>
+            <div className="flex items-center justify-between gap-3">
+              <DialogTitle className="flex items-center gap-2 text-base">
+                <FileText className="w-4 h-4 text-primary" />
+                {briefModal?.pipelineName} — Pipeline Brief
+              </DialogTitle>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs text-muted-foreground">
+                  {briefModal?.assetCount} asset{briefModal?.assetCount !== 1 ? "s" : ""}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopy}
+                  className="h-7 text-xs gap-1.5 border-card-border"
+                  data-testid="button-brief-copy"
+                >
+                  {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  {copied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            </div>
+          </DialogHeader>
+          <ScrollArea className="flex-1 mt-2">
+            <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">
+              {briefModal?.brief}
+            </pre>
+          </ScrollArea>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
