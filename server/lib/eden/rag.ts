@@ -621,10 +621,23 @@ const BIOTECH_SIGNALS = [
   "inflammation", "cardiac", "neuro", "stanford", "mit", "harvard", "columbia",
 ];
 
+const FUN_FACT_PATTERNS = [
+  /\bfun fact\b/i,
+  /\binteresting fact\b/i,
+  /\bcool fact\b/i,
+  /\bsurprising fact\b/i,
+  /\bfun factoid\b/i,
+  /\btell me something (interesting|surprising|cool|fun|unusual) about/i,
+  /\bwhat.s (interesting|unusual|surprising|cool|fun) about (your data|the data|your portfolio|the portfolio)\b/i,
+  /\bgive me an? (interesting|surprising|fun|cool) fact\b/i,
+];
+
 export function isConversational(query: string): boolean {
+  const lower = query.toLowerCase();
+  // Fun-fact / meta queries never need vector search — portfolio stats context is enough
+  if (FUN_FACT_PATTERNS.some((rx) => rx.test(lower))) return true;
   const words = query.trim().split(/\s+/);
   if (words.length > 8) return false;
-  const lower = query.toLowerCase();
   return !BIOTECH_SIGNALS.some((kw) => {
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s+");
     return new RegExp(`(?<![a-z])${escaped}(?![a-z])`, "i").test(lower);

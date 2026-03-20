@@ -3177,7 +3177,7 @@ function EdenTab({ pw }: { pw: string }) {
               <div className="px-4 sm:px-5 py-5 space-y-5 max-w-3xl w-full mx-auto">
                 {chatMessages.map((msg, i) => {
                   const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
-                    ? getFollowUpPills(msg.content)
+                    ? getFollowUpPills(msg.content, (msg.assets?.length ?? 0) > 0)
                     : [];
                   return (
                     <div

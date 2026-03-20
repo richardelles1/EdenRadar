@@ -16,6 +16,18 @@ const SITE_PW = "quality";
 
 
 // ── Helpers ───────────────────────────────────────────────────────────────
+function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
+  if (!assets.length || !content) return assets;
+  const lower = content.toLowerCase();
+  return [...assets].sort((a, b) => {
+    const nameA = a.assetName.toLowerCase().slice(0, 30);
+    const nameB = b.assetName.toLowerCase().slice(0, 30);
+    const posA = lower.indexOf(nameA);
+    const posB = lower.indexOf(nameB);
+    return (posA === -1 ? Infinity : posA) - (posB === -1 ? Infinity : posB);
+  });
+}
+
 function relevanceLabel(sim: number): { label: string; cls: string } {
   if (sim >= 0.85) return { label: "Strong match",  cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" };
   if (sim >= 0.70) return { label: "Good match",    cls: "bg-primary/10 text-primary border-primary/20" };
@@ -493,7 +505,7 @@ export default function IndustryEden() {
               <div className="px-4 sm:px-6 py-5 space-y-5 max-w-3xl w-full mx-auto">
                 {messages.map((msg, i) => {
                   const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
-                    ? getFollowUpPills(msg.content)
+                    ? getFollowUpPills(msg.content, (msg.assets?.length ?? 0) > 0)
                     : [];
 
                   return (
@@ -598,7 +610,7 @@ export default function IndustryEden() {
                                   Hide assets
                                 </button>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {msg.assets.map((a, ci) => (
+                                  {sortAssetsByMention(msg.assets, msg.content).map((a, ci) => (
                                     <div
                                       key={a.id}
                                       style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 50}ms` }}

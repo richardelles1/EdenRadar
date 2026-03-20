@@ -288,19 +288,15 @@ export const FOLLOW_UP_RULES: Array<{ test: (text: string) => boolean; pills: st
   },
 ];
 
-export const DEFAULT_FOLLOW_UPS = [
-  "Show me similar assets",
-  "Who else is working in this space?",
-  "Show the institution breakdown",
-];
-
-export function getFollowUpPills(responseText: string): string[] {
+export function getFollowUpPills(responseText: string, hasAssets: boolean): string[] {
+  // Only show pills when Eden is presenting assets — suppress for facts, stats, greetings
+  if (!hasAssets) return [];
   for (const rule of FOLLOW_UP_RULES) {
     if (rule.test(responseText)) {
-      return rule.pills.slice(0, 2).concat(DEFAULT_FOLLOW_UPS.slice(0, 1));
+      return rule.pills.slice(0, 2);
     }
   }
-  return DEFAULT_FOLLOW_UPS.slice(0, 3);
+  return [];
 }
 
 // ── EDEN acronym intro animation ──────────────────────────────────────────
