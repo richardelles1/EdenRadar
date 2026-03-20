@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -4228,7 +4228,7 @@ function PlatformInfo({ pw }: { pw: string }) {
     );
   }
 
-  const StatCard = ({ label, value, sub, icon: Icon, testid }: { label: string; value: string | number; sub?: string; icon: any; testid: string }) => (
+  const StatCard = ({ label, value, sub, icon: Icon, testid }: { label: string; value: string | number; sub?: string; icon: LucideIcon; testid: string }) => (
     <div className="rounded-lg border border-border bg-card p-4 flex flex-col gap-1" data-testid={testid}>
       <div className="flex items-center gap-2 text-muted-foreground">
         <Icon className="h-4 w-4" />

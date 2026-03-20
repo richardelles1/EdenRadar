@@ -1531,21 +1531,7 @@ export class DatabaseStorage implements IStorage {
     const ago7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const ago30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    const [row] = await db.execute<{
-      total_users: number;
-      total_assets: number;
-      relevant_assets: number;
-      total_institutions: number;
-      eden_sessions_all: number;
-      eden_sessions_24h: number;
-      eden_sessions_7d: number;
-      eden_sessions_30d: number;
-      concept_cards: number;
-      research_projects: number;
-      published_discovery_cards: number;
-      saved_assets: number;
-      enrichment_processed: number;
-    }>(sql`
+    const result = await db.execute(sql`
       SELECT
         (SELECT count(*)::int FROM users)                                                         AS total_users,
         (SELECT count(*)::int FROM ingested_assets)                                              AS total_assets,
@@ -1561,6 +1547,7 @@ export class DatabaseStorage implements IStorage {
         (SELECT count(*)::int FROM saved_assets)                                                 AS saved_assets,
         (SELECT coalesce(sum(processed), 0)::int FROM enrichment_jobs)                          AS enrichment_processed
     `);
+    const row = result.rows[0] as Record<string, unknown>;
 
     return {
       totalUsers: Number(row?.total_users ?? 0),
