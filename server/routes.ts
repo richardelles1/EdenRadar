@@ -1643,6 +1643,10 @@ export async function registerRoutes(
     }
 
     if (lastJob) {
+      // "completed" is the reset/dismissed state — treat as idle for UI purposes
+      if (lastJob.status === "completed") {
+        return res.json({ status: "idle", processed: 0, total: 0, improved: 0, resumed: false });
+      }
       return res.json({
         status: lastJob.status as string,
         jobId: lastJob.id,
