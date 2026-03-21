@@ -752,44 +752,44 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   },
   {
     role: "user",
-    delay: 2800,
+    delay: 2500,
     text: "What's the hottest area in oncology right now across all TTOs?",
   },
   {
     role: "eden",
-    delay: 4800,
+    delay: 4500,
     text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days — particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
     showCards: true,
   },
   {
     role: "user",
-    delay: 11500,
+    delay: 10500,
     text: "Show me CRISPR-based assets targeting rare disease — any university stage.",
   },
   {
     role: "eden",
-    delay: 13800,
+    delay: 12800,
     text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies — 6 institutions active, no approved competitors. Here are the top results:",
     showCrisprCards: true,
   },
   {
     role: "user",
-    delay: 19500,
+    delay: 18500,
     text: "Compare the competitive landscape for the top HDAC inhibitor asset.",
   },
   {
     role: "eden",
-    delay: 22000,
+    delay: 21000,
     text: "Commercial HDAC inhibitors — Vorinostat, Romidepsin, Panobinostat — are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
   },
   {
     role: "user",
-    delay: 28500,
+    delay: 27000,
     text: "What else is EDEN watching that we should know about?",
   },
   {
     role: "eden",
-    delay: 31000,
+    delay: 29500,
     text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders — 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets — activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
   },
 ];
@@ -990,8 +990,8 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
     <Slide index={6} section="EDEN" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.1} />
 
-      {/* ── MOBILE LAYOUT: compact identity bar + full-height chat ── */}
-      <div className="lg:hidden flex flex-col" style={{ height: "calc(100svh - 80px)", minHeight: 0 }}>
+      {/* ── MOBILE LAYOUT: absolute-fill so chat uses all remaining screen space ── */}
+      <div className="lg:hidden absolute inset-0 flex flex-col pt-14 pb-14 px-5" style={{ zIndex: 11 }}>
         <h2 className="text-xl font-bold mb-3 shrink-0" style={{ color: colors.text }}>
           Ask EDEN anything about the biotech landscape.
         </h2>
