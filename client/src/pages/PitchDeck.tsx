@@ -499,13 +499,13 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
           </div>
           <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-5 leading-tight" style={{ color: colors.text }}>
             The team building the{" "}
-            <span style={{ color: colors.green }}>connective tissue of biotech.</span>
+            <span style={{ color: colors.green }}>connective tissue of research & biotech.</span>
           </h2>
           <blockquote
             className="text-sm sm:text-base italic mb-5 max-w-lg leading-relaxed pl-4"
             style={{ color: colors.textMuted, borderLeft: `3px solid ${colors.green}44` }}
           >
-            "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments — creating direct connections between scientists and the industry partners who can advance it."
+            "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments, creating direct connections between scientists and the industry partners who can advance it."
           </blockquote>
           <p className="text-xs sm:text-sm max-w-lg leading-relaxed" style={{ color: colors.green }}>
             EdenRadar is building the connective tissue of biotech: an intelligence layer that makes the entire pipeline visible, searchable, and actionable from concept to commercialization.
@@ -669,7 +669,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
     },
     {
       title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
-      items: ["300+ Tech Transfer Offices monitored continuously", "EDEN-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
+      items: ["300+ TTOs monitored continuously", "EDEN-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
     },
   ];
   return (
@@ -752,44 +752,44 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   },
   {
     role: "user",
-    delay: 2500,
+    delay: 5500,
     text: "What's the hottest area in oncology right now across all TTOs?",
   },
   {
     role: "eden",
-    delay: 4500,
+    delay: 7500,
     text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days — particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
     showCards: true,
   },
   {
     role: "user",
-    delay: 10500,
+    delay: 17000,
     text: "Show me CRISPR-based assets targeting rare disease — any university stage.",
   },
   {
     role: "eden",
-    delay: 12800,
+    delay: 19500,
     text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies — 6 institutions active, no approved competitors. Here are the top results:",
     showCrisprCards: true,
   },
   {
     role: "user",
-    delay: 18500,
+    delay: 30000,
     text: "Compare the competitive landscape for the top HDAC inhibitor asset.",
   },
   {
     role: "eden",
-    delay: 21000,
+    delay: 32500,
     text: "Commercial HDAC inhibitors — Vorinostat, Romidepsin, Panobinostat — are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
   },
   {
     role: "user",
-    delay: 27000,
+    delay: 45000,
     text: "What else is EDEN watching that we should know about?",
   },
   {
     role: "eden",
-    delay: 29500,
+    delay: 47500,
     text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders — 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets — activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
   },
 ];
@@ -923,8 +923,10 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
     <div ref={wrapperRef} className={mobile ? "h-full flex flex-col min-h-0" : ""}>
       <div
         ref={chatRef}
-        className="flex flex-col gap-3 overflow-y-auto"
-        style={mobile ? { flex: 1, minHeight: 0 } : { maxHeight: "62vh" }}
+        className="pitch-chat-scroll flex flex-col gap-3 overflow-y-auto"
+        style={mobile
+          ? { flex: 1, minHeight: 0, scrollbarWidth: "none", msOverflowStyle: "none" }
+          : { maxHeight: "62vh", scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {PITCH_CHAT_MESSAGES.slice(0, visibleCount).map((msg, i) => (
           <div
@@ -1058,7 +1060,6 @@ function RadarSlide({ colors }: { colors: Colors }) {
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h2>
-          <p className="text-xs" style={{ color: colors.textMuted }}>Tier 3 — Industry intelligence</p>
         </div>
       </div>
       <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
