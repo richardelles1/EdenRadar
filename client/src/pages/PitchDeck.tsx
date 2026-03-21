@@ -1021,9 +1021,9 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
         Early Signal <span style={{ color: colors.green }}>Pipeline</span>.
       </h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+      <div className="flex flex-col sm:flex-row items-stretch gap-4 sm:gap-0">
         {/* EdenDiscovery — amber */}
-        <div className="rounded-xl p-4 sm:p-6 flex flex-col" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}44`, borderTop: `3px solid ${colors.amber}` }}>
+        <div className="flex-1 rounded-xl p-4 sm:p-6 flex flex-col" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}44`, borderTop: `3px solid ${colors.amber}` }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: colors.amber }}>
               <Lightbulb className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
@@ -1052,8 +1052,30 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
           </div>
         </div>
 
+        {/* Connector: concept → research → signal to industry */}
+        {/* Desktop: vertical dashed line + label + arrow */}
+        <div className="hidden sm:flex flex-col items-center justify-center shrink-0 w-14 px-1 gap-1">
+          <div className="w-px flex-1 max-h-12" style={{ background: `linear-gradient(to bottom, ${colors.amber}77, ${colors.violet}77)` }} />
+          <div className="text-center leading-tight py-1">
+            <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: colors.amber }}>concept</p>
+            <ChevronRight className="w-3.5 h-3.5 rotate-90 mx-auto my-0.5" style={{ color: colors.green }} />
+            <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: colors.violet }}>research</p>
+            <ChevronRight className="w-3.5 h-3.5 rotate-90 mx-auto my-0.5" style={{ color: colors.green }} />
+            <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: colors.green }}>signal</p>
+          </div>
+          <div className="w-px flex-1 max-h-12" style={{ background: `linear-gradient(to bottom, ${colors.violet}77, ${colors.green}77)` }} />
+        </div>
+        {/* Mobile: horizontal arrow separator */}
+        <div className="sm:hidden flex items-center gap-2">
+          <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${colors.amber}55, ${colors.violet}55)` }} />
+          <div className="text-center shrink-0">
+            <p className="text-[8px] font-bold uppercase tracking-wider" style={{ color: colors.textMuted }}>concept → research → signal</p>
+          </div>
+          <div className="flex-1 h-px" style={{ background: `linear-gradient(to right, ${colors.violet}55, ${colors.green}55)` }} />
+        </div>
+
         {/* EdenLab — violet */}
-        <div className="rounded-xl p-4 sm:p-6 flex flex-col" style={{ background: colors.violetDim, border: `1px solid ${colors.violet}44`, borderTop: `3px solid ${colors.violet}` }}>
+        <div className="flex-1 rounded-xl p-4 sm:p-6 flex flex-col" style={{ background: colors.violetDim, border: `1px solid ${colors.violet}44`, borderTop: `3px solid ${colors.violet}` }}>
           <div className="flex items-center gap-3 mb-4">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: colors.violet }}>
               <FlaskConical className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
