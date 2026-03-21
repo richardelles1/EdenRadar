@@ -768,7 +768,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   },
   {
     role: "eden",
-    delay: 19500,
+    delay: 19000,
     text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies — 6 institutions active, no approved competitors. Here are the top results:",
     showCrisprCards: true,
   },
@@ -779,7 +779,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   },
   {
     role: "eden",
-    delay: 32500,
+    delay: 32000,
     text: "Commercial HDAC inhibitors — Vorinostat, Romidepsin, Panobinostat — are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
   },
   {
@@ -789,7 +789,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   },
   {
     role: "eden",
-    delay: 47500,
+    delay: 47000,
     text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders — 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets — activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
   },
 ];
