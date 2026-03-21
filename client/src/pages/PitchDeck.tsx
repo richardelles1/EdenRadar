@@ -729,6 +729,7 @@ interface PitchChatMessage {
   text: string;
   delay: number;
   showCards?: boolean;
+  showCrisprCards?: boolean;
 }
 
 interface PitchAssetCard {
@@ -746,29 +747,50 @@ interface PitchAssetCard {
 const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   {
     role: "eden",
-    text: "I'm EDEN, EdenRadar's research intelligence engine. I monitor and enrich biotech assets across 300+ tech transfer offices in real time. How can I help your team today?",
-    delay: 400,
+    delay: 500,
+    text: "Welcome. I'm EDEN — EdenRadar's research intelligence engine. I monitor, classify, and enrich biotech assets across 300+ tech transfer offices in real time. I also surface signals directly from active research labs before they reach the patent stage. What would you like to explore?",
   },
   {
     role: "user",
-    text: "Show me oncology assets from Johns Hopkins in preclinical stage.",
-    delay: 1900,
+    delay: 2800,
+    text: "What's the hottest area in oncology right now across all TTOs?",
   },
   {
     role: "eden",
-    text: "Johns Hopkins Technology Ventures has a significant oncology portfolio. Here are the top-ranked assets by EDEN readiness score:",
-    delay: 3400,
+    delay: 4800,
+    text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days — particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
     showCards: true,
   },
   {
     role: "user",
-    text: "Can you cross-reference these against competitor pipelines?",
-    delay: 7200,
+    delay: 11500,
+    text: "Show me CRISPR-based assets targeting rare disease — any university stage.",
   },
   {
     role: "eden",
-    text: "Of the 3 assets surfaced, 2 have active competitor programs in the same target class. I've flagged the white-space opportunity on the HDAC inhibitor platform — no approved competitors in solid tumor microenvironment. EDEN readiness score: 85.",
-    delay: 8800,
+    delay: 13800,
+    text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies — 6 institutions active, no approved competitors. Here are the top results:",
+    showCrisprCards: true,
+  },
+  {
+    role: "user",
+    delay: 19500,
+    text: "Compare the competitive landscape for the top HDAC inhibitor asset.",
+  },
+  {
+    role: "eden",
+    delay: 22000,
+    text: "Commercial HDAC inhibitors — Vorinostat, Romidepsin, Panobinostat — are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
+  },
+  {
+    role: "user",
+    delay: 28500,
+    text: "What else is EDEN watching that we should know about?",
+  },
+  {
+    role: "eden",
+    delay: 31000,
+    text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders — 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets — activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
   },
 ];
 
@@ -808,6 +830,31 @@ const PITCH_DEMO_ASSETS: PitchAssetCard[] = [
   },
 ];
 
+const PITCH_CRISPR_ASSETS: PitchAssetCard[] = [
+  {
+    id: 4,
+    title: "Ex Vivo HSC Editing for Sickle Cell Disease via Base Editing",
+    institution: "MIT — Koch Institute",
+    area: "Rare Disease",
+    stage: "Preclinical",
+    score: 94,
+    modality: "Gene Editing",
+    color: "hsl(142 65% 48%)",
+    icon: Dna,
+  },
+  {
+    id: 5,
+    title: "CRISPR-Cas12a Knockin for Spinal Muscular Atrophy (SMA)",
+    institution: "Stanford University",
+    area: "Rare Disease",
+    stage: "Discovery",
+    score: 88,
+    modality: "Gene Therapy",
+    color: "hsl(265 60% 60%)",
+    icon: Brain,
+  },
+];
+
 function PitchDemoAssetCard({ asset, colors }: { asset: PitchAssetCard; colors: Colors }) {
   return (
     <div
@@ -837,7 +884,7 @@ function PitchDemoAssetCard({ asset, colors }: { asset: PitchAssetCard; colors: 
   );
 }
 
-function PitchEdenChat({ colors }: { colors: Colors }) {
+function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -873,8 +920,12 @@ function PitchEdenChat({ colors }: { colors: Colors }) {
   }, []);
 
   return (
-    <div ref={wrapperRef}>
-      <div ref={chatRef} className="flex flex-col gap-3 overflow-y-auto" style={{ maxHeight: "62vh" }}>
+    <div ref={wrapperRef} className={mobile ? "h-full flex flex-col min-h-0" : ""}>
+      <div
+        ref={chatRef}
+        className="flex flex-col gap-3 overflow-y-auto"
+        style={mobile ? { flex: 1, minHeight: 0 } : { maxHeight: "62vh" }}
+      >
         {PITCH_CHAT_MESSAGES.slice(0, visibleCount).map((msg, i) => (
           <div
             key={i}
@@ -896,6 +947,13 @@ function PitchEdenChat({ colors }: { colors: Colors }) {
               {msg.showCards && (
                 <div className="space-y-2">
                   {PITCH_DEMO_ASSETS.map((a) => (
+                    <PitchDemoAssetCard key={a.id} asset={a} colors={colors} />
+                  ))}
+                </div>
+              )}
+              {msg.showCrisprCards && (
+                <div className="space-y-2">
+                  {PITCH_CRISPR_ASSETS.map((a) => (
                     <PitchDemoAssetCard key={a.id} asset={a} colors={colors} />
                   ))}
                 </div>
@@ -931,23 +989,49 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={6} section="EDEN" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.1} />
-      <h2 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-5 sm:mb-7" style={{ color: colors.text }}>
-        Ask EDEN anything about the biotech landscape.
-      </h2>
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-center">
-        {/* Orb */}
-        <div className="flex flex-col items-center shrink-0 lg:w-[40%]">
-          <div className="w-full max-w-[320px] sm:max-w-[380px]">
-            <EdenOrb />
+
+      {/* ── MOBILE LAYOUT: compact identity bar + full-height chat ── */}
+      <div className="lg:hidden flex flex-col" style={{ height: "calc(100svh - 80px)", minHeight: 0 }}>
+        <h2 className="text-xl font-bold mb-3 shrink-0" style={{ color: colors.text }}>
+          Ask EDEN anything about the biotech landscape.
+        </h2>
+        {/* Compact identity bar replaces the giant orb */}
+        <div
+          className="flex items-center gap-3 mb-4 p-3 rounded-xl shrink-0"
+          style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}
+        >
+          <EdenAvatar size={34} />
+          <div>
+            <p className="text-sm font-bold" style={{ color: colors.green }}>EDEN Intelligence Engine</p>
+            <p className="text-[10px] leading-relaxed" style={{ color: colors.textMuted }}>
+              300+ tech transfer offices · Scored · Enriched · Actionable
+            </p>
           </div>
-          <p className="text-xs sm:text-sm font-bold mt-1" style={{ color: colors.green }}>EDEN Intelligence Engine</p>
-          <p className="text-[10px] sm:text-xs text-center max-w-xs mt-1 leading-relaxed" style={{ color: colors.textMuted }}>
-            Natural language queries across 300+ tech transfer offices. Scored. Enriched. Actionable.
-          </p>
         </div>
-        {/* Chat — no border, no window chrome, just floating messages */}
-        <div className="flex-1 min-w-0">
-          <PitchEdenChat colors={colors} />
+        {/* Chat fills all remaining height */}
+        <div className="flex-1 min-h-0">
+          <PitchEdenChat colors={colors} mobile />
+        </div>
+      </div>
+
+      {/* ── DESKTOP LAYOUT: giant orb left, chat right ── */}
+      <div className="hidden lg:block">
+        <h2 className="text-2xl lg:text-3xl font-bold mb-7" style={{ color: colors.text }}>
+          Ask EDEN anything about the biotech landscape.
+        </h2>
+        <div className="flex flex-row gap-10 items-center">
+          <div className="flex flex-col items-center shrink-0 w-[40%]">
+            <div className="w-full max-w-[380px]">
+              <EdenOrb />
+            </div>
+            <p className="text-sm font-bold mt-1" style={{ color: colors.green }}>EDEN Intelligence Engine</p>
+            <p className="text-xs text-center max-w-xs mt-1 leading-relaxed" style={{ color: colors.textMuted }}>
+              Natural language queries across 300+ tech transfer offices. Scored. Enriched. Actionable.
+            </p>
+          </div>
+          <div className="flex-1 min-w-0">
+            <PitchEdenChat colors={colors} />
+          </div>
         </div>
       </div>
     </Slide>
