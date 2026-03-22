@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import type { ElementType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
@@ -8,9 +8,11 @@ import {
   Lightbulb, Sparkles, FlaskConical, Beaker, GraduationCap, Swords,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
-
-const GREEN = "#3fb950";
-const BG_DARK = "#0a0f0d";
+import {
+  GREEN, BG_DARK,
+  PrintRadar, PrintLogo, PrintFooter, SectionHeader, DarkPill, CoverBottomStrip,
+  PRINT_STYLES, formatDate, parseMarkdown, val,
+} from "@/lib/print-shared";
 
 type IntelligenceData = {
   assetRecord: {
@@ -58,128 +60,18 @@ type IntelligenceData = {
   }>;
 };
 
-function val(v: string | null | undefined): string | null {
-  if (!v || v === "unknown" || v.trim() === "") return null;
-  return v;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function sourceLabel(st: string): string {
   const map: Record<string, string> = {
-    paper: "PubMed",
-    preprint: "bioRxiv",
-    clinical_trial: "ClinicalTrials.gov",
-    patent: "Patent",
-    tech_transfer: "TTO",
-    researcher: "Lab Published",
-    grant: "Grant",
-    dataset: "Dataset",
+    paper: "PubMed", preprint: "bioRxiv", clinical_trial: "ClinicalTrials.gov",
+    patent: "Patent", tech_transfer: "TTO", researcher: "Lab Published",
+    grant: "Grant", dataset: "Dataset",
   };
   return map[st] ?? st;
 }
 
-function parseMarkdown(text: string): React.ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i} className="font-semibold">{part.slice(2, -2)}</strong>;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
-
-function PrintRadar() {
+function PrintSection({ children }: { children: ReactNode }) {
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
-      <div style={{
-        position: "absolute", left: "50%", top: "50%",
-        transform: "translate(-50%, -50%)",
-        width: "min(75vw, 660px)", height: "min(75vw, 660px)",
-        animation: "radar-bg-slow 22s linear infinite",
-        transformOrigin: "center center",
-        background: `conic-gradient(from 0deg, transparent 260deg, ${GREEN}0a 310deg, ${GREEN}22 360deg)`,
-        borderRadius: "50%",
-      }} />
-      {[200, 340, 470, 590].map((r, i) => (
-        <div key={r} style={{
-          position: "absolute", left: "50%", top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: r, height: r, borderRadius: "50%",
-          border: `1px solid ${GREEN}${Math.round((0.10 - i * 0.018) * 255).toString(16).padStart(2, "0")}`,
-        }} />
-      ))}
-      <div style={{
-        position: "absolute", left: "50%", top: "50%",
-        transform: "translate(-50%, -50%)",
-        width: 10, height: 10, borderRadius: "50%",
-        background: GREEN, opacity: 0,
-        animation: "pulse-ring 3s ease-out infinite",
-      }} />
-    </div>
-  );
-}
-
-function Pill({ label }: { label: string }) {
-  return (
-    <span style={{
-      display: "inline-flex", alignItems: "center",
-      padding: "4px 12px", borderRadius: 6,
-      background: "rgba(255,255,255,0.07)",
-      border: "1px solid rgba(255,255,255,0.12)",
-      color: "rgba(255,255,255,0.80)", fontSize: 12, fontWeight: 500,
-      whiteSpace: "nowrap",
-    }}>
-      {label}
-    </span>
-  );
-}
-
-function SectionHeader({ icon: Icon, title, color = "#2d6a45" }: {
-  icon: ElementType; title: string; color?: string;
-}) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <div style={{ width: 3, height: 20, borderRadius: 2, background: color, flexShrink: 0 }} />
-      <Icon style={{ width: 16, height: 16, color, flexShrink: 0 }} />
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: "#111", margin: 0 }}>{title}</h2>
-    </div>
-  );
-}
-
-function PrintFooter({ date, scoredCount }: { date: string; scoredCount: number }) {
-  return (
-    <div style={{
-      marginTop: 48, paddingTop: 16,
-      borderTop: "1px solid #e5e7eb",
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-    }}>
-      <span style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
-        <span style={{ fontWeight: 700, color: "#374151" }}>Eden</span>
-        <span style={{ fontWeight: 700, color: "#2d6a45" }}>Radar</span>
-        {" "}· Confidential · {date}
-      </span>
-      <span style={{ fontSize: 10, color: "#9ca3af" }}>
-        Scored on {scoredCount} of 6 signal dimensions
-      </span>
-    </div>
-  );
-}
-
-function PrintSection({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return (
-    <div className={`print-section ${className}`} style={{
-      background: "#ffffff",
-      padding: "48px 56px 40px",
-      minHeight: "60vh",
-    }}>
+    <div className="print-section" style={{ background: "#ffffff", padding: "48px 56px 40px", minHeight: "60vh" }}>
       {children}
     </div>
   );
@@ -208,13 +100,9 @@ export default function DossierPrint() {
 
   useEffect(() => {
     const stored = sessionStorage.getItem(`asset-${id}`);
-    if (stored) {
-      try { setAsset(JSON.parse(stored)); } catch {}
-    }
+    if (stored) { try { setAsset(JSON.parse(stored)); } catch {} }
     const storedDossier = sessionStorage.getItem(`dossier-${id}`);
-    if (storedDossier) {
-      try { setDossier(JSON.parse(storedDossier)); } catch {}
-    }
+    if (storedDossier) { try { setDossier(JSON.parse(storedDossier)); } catch {} }
   }, [id]);
 
   useEffect(() => {
@@ -248,7 +136,6 @@ export default function DossierPrint() {
   }, [intelligence, asset]);
 
   const enriched = intelligence?.enriched ?? null;
-
   const assetName = asset?.asset_name && asset.asset_name !== "unknown" ? asset.asset_name : "Asset Dossier";
   const institution = val(asset?.institution) ?? val(asset?.owner_name);
   const indication = val(asset?.indication);
@@ -272,26 +159,13 @@ export default function DossierPrint() {
     val(enriched?.innovationClaim) || val(asset?.why_it_matters) ||
     val(enriched?.unmetNeed) || val(enriched?.comparableDrugs)
   );
-  const hasEvidenceContent = !!(
-    (intelligence?.literature?.length ?? 0) > 0 ||
-    (intelligence?.competingAssets?.length ?? 0) > 0 ||
-    (asset?.signals?.length ?? 0) > 0
-  );
+  const footerRight = scoredCount > 0
+    ? `Scored on ${scoredCount} of 6 signal dimensions`
+    : `Signal coverage: ${Math.round(coverage)}%`;
 
   return (
     <div style={{ fontFamily: "'Open Sans', sans-serif", background: "#f8f9fa" }}>
-      <style>{`
-        @media print {
-          .print-cover { page-break-after: always; break-after: page; }
-          .print-section { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
-          .no-print { display: none !important; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { margin: 12mm 14mm; size: A4; }
-          body { background: #ffffff !important; }
-        }
-        @keyframes radar-bg-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        @keyframes pulse-ring { 0% { transform: scale(0.6) translate(-50%,-50%); opacity: 0.5; } 100% { transform: scale(1.8) translate(-50%,-50%); opacity: 0; } }
-      `}</style>
+      <style>{PRINT_STYLES}</style>
 
       {/* ── COVER PAGE ── */}
       <div className="print-cover" style={{
@@ -331,16 +205,7 @@ export default function DossierPrint() {
           </button>
         </div>
 
-        {/* Top-left logo */}
-        <div style={{ position: "relative", zIndex: 10, padding: "28px 40px 0" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
-            <span style={{ color: "#ffffff" }}>Eden</span>
-            <span style={{ color: GREEN }}>Radar</span>
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 3, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            EDEN Intelligence Platform · {dateStr}
-          </div>
-        </div>
+        <PrintLogo subtitle={`EDEN Intelligence Platform · ${dateStr}`} />
 
         {/* Center content */}
         <div style={{
@@ -348,7 +213,6 @@ export default function DossierPrint() {
           display: "flex", flexDirection: "column", justifyContent: "center",
           padding: "40px 80px",
         }}>
-          {/* Label */}
           <div style={{
             display: "inline-flex", alignItems: "center",
             padding: "4px 12px", borderRadius: 20,
@@ -360,7 +224,6 @@ export default function DossierPrint() {
             Asset Intelligence Dossier
           </div>
 
-          {/* Asset name */}
           <h1 style={{
             fontSize: "clamp(28px, 5vw, 46px)", fontWeight: 800,
             color: "#ffffff", lineHeight: 1.15, margin: 0, marginBottom: 12,
@@ -369,26 +232,27 @@ export default function DossierPrint() {
             {assetName}
           </h1>
 
-          {/* Institution */}
           {institution && (
             <p style={{ fontSize: 16, color: "rgba(255,255,255,0.55)", marginBottom: 28, fontWeight: 500 }}>
               {institution}
             </p>
           )}
 
-          {/* Identifier pills */}
+          {/* Identifier pills — all non-unknown values */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 32 }}>
-            {indication && <Pill label={indication} />}
-            {target && target !== indication && <Pill label={`Target: ${target}`} />}
-            {modality && <Pill label={modality} />}
-            {stage && <Pill label={stage} />}
-            {patentStatus && <Pill label={`Patent: ${patentStatus}`} />}
+            {indication && <DarkPill label={indication} />}
+            {target && target !== indication && <DarkPill label={`Target: ${target}`} />}
+            {modality && <DarkPill label={modality} />}
+            {stage && <DarkPill label={stage} />}
+            {patentStatus && <DarkPill label={`Patent: ${patentStatus}`} />}
+            {licensingStatus && !licensingAvailable && <DarkPill label={`Licensing: ${licensingStatus}`} />}
             {licensingAvailable && (
               <span style={{
                 display: "inline-flex", alignItems: "center", gap: 5,
                 padding: "4px 12px", borderRadius: 6,
                 background: `${GREEN}30`, border: `1px solid ${GREEN}70`,
                 color: GREEN, fontSize: 12, fontWeight: 700,
+                whiteSpace: "nowrap",
               }}>
                 <Key style={{ width: 11, height: 11 }} />
                 Available for Licensing
@@ -396,7 +260,6 @@ export default function DossierPrint() {
             )}
           </div>
 
-          {/* Signal coverage */}
           {scoredCount > 0 && (
             <div style={{ fontSize: 12, color: "rgba(255,255,255,0.35)" }}>
               {scoredCount} of 6 signal dimensions scored · {Math.round(coverage)}% signal coverage
@@ -404,13 +267,7 @@ export default function DossierPrint() {
           )}
         </div>
 
-        {/* Bottom strip */}
-        <div style={{
-          position: "relative", zIndex: 10,
-          padding: "20px 40px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
+        <CoverBottomStrip>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             {asset?.source_types?.map((st) => (
               <span key={st} style={{
@@ -434,7 +291,7 @@ export default function DossierPrint() {
               <span style={{ fontSize: 12, color: GREEN, fontWeight: 600 }}>{contactEmail}</span>
             </div>
           )}
-        </div>
+        </CoverBottomStrip>
       </div>
 
       {/* ── PAGE 2: SCIENTIFIC OVERVIEW ── */}
@@ -509,20 +366,17 @@ export default function DossierPrint() {
             </div>
           )}
 
-          <PrintFooter date={dateStr} scoredCount={scoredCount} />
+          <PrintFooter date={dateStr} right={footerRight} />
         </PrintSection>
       )}
 
       {/* ── PAGE 3: COMMERCIAL INTELLIGENCE ── */}
       {hasCommercialContent && (
         <PrintSection>
-          <SectionHeader icon={Sparkles} title="Commercial Intelligence" color="#2d6a45" />
+          <SectionHeader icon={Sparkles} title="Commercial Intelligence" />
 
           {val(enriched?.innovationClaim) && (
-            <div style={{
-              marginBottom: 24, padding: "16px 20px", borderRadius: 8,
-              background: "#fffbeb", border: "1px solid #fde68a",
-            }}>
+            <div style={{ marginBottom: 24, padding: "16px 20px", borderRadius: 8, background: "#fffbeb", border: "1px solid #fde68a" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Lightbulb style={{ width: 14, height: 14, color: "#d97706" }} />
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#92400e", textTransform: "uppercase", letterSpacing: "0.06em" }}>Innovation Claim</span>
@@ -532,10 +386,7 @@ export default function DossierPrint() {
           )}
 
           {val(asset?.why_it_matters) && (
-            <div style={{
-              marginBottom: 24, padding: "16px 20px", borderRadius: 8,
-              background: "#f0fdf4", border: "1px solid #bbf7d0",
-            }}>
+            <div style={{ marginBottom: 24, padding: "16px 20px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <Sparkles style={{ width: 14, height: 14, color: "#16a34a" }} />
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#14532d", textTransform: "uppercase", letterSpacing: "0.06em" }}>Commercial Opportunity Signal</span>
@@ -547,10 +398,7 @@ export default function DossierPrint() {
           )}
 
           {val(enriched?.unmetNeed) && (
-            <div style={{
-              marginBottom: 24, padding: "16px 20px", borderRadius: 8,
-              background: "#fff1f2", border: "1px solid #fecdd3",
-            }}>
+            <div style={{ marginBottom: 24, padding: "16px 20px", borderRadius: 8, background: "#fff1f2", border: "1px solid #fecdd3" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
                 <FlaskConical style={{ width: 14, height: 14, color: "#e11d48" }} />
                 <span style={{ fontSize: 11, fontWeight: 700, color: "#881337", textTransform: "uppercase", letterSpacing: "0.06em" }}>Unmet Need</span>
@@ -569,13 +417,13 @@ export default function DossierPrint() {
             </div>
           )}
 
-          <PrintFooter date={dateStr} scoredCount={scoredCount} />
+          <PrintFooter date={dateStr} right={footerRight} />
         </PrintSection>
       )}
 
       {/* ── PAGE 4: EDEN ANALYSIS ── */}
       <PrintSection>
-        <SectionHeader icon={BookOpen} title="EDEN Analysis" color="#2d6a45" />
+        <SectionHeader icon={BookOpen} title="EDEN Analysis" />
 
         {dossier ? (
           <>
@@ -591,28 +439,24 @@ export default function DossierPrint() {
             </div>
           </>
         ) : (
-          <div style={{
-            padding: "32px 24px", borderRadius: 10, textAlign: "center",
-            background: "#f9fafb", border: "2px dashed #d1d5db",
-          }}>
+          <div style={{ padding: "32px 24px", borderRadius: 10, textAlign: "center", background: "#f9fafb", border: "2px dashed #d1d5db" }}>
             <BookOpen style={{ width: 32, height: 32, color: "#d1d5db", margin: "0 auto 12px" }} />
             <p style={{ fontSize: 14, fontWeight: 600, color: "#374151", marginBottom: 8 }}>
               EDEN Analysis Not Yet Generated
             </p>
             <p style={{ fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>
               Return to the asset dossier page and click "Generate Dossier" to produce an
-              EDEN-powered analysis — including executive summary, commercial rationale,
-              licensing outlook, key risks, and recommended next step — before printing.
+              EDEN-powered analysis before printing.
             </p>
           </div>
         )}
 
-        <PrintFooter date={dateStr} scoredCount={scoredCount} />
+        <PrintFooter date={dateStr} right={footerRight} />
       </PrintSection>
 
       {/* ── PAGE 5: SIGNAL PROFILE & EVIDENCE ── */}
       <PrintSection>
-        <SectionHeader icon={Sparkles} title="Signal Profile & Evidence" color="#2d6a45" />
+        <SectionHeader icon={Sparkles} title="Signal Profile & Evidence" />
 
         {asset?.score_breakdown && (
           <div style={{ marginBottom: 32 }}>
@@ -687,13 +531,7 @@ export default function DossierPrint() {
           </div>
         )}
 
-        {!hasSciContent && !hasCommercialContent && !dossier && !hasEvidenceContent && (
-          <p style={{ fontSize: 13, color: "#9ca3af", fontStyle: "italic" }}>
-            No additional evidence signals were found for this asset.
-          </p>
-        )}
-
-        <PrintFooter date={dateStr} scoredCount={scoredCount} />
+        <PrintFooter date={dateStr} right={footerRight} />
       </PrintSection>
     </div>
   );

@@ -1,105 +1,19 @@
 import { useState, useEffect } from "react";
-import type { ElementType } from "react";
 import { useLocation } from "wouter";
 import {
   ArrowLeft, Printer, FileText, Building2, Key, ExternalLink,
   BookOpen, User, Calendar, BarChart2,
 } from "lucide-react";
-import type { ReportPayload, ScoredAsset } from "@/lib/types";
-
-const GREEN = "#3fb950";
-const BG_DARK = "#0a0f0d";
-
-function val(v: string | null | undefined): string | null {
-  if (!v || v === "unknown" || v.trim() === "") return null;
-  return v;
-}
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleDateString("en-US", {
-      year: "numeric", month: "long", day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function formatDateTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      year: "numeric", month: "short", day: "numeric",
-      hour: "2-digit", minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function parseMarkdown(text: string): React.ReactNode[] {
-  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i} style={{ fontWeight: 700, color: "#111" }}>{part.slice(2, -2)}</strong>;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
-
-function PrintRadar() {
-  return (
-    <div style={{ position: "absolute", inset: 0, overflow: "hidden", pointerEvents: "none", zIndex: 0 }} aria-hidden>
-      <div style={{
-        position: "absolute", left: "50%", top: "50%",
-        transform: "translate(-50%, -50%)",
-        width: "min(70vw, 600px)", height: "min(70vw, 600px)",
-        animation: "radar-bg-slow 22s linear infinite",
-        transformOrigin: "center center",
-        background: `conic-gradient(from 0deg, transparent 260deg, ${GREEN}09 310deg, ${GREEN}1e 360deg)`,
-        borderRadius: "50%",
-      }} />
-      {[180, 310, 430, 540].map((r, i) => (
-        <div key={r} style={{
-          position: "absolute", left: "50%", top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: r, height: r, borderRadius: "50%",
-          border: `1px solid ${GREEN}${Math.round((0.10 - i * 0.018) * 255).toString(16).padStart(2, "0")}`,
-        }} />
-      ))}
-    </div>
-  );
-}
-
-function PrintFooter({ date }: { date: string }) {
-  return (
-    <div style={{
-      marginTop: 48, paddingTop: 16,
-      borderTop: "1px solid #e5e7eb",
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-    }}>
-      <span style={{ fontSize: 10, color: "#9ca3af", letterSpacing: "0.05em" }}>
-        <span style={{ fontWeight: 700, color: "#374151" }}>Eden</span>
-        <span style={{ fontWeight: 700, color: "#2d6a45" }}>Radar</span>
-        {" "}· Buyer Intelligence Report · {date}
-      </span>
-      <span style={{ fontSize: 10, color: "#9ca3af" }}>For research purposes only.</span>
-    </div>
-  );
-}
-
-function SectionHeader({ icon: Icon, title, color = "#2d6a45" }: {
-  icon: ElementType; title: string; color?: string;
-}) {
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-      <div style={{ width: 3, height: 20, borderRadius: 2, background: color, flexShrink: 0 }} />
-      <Icon style={{ width: 16, height: 16, color, flexShrink: 0 }} />
-      <h2 style={{ fontSize: 15, fontWeight: 700, color: "#111", margin: 0 }}>{title}</h2>
-    </div>
-  );
-}
+import type { ReportPayload, ScoredAsset, BuyerProfile } from "@/lib/types";
+import {
+  GREEN, BG_DARK,
+  PrintRadar, PrintLogo, PrintFooter, SectionHeader, DarkPill, CoverBottomStrip,
+  PRINT_STYLES, formatDate, formatDateTime, parseMarkdown, val, scoreColor,
+} from "@/lib/print-shared";
 
 function RankedAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
   const licensingAvailable = (asset.licensing_status ?? "").toLowerCase().includes("available");
+  const { bg, border, text } = scoreColor(asset.score);
   return (
     <div style={{
       display: "flex", gap: 16, padding: "16px 18px",
@@ -122,10 +36,8 @@ function RankedAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
           </div>
           <div style={{
             padding: "4px 10px", borderRadius: 6,
-            background: asset.score >= 75 ? "#dcfce7" : asset.score >= 55 ? "#fef9c3" : "#fee2e2",
-            border: `1px solid ${asset.score >= 75 ? "#86efac" : asset.score >= 55 ? "#fde68a" : "#fca5a5"}`,
-            color: asset.score >= 75 ? "#15803d" : asset.score >= 55 ? "#b45309" : "#dc2626",
-            fontSize: 14, fontWeight: 800, flexShrink: 0,
+            background: bg, border: `1px solid ${border}`,
+            color: text, fontSize: 14, fontWeight: 800, flexShrink: 0,
           }}>
             {Math.round(asset.score)}
           </div>
@@ -178,6 +90,7 @@ function RankedAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
 export default function ReportPrint() {
   const [, setLocation] = useLocation();
   const [report, setReport] = useState<ReportPayload | null>(null);
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile | null>(null);
 
   useEffect(() => {
     const fromSession = (() => {
@@ -190,23 +103,45 @@ export default function ReportPrint() {
       ? window.history.state.report as ReportPayload
       : null;
     setReport(fromHistory ?? fromSession);
+
+    const bp = (() => {
+      try {
+        const stored = sessionStorage.getItem("buyer-profile");
+        return stored ? JSON.parse(stored) as BuyerProfile : null;
+      } catch { return null; }
+    })();
+    setBuyerProfile(bp);
   }, []);
 
   const dateStr = formatDate(new Date().toISOString());
 
+  const thesisPills: string[] = [];
+  if (buyerProfile) {
+    (buyerProfile.therapeutic_areas ?? []).forEach((t) => thesisPills.push(t));
+    (buyerProfile.modalities ?? []).forEach((m) => thesisPills.push(m));
+    (buyerProfile.preferred_stages ?? []).forEach((s) => thesisPills.push(s));
+  }
+
+  const maxScoredDims = report?.top_assets?.reduce((max, a) => {
+    const n = a.score_breakdown?.scored_dimensions?.length ?? 0;
+    return n > max ? n : max;
+  }, 0) ?? 0;
+
+  const footerRight = maxScoredDims > 0
+    ? `Scored on ${maxScoredDims} of 6 signal dimensions`
+    : `${report?.top_assets?.length ?? 0} assets ranked`;
+
   if (!report) {
     return (
       <div style={{ fontFamily: "'Open Sans', sans-serif", minHeight: "100vh", background: "#f8f9fa", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <style>{PRINT_STYLES}</style>
         <div style={{ textAlign: "center" }}>
           <FileText style={{ width: 40, height: 40, color: "#d1d5db", margin: "0 auto 12px" }} />
           <p style={{ fontSize: 16, fontWeight: 600, color: "#374151", marginBottom: 8 }}>No Report Available</p>
           <p style={{ fontSize: 14, color: "#9ca3af", marginBottom: 20 }}>Return to Scout and generate a report first.</p>
           <button
             onClick={() => setLocation("/scout")}
-            style={{
-              padding: "8px 20px", borderRadius: 8, cursor: "pointer",
-              background: GREEN, border: "none", color: "#fff", fontWeight: 600, fontSize: 14,
-            }}
+            style={{ padding: "8px 20px", borderRadius: 8, cursor: "pointer", background: GREEN, border: "none", color: "#fff", fontWeight: 600, fontSize: 14 }}
           >
             Go to Scout
           </button>
@@ -215,19 +150,13 @@ export default function ReportPrint() {
     );
   }
 
+  const licensableCount = report.top_assets.filter((a) =>
+    (a.licensing_status ?? "").toLowerCase().includes("available")
+  ).length;
+
   return (
     <div style={{ fontFamily: "'Open Sans', sans-serif", background: "#f8f9fa" }}>
-      <style>{`
-        @media print {
-          .print-cover { page-break-after: always; break-after: page; }
-          .print-section { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
-          .no-print { display: none !important; }
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          @page { margin: 12mm 14mm; size: A4; }
-          body { background: #ffffff !important; }
-        }
-        @keyframes radar-bg-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
+      <style>{PRINT_STYLES}</style>
 
       {/* ── COVER PAGE ── */}
       <div className="print-cover" style={{
@@ -267,16 +196,7 @@ export default function ReportPrint() {
           </button>
         </div>
 
-        {/* Top-left logo */}
-        <div style={{ position: "relative", zIndex: 10, padding: "28px 40px 0" }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: "-0.02em" }}>
-            <span style={{ color: "#ffffff" }}>Eden</span>
-            <span style={{ color: GREEN }}>Radar</span>
-          </div>
-          <div style={{ fontSize: 11, color: "rgba(255,255,255,0.35)", marginTop: 3, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            Buyer Intelligence Platform · {dateStr}
-          </div>
-        </div>
+        <PrintLogo subtitle={`Buyer Intelligence Platform · ${dateStr}`} />
 
         {/* Center content */}
         <div style={{
@@ -291,32 +211,47 @@ export default function ReportPrint() {
             background: `${GREEN}22`, border: `1px solid ${GREEN}44`,
             color: GREEN, fontSize: 11, fontWeight: 700,
             letterSpacing: "0.08em", textTransform: "uppercase",
-            marginBottom: 20, width: "fit-content",
+            marginBottom: 16, width: "fit-content",
           }}>
             Intelligence Report
           </div>
 
-          {/* Title */}
-          <h1 style={{
-            fontSize: "clamp(24px, 4vw, 40px)", fontWeight: 800,
-            color: "#ffffff", lineHeight: 1.2, margin: 0, marginBottom: 16,
-            letterSpacing: "-0.02em", maxWidth: 700,
-          }}>
+          {/* Report title */}
+          <p style={{ fontSize: 13, color: "rgba(255,255,255,0.40)", margin: "0 0 8px", fontWeight: 500 }}>
             {report.title}
+          </p>
+
+          {/* Primary: search query as cover hero */}
+          <h1 style={{
+            fontSize: "clamp(22px, 4vw, 38px)", fontWeight: 800,
+            color: "#ffffff", lineHeight: 1.2, margin: 0, marginBottom: 24,
+            letterSpacing: "-0.02em", maxWidth: 680,
+          }}>
+            "{report.query}"
           </h1>
 
-          {/* Query pill */}
-          <div style={{
-            display: "inline-flex", alignItems: "center", gap: 8,
-            padding: "6px 14px", borderRadius: 8, marginBottom: 28,
-            background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.10)",
-            width: "fit-content",
-          }}>
-            <BookOpen style={{ width: 13, height: 13, color: "rgba(255,255,255,0.40)" }} />
-            <span style={{ fontSize: 13, color: "rgba(255,255,255,0.60)", fontStyle: "italic" }}>
-              "{report.query}"
-            </span>
-          </div>
+          {/* Buyer thesis pills (from profile or derived from query) */}
+          {thesisPills.length > 0 ? (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 28 }}>
+              {thesisPills.slice(0, 8).map((pill, i) => (
+                <DarkPill key={i} label={pill} />
+              ))}
+            </div>
+          ) : report.buyer_profile_summary ? (
+            <div style={{
+              marginBottom: 28, padding: "12px 16px", borderRadius: 8,
+              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.10)",
+              maxWidth: 640,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <User style={{ width: 12, height: 12, color: "rgba(255,255,255,0.35)" }} />
+                <span style={{ fontSize: 10, color: "rgba(255,255,255,0.35)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 }}>Buyer Thesis</span>
+              </div>
+              <p style={{ fontSize: 13, color: "rgba(255,255,255,0.60)", lineHeight: 1.6, margin: 0 }}>
+                {report.buyer_profile_summary}
+              </p>
+            </div>
+          ) : null}
 
           {/* Stats row */}
           <div style={{ display: "flex", gap: 32 }}>
@@ -324,28 +259,22 @@ export default function ReportPrint() {
               <div style={{ fontSize: 28, fontWeight: 800, color: "#ffffff" }}>{report.top_assets.length}</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Assets Ranked</div>
             </div>
-            <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: GREEN }}>
-                {report.top_assets[0] ? Math.round(report.top_assets[0].score) : "—"}
+            {report.top_assets[0] && (
+              <div>
+                <div style={{ fontSize: 28, fontWeight: 800, color: GREEN }}>
+                  {Math.round(report.top_assets[0].score)}
+                </div>
+                <div style={{ fontSize: 11, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Top Score</div>
               </div>
-              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Top Score</div>
-            </div>
+            )}
             <div>
-              <div style={{ fontSize: 28, fontWeight: 800, color: "#ffffff" }}>
-                {report.top_assets.filter((a) => (a.licensing_status ?? "").toLowerCase().includes("available")).length}
-              </div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#ffffff" }}>{licensableCount}</div>
               <div style={{ fontSize: 11, color: "rgba(255,255,255,0.40)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Licensable</div>
             </div>
           </div>
         </div>
 
-        {/* Bottom strip */}
-        <div style={{
-          position: "relative", zIndex: 10,
-          padding: "20px 40px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
-          display: "flex", justifyContent: "space-between", alignItems: "center",
-        }}>
+        <CoverBottomStrip>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <Calendar style={{ width: 12, height: 12, color: "rgba(255,255,255,0.30)" }} />
             <span style={{ fontSize: 11, color: "rgba(255,255,255,0.35)" }}>
@@ -353,9 +282,9 @@ export default function ReportPrint() {
             </span>
           </div>
           <span style={{ fontSize: 10, color: "rgba(255,255,255,0.20)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-            For Research Purposes Only
+            Confidential · For Research Purposes Only
           </span>
-        </div>
+        </CoverBottomStrip>
       </div>
 
       {/* ── PAGE 2: BUYER THESIS + EXECUTIVE SUMMARY ── */}
@@ -363,10 +292,7 @@ export default function ReportPrint() {
         {report.buyer_profile_summary && (
           <div style={{ marginBottom: 32 }}>
             <SectionHeader icon={User} title="Buyer Thesis" />
-            <div style={{
-              padding: "16px 20px", borderRadius: 8,
-              background: "#f0fdf4", border: "1px solid #bbf7d0",
-            }}>
+            <div style={{ padding: "16px 20px", borderRadius: 8, background: "#f0fdf4", border: "1px solid #bbf7d0" }}>
               <p style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.7, margin: 0 }}>
                 {report.buyer_profile_summary}
               </p>
@@ -381,19 +307,17 @@ export default function ReportPrint() {
           </p>
         </div>
 
-        <PrintFooter date={dateStr} />
+        <PrintFooter date={dateStr} right={footerRight} />
       </div>
 
       {/* ── PAGE 3: RANKED ASSETS ── */}
       {report.top_assets.length > 0 && (
         <div className="print-section" style={{ background: "#ffffff", padding: "48px 56px 40px" }}>
           <SectionHeader icon={BarChart2} title={`Top Ranked Opportunities (${report.top_assets.length})`} />
-
           {report.top_assets.map((asset, i) => (
             <RankedAssetRow key={asset.id} asset={asset} rank={i + 1} />
           ))}
-
-          <PrintFooter date={dateStr} />
+          <PrintFooter date={dateStr} right={footerRight} />
         </div>
       )}
 
@@ -401,14 +325,12 @@ export default function ReportPrint() {
       {report.narrative && (
         <div className="print-section" style={{ background: "#ffffff", padding: "48px 56px 40px" }}>
           <SectionHeader icon={BookOpen} title="Intelligence Analysis" />
-
           <div style={{ fontSize: 13.5, color: "#374151", lineHeight: 1.8 }}>
             {report.narrative.split(/\n{2,}/).filter(Boolean).map((p, i) => (
               <p key={i} style={{ marginBottom: 16 }}>{parseMarkdown(p)}</p>
             ))}
           </div>
-
-          <PrintFooter date={dateStr} />
+          <PrintFooter date={dateStr} right={footerRight} />
         </div>
       )}
     </div>
