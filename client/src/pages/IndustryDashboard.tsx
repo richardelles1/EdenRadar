@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import {
@@ -537,7 +538,7 @@ export default function IndustryDashboard() {
           data-testid="dashboard-new-assets-panel"
           style={{ animation: "dash-fade-up 400ms ease 140ms both" }}
         >
-          <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center justify-between gap-2 mb-3">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-muted-foreground" />
               <h2 className="text-sm font-semibold text-foreground">New Assets</h2>
@@ -564,6 +565,15 @@ export default function IndustryDashboard() {
                 </span>
               </Link>
             </div>
+          </div>
+
+          <div className="mb-3">
+            <OrientationHint
+              hintId="dashboard-new-assets"
+              title="Live asset feed."
+              body="This panel refreshes as scrapers index new TTO disclosures. Set up Alerts to get notified when assets match your therapeutic focus."
+              accent="emerald"
+            />
           </div>
 
           {activeTab === "institution" ? (

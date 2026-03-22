@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from "react";
+import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -636,6 +637,18 @@ export default function IndustryEden() {
           </div>
 
           {/* Input bar — anchored at bottom, no outer border */}
+          {messages.length === 0 && (
+            <div className="px-4 sm:px-6 pb-2 shrink-0">
+              <div className="max-w-3xl mx-auto">
+                <OrientationHint
+                  hintId="eden-thesis-matching"
+                  title="Thesis matching."
+                  body="Describe your deal criteria — modality, stage, indication, deal structure — and EDEN will cross-reference the entire network against your requirements."
+                  accent="emerald"
+                />
+              </div>
+            </div>
+          )}
           <div className="px-4 sm:px-6 py-3 bg-background/95 backdrop-blur shrink-0" data-testid="chat-input-area">
             <div
               className="max-w-3xl mx-auto flex gap-2 items-center rounded-2xl border border-border bg-card px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500/50 transition-all"

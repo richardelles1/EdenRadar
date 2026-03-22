@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { OrientationHint } from "@/components/OrientationHint";
 import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
@@ -543,6 +544,17 @@ export default function Scout() {
                 Semantic search across indexed TTO assets from leading research institutions, matched to your buyer thesis.
               </p>
             </div>
+
+            {!hasSearched && (
+              <div className="max-w-3xl mx-auto">
+                <OrientationHint
+                  hintId="scout-cross-source"
+                  title="Cross-source discovery."
+                  body="Each search pulls simultaneously from 300+ TTO disclosures, PubMed, ClinicalTrials.gov, and patents — scored against your buyer thesis."
+                  accent="emerald"
+                />
+              </div>
+            )}
 
             <div className="max-w-3xl mx-auto flex gap-2">
               <div className="flex-1">

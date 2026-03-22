@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { OrientationHint } from "@/components/OrientationHint";
 import { useLocation } from "wouter";
 import {
   Bell,
@@ -255,7 +256,13 @@ export default function ResearchDashboard() {
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <OrientationHint
+          hintId="research-grants-spotlight"
+          title="Profile-driven spotlight."
+          body="These grants are matched to the Research Areas in your profile. Add more areas to widen coverage, or update them in your profile settings."
+          accent="violet"
+        />
+        <div className="flex items-center justify-between mb-3 mt-3">
           <button onClick={() => navigate("/research/grants")} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
             <BadgeDollarSign className="w-4 h-4 text-emerald-500" />
             <h2 className="text-base font-semibold text-foreground">Grants Spotlight</h2>

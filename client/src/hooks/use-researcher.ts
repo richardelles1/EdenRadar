@@ -11,6 +11,7 @@ export type ResearcherProfile = {
   secondaryInterests: string[];
   photoUrl: string;
   orcidId: string;
+  onboardingDone?: boolean;
 };
 
 const DEFAULT_PROFILE: ResearcherProfile = {
@@ -24,6 +25,7 @@ const DEFAULT_PROFILE: ResearcherProfile = {
   secondaryInterests: [],
   photoUrl: "",
   orcidId: "",
+  onboardingDone: false,
 };
 
 export function getProfileCompleteness(profile: ResearcherProfile): { percent: number; filled: number; total: number; missing: string[] } {

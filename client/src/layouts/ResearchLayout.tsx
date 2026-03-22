@@ -1,8 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { ResearchSidebar } from "@/components/ResearchSidebar";
+import { ResearcherOnboarding } from "@/components/ResearcherOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
+import { getResearcherProfile } from "@/hooks/use-researcher";
 
 type ResearchLayoutProps = {
   children: React.ReactNode;
@@ -11,6 +13,7 @@ type ResearchLayoutProps = {
 export function ResearchLayout({ children }: ResearchLayoutProps) {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
     if (loading) return;
@@ -22,6 +25,11 @@ export function ResearchLayout({ children }: ResearchLayoutProps) {
       navigate("/discovery", { replace: true });
     } else if (role !== "researcher") {
       navigate("/login", { replace: true });
+    } else {
+      const profile = getResearcherProfile();
+      if (!profile.onboardingDone) {
+        setOnboardingOpen(true);
+      }
     }
   }, [session, role, loading, navigate]);
 
@@ -34,6 +42,10 @@ export function ResearchLayout({ children }: ResearchLayoutProps) {
       <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         {children}
       </main>
+      <ResearcherOnboarding
+        open={onboardingOpen}
+        onClose={() => setOnboardingOpen(false)}
+      />
     </div>
   );
 }

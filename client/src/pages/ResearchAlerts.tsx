@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { OrientationHint } from "@/components/OrientationHint";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import {
   Bell,
@@ -162,9 +163,17 @@ export default function ResearchAlerts() {
       </div>
 
       <div className="border border-border rounded-lg p-4 bg-card" data-testid="alert-topic-manager">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-2">
           <h2 className="text-sm font-semibold text-foreground">Alert Topics</h2>
           <span className="text-[11px] text-muted-foreground">{topicsList.length}/{MAX_TOPICS} topics</span>
+        </div>
+        <div className="mb-3">
+          <OrientationHint
+            hintId="alerts-topic-guide"
+            title="Keyword strategy."
+            body="Be specific — try your target protein name, a modality + disease combination like 'CAR-T lymphoma', or a technique like 'base editing'."
+            accent="amber"
+          />
         </div>
         <div className="flex flex-wrap gap-2 mb-3">
           {topicsList.map(t => (
