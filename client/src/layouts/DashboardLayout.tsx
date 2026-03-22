@@ -36,7 +36,15 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [location] = useLocation();
   const isEden = location === "/industry/eden";
 
-  if (loading || !session || role !== "industry") return null;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!session || role !== "industry") return null;
 
   return (
     <div className="flex min-h-screen bg-background relative">
