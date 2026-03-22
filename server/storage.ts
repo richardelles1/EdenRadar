@@ -1186,11 +1186,12 @@ export class DatabaseStorage implements IStorage {
 
     const sessionIds = [...new Set(stagingRows.map((r) => r.session_id))];
     for (const sessionId of sessionIds) {
+      const countForSession = stagingRows.filter((r) => r.session_id === sessionId).length;
       await this.updateSyncStagingStatus(sessionId, "pushed", true, true);
-      await this.updateSyncSession(sessionId, { status: "pushed", pushedCount: newAssets.length, lastRefreshedAt: new Date() });
+      await this.updateSyncSession(sessionId, { status: "pushed", pushedCount: countForSession, lastRefreshedAt: new Date() });
     }
 
-    return { updated: newAssets.length };
+    return { updated: stagingRows.length };
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
