@@ -452,7 +452,12 @@ export default function DossierPrint() {
         <PrintFooter date={dateStr} right={footerRight} />
       </PrintSection>
 
-      {/* ── PAGE 5: SIGNAL PROFILE & EVIDENCE ── */}
+      {/* ── PAGE 5: SIGNAL PROFILE & EVIDENCE (only if any real data) ── */}
+      {(
+        (asset?.score_breakdown?.scored_dimensions?.length ?? 0) > 0 ||
+        (intelligence?.literature?.length ?? 0) > 0 ||
+        (intelligence?.competingAssets?.length ?? 0) > 0
+      ) && (
       <PrintSection>
         <SectionHeader icon={Sparkles} title="Signal Profile & Evidence" />
 
@@ -531,6 +536,7 @@ export default function DossierPrint() {
 
         <PrintFooter date={dateStr} right={footerRight} />
       </PrintSection>
+      )}
     </div>
   );
 }

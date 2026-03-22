@@ -29,7 +29,9 @@ function RankedAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 6 }}>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: "#111", marginBottom: 3 }}>{asset.asset_name}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "#111", marginBottom: 3 }}>
+              {val(asset.asset_name) ?? "Unnamed Asset"}
+            </div>
             {val(asset.indication) && (
               <div style={{ fontSize: 12, color: "#6b7280" }}>{asset.indication}</div>
             )}
