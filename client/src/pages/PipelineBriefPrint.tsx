@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Moon, Printer, Sun } from "lucide-react";
-import { PRINT_STYLES, PrintLogo, PrintFooter, formatDate, GREEN, BG_DARK } from "@/lib/print-shared";
+import { PRINT_STYLES, PrintFooter, formatDate, GREEN, BG_DARK } from "@/lib/print-shared";
 
 type BriefData = {
   brief: string;
@@ -20,12 +20,19 @@ function parseSections(text: string): Section[] {
     const trimmed = para.trim();
     if (!trimmed) continue;
     const firstLine = trimmed.split("\n")[0];
-    const rest = trimmed.split("\n").slice(1).join("\n").trim();
-    const colonMatch = firstLine.match(/^([A-Z][A-Z\s/&()-]{2,50}):\s*$/);
-    if (colonMatch) {
-      sections.push({ heading: colonMatch[1], lines: rest ? [rest] : [] });
-    } else if (firstLine.endsWith(":") && firstLine.length < 60) {
-      sections.push({ heading: firstLine.replace(/:$/, ""), lines: rest ? [rest] : [] });
+    const restLines = trimmed.split("\n").slice(1).join("\n").trim();
+
+    const colonOnlyMatch = firstLine.match(/^([A-Z][A-Za-z\s/&(),-]{2,50}):\s*$/);
+    const colonInlineMatch = firstLine.match(/^([A-Z][A-Za-z\s/&(),-]{2,50}):\s+(.+)$/);
+
+    if (colonOnlyMatch) {
+      sections.push({ heading: colonOnlyMatch[1], lines: restLines ? [restLines] : [] });
+    } else if (colonInlineMatch) {
+      const bodyFromFirstLine = colonInlineMatch[2].trim();
+      const fullBody = restLines ? `${bodyFromFirstLine}\n${restLines}` : bodyFromFirstLine;
+      sections.push({ heading: colonInlineMatch[1], lines: [fullBody] });
+    } else if (firstLine.endsWith(":") && firstLine.length < 70) {
+      sections.push({ heading: firstLine.replace(/:$/, ""), lines: restLines ? [restLines] : [] });
     } else {
       sections.push({ heading: null, lines: [trimmed] });
     }
@@ -128,7 +135,15 @@ export default function PipelineBriefPrint() {
       </div>
 
       <div style={{ maxWidth: "760px", margin: "0 auto", padding: "3rem 2rem 4rem" }}>
-        <PrintLogo subtitle="Pipeline Intelligence Brief" />
+        <div style={{ marginBottom: "0.25rem" }}>
+          <div style={{ fontSize: "1.25rem", fontWeight: 800, letterSpacing: "-0.02em" }}>
+            <span style={{ color: headingColor }}>Eden</span>
+            <span style={{ color: GREEN }}>Radar</span>
+          </div>
+          <div style={{ fontSize: "0.68rem", color: mutedColor, marginTop: "2px", letterSpacing: "0.06em", textTransform: "uppercase" }}>
+            Pipeline Intelligence Brief
+          </div>
+        </div>
 
         <div
           className="pbp-card"
