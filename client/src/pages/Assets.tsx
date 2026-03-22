@@ -633,7 +633,7 @@ export default function Assets() {
                 </div>
                 {typeof selectedPipeline === "number" && displayedAssets.length > 0 && (
                   <button
-                    onClick={handleBrief}
+                    onClick={() => handleBrief()}
                     disabled={briefLoading !== null}
                     className="flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-md border border-border text-muted-foreground hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all disabled:opacity-50"
                     data-testid="button-pipeline-brief"
