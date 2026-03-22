@@ -1106,15 +1106,17 @@ export class DatabaseStorage implements IStorage {
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>> {
     const result = await db.execute(sql`
-      SELECT id, asset_name, institution, first_seen_at, source_url
-      FROM ingested_assets
-      WHERE relevant = true
-        AND source_type = 'tech_transfer'
-        AND enriched_at IS NULL
-      ORDER BY first_seen_at DESC
+      SELECT ss.id, ss.asset_name, ss.institution, ss.created_at, ss.source_url
+      FROM sync_staging ss
+      JOIN sync_sessions ses ON ses.session_id = ss.session_id
+      WHERE ss.is_new = true
+        AND ss.relevant = true
+        AND ss.status NOT IN ('pushed', 'skipped')
+        AND ses.status = 'enriched'
+      ORDER BY ss.created_at DESC
     `);
     const rows = result.rows as Array<{
-      id: number; asset_name: string; institution: string; first_seen_at: string; source_url: string | null;
+      id: number; asset_name: string; institution: string; created_at: string; source_url: string | null;
     }>;
 
     const grouped = new Map<string, {
@@ -1132,7 +1134,7 @@ export class DatabaseStorage implements IStorage {
       entry.assets.push({
         id: Number(row.id),
         assetName: row.asset_name,
-        firstSeenAt: new Date(row.first_seen_at),
+        firstSeenAt: new Date(row.created_at),
         sourceUrl: row.source_url,
       });
     }
@@ -1141,28 +1143,54 @@ export class DatabaseStorage implements IStorage {
   }
 
   async pushNewArrivals(institution?: string): Promise<{ updated: number }> {
-    let result;
-    if (institution) {
-      result = await db.execute(sql`
-        UPDATE ingested_assets
-        SET enriched_at = NOW()
-        WHERE relevant = true
-          AND source_type = 'tech_transfer'
-          AND enriched_at IS NULL
-          AND institution = ${institution}
-        RETURNING id
-      `);
-    } else {
-      result = await db.execute(sql`
-        UPDATE ingested_assets
-        SET enriched_at = NOW()
-        WHERE relevant = true
-          AND source_type = 'tech_transfer'
-          AND enriched_at IS NULL
-        RETURNING id
-      `);
+    const institutionFilter = institution ? sql`AND ss.institution = ${institution}` : sql``;
+    const result = await db.execute(sql`
+      SELECT ss.id, ss.session_id, ss.fingerprint, ss.asset_name, ss.institution,
+             ss.summary, ss.source_url, ss.target, ss.modality, ss.indication, ss.development_stage
+      FROM sync_staging ss
+      JOIN sync_sessions ses ON ses.session_id = ss.session_id
+      WHERE ss.is_new = true
+        AND ss.relevant = true
+        AND ss.status NOT IN ('pushed', 'skipped')
+        AND ses.status = 'enriched'
+        ${institutionFilter}
+    `);
+    const stagingRows = result.rows as Array<{
+      id: number; session_id: string; fingerprint: string; asset_name: string; institution: string;
+      summary: string; source_url: string | null; target: string; modality: string;
+      indication: string; development_stage: string;
+    }>;
+
+    if (stagingRows.length === 0) return { updated: 0 };
+
+    const { newAssets } = await this.bulkUpsertIngestedAssets(
+      stagingRows.map((r) => ({
+        fingerprint: r.fingerprint,
+        assetName: r.asset_name,
+        institution: r.institution,
+        summary: r.summary,
+        sourceUrl: r.source_url,
+        sourceType: "tech_transfer" as const,
+        developmentStage: r.development_stage,
+        target: r.target,
+        modality: r.modality,
+        indication: r.indication,
+        relevant: true,
+        runId: 0,
+      }))
+    );
+
+    for (const asset of newAssets) {
+      await this.stampEnrichedAt(asset.id);
     }
-    return { updated: result.rows.length };
+
+    const sessionIds = [...new Set(stagingRows.map((r) => r.session_id))];
+    for (const sessionId of sessionIds) {
+      await this.updateSyncStagingStatus(sessionId, "pushed", true, true);
+      await this.updateSyncSession(sessionId, { status: "pushed", pushedCount: newAssets.length, lastRefreshedAt: new Date() });
+    }
+
+    return { updated: newAssets.length };
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
