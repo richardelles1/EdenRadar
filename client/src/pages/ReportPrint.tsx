@@ -82,6 +82,24 @@ function RankedAssetRow({ asset, rank }: { asset: ScoredAsset; rank: number }) {
             "{asset.why_it_matters}"
           </p>
         )}
+
+        {/* Signal coverage */}
+        {(asset.score_breakdown?.signal_coverage ?? 0) > 0 && (
+          <div style={{ marginTop: 8, display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, height: 3, borderRadius: 2, background: "#e5e7eb", overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 2,
+                width: `${Math.round(asset.score_breakdown.signal_coverage ?? 0)}%`,
+                background: (asset.score_breakdown.signal_coverage ?? 0) >= 75 ? "#22c55e"
+                  : (asset.score_breakdown.signal_coverage ?? 0) >= 50 ? "#f59e0b"
+                  : "#ef4444",
+              }} />
+            </div>
+            <span style={{ fontSize: 10, color: "#9ca3af", whiteSpace: "nowrap" }}>
+              {Math.round(asset.score_breakdown.signal_coverage ?? 0)}% signal coverage
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -127,9 +145,7 @@ export default function ReportPrint() {
     return n > max ? n : max;
   }, 0) ?? 0;
 
-  const footerRight = maxScoredDims > 0
-    ? `Scored on ${maxScoredDims} of 6 signal dimensions`
-    : `${report?.top_assets?.length ?? 0} assets ranked`;
+  const footerRight = `Scored on ${maxScoredDims} of 6 signal dimensions`;
 
   if (!report) {
     return (

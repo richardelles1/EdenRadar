@@ -159,9 +159,7 @@ export default function DossierPrint() {
     val(enriched?.innovationClaim) || val(asset?.why_it_matters) ||
     val(enriched?.unmetNeed) || val(enriched?.comparableDrugs)
   );
-  const footerRight = scoredCount > 0
-    ? `Scored on ${scoredCount} of 6 signal dimensions`
-    : `Signal coverage: ${Math.round(coverage)}%`;
+  const footerRight = `Scored on ${scoredCount} of 6 signal dimensions`;
 
   return (
     <div style={{ fontFamily: "'Open Sans', sans-serif", background: "#f8f9fa" }}>
