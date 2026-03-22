@@ -5,6 +5,7 @@ import { IndustryOnboarding } from "@/components/IndustryOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
 import { getIndustryProfile } from "@/hooks/use-industry";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -51,7 +52,9 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       {!isEden && <PortalBackground variant="radar" />}
       <IndustrySidebar />
       <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
-        {children}
+        <ErrorBoundary>
+          {children}
+        </ErrorBoundary>
       </main>
       <IndustryOnboarding
         open={onboardingOpen}

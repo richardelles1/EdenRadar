@@ -51,7 +51,7 @@ type PipelineSummaryData = {
 interface DeltaInstitution {
   institution: string;
   count: number;
-  sampleAssets: string[];
+  sampleAssets: Array<{ id: number; name: string } | string>;
 }
 
 interface AlertDeltaResponse {
@@ -382,7 +382,11 @@ function NewAlertsCard({ onViewAll }: { onViewAll: () => void }) {
             </div>
             <p className="text-xs text-primary font-semibold mt-1">+{item.count} new assets</p>
             {item.sampleAssets[0] && (
-              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">{item.sampleAssets[0]}</p>
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-1">
+                {typeof item.sampleAssets[0] === "string"
+                  ? item.sampleAssets[0]
+                  : (item.sampleAssets[0] as { id: number; name: string }).name}
+              </p>
             )}
           </div>
         ) : null}
