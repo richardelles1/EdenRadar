@@ -2099,6 +2099,17 @@ export async function registerRoutes(
       // ── Session focus context + filter extraction ──────────────────────────
       const focusContext = getOrUpdateSessionFocus(sid, message.trim());
       const filters = parseQueryFilters(message.trim(), focusContext);
+      // ── Portfolio institution names for two-pass detection ────────────────
+      const portfolioInstitutionNames: string[] = portfolioStats?.topInstitutions?.map((i: { institution: string }) => i.institution) ?? [];
+
+      // Override filters.institution with two-pass detection if not already set.
+      // Must happen BEFORE filtersActive computation so pass-2 institutions
+      // consistently trigger filtered semantic search.
+      if (!filters.institution) {
+        const detected = detectInstitutionName(message.trim(), portfolioInstitutionNames);
+        if (detected) filters.institution = detected;
+      }
+
       const filtersActive = hasMeaningfulFilters(filters);
       const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
 
@@ -2106,15 +2117,6 @@ export async function registerRoutes(
       persistSessionFocus(sid, focusContext).catch((e) =>
         console.warn("[eden] focus persist failed:", e?.message ?? e)
       );
-
-      // ── Portfolio institution names for two-pass detection ────────────────
-      const portfolioInstitutionNames: string[] = portfolioStats?.topInstitutions?.map((i: { institution: string }) => i.institution) ?? [];
-
-      // Override filters.institution with two-pass detection if not already set
-      if (!filters.institution) {
-        const detected = detectInstitutionName(message.trim(), portfolioInstitutionNames);
-        if (detected) filters.institution = detected;
-      }
 
       // ── Intent classification (order matters) ─────────────────────────────
       // aggQuery checked first — short count phrases lack biotech signals and
@@ -2279,7 +2281,8 @@ export async function registerRoutes(
       }
       await storage.appendEdenMessage(sid, {
         role: "assistant", content: fullResponse,
-        assetIds: retrieved.map((a) => a.id), assets: assetPayload,
+        // Store exactly last 3 IDs for turn-memory contract (ordinal back-refs: first/second/third)
+        assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
 
       sendEvent("done", { sessionId: sid });
