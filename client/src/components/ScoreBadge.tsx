@@ -10,6 +10,8 @@ interface ScoreBadgeProps {
     fit: number;
     competition: number;
     total: number;
+    signal_coverage?: number;
+    scored_dimensions?: string[];
   };
   size?: "sm" | "md" | "lg";
 }
@@ -22,7 +24,7 @@ function scoreColor(score: number): { bg: string; text: string; ring: string } {
 
 const BREAKDOWN_LABELS: Record<string, string> = {
   fit: "Buyer Fit",
-  novelty: "Quality Bonus",
+  novelty: "Novelty",
   readiness: "Readiness",
   licensability: "Licensability",
 };
@@ -46,17 +48,27 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
 
   if (!breakdown) return badge;
 
+  const scoredDims = breakdown.scored_dimensions ?? MEANINGFUL_DIMS.slice();
   const dims = MEANINGFUL_DIMS.filter(
-    (k): k is MeaningfulDim => k in breakdown && (breakdown as Record<string, number>)[k] > 0
+    (k): k is MeaningfulDim =>
+      k in breakdown &&
+      scoredDims.includes(k) &&
+      (breakdown as Record<string, number>)[k] > 0
   );
 
   if (dims.length === 0) return badge;
 
+  const coverage = breakdown.signal_coverage ?? 100;
+  const scoredCount = (breakdown.scored_dimensions ?? Object.keys(breakdown).filter((k) => k !== "total" && k !== "signal_coverage" && k !== "scored_dimensions" && k !== "dimension_basis")).length;
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>{badge}</TooltipTrigger>
-      <TooltipContent side="bottom" className="p-3 w-52 bg-card border border-card-border shadow-xl">
-        <p className="text-xs font-semibold text-foreground mb-2">Score Breakdown</p>
+      <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
+        <p className="text-xs font-semibold text-foreground mb-1">Signal Profile</p>
+        <p className="text-[10px] text-muted-foreground mb-2">
+          {scoredCount} of 6 dimensions scored &middot; {Math.round(coverage)}% coverage
+        </p>
         <div className="space-y-1.5">
           {dims.map((k) => {
             const val = (breakdown as Record<string, number>)[k];

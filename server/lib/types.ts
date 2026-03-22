@@ -29,6 +29,9 @@ export interface ScoreBreakdown {
   fit: number;
   competition: number;
   total: number;
+  signal_coverage?: number;
+  scored_dimensions?: string[];
+  dimension_basis?: Record<string, string>;
 }
 
 export interface ScoredAsset {
