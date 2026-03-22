@@ -22,13 +22,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    let isMounted = true;
+
+    supabase.auth.getSession().then(({ data: { session: s } }) => {
+      if (!isMounted) return;
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setUser(s?.user ?? null);
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const role: UserRole = (user?.user_metadata?.role as UserRole) ?? undefined;
