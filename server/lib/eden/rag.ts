@@ -490,10 +490,12 @@ export function isDefinitionalQuery(query: string): boolean {
 
 // ── Back-reference detection ──────────────────────────────────────────────
 const BACK_REF_PATTERNS = [
-  // Ordinal back-refs require an explicit "one/asset/result/technology" object marker
-  /\bthe\s+(?:first|1st)\s+(?:one|asset|result|technology|option|compound)\b/i,
-  /\bthe\s+(?:second|2nd)\s+(?:one|asset|result|technology|option|compound)\b/i,
-  /\bthe\s+(?:third|3rd)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  // Ordinal back-refs — "the/that/this first asset/one/result/technology"
+  /\b(?:the|that|this)\s+(?:first|1st)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  /\b(?:the|that|this)\s+(?:second|2nd)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  /\b(?:the|that|this)\s+(?:third|3rd)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  // "what was that first asset?", "what about that second one?" style
+  /\bwhat\s+(?:was|is|about)\s+that\s+(?:first|second|third|1st|2nd|3rd)\s+(?:one|asset|result|technology)?\b/i,
   // Anaphoric expansion phrases require "it/that/this" (not a noun phrase) to avoid
   // misclassifying "give me more oncology assets" as a back-reference
   /\b(?:tell|give)\s+me\s+more\s+(?:about|on)\s+(?:it|that|this)\b/i,
