@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Moon, Printer, Sun } from "lucide-react";
+import { ArrowLeft, Moon, Printer, Sun } from "lucide-react";
 import { PRINT_STYLES, PrintLogo, PrintFooter, formatDate, GREEN, BG_DARK } from "@/lib/print-shared";
 
 type BriefData = {
@@ -33,6 +33,16 @@ function parseSections(text: string): Section[] {
   return sections;
 }
 
+const PRINT_LIGHT_OVERRIDE = `
+  @media print {
+    .pbp-root { background: #f8f9fa !important; color: #1a2b24 !important; }
+    .pbp-card { background: #ffffff !important; border-color: #d1e8db !important; }
+    .pbp-heading { color: #1a6b44 !important; }
+    .pbp-muted { color: #5a8a72 !important; }
+    .pbp-body { color: #1a2b24 !important; }
+  }
+`;
+
 export default function PipelineBriefPrint() {
   const [data, setData] = useState<BriefData | null>(null);
   const [dark, setDark] = useState(false);
@@ -62,9 +72,33 @@ export default function PipelineBriefPrint() {
   const headingColor = dark ? GREEN : "#1a6b44";
   const mutedColor = dark ? "#6b9e82" : "#5a8a72";
 
+  const btnBase: React.CSSProperties = {
+    border: `1px solid ${cardBorder}`, borderRadius: "6px",
+    padding: "0.35rem 0.75rem", cursor: "pointer", color: fg,
+    display: "flex", alignItems: "center", gap: "0.4rem",
+    fontSize: "0.8rem", background: cardBg,
+  };
+
   return (
-    <div style={{ fontFamily: "'Open Sans', sans-serif", background: bg, minHeight: "100vh", color: fg, transition: "background 0.2s, color 0.2s" }}>
+    <div
+      className="pbp-root"
+      style={{ fontFamily: "'Open Sans', sans-serif", background: bg, minHeight: "100vh", color: fg, transition: "background 0.2s, color 0.2s" }}
+    >
       <style>{PRINT_STYLES}</style>
+      <style>{PRINT_LIGHT_OVERRIDE}</style>
+
+      <div className="no-print" style={{
+        position: "fixed", top: "1rem", left: "1.25rem", zIndex: 100,
+      }}>
+        <button
+          onClick={() => window.close()}
+          style={btnBase}
+          data-testid="button-back"
+        >
+          <ArrowLeft size={13} />
+          Back
+        </button>
+      </div>
 
       <div className="no-print" style={{
         position: "fixed", top: "1rem", right: "1.25rem", zIndex: 100,
@@ -72,11 +106,7 @@ export default function PipelineBriefPrint() {
       }}>
         <button
           onClick={() => setDark(d => !d)}
-          style={{
-            background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "6px",
-            padding: "0.35rem 0.7rem", cursor: "pointer", color: fg,
-            display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem",
-          }}
+          style={btnBase}
           data-testid="button-toggle-dark"
         >
           {dark ? <Sun size={13} /> : <Moon size={13} />}
@@ -87,30 +117,33 @@ export default function PipelineBriefPrint() {
           style={{
             background: GREEN, border: "none", borderRadius: "6px",
             padding: "0.35rem 0.9rem", cursor: "pointer", color: "#fff",
-            display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem",
-            fontWeight: 600,
+            display: "flex", alignItems: "center", gap: "0.4rem",
+            fontSize: "0.8rem", fontWeight: 600,
           }}
           data-testid="button-print"
         >
           <Printer size={13} />
-          Print
+          Print / Save PDF
         </button>
       </div>
 
       <div style={{ maxWidth: "760px", margin: "0 auto", padding: "3rem 2rem 4rem" }}>
         <PrintLogo subtitle="Pipeline Intelligence Brief" />
 
-        <div style={{
-          background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "10px",
-          padding: "1.5rem 2rem", marginTop: "2rem", marginBottom: "2rem",
-        }}>
-          <div style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: mutedColor, marginBottom: "0.35rem" }}>
+        <div
+          className="pbp-card"
+          style={{
+            background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: "10px",
+            padding: "1.5rem 2rem", marginTop: "2rem", marginBottom: "2rem",
+          }}
+        >
+          <div className="pbp-muted" style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: mutedColor, marginBottom: "0.35rem" }}>
             Pipeline
           </div>
-          <div style={{ fontSize: "1.35rem", fontWeight: 700, color: headingColor, lineHeight: 1.25 }}>
+          <div className="pbp-heading" style={{ fontSize: "1.35rem", fontWeight: 700, color: headingColor, lineHeight: 1.25 }}>
             {data.pipelineName}
           </div>
-          <div style={{ marginTop: "0.5rem", fontSize: "0.82rem", color: mutedColor }}>
+          <div className="pbp-muted" style={{ marginTop: "0.5rem", fontSize: "0.82rem", color: mutedColor }}>
             {data.assetCount} asset{data.assetCount !== 1 ? "s" : ""} &nbsp;&middot;&nbsp; Generated {today}
           </div>
         </div>
@@ -119,7 +152,7 @@ export default function PipelineBriefPrint() {
           {sections.map((sec, i) => (
             <div
               key={i}
-              className="print-para"
+              className="pbp-card print-para"
               style={{
                 background: cardBg,
                 border: `1px solid ${cardBorder}`,
@@ -128,16 +161,19 @@ export default function PipelineBriefPrint() {
               }}
             >
               {sec.heading && (
-                <div style={{
-                  fontSize: "0.68rem", textTransform: "uppercase",
-                  letterSpacing: "0.1em", color: headingColor,
-                  fontWeight: 700, marginBottom: "0.5rem",
-                }}>
+                <div
+                  className="pbp-heading"
+                  style={{
+                    fontSize: "0.68rem", textTransform: "uppercase",
+                    letterSpacing: "0.1em", color: headingColor,
+                    fontWeight: 700, marginBottom: "0.5rem",
+                  }}
+                >
                   {sec.heading}
                 </div>
               )}
               {sec.lines.map((line, j) => (
-                <p key={j} style={{ margin: 0, marginTop: j > 0 ? "0.5rem" : 0, fontSize: "0.875rem", lineHeight: 1.7, color: fg }}>
+                <p key={j} className="pbp-body" style={{ margin: 0, marginTop: j > 0 ? "0.5rem" : 0, fontSize: "0.875rem", lineHeight: 1.7, color: fg }}>
                   {line}
                 </p>
               ))}
