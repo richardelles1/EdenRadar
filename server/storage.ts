@@ -506,7 +506,7 @@ export class DatabaseStorage implements IStorage {
         sourceUrl: ingestedAssets.sourceUrl,
         sourceName: ingestedAssets.sourceName,
         summary: ingestedAssets.summary,
-        categories: ingestedAssets.categories,
+        categories: sql<string | null>`${ingestedAssets.categories}::text`,
         technologyId: ingestedAssets.technologyId,
       })
       .from(ingestedAssets)
