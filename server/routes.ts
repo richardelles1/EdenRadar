@@ -2122,41 +2122,64 @@ export async function registerRoutes(
       );
 
       // ── Intent classification (order matters) ─────────────────────────────
-      // aggQuery checked first — short count phrases lack biotech signals and
-      // would otherwise be misclassified as conversational.
-      // definitional checked before conversational — "what is a PROTAC?" is
-      // both definitional and conversational; definitional path must win.
+      // Routing priority (evaluated top-to-bottom, first match wins):
+      //   1. Back-reference  — must be first; anaphoric phrases like "tell me more about
+      //      the second one" look conversational to isConversational(), so checking them
+      //      before conversational routing is essential.
+      //   2. Aggregation     — count phrases lack biotech signals; must beat conversational.
+      //   3. Definitional    — "what is a PROTAC?" beats conversational/RAG.
+      //   4. Conversational  — general chitchat, greetings, out-of-scope.
+      //   5. Standard RAG    — default retrieval path.
+
+      // Pre-compute back-reference state so we can use it in the routing guard
+      const lastAssistant = [...(session.messages ?? [])].reverse().find((m) => m.role === "assistant");
+      const priorIds: number[] = (lastAssistant?.assetIds ?? []).slice(0, 3);
+      const isBackRef = priorIds.length > 0 && detectBackReference(message.trim());
+
+      // ── Path 1: Back-reference ─────────────────────────────────────────────
+      if (isBackRef) {
+        const fetchedAssets = await storage.getIngestedAssetsByIds(priorIds).catch(() => [] as import("./storage").RetrievedAsset[]);
+        // Restore original retrieval order (SQL IN clause does not guarantee order)
+        const idOrder = new Map(priorIds.map((id, i) => [id, i]));
+        fetchedAssets.sort((a, b) => (idOrder.get(a.id) ?? 99) - (idOrder.get(b.id) ?? 99));
+
+        let targeted: import("./storage").RetrievedAsset[];
+        // Institution-qualified back-ref: "the one from MIT", "that one from Stanford"
+        const backRefInst = extractBackRefInstitution(message.trim(), portfolioInstitutionNames);
+        if (backRefInst) {
+          const instMatch = fetchedAssets.filter((a) =>
+            a.institution?.toLowerCase().includes(backRefInst.toLowerCase())
+          );
+          targeted = instMatch.length > 0 ? instMatch : fetchedAssets;
+        } else {
+          const pos = extractBackRefPosition(message.trim());
+          targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
+        }
+
+        const assetPayload = targeted.map((a) => ({
+          id: a.id, assetName: a.assetName, institution: a.institution,
+          indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
+        }));
+        sendEvent("context", { sessionId: sid, assets: assetPayload });
+        let fullResponse = "";
+        for await (const token of ragQuery(message.trim(), targeted, history, ctx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, {
+          role: "assistant", content: fullResponse,
+          assetIds: targeted.map((a) => a.id), assets: assetPayload,
+        });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
+
       const aggQuery = isAggregationQuery(message.trim());
       const definitional = !aggQuery && isDefinitionalQuery(message.trim());
       const chat = !aggQuery && !definitional && isConversational(message.trim());
 
-      // ── Path 1: Conversational ───────────────────────────────────────────
-      if (chat) {
-        sendEvent("context", { sessionId: sid, assets: [] });
-        let fullResponse = "";
-        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
-          fullResponse += token;
-          sendEvent("token", { text: token });
-        }
-        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
-        sendEvent("done", { sessionId: sid });
-        return;
-      }
-
-      // ── Path 2: Definitional / educational ──────────────────────────────
-      if (definitional) {
-        sendEvent("context", { sessionId: sid, assets: [] });
-        let fullResponse = "";
-        for await (const token of conceptQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
-          fullResponse += token;
-          sendEvent("token", { text: token });
-        }
-        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
-        sendEvent("done", { sessionId: sid });
-        return;
-      }
-
-      // ── Path 3: Aggregation / count queries ──────────────────────────────
+      // ── Path 2: Aggregation / count queries ──────────────────────────────
       if (aggQuery) {
         const resolvedResult = await resolveAggregationQuery(message.trim(), filters, geoRx).catch(() => null);
         if (resolvedResult) {
@@ -2194,54 +2217,33 @@ export async function registerRoutes(
         // fall through to RAG if SQL cannot resolve
       }
 
-      // ── Path 4: RAG (semantic retrieval) ─────────────────────────────────
-
-      // Back-reference: user refers to a prior result ("tell me more about the first one",
-      // "the one from MIT", "give me more on #2", etc.)
-      const isBackRef = detectBackReference(message.trim());
-      if (isBackRef) {
-        const lastAssistant = [...(session.messages ?? [])].reverse().find((m) => m.role === "assistant");
-        // Memory contract: only last 3 asset IDs (preserves ordinal intent: first/second/third)
-        const priorIds: number[] = (lastAssistant?.assetIds ?? []).slice(0, 3);
-        if (priorIds.length > 0) {
-          const fetchedAssets = await storage.getIngestedAssetsByIds(priorIds).catch(() => [] as import("./storage").RetrievedAsset[]);
-          // Restore original retrieval order (SQL IN clause does not guarantee order)
-          const idOrder = new Map(priorIds.map((id, i) => [id, i]));
-          fetchedAssets.sort((a, b) => (idOrder.get(a.id) ?? 99) - (idOrder.get(b.id) ?? 99));
-
-          let targeted: import("./storage").RetrievedAsset[];
-
-          // Institution-qualified back-ref: "the one from MIT", "the Stanford one"
-          const backRefInst = extractBackRefInstitution(message.trim(), portfolioInstitutionNames);
-          if (backRefInst) {
-            const instMatch = fetchedAssets.filter((a) =>
-              a.institution?.toLowerCase().includes(backRefInst.toLowerCase())
-            );
-            targeted = instMatch.length > 0 ? instMatch : fetchedAssets;
-          } else {
-            const pos = extractBackRefPosition(message.trim());
-            targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
-          }
-
-          const assetPayload = targeted.map((a) => ({
-            id: a.id, assetName: a.assetName, institution: a.institution,
-            indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
-            ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
-          }));
-          sendEvent("context", { sessionId: sid, assets: assetPayload });
-          let fullResponse = "";
-          for await (const token of ragQuery(message.trim(), targeted, history, ctx, portfolioStats, focusContext)) {
-            fullResponse += token;
-            sendEvent("token", { text: token });
-          }
-          await storage.appendEdenMessage(sid, {
-            role: "assistant", content: fullResponse,
-            assetIds: targeted.map((a) => a.id), assets: assetPayload,
-          });
-          sendEvent("done", { sessionId: sid });
-          return;
+      // ── Path 3: Definitional / educational ──────────────────────────────
+      if (definitional) {
+        sendEvent("context", { sessionId: sid, assets: [] });
+        let fullResponse = "";
+        for await (const token of conceptQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
         }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        sendEvent("done", { sessionId: sid });
+        return;
       }
+
+      // ── Path 4: Conversational ───────────────────────────────────────────
+      if (chat) {
+        sendEvent("context", { sessionId: sid, assets: [] });
+        let fullResponse = "";
+        for await (const token of directQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
+
+      // ── Path 5: Standard RAG (semantic retrieval) ─────────────────────────
 
       // Standard semantic retrieval (two-pass institution detection with portfolio names)
       const institutionName = detectInstitutionName(message.trim(), portfolioInstitutionNames);
