@@ -2131,9 +2131,13 @@ export async function registerRoutes(
       //   4. Conversational  — general chitchat, greetings, out-of-scope.
       //   5. Standard RAG    — default retrieval path.
 
-      // Pre-compute back-reference state so we can use it in the routing guard
-      const lastAssistant = [...(session.messages ?? [])].reverse().find((m) => m.role === "assistant");
-      const priorIds: number[] = (lastAssistant?.assetIds ?? []).slice(0, 3);
+      // Pre-compute back-reference state so we can use it in the routing guard.
+      // Find the most recent assistant turn with non-empty assetIds — skips
+      // intervening conversational/definitional turns that have empty assetIds.
+      const lastAssistantWithAssets = [...(session.messages ?? [])].reverse().find(
+        (m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0
+      );
+      const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
       const isBackRef = priorIds.length > 0 && detectBackReference(message.trim());
 
       // ── Path 1: Back-reference ─────────────────────────────────────────────
