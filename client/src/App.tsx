@@ -31,6 +31,8 @@ import ConceptDetail from "@/pages/ConceptDetail";
 import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
+import DossierPrint from "@/pages/DossierPrint";
+import ReportPrint from "@/pages/ReportPrint";
 import PitchDeck from "@/pages/PitchDeck";
 import About from "@/pages/About";
 import WhatWeDo from "@/pages/WhatWeDo";
@@ -201,6 +203,9 @@ function Router() {
           <ResearchGrants />
         </ResearchLayout>
       </Route>
+
+      <Route path="/asset/:id/print" component={DossierPrint} />
+      <Route path="/report/print" component={ReportPrint} />
 
       <Route path="/pitch" component={PitchDeck} />
       <Route path="/about" component={About} />

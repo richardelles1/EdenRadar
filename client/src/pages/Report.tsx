@@ -168,7 +168,10 @@ export default function Report() {
             variant="outline"
             size="sm"
             className="gap-1.5 text-xs"
-            onClick={() => window.print()}
+            onClick={() => {
+              try { sessionStorage.setItem("current-report", JSON.stringify(report)); } catch {}
+              setLocation("/report/print");
+            }}
             data-testid="button-print-report"
           >
             <Printer className="w-3.5 h-3.5" />

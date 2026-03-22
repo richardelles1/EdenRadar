@@ -279,11 +279,17 @@ export default function AssetDossier() {
                 variant="outline"
                 size="sm"
                 className="shrink-0 gap-1.5 text-xs no-print"
-                onClick={() => window.print()}
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem(`asset-${id}`, JSON.stringify(asset));
+                    if (dossier) sessionStorage.setItem(`dossier-${id}`, JSON.stringify(dossier));
+                  } catch {}
+                  setLocation(`/asset/${id}/print`);
+                }}
                 data-testid="button-print-dossier"
               >
                 <Printer className="w-3.5 h-3.5" />
-                Print
+                Print Dossier
               </Button>
             </div>
 
