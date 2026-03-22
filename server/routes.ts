@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2107,12 +2107,23 @@ export async function registerRoutes(
         console.warn("[eden] focus persist failed:", e?.message ?? e)
       );
 
+      // ── Portfolio institution names for two-pass detection ────────────────
+      const portfolioInstitutionNames: string[] = portfolioStats?.topInstitutions?.map((i: { institution: string }) => i.institution) ?? [];
+
+      // Override filters.institution with two-pass detection if not already set
+      if (!filters.institution) {
+        const detected = detectInstitutionName(message.trim(), portfolioInstitutionNames);
+        if (detected) filters.institution = detected;
+      }
+
       // ── Intent classification (order matters) ─────────────────────────────
       // aggQuery checked first — short count phrases lack biotech signals and
       // would otherwise be misclassified as conversational.
+      // definitional checked before conversational — "what is a PROTAC?" is
+      // both definitional and conversational; definitional path must win.
       const aggQuery = isAggregationQuery(message.trim());
-      const chat = !aggQuery && isConversational(message.trim());
-      const definitional = !aggQuery && !chat && isDefinitionalQuery(message.trim());
+      const definitional = !aggQuery && isDefinitionalQuery(message.trim());
+      const chat = !aggQuery && !definitional && isConversational(message.trim());
 
       // ── Path 1: Conversational ───────────────────────────────────────────
       if (chat) {
@@ -2180,15 +2191,33 @@ export async function registerRoutes(
 
       // ── Path 4: RAG (semantic retrieval) ─────────────────────────────────
 
-      // Back-reference: user refers to a prior result ("tell me more about the first one")
+      // Back-reference: user refers to a prior result ("tell me more about the first one",
+      // "the one from MIT", "give me more on #2", etc.)
       const isBackRef = detectBackReference(message.trim());
       if (isBackRef) {
         const lastAssistant = [...(session.messages ?? [])].reverse().find((m) => m.role === "assistant");
-        const priorIds: number[] = lastAssistant?.assetIds ?? [];
+        // Memory contract: only last 3 asset IDs (preserves ordinal intent: first/second/third)
+        const priorIds: number[] = (lastAssistant?.assetIds ?? []).slice(0, 3);
         if (priorIds.length > 0) {
-          const priorAssets = await storage.getIngestedAssetsByIds(priorIds).catch(() => [] as import("./storage").RetrievedAsset[]);
-          const pos = extractBackRefPosition(message.trim());
-          const targeted = pos !== null && priorAssets[pos] ? [priorAssets[pos]] : priorAssets;
+          const fetchedAssets = await storage.getIngestedAssetsByIds(priorIds).catch(() => [] as import("./storage").RetrievedAsset[]);
+          // Restore original retrieval order (SQL IN clause does not guarantee order)
+          const idOrder = new Map(priorIds.map((id, i) => [id, i]));
+          fetchedAssets.sort((a, b) => (idOrder.get(a.id) ?? 99) - (idOrder.get(b.id) ?? 99));
+
+          let targeted: import("./storage").RetrievedAsset[];
+
+          // Institution-qualified back-ref: "the one from MIT", "the Stanford one"
+          const backRefInst = extractBackRefInstitution(message.trim(), portfolioInstitutionNames);
+          if (backRefInst) {
+            const instMatch = fetchedAssets.filter((a) =>
+              a.institution?.toLowerCase().includes(backRefInst.toLowerCase())
+            );
+            targeted = instMatch.length > 0 ? instMatch : fetchedAssets;
+          } else {
+            const pos = extractBackRefPosition(message.trim());
+            targeted = pos !== null && fetchedAssets[pos] ? [fetchedAssets[pos]] : fetchedAssets;
+          }
+
           const assetPayload = targeted.map((a) => ({
             id: a.id, assetName: a.assetName, institution: a.institution,
             indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
@@ -2209,8 +2238,8 @@ export async function registerRoutes(
         }
       }
 
-      // Standard semantic retrieval
-      const institutionName = detectInstitutionName(message.trim());
+      // Standard semantic retrieval (two-pass institution detection with portfolio names)
+      const institutionName = detectInstitutionName(message.trim(), portfolioInstitutionNames);
       const [queryEmbedding, institutionAssets] = await Promise.all([
         embedQuery(message.trim()),
         institutionName

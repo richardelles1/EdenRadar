@@ -501,6 +501,10 @@ const BACK_REF_PATTERNS = [
   /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd|last|other)\s+(?:one|asset)?\b/i,
   /\bgo\s+(?:deeper|further)\s+on\s+(?:that|this|it)\b/i,
   /\bgive\s+me\s+more\b/i,
+  // Institution-qualified back-references: "the one from MIT", "the MIT one", "that Stanford asset"
+  /\bthe\s+one\s+from\s+\w/i,
+  /\bthat\s+(?:one\s+from|[\w]+\s+(?:one|asset|result|technology))\b/i,
+  /\bthe\s+[\w]+\s+(?:one|asset|result)\b/i,
 ];
 
 export function detectBackReference(query: string): boolean {
@@ -513,6 +517,10 @@ export function extractBackRefPosition(query: string): number | null {
   if (/\bsecond\b|\b2nd\b|\bnumber\s*2\b|\b#\s*2\b/.test(lower)) return 1;
   if (/\bthird\b|\b3rd\b|\bnumber\s*3\b|\b#\s*3\b/.test(lower)) return 2;
   return null;
+}
+
+export function extractBackRefInstitution(query: string, portfolioInstitutions?: string[]): string | null {
+  return detectInstitutionName(query, portfolioInstitutions);
 }
 
 type AggResult = Record<string, unknown>[];
