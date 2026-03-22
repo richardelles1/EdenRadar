@@ -490,21 +490,23 @@ export function isDefinitionalQuery(query: string): boolean {
 
 // ── Back-reference detection ──────────────────────────────────────────────
 const BACK_REF_PATTERNS = [
+  // Ordinal back-refs require an explicit "one/asset/result/technology" object marker
   /\bthe\s+(?:first|1st)\s+(?:one|asset|result|technology|option|compound)\b/i,
   /\bthe\s+(?:second|2nd)\s+(?:one|asset|result|technology|option|compound)\b/i,
   /\bthe\s+(?:third|3rd)\s+(?:one|asset|result|technology|option|compound)\b/i,
-  /\b(?:tell|give)\s+me\s+more\s+(?:about|on)\s+(?:it|that|this|(?:number|#)?\s*[123])\b/i,
+  // Anaphoric expansion phrases require "it/that/this" (not a noun phrase) to avoid
+  // misclassifying "give me more oncology assets" as a back-reference
+  /\b(?:tell|give)\s+me\s+more\s+(?:about|on)\s+(?:it|that|this)\b/i,
+  /\b(?:tell|give)\s+me\s+more\s+(?:about|on)\s+(?:number|#)?\s*[123]\b/i,
   /\bmore\s+(?:details?|info(?:rmation)?)\s+(?:about|on)\s+(?:it|that|this)\b/i,
   /\b(?:expand|dig)\s+(?:deeper|more)?\s*(?:on|into)\s+(?:that|this|it)\b/i,
-  /\bpull\s+(?:a\s+)?(?:full\s+)?(?:profile|dossier)\s+(?:on|for)?\s*(?:it|that|this)?\b/i,
+  /\bpull\s+(?:a\s+)?(?:full\s+)?(?:profile|dossier)\s+(?:on|for)?\s*(?:it|that|this)\b/i,
   /\b(?:number|#)\s*[123]\b/i,
-  /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd|last|other)\s+(?:one|asset)?\b/i,
+  /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd)\s+(?:one|asset)?\b/i,
   /\bgo\s+(?:deeper|further)\s+on\s+(?:that|this|it)\b/i,
-  /\bgive\s+me\s+more\b/i,
-  // Institution-qualified back-references: "the one from MIT", "the MIT one", "that Stanford asset"
+  // Institution-qualified back-references (anaphora with institution name)
   /\bthe\s+one\s+from\s+\w/i,
-  /\bthat\s+(?:one\s+from|[\w]+\s+(?:one|asset|result|technology))\b/i,
-  /\bthe\s+[\w]+\s+(?:one|asset|result)\b/i,
+  /\bthat\s+one\s+from\s+\w/i,
 ];
 
 export function detectBackReference(query: string): boolean {
