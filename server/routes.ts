@@ -288,7 +288,9 @@ export async function registerRoutes(
 
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
-        return res.json({ assets: [], query, sources: effectiveSources, signalsFound: 0 });
+        const emptySearchResponse = { assets: [], query, sources: effectiveSources, signalsFound: 0 };
+        cacheSet(searchCacheKey, emptySearchResponse, 45 * 60 * 1000);
+        return res.json(emptySearchResponse);
       }
 
       let normalized: Partial<import("./lib/types").ScoredAsset>[];
