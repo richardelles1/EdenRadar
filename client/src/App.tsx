@@ -33,6 +33,7 @@ import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
 import DossierPrint from "@/pages/DossierPrint";
 import ReportPrint from "@/pages/ReportPrint";
+import PipelineBriefPrint from "@/pages/PipelineBriefPrint";
 import PitchDeck from "@/pages/PitchDeck";
 import About from "@/pages/About";
 import WhatWeDo from "@/pages/WhatWeDo";
@@ -206,6 +207,7 @@ function Router() {
 
       <Route path="/asset/:id/print" component={DossierPrint} />
       <Route path="/report/print" component={ReportPrint} />
+      <Route path="/pipeline/brief/print" component={PipelineBriefPrint} />
 
       <Route path="/pitch" component={PitchDeck} />
       <Route path="/about" component={About} />

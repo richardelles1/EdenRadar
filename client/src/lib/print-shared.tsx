@@ -125,9 +125,18 @@ export const PRINT_STYLES = `
     .print-cover { page-break-after: always; break-after: page; }
     .print-section { page-break-before: always; break-before: page; page-break-inside: avoid; break-inside: avoid; }
     .no-print { display: none !important; }
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-    @page { margin: 12mm 14mm; size: A4; }
-    body { background: #ffffff !important; }
+    * {
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      forced-color-adjust: none !important;
+    }
+    p, li, .print-para { break-inside: avoid; orphans: 3; widows: 3; }
+    @page {
+      margin: 12mm 14mm;
+      size: A4;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
   @keyframes radar-bg-slow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   @keyframes pulse-ring { 0% { transform: scale(0.6) translate(-50%,-50%); opacity: 0.5; } 100% { transform: scale(1.8) translate(-50%,-50%); opacity: 0; } }

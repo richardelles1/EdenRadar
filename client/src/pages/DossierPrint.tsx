@@ -169,7 +169,8 @@ export default function DossierPrint() {
       <div className="print-cover" style={{
         position: "relative", background: BG_DARK, minHeight: "100vh",
         display: "flex", flexDirection: "column", overflow: "hidden",
-      }}>
+        printColorAdjust: "exact", WebkitPrintColorAdjust: "exact",
+      } as React.CSSProperties}>
         <PrintRadar />
 
         {/* Screen-only controls */}

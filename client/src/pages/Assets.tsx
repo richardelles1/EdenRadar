@@ -24,6 +24,7 @@ import {
   FileText,
   Copy,
   Loader2,
+  Printer,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -475,6 +476,16 @@ export default function Assets() {
     });
   };
 
+  const handlePrint = () => {
+    if (!briefModal) return;
+    sessionStorage.setItem("pipeline-brief-print", JSON.stringify({
+      brief: briefModal.brief,
+      pipelineName: briefModal.pipelineName,
+      assetCount: briefModal.assetCount,
+    }));
+    window.open("/pipeline/brief/print", "_blank");
+  };
+
   const pipelines = pipelinesData?.pipelines ?? [];
   const uncategorisedCount = pipelinesData?.uncategorisedCount ?? 0;
   const displayedAssets = data?.assets ?? [];
@@ -679,7 +690,7 @@ export default function Assets() {
       )}
 
       <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); } }}>
-        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col" data-testid="dialog-pipeline-brief">
+        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col overflow-hidden" data-testid="dialog-pipeline-brief">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="flex items-center gap-2 text-base">
@@ -700,10 +711,20 @@ export default function Assets() {
                   {copied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
                   {copied ? "Copied!" : "Copy"}
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePrint}
+                  className="h-7 text-xs gap-1.5 border-card-border"
+                  data-testid="button-brief-print"
+                >
+                  <Printer className="w-3 h-3" />
+                  Print
+                </Button>
               </div>
             </div>
           </DialogHeader>
-          <ScrollArea className="flex-1 mt-2">
+          <ScrollArea className="flex-1 min-h-0 mt-2">
             <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">
               {briefModal?.brief}
             </pre>
