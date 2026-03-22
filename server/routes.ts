@@ -277,7 +277,10 @@ export async function registerRoutes(
 
       const enrichedQuery = [query, field, technologyType].filter(Boolean).join(" ");
 
-      const searchCacheKey = `search:${enrichedQuery}:${[...effectiveSources].sort().join(",")}:${maxPerSource ?? ""}:${field ?? ""}:${sourceType ?? ""}:${dateRange ?? ""}:${technologyType ?? ""}:${trialPhase ?? ""}`;
+      const profileFingerprint = buyerProfile
+        ? crypto.createHash("sha256").update(JSON.stringify(buyerProfile)).digest("hex").slice(0, 16)
+        : "default";
+      const searchCacheKey = `search:${enrichedQuery}:${[...effectiveSources].sort().join(",")}:${maxPerSource ?? ""}:${field ?? ""}:${sourceType ?? ""}:${dateRange ?? ""}:${technologyType ?? ""}:${trialPhase ?? ""}:${profileFingerprint}`;
       const cachedSearch = cacheGet<object>(searchCacheKey);
       if (cachedSearch) return res.json(cachedSearch);
 
