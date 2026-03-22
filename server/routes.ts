@@ -2096,11 +2096,14 @@ export async function registerRoutes(
 
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
-      // ── Session focus context + filter extraction ──────────────────────────
-      const focusContext = getOrUpdateSessionFocus(sid, message.trim());
-      const filters = parseQueryFilters(message.trim(), focusContext);
       // ── Portfolio institution names for two-pass detection ────────────────
+      // Defined first so pass-2 can be used in focus extraction AND filter override.
       const portfolioInstitutionNames: string[] = portfolioStats?.topInstitutions?.map((i: { institution: string }) => i.institution) ?? [];
+
+      // ── Session focus context + filter extraction ──────────────────────────
+      // Pass portfolio institution names so pass-2 detected institutions persist to focusContext
+      const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
+      const filters = parseQueryFilters(message.trim(), focusContext);
 
       // Override filters.institution with two-pass detection if not already set.
       // Must happen BEFORE filtersActive computation so pass-2 institutions
@@ -2258,12 +2261,13 @@ export async function registerRoutes(
 
       const threshold = institutionName ? 0.38 : 0.45;
       const institutionIds = new Set(institutionAssets.map((a) => a.id));
+      // Cap merged candidates at 15 before reranking (spec adherence)
       const merged = [
         ...institutionAssets,
         ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
-      ];
+      ].slice(0, 15);
 
-      // User-profile reranking (top 8 profile-boosted)
+      // User-profile reranking (top 8 profile-boosted from up to 15 candidates)
       const retrieved = rerankAssets(merged, ctx);
 
       const assetPayload = retrieved.map((a) => ({

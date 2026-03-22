@@ -256,7 +256,7 @@ const PIVOT_PATTERNS = [
   /\b(?:actually|scratch that|let'?s try something different|instead let'?s)\b/i,
 ];
 
-function extractRawFilters(message: string): SessionFocusContext {
+function extractRawFilters(message: string, portfolioInstitutions?: string[]): SessionFocusContext {
   const filters: SessionFocusContext = {};
   const modality = detectModality(message);
   if (modality) filters.modality = modality;
@@ -266,22 +266,22 @@ function extractRawFilters(message: string): SessionFocusContext {
   if (stage) filters.stage = stage;
   const indication = detectIndication(message);
   if (indication) filters.indication = indication;
-  const institution = detectInstitutionName(message);
+  const institution = detectInstitutionName(message, portfolioInstitutions);
   if (institution) filters.institution = institution;
   return filters;
 }
 
-function extractFocusUpdates(message: string, current: SessionFocusContext): SessionFocusContext {
+function extractFocusUpdates(message: string, current: SessionFocusContext, portfolioInstitutions?: string[]): SessionFocusContext {
   // Pure reset — no new intent: "start fresh", "clear filters", "never mind"
   if (PURE_RESET_PATTERNS.some((r) => r.test(message))) {
-    const newFilters = extractRawFilters(message);
+    const newFilters = extractRawFilters(message, portfolioInstitutions);
     // If accompanied by new filters (e.g. "start fresh with gene therapy"), apply those
     return Object.keys(newFilters).length > 0 ? newFilters : {};
   }
 
   // Pivot — "actually, let's focus on X" → discard old context, apply only new filters
   if (PIVOT_PATTERNS.some((r) => r.test(message))) {
-    const newFilters = extractRawFilters(message);
+    const newFilters = extractRawFilters(message, portfolioInstitutions);
     // If pivot comes with meaningful new filters, replace context (not merge)
     if (Object.keys(newFilters).length > 0) return newFilters;
     // Bare pivot with no new content ("actually, never mind") → clear
@@ -291,7 +291,7 @@ function extractFocusUpdates(message: string, current: SessionFocusContext): Ses
   // Normal accumulation — only merge new filters when the user explicitly signals
   // a focus intent (e.g. "show me X from Y", "focus on Z", "find me X").
   // Pure informational queries ("what is gene therapy?") should not update focus.
-  const newFilters = extractRawFilters(message);
+  const newFilters = extractRawFilters(message, portfolioInstitutions);
   if (!Object.keys(newFilters).length) return current; // no new filter signals → preserve
   // Detect explicit search/filter intent; avoid accumulating on pure information queries
   const hasExplicitIntent = /\b(?:show me|find me|give me|focus on|filter (?:by|for|to)|narrow|restrict|limit to|only show|let'?s look at|let'?s explore|looking for|searching for|interested in)\b/i.test(message)
@@ -300,9 +300,9 @@ function extractFocusUpdates(message: string, current: SessionFocusContext): Ses
   return { ...current, ...newFilters };
 }
 
-export function getOrUpdateSessionFocus(sessionId: string, message: string): SessionFocusContext {
+export function getOrUpdateSessionFocus(sessionId: string, message: string, portfolioInstitutions?: string[]): SessionFocusContext {
   const current = _sessionFocusMap.get(sessionId) ?? {};
-  const updated = extractFocusUpdates(message, current);
+  const updated = extractFocusUpdates(message, current, portfolioInstitutions);
   _sessionFocusMap.set(sessionId, updated);
   return updated;
 }
