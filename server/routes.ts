@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2059,44 +2059,6 @@ export async function registerRoutes(
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────
 
-  const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
-    { pattern: /\bstanford\b/i, name: "stanford" },
-    { pattern: /\bmit\b|\bmassachusetts\s+institute\b/i, name: "mit" },
-    { pattern: /\bharvard\b/i, name: "harvard" },
-    { pattern: /\bcolumbia\b/i, name: "columbia" },
-    { pattern: /\byale\b/i, name: "yale" },
-    { pattern: /\bjohns\s+hop+kins\b/i, name: "johns hopkins" },
-    { pattern: /\bduke\b/i, name: "duke" },
-    { pattern: /\bucsf\b/i, name: "ucsf" },
-    { pattern: /\bucla\b/i, name: "ucla" },
-    { pattern: /\bcaltech\b|\bcalifornia\s+institute\s+of\s+tech/i, name: "caltech" },
-    { pattern: /\bcornell\b/i, name: "cornell" },
-    { pattern: /\bprinceton\b/i, name: "princeton" },
-    { pattern: /\bupenn\b|\buniversity\s+of\s+pennsylvania\b/i, name: "university of pennsylvania" },
-    { pattern: /\buniversity\s+of\s+michigan\b/i, name: "university of michigan" },
-    { pattern: /\buniversity\s+of\s+toronto\b/i, name: "university of toronto" },
-    { pattern: /\buniversity\s+of\s+oxford\b|\boxford\s+university\b/i, name: "university of oxford" },
-    { pattern: /\buniversity\s+of\s+cambridge\b|\bcambridge\s+university\b/i, name: "university of cambridge" },
-    { pattern: /\bwustl\b|\bwashington\s+university\b/i, name: "washington university" },
-    { pattern: /\buc\s+san\s+diego\b|\bucsd\b/i, name: "uc san diego" },
-    { pattern: /\buc\s+davis\b/i, name: "uc davis" },
-    { pattern: /\buc\s+berkeley\b|\bberkeley\b/i, name: "uc berkeley" },
-    { pattern: /\bpitt\b|\buniversity\s+of\s+pittsburgh\b/i, name: "university of pittsburgh" },
-    { pattern: /\bemory\b/i, name: "emory" },
-    { pattern: /\bvanderbi?lt\b/i, name: "vanderbilt" },
-    { pattern: /\bgeorgetown\b/i, name: "georgetown" },
-    { pattern: /\bnorthwestern\b/i, name: "northwestern" },
-    { pattern: /\bnyu\b|\bnew\s+york\s+university\b/i, name: "new york university" },
-    { pattern: /\bbaylor\b/i, name: "baylor" },
-    { pattern: /\btufts\b/i, name: "tufts" },
-  ];
-  function detectInstitutionKeyword(query: string): string | null {
-    for (const { pattern, name } of INSTITUTION_PATTERNS) {
-      if (pattern.test(query)) return name;
-    }
-    return null;
-  }
-
   app.post("/api/eden/chat", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
     const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
@@ -2123,48 +2085,63 @@ export async function registerRoutes(
       const [session, portfolioStats] = await Promise.all([
         storage.getOrCreateEdenSession(sid),
         fetchPortfolioStats().catch((err) => {
-          console.error("[eden] Portfolio stats preload failed — count answers may be degraded:", err?.message ?? err);
+          console.error("[eden] Portfolio stats preload failed:", err?.message ?? err);
           return undefined;
         }),
       ]);
       const history = (session.messages ?? []).map((t) => ({ role: t.role, content: t.content }));
 
+      // ── Seed in-memory focus from DB on first message of this server process ──
+      seedSessionFocusFromDb(sid, session.focusContext);
+
       await storage.appendEdenMessage(sid, { role: "user", content: message.trim() });
 
-      // ── Session focus context + filter extraction ────────────────────────
+      // ── Session focus context + filter extraction ──────────────────────────
       const focusContext = getOrUpdateSessionFocus(sid, message.trim());
       const filters = parseQueryFilters(message.trim(), focusContext);
       const filtersActive = hasMeaningfulFilters(filters);
       const geoRx: string | undefined = filters.geography ? GEO_INSTITUTION_REGEX[filters.geography] : undefined;
 
-      // isAggregationQuery MUST be checked before isConversational — short count
-      // phrases like "what's the total" and "give me a count" have no biotech signals
-      // and would be misclassified as conversational, bypassing the SQL count path.
+      // Fire-and-forget focus persistence to DB
+      persistSessionFocus(sid, focusContext).catch((e) =>
+        console.warn("[eden] focus persist failed:", e?.message ?? e)
+      );
+
+      // ── Intent classification (order matters) ─────────────────────────────
+      // aggQuery checked first — short count phrases lack biotech signals and
+      // would otherwise be misclassified as conversational.
       const aggQuery = isAggregationQuery(message.trim());
       const chat = !aggQuery && isConversational(message.trim());
+      const definitional = !aggQuery && !chat && isDefinitionalQuery(message.trim());
 
+      // ── Path 1: Conversational ───────────────────────────────────────────
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
-
         let fullResponse = "";
         for await (const token of directQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
 
-        await storage.appendEdenMessage(sid, {
-          role: "assistant",
-          content: fullResponse,
-          assetIds: [],
-          assets: [],
-        });
-      } else if (aggQuery) {
-        // ── Step 1: Structural/breakdown queries via deterministic SQL ────
-        // Handles: institution COUNT(DISTINCT), institution-specific asset count,
-        // newest-by-institution, stage breakdown, area→institution breakdown.
-        // Generic count phrases ("how many do you have", "what's the total") and
-        // modality scalar counts ("how many gene therapy assets") intentionally
-        // return null here — they are handled by filteredCount in Step 2.
+      // ── Path 2: Definitional / educational ──────────────────────────────
+      if (definitional) {
+        sendEvent("context", { sessionId: sid, assets: [] });
+        let fullResponse = "";
+        for await (const token of conceptQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
+          fullResponse += token;
+          sendEvent("token", { text: token });
+        }
+        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        sendEvent("done", { sessionId: sid });
+        return;
+      }
+
+      // ── Path 3: Aggregation / count queries ──────────────────────────────
+      if (aggQuery) {
         const resolvedResult = await resolveAggregationQuery(message.trim(), filters, geoRx).catch(() => null);
         if (resolvedResult) {
           sendEvent("context", { sessionId: sid, assets: [] });
@@ -2173,39 +2150,18 @@ export async function registerRoutes(
             fullResponse += token;
             sendEvent("token", { text: token });
           }
-          await storage.appendEdenMessage(sid, {
-            role: "assistant",
-            content: fullResponse,
-            assetIds: [],
-            assets: [],
-          });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
           sendEvent("done", { sessionId: sid });
           return;
         }
 
-        // ── Step 2: SQL COUNT for all remaining count intents ─────────────
-        // Runs unconditionally — filteredCount with no active filters returns
-        // the total asset count; with filters it returns the constrained count.
-        // Covers: "how many gene therapy assets" (modality filter from query),
-        // "what's the total" (no filters → total), "give me a count",
-        // "how many do you have" (session filters → filtered count), etc.
-        const count = await storage.filteredCount(
-          geoRx,
-          filters.modality,
-          filters.stage,
-          filters.indication,
-          filters.institution
-        ).catch(() => null);
-
+        const count = await storage.filteredCount(geoRx, filters.modality, filters.stage, filters.indication, filters.institution).catch(() => null);
         if (count !== null) {
           const filterDesc = [
             filters.geography ? `${filters.geography.toUpperCase()} institution` : "",
-            filters.modality || "",
-            filters.stage || "",
-            filters.indication || "",
-            filters.institution || "",
+            filters.modality || "", filters.stage || "",
+            filters.indication || "", filters.institution || "",
           ].filter(Boolean).join(", ");
-
           const sqlCountResult = filterDesc
             ? `Filtered count (${filterDesc}): **${count}** relevant assets match the active filters.`
             : `Total relevant assets indexed in the portfolio: **${count.toLocaleString()}**`;
@@ -2215,101 +2171,87 @@ export async function registerRoutes(
             fullResponse += token;
             sendEvent("token", { text: token });
           }
+          await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+          sendEvent("done", { sessionId: sid });
+          return;
+        }
+        // fall through to RAG if SQL cannot resolve
+      }
+
+      // ── Path 4: RAG (semantic retrieval) ─────────────────────────────────
+
+      // Back-reference: user refers to a prior result ("tell me more about the first one")
+      const isBackRef = detectBackReference(message.trim());
+      if (isBackRef) {
+        const lastAssistant = [...(session.messages ?? [])].reverse().find((m) => m.role === "assistant");
+        const priorIds: number[] = lastAssistant?.assetIds ?? [];
+        if (priorIds.length > 0) {
+          const priorAssets = await storage.getIngestedAssetsByIds(priorIds).catch(() => [] as import("./storage").RetrievedAsset[]);
+          const pos = extractBackRefPosition(message.trim());
+          const targeted = pos !== null && priorAssets[pos] ? [priorAssets[pos]] : priorAssets;
+          const assetPayload = targeted.map((a) => ({
+            id: a.id, assetName: a.assetName, institution: a.institution,
+            indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+            ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
+          }));
+          sendEvent("context", { sessionId: sid, assets: assetPayload });
+          let fullResponse = "";
+          for await (const token of ragQuery(message.trim(), targeted, history, ctx, portfolioStats, focusContext)) {
+            fullResponse += token;
+            sendEvent("token", { text: token });
+          }
           await storage.appendEdenMessage(sid, {
-            role: "assistant",
-            content: fullResponse,
-            assetIds: [],
-            assets: [],
+            role: "assistant", content: fullResponse,
+            assetIds: targeted.map((a) => a.id), assets: assetPayload,
           });
           sendEvent("done", { sessionId: sid });
           return;
         }
-
-        // ── Fall through to RAG ───────────────────────────────────────────
-        const institutionName = detectInstitutionKeyword(message.trim());
-        const [queryEmbedding, institutionAssets] = await Promise.all([
-          embedQuery(message.trim()),
-          institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
-        ]);
-
-        let allSemantic: import("./storage").RetrievedAsset[];
-        if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
-        } else {
-          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
-        }
-
-        const threshold = institutionName ? 0.38 : 0.45;
-        const institutionIds = new Set(institutionAssets.map((a) => a.id));
-        const retrieved = [
-          ...institutionAssets,
-          ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
-        ].slice(0, 15);
-        const assetPayload = retrieved.map((a) => ({
-          id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
-          ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
-          similarity: Math.round(a.similarity * 100) / 100,
-        }));
-        sendEvent("context", { sessionId: sid, assets: assetPayload });
-        let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
-          fullResponse += token;
-          sendEvent("token", { text: token });
-        }
-        await storage.appendEdenMessage(sid, {
-          role: "assistant", content: fullResponse,
-          assetIds: retrieved.map((a) => a.id), assets: assetPayload,
-        });
-      } else {
-        const institutionName = detectInstitutionKeyword(message.trim());
-        const [queryEmbedding, institutionAssets] = await Promise.all([
-          embedQuery(message.trim()),
-          institutionName ? storage.searchIngestedAssetsByInstitution(institutionName, 8) : Promise.resolve([] as import("./storage").RetrievedAsset[]),
-        ]);
-
-        let allSemantic: import("./storage").RetrievedAsset[];
-        if (filtersActive) {
-          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
-        } else {
-          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
-        }
-
-        const threshold = institutionName ? 0.38 : 0.45;
-        const institutionIds = new Set(institutionAssets.map((a) => a.id));
-        const retrieved = [
-          ...institutionAssets,
-          ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
-        ].slice(0, 15);
-
-        const assetPayload = retrieved.map((a) => ({
-          id: a.id,
-          assetName: a.assetName,
-          institution: a.institution,
-          indication: a.indication,
-          modality: a.modality,
-          developmentStage: a.developmentStage,
-          ipType: a.ipType,
-          sourceName: a.sourceName,
-          sourceUrl: a.sourceUrl,
-          similarity: Math.round(a.similarity * 100) / 100,
-        }));
-
-        sendEvent("context", { sessionId: sid, assets: assetPayload });
-
-        let fullResponse = "";
-        for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
-          fullResponse += token;
-          sendEvent("token", { text: token });
-        }
-
-        await storage.appendEdenMessage(sid, {
-          role: "assistant",
-          content: fullResponse,
-          assetIds: retrieved.map((a) => a.id),
-          assets: assetPayload,
-        });
       }
+
+      // Standard semantic retrieval
+      const institutionName = detectInstitutionName(message.trim());
+      const [queryEmbedding, institutionAssets] = await Promise.all([
+        embedQuery(message.trim()),
+        institutionName
+          ? storage.searchIngestedAssetsByInstitution(institutionName, 10)
+          : Promise.resolve([] as import("./storage").RetrievedAsset[]),
+      ]);
+
+      let allSemantic: import("./storage").RetrievedAsset[];
+      if (filtersActive) {
+        allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
+      } else {
+        allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+      }
+
+      const threshold = institutionName ? 0.38 : 0.45;
+      const institutionIds = new Set(institutionAssets.map((a) => a.id));
+      const merged = [
+        ...institutionAssets,
+        ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
+      ];
+
+      // User-profile reranking (top 8 profile-boosted)
+      const retrieved = rerankAssets(merged, ctx);
+
+      const assetPayload = retrieved.map((a) => ({
+        id: a.id, assetName: a.assetName, institution: a.institution,
+        indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+        ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
+        similarity: Math.round(a.similarity * 100) / 100,
+      }));
+
+      sendEvent("context", { sessionId: sid, assets: assetPayload });
+      let fullResponse = "";
+      for await (const token of ragQuery(message.trim(), retrieved, history, ctx, portfolioStats, focusContext)) {
+        fullResponse += token;
+        sendEvent("token", { text: token });
+      }
+      await storage.appendEdenMessage(sid, {
+        role: "assistant", content: fullResponse,
+        assetIds: retrieved.map((a) => a.id), assets: assetPayload,
+      });
 
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {

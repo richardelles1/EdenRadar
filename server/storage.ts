@@ -87,6 +87,7 @@ export interface IStorage {
   addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
+  getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
   getIngestionDelta(ranAt: Date): Promise<{ institution: string; count: number; sampleAssets: string[] }[]>;
 
@@ -482,6 +483,35 @@ export class DatabaseStorage implements IStorage {
       .from(ingestedAssets)
       .where(and(eq(ingestedAssets.institution, institution), eq(ingestedAssets.sourceType, "tech_transfer")))
       .orderBy(desc(ingestedAssets.lastSeenAt));
+  }
+
+  async getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]> {
+    if (!ids.length) return [];
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        target: ingestedAssets.target,
+        modality: ingestedAssets.modality,
+        indication: ingestedAssets.indication,
+        developmentStage: ingestedAssets.developmentStage,
+        institution: ingestedAssets.institution,
+        mechanismOfAction: ingestedAssets.mechanismOfAction,
+        innovationClaim: ingestedAssets.innovationClaim,
+        unmetNeed: ingestedAssets.unmetNeed,
+        comparableDrugs: ingestedAssets.comparableDrugs,
+        completenessScore: ingestedAssets.completenessScore,
+        licensingReadiness: ingestedAssets.licensingReadiness,
+        ipType: ingestedAssets.ipType,
+        sourceUrl: ingestedAssets.sourceUrl,
+        sourceName: ingestedAssets.sourceName,
+        summary: ingestedAssets.summary,
+        categories: ingestedAssets.categories,
+        technologyId: ingestedAssets.technologyId,
+      })
+      .from(ingestedAssets)
+      .where(inArray(ingestedAssets.id, ids));
+    return rows.map((r) => ({ ...r, similarity: 1.0 }));
   }
 
   async getInstitutionAssetCounts(): Promise<Record<string, number>> {

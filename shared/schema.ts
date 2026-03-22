@@ -535,6 +535,7 @@ export type ManualInstitution = typeof manualInstitutions.$inferSelect;
 export const edenSessions = pgTable("eden_sessions", {
   id: serial("id").primaryKey(),
   sessionId: text("session_id").notNull().unique(),
+  focusContext: jsonb("focus_context").$type<Record<string, unknown>>(),
   messages: jsonb("messages").$type<Array<{
     role: "user" | "assistant";
     content: string;

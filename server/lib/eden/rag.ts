@@ -1,8 +1,8 @@
 import OpenAI from "openai";
 import type { RetrievedAsset } from "../../storage";
 import { db } from "../../db";
-import { ingestedAssets, therapyAreaTaxonomy } from "../../../shared/schema";
-import { sql, desc } from "drizzle-orm";
+import { ingestedAssets, therapyAreaTaxonomy, edenSessions } from "../../../shared/schema";
+import { sql, desc, eq } from "drizzle-orm";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const EMBED_MODEL = "text-embedding-3-small";
@@ -65,6 +65,66 @@ const MODALITY_ALIASES: Record<string, string> = {
   "protein therapy": "Protein/Biologics",
   "protein replacement": "Protein/Biologics",
 };
+
+// ── Institution patterns for two-pass detection ───────────────────────────
+export const INSTITUTION_PATTERNS: Array<{ pattern: RegExp; name: string }> = [
+  { pattern: /\bstanford\b/i, name: "stanford" },
+  { pattern: /\bmit\b|\bmassachusetts\s+institute\b/i, name: "mit" },
+  { pattern: /\bharvard\b/i, name: "harvard" },
+  { pattern: /\bcolumbia\b/i, name: "columbia" },
+  { pattern: /\byale\b/i, name: "yale" },
+  { pattern: /\bjohns\s+hop+kins\b/i, name: "johns hopkins" },
+  { pattern: /\bduke\b/i, name: "duke" },
+  { pattern: /\bucsf\b/i, name: "ucsf" },
+  { pattern: /\bucla\b/i, name: "ucla" },
+  { pattern: /\bcaltech\b|\bcalifornia\s+institute\s+of\s+tech/i, name: "caltech" },
+  { pattern: /\bcornell\b/i, name: "cornell" },
+  { pattern: /\bprinceton\b/i, name: "princeton" },
+  { pattern: /\bupenn\b|\buniversity\s+of\s+pennsylvania\b/i, name: "university of pennsylvania" },
+  { pattern: /\buniversity\s+of\s+michigan\b/i, name: "university of michigan" },
+  { pattern: /\buniversity\s+of\s+toronto\b/i, name: "university of toronto" },
+  { pattern: /\buniversity\s+of\s+oxford\b|\boxford\s+university\b/i, name: "university of oxford" },
+  { pattern: /\buniversity\s+of\s+cambridge\b|\bcambridge\s+university\b/i, name: "university of cambridge" },
+  { pattern: /\bwustl\b|\bwashington\s+university\b/i, name: "washington university" },
+  { pattern: /\buc\s+san\s+diego\b|\bucsd\b/i, name: "uc san diego" },
+  { pattern: /\buc\s+davis\b/i, name: "uc davis" },
+  { pattern: /\buc\s+berkeley\b|\bberkeley\b/i, name: "uc berkeley" },
+  { pattern: /\bpitt\b|\buniversity\s+of\s+pittsburgh\b/i, name: "university of pittsburgh" },
+  { pattern: /\bemory\b/i, name: "emory" },
+  { pattern: /\bvanderbi?lt\b/i, name: "vanderbilt" },
+  { pattern: /\bgeorgetown\b/i, name: "georgetown" },
+  { pattern: /\bnorthwestern\b/i, name: "northwestern" },
+  { pattern: /\bnyu\b|\bnew\s+york\s+university\b/i, name: "new york university" },
+  { pattern: /\bbaylor\b/i, name: "baylor" },
+  { pattern: /\btufts\b/i, name: "tufts" },
+  { pattern: /\bmayo\b/i, name: "mayo" },
+  { pattern: /\bmd\s+anderson\b/i, name: "md anderson" },
+  { pattern: /\bsloan\s+kettering\b|\bmskcc\b/i, name: "memorial sloan kettering" },
+  { pattern: /\bsalk\b/i, name: "salk" },
+  { pattern: /\bscripps\b/i, name: "scripps" },
+  { pattern: /\bgeorgia\s+tech\b/i, name: "georgia tech" },
+  { pattern: /\bpurdue\b/i, name: "purdue" },
+  { pattern: /\bimperial\s+college\b/i, name: "imperial college" },
+  { pattern: /\bkarolinska\b/i, name: "karolinska" },
+  { pattern: /\beth\s+zurich\b/i, name: "eth zurich" },
+  { pattern: /\bokford\b|\boxford\b/i, name: "oxford" },
+];
+
+export function detectInstitutionName(query: string, portfolioInstitutions?: string[]): string | null {
+  // Pass 1: pattern-based matching (fast, handles abbreviations like MIT, UCSF)
+  for (const { pattern, name } of INSTITUTION_PATTERNS) {
+    if (pattern.test(query)) return name;
+  }
+  // Pass 2: substring scan against live portfolio institution names
+  if (portfolioInstitutions?.length) {
+    const lowerQuery = query.toLowerCase();
+    for (const inst of portfolioInstitutions) {
+      if (!inst || inst.length < 4) continue;
+      if (lowerQuery.includes(inst.toLowerCase())) return inst;
+    }
+  }
+  return null;
+}
 
 const GEO_DETECT: Record<string, GeoKey> = {
   "american": "us",
@@ -206,10 +266,8 @@ function extractRawFilters(message: string): SessionFocusContext {
   if (stage) filters.stage = stage;
   const indication = detectIndication(message);
   if (indication) filters.indication = indication;
-  const instMatch = message.match(
-    /(?:from|at|by)\s+([\w\s]+?(?:university|institute|college|hospital|MIT|Stanford|Harvard|Yale|Columbia|Duke|Cornell|Johns Hopkins)[\w\s]*)/i
-  );
-  if (instMatch?.[1]) filters.institution = instMatch[1].trim();
+  const institution = detectInstitutionName(message);
+  if (institution) filters.institution = institution;
   return filters;
 }
 
@@ -247,6 +305,20 @@ export function getOrUpdateSessionFocus(sessionId: string, message: string): Ses
   const updated = extractFocusUpdates(message, current);
   _sessionFocusMap.set(sessionId, updated);
   return updated;
+}
+
+// ── Session focus DB persistence ──────────────────────────────────────────
+
+export function seedSessionFocusFromDb(sessionId: string, dbFocus: Record<string, unknown> | null | undefined): void {
+  if (!_sessionFocusMap.has(sessionId) && dbFocus && Object.keys(dbFocus).length > 0) {
+    _sessionFocusMap.set(sessionId, dbFocus as SessionFocusContext);
+  }
+}
+
+export async function persistSessionFocus(sessionId: string, focus: SessionFocusContext): Promise<void> {
+  await db.update(edenSessions)
+    .set({ focusContext: focus as Record<string, unknown>, updatedAt: new Date() })
+    .where(eq(edenSessions.sessionId, sessionId));
 }
 
 export function buildFocusContextBlock(focus: SessionFocusContext): string {
@@ -399,6 +471,48 @@ const AGG_PATTERNS = [
 
 export function isAggregationQuery(query: string): boolean {
   return AGG_PATTERNS.some((p) => p.test(query));
+}
+
+// ── Definitional / educational intent detection ───────────────────────────
+const DEFINITIONAL_PATTERNS = [
+  /^(?:what\s+(?:is|are)\s+(?:a\s+|an\s+)?)([\w\s,\-\/]+?)(?:\?|\s*$)/i,
+  /^(?:can\s+you\s+)?(?:explain|define)\s+([\w\s,\-\/]+?)(?:\?|\s*$)/i,
+  /^how\s+does?\s+([\w\s\-\/]+?)\s+work(?:\?|\s*$)/i,
+  /^what'?s?\s+(?:a|an|the)?\s*([\w\s\-\/]+?)\s*\?$/i,
+  /^(?:tell\s+me\s+)?what\s+(?:exactly\s+)?(?:is|are)\s+([\w\s,\-\/]+?)(?:\?|\s*$)/i,
+];
+const COMBINED_SEARCH_INTENT = /\b(?:do\s+you\s+have|find\s+me|show\s+me|any\s+(?:assets?|examples?|technologies?)|in\s+your\s+(?:portfolio|database|index))\b/i;
+
+export function isDefinitionalQuery(query: string): boolean {
+  if (COMBINED_SEARCH_INTENT.test(query)) return false;
+  return DEFINITIONAL_PATTERNS.some((p) => p.test(query.trim()));
+}
+
+// ── Back-reference detection ──────────────────────────────────────────────
+const BACK_REF_PATTERNS = [
+  /\bthe\s+(?:first|1st)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  /\bthe\s+(?:second|2nd)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  /\bthe\s+(?:third|3rd)\s+(?:one|asset|result|technology|option|compound)\b/i,
+  /\b(?:tell|give)\s+me\s+more\s+(?:about|on)\s+(?:it|that|this|(?:number|#)?\s*[123])\b/i,
+  /\bmore\s+(?:details?|info(?:rmation)?)\s+(?:about|on)\s+(?:it|that|this)\b/i,
+  /\b(?:expand|dig)\s+(?:deeper|more)?\s*(?:on|into)\s+(?:that|this|it)\b/i,
+  /\bpull\s+(?:a\s+)?(?:full\s+)?(?:profile|dossier)\s+(?:on|for)?\s*(?:it|that|this)?\b/i,
+  /\b(?:number|#)\s*[123]\b/i,
+  /\bwhat\s+about\s+(?:the\s+)?(?:first|second|third|1st|2nd|3rd|last|other)\s+(?:one|asset)?\b/i,
+  /\bgo\s+(?:deeper|further)\s+on\s+(?:that|this|it)\b/i,
+  /\bgive\s+me\s+more\b/i,
+];
+
+export function detectBackReference(query: string): boolean {
+  return BACK_REF_PATTERNS.some((p) => p.test(query));
+}
+
+export function extractBackRefPosition(query: string): number | null {
+  const lower = query.toLowerCase();
+  if (/\bfirst\b|\b1st\b|\bnumber\s*1\b|\b#\s*1\b/.test(lower)) return 0;
+  if (/\bsecond\b|\b2nd\b|\bnumber\s*2\b|\b#\s*2\b/.test(lower)) return 1;
+  if (/\bthird\b|\b3rd\b|\bnumber\s*3\b|\b#\s*3\b/.test(lower)) return 2;
+  return null;
 }
 
 type AggResult = Record<string, unknown>[];
@@ -690,6 +804,33 @@ function buildContext(assets: RetrievedAsset[]): string {
     .join("\n\n");
 }
 
+// ── User-profile reranking ────────────────────────────────────────────────
+export function rerankAssets(assets: RetrievedAsset[], userContext?: UserContext): RetrievedAsset[] {
+  const LIMIT = 8;
+  if (!userContext || assets.length <= LIMIT) return assets.slice(0, LIMIT);
+
+  const preferredModalities = (userContext.modalities ?? []).map((m) => m.toLowerCase());
+  const preferredAreas = (userContext.therapeuticAreas ?? []).map((a) => a.toLowerCase());
+
+  if (!preferredModalities.length && !preferredAreas.length) return assets.slice(0, LIMIT);
+
+  const scored = assets.map((a) => {
+    let boost = 0;
+    if (a.modality && a.modality !== "unknown") {
+      const m = a.modality.toLowerCase();
+      if (preferredModalities.some((pm) => m.includes(pm) || pm.includes(m))) boost += 3;
+    }
+    if (a.indication && a.indication !== "unknown") {
+      const ind = a.indication.toLowerCase();
+      if (preferredAreas.some((pa) => ind.includes(pa) || pa.includes(ind))) boost += 2;
+    }
+    return { asset: a, boost };
+  });
+
+  scored.sort((a, b) => b.boost - a.boost);
+  return scored.slice(0, LIMIT).map((s) => s.asset);
+}
+
 // ── Static industry intelligence ─────────────────────────────────────────
 
 const INDUSTRY_INTELLIGENCE_BLOCK = `## Industry intelligence you've internalized
@@ -910,6 +1051,39 @@ export async function* aggregationQuery(
   });
 
   for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
+// ── Concept / definitional query ──────────────────────────────────────────
+export async function* conceptQuery(
+  question: string,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext,
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
+): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
+
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-6),
+    {
+      role: "user",
+      content: `Please explain this concept clearly and concisely for a pharma/biotech BD professional (3-5 sentences). Tie it to TTO licensing context where relevant. Do not list specific assets from the portfolio. Question: ${question}`,
+    },
+  ];
+
+  const conceptStream = await client.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages,
+    stream: true,
+    temperature: 0.4,
+    max_tokens: 400,
+  });
+
+  for await (const chunk of conceptStream) {
     const delta = chunk.choices[0]?.delta?.content;
     if (delta) yield delta;
   }
