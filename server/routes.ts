@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
@@ -276,6 +277,10 @@ export async function registerRoutes(
 
       const enrichedQuery = [query, field, technologyType].filter(Boolean).join(" ");
 
+      const searchCacheKey = `search:${enrichedQuery}:${[...effectiveSources].sort().join(",")}:${maxPerSource ?? ""}:${field ?? ""}:${sourceType ?? ""}:${dateRange ?? ""}:${technologyType ?? ""}:${trialPhase ?? ""}`;
+      const cachedSearch = cacheGet<object>(searchCacheKey);
+      if (cachedSearch) return res.json(cachedSearch);
+
       let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
 
       signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
@@ -351,13 +356,15 @@ export async function registerRoutes(
 
       await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: scored.length });
 
-      return res.json({
+      const searchResponse = {
         assets: scored,
         query,
         sources: effectiveSources,
         signalsFound: signals.length,
         assetsFound: scored.length,
-      });
+      };
+      cacheSet(searchCacheKey, searchResponse, 45 * 60 * 1000);
+      return res.json(searchResponse);
     } catch (err: any) {
       console.error("Search error:", err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
@@ -3939,6 +3946,11 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+
+      const landscapeCacheKey = `concept-landscape:${id}`;
+      const cachedLandscape = cacheGet<object>(landscapeCacheKey);
+      if (cachedLandscape) return res.json(cachedLandscape);
+
       const [concept] = await db.select().from(conceptCards).where(eq(conceptCards.id, id));
       if (!concept) return res.status(404).json({ error: "Not found" });
       const therapyArea = concept.therapeuticArea?.toLowerCase() ?? "";
@@ -4048,9 +4060,13 @@ If a field cannot be determined, use "N/A".`
       const literature = pubmedResults.status === "fulfilled" ? pubmedResults.value : [];
 
       if (assets.length === 0 && literature.length === 0) {
-        return res.json({ assets: [], literature: [], noResults: true });
+        const emptyResp = { assets: [], literature: [], noResults: true };
+        cacheSet(landscapeCacheKey, emptyResp, 2 * 60 * 60 * 1000);
+        return res.json(emptyResp);
       }
-      res.json({ assets, literature });
+      const landscapeResp = { assets, literature };
+      cacheSet(landscapeCacheKey, landscapeResp, 2 * 60 * 60 * 1000);
+      res.json(landscapeResp);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

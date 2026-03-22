@@ -293,8 +293,8 @@ function TopicSection({
       return r.json();
     },
     enabled: !!topic,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 
   const { data: grantData, isLoading: grantLoading } = useQuery<SearchResponse>({
@@ -309,8 +309,8 @@ function TopicSection({
       return r.json();
     },
     enabled: !!topic,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 
   const researchSignals = useMemo(() =>

@@ -71,8 +71,8 @@ export default function ResearchDashboard() {
       return r.json();
     },
     enabled: !!spotlightQuery,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 
   const primaryArea = allAreas[0];
@@ -89,8 +89,8 @@ export default function ResearchDashboard() {
       return r.json();
     },
     enabled: !!primaryArea,
-    staleTime: 5 * 60 * 1000,
-    gcTime: 10 * 60 * 1000,
+    staleTime: 30 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
   });
 
   const projects = projectsData?.projects ?? [];
