@@ -40,7 +40,7 @@ import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 
-const SLIDE_COUNT = 10;
+const SLIDE_COUNT = 9;
 
 const DARK = {
   bg: "#0d1117",
@@ -601,59 +601,8 @@ function ProblemSlide({ colors }: { colors: Colors }) {
   );
 }
 
-/* ═══════════════════════ SLIDE 4 — SOLUTION ═══════════════════════ */
-function SolutionSlide({ colors }: { colors: Colors }) {
-  const stages = [
-    { label: "Concept Community", accent: "Discovery", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "A creative community where biotech ideas are born. Submit hypotheses, get scored, and connect with collaborators before research begins." },
-    { label: "Project-Based Research", accent: "Lab", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Structured project workspace with intuitive tools for literature review, synthesis, grants, and industry visibility." },
-    { label: "Industry Intelligence", accent: "Radar", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "EDEN-enriched asset dossiers from 300+ monitored Technology Transfer Offices (TTOs) with real-time convergence signals." },
-  ];
-  return (
-    <Slide index={4} section="Our Solution" accent={colors.green} colors={colors}>
-      <PitchDots color={colors.amber} count={4} seed={0} />
-      <PitchDots color={colors.violet} count={4} seed={1} />
-      <PitchDots color={colors.green} count={4} seed={2} />
-      <div className="absolute inset-0 pointer-events-none" style={{ background: `radial-gradient(ellipse at 30% 60%, ${colors.green}0a 0%, transparent 60%)` }} />
-      <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-8" style={{ color: colors.text }}>
-        EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
-      </h2>
-      <div className="relative">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5 relative">
-          {stages.map((s) => (
-            <div key={s.label} className="rounded-xl p-5 sm:p-6 relative" style={{ background: s.dim, border: `1px solid ${s.color}44`, borderTop: `3px solid ${s.color}` }}>
-              <div className="flex sm:flex-col items-center sm:items-start gap-4 sm:gap-0 mb-3">
-                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center shrink-0 sm:mb-3" style={{ background: s.color }}>
-                  <s.icon className="w-6 h-6 sm:w-7 sm:h-7" style={{ color: "#fff" }} />
-                </div>
-                <div>
-                  <p className="text-lg sm:text-xl font-bold leading-tight" style={{ color: colors.text }}>
-                    Eden<span style={{ color: s.color }}>{s.accent}</span>
-                  </p>
-                  <p className="text-xs mt-0.5" style={{ color: colors.textMuted }}>{s.label}</p>
-                </div>
-              </div>
-              <p className="text-xs sm:text-sm" style={{ color: colors.textMuted }}>{s.desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
-      {/* Gradient pipeline arrow — same as Portals slide */}
-      <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: "1px solid transparent" }}>
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
-        <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
-          One Pipeline of Innovation
-        </span>
-        <div className="relative z-10 flex items-center justify-center w-9 h-full shrink-0" style={{ background: `linear-gradient(to right, ${colors.green}44, ${colors.green}88)` }}>
-          <ChevronRight className="w-5 h-5" style={{ color: colors.green }} />
-        </div>
-      </div>
-    </Slide>
-  );
-}
-
-/* ═══════════════════════ SLIDE 5 — THREE PORTALS ═══════════════════════ */
-function PortalsSlide({ colors }: { colors: Colors }) {
+/* ═══════════════════════ SLIDE 6 — SOLUTION + PORTALS (COMBINED) ═══════════════════════ */
+function SolutionPortalsSlide({ colors }: { colors: Colors }) {
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInView = useInView(gridRef, { once: false, amount: 0.2 });
   const reducedMotion = useReducedMotion();
@@ -661,7 +610,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
   const portals = [
     {
       title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
-      items: ["Submit hypotheses before research begins", "EDEN credibility scoring (0 to 100)", "Discovered by collaborators and funders"],
+      items: ["Submit hypotheses before research begins", "EDEN AI scoring and credibility scoring (0 to 100)", "Discovered by collaborators and funders"],
     },
     {
       title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
@@ -673,9 +622,13 @@ function PortalsSlide({ colors }: { colors: Colors }) {
     },
   ];
   return (
-    <Slide index={5} section="Three Portals" accent={colors.green} colors={colors}>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-7" style={{ color: colors.text }}>
-        Three portals. One <span style={{ color: colors.green }}>ecosystem</span>.
+    <Slide index={6} section="Our Solution" accent={colors.green} colors={colors}>
+      <PitchDots color={colors.amber} count={4} seed={0} />
+      <PitchDots color={colors.violet} count={4} seed={1} />
+      <PitchDots color={colors.green} count={4} seed={2} />
+      <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-6" style={{ color: colors.text }}>
+        EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
       <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
         {portals.map((p, i) => (
@@ -708,8 +661,7 @@ function PortalsSlide({ colors }: { colors: Colors }) {
           </motion.div>
         ))}
       </div>
-
-      <div className="mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: "1px solid transparent" }}>
+      <div className="mt-4 sm:mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: "1px solid transparent" }}>
         <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
         <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
           One Pipeline of Innovation
@@ -989,7 +941,7 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
 
 function PitchEdenChatSlide({ colors }: { colors: Colors }) {
   return (
-    <Slide index={6} section="EDEN" accent={colors.green} colors={colors}>
+    <Slide index={7} section="EDEN" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.1} />
 
       {/* ── MOBILE LAYOUT: absolute-fill so chat uses all remaining screen space ── */}
@@ -1049,7 +1001,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
-    <Slide index={7} section="EdenRadar" accent={colors.green} colors={colors}>
+    <Slide index={5} section="EdenRadar" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.12} />
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
@@ -1086,7 +1038,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
 function EarlySignalSlide({ colors }: { colors: Colors }) {
   const discoveryFeatures = [
     { icon: Sparkles, text: "Submit ideas before formal research begins" },
-    { icon: Target, text: "EDEN credibility scoring on a 0-100 scale" },
+    { icon: Target, text: "EDEN AI scoring and credibility scoring (0-100 scale)" },
     { icon: Users, text: "Discovered by industry scouts and collaborators" },
     { icon: Lock, text: "Timestamped concept provenance" },
   ];
@@ -1098,7 +1050,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
   ];
 
   return (
-    <Slide index={8} section="Supply Side" accent={colors.green} colors={colors}>
+    <Slide index={4} section="Supply Side" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={5} seed={0} />
       <PitchDots color={colors.violet} count={5} seed={2} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
@@ -1231,12 +1183,12 @@ function TractionSlide({ colors }: { colors: Colors }) {
     { num: 11, suffix: "-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
   ];
   const tiers = [
-    { name: "EdenDiscovery", price: "$9.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN scoring, landscape intelligence" },
-    { name: "EdenLab", price: "$24.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
-    { name: "EdenRadar", price: "$44.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 300+ Tech Transfer Offices, EDEN dossiers, convergence signals, full ecosystem access" },
+    { name: "EdenDiscovery", price: "$14.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
+    { name: "EdenLab", price: "$29.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
+    { name: "EdenRadar", price: "$59.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 300+ Tech Transfer Offices, EDEN dossiers, convergence signals, full ecosystem access" },
   ];
   return (
-    <Slide index={9} section="What We've Built" accent={colors.green} colors={colors}>
+    <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
       <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Built, deployed, <span style={{ color: colors.green }}>running today</span>.
       </h2>
@@ -1273,7 +1225,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 10 — CONTACT ═══════════════════════ */
 function ContactSlide({ colors }: { colors: Colors }) {
   return (
-    <Slide index={10} section="Contact" accent={colors.green} colors={colors}>
+    <Slide index={9} section="Contact" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.08} />
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
@@ -1390,11 +1342,10 @@ export default function PitchDeck() {
       <CoverSlide colors={colors} />
       <WhoWeAreSlide colors={colors} />
       <ProblemSlide colors={colors} />
-      <SolutionSlide colors={colors} />
-      <PortalsSlide colors={colors} />
-      <PitchEdenChatSlide colors={colors} />
-      <RadarSlide colors={colors} />
       <EarlySignalSlide colors={colors} />
+      <RadarSlide colors={colors} />
+      <SolutionPortalsSlide colors={colors} />
+      <PitchEdenChatSlide colors={colors} />
       <TractionSlide colors={colors} />
       <ContactSlide colors={colors} />
     </div>
