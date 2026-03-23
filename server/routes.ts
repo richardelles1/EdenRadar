@@ -2278,10 +2278,10 @@ export async function registerRoutes(
         }
 
         // ── Step b: named-asset matching ──────────────────────────────────
-        // Detects prior asset names (>=5 chars) verbatim in the query.
-        // >= 2 hits → explicit successful resolution. 1 hit → still a reference intent
-        // but falls through; no partial error emitted here since names aren't asserted
-        // against each other the way ordinals and institutions are.
+        // Detects prior asset names (>=5 chars) verbatim in the query against
+        // session history. Named refs are explicit — any partial match (1 found)
+        // triggers a portfolio-level semantic search for the missing side.
+        // If portfolio search also fails, emits a terminal error naming the gap.
         if (compareIds.length < 2 && !terminalError) {
           const namedMatches: number[] = [];
           for (const a of allPriorAssetPayloads) {
@@ -2293,6 +2293,27 @@ export async function registerRoutes(
           if (namedMatches.length >= 2) {
             hasExplicitRefs = true;
             compareIds = namedMatches.slice(0, 3);
+          } else if (namedMatches.length === 1) {
+            // 1 named asset from session history: explicit reference, needs a second.
+            // Try portfolio semantic search to find a relevant counterpart.
+            hasExplicitRefs = true;
+            try {
+              const namedEmbedding = await embedQuery(message.trim());
+              const namedHits = await storage.semanticSearch(namedEmbedding, 5);
+              const NAMED_SIM_THRESHOLD = 0.45;
+              const portfolioCandidate = namedHits.find(
+                (h) => h.similarity >= NAMED_SIM_THRESHOLD && !namedMatches.includes(h.id)
+              );
+              if (portfolioCandidate) {
+                compareIds = [namedMatches[0], portfolioCandidate.id];
+              } else {
+                const resolvedAsset = allPriorAssetPayloads.find((a) => a.id === namedMatches[0]);
+                terminalError = `I found "${resolvedAsset?.assetName ?? "one asset"}" from your session, but couldn't find a second asset to compare it to. Try searching for both assets first, then ask me to compare.`;
+              }
+            } catch {
+              const resolvedAsset = allPriorAssetPayloads.find((a) => a.id === namedMatches[0]);
+              terminalError = `I found "${resolvedAsset?.assetName ?? "one asset"}" from your session, but couldn't locate a second asset to compare it to.`;
+            }
           }
         }
 

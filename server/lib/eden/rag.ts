@@ -641,6 +641,13 @@ const BACK_REF_PATTERNS = [
   // Institution-qualified back-references (anaphora with institution name)
   /\bthe\s+one\s+from\s+\w/i,
   /\bthat\s+one\s+from\s+\w/i,
+  // Comparative follow-up back-references — "the stronger one", "the winner", etc.
+  // Covers post-comparison turns that reference a conclusion from the prior head-to-head.
+  /\bthe\s+(?:stronger|weaker|better|worse|dominant|leading|preferred|winning|losing)\s+one\b/i,
+  /\bthe\s+(?:winner|loser|front[-\s]?runner)\b/i,
+  /\bthe\s+(?:better|preferred|recommended|stronger|leading)\s+(?:option|asset|candidate|compound|technology|choice)\b/i,
+  /\bthe\s+one\s+(?:I\s+should|(?:you\s+)?recommend(?:ed)?|(?:that\s+)?(?:won|came\s+out\s+(?:ahead|on\s+top)))\b/i,
+  /\bwhich(?:ever)?\s+(?:one\s+)?(?:won|came\s+out\s+(?:ahead|on\s+top)|(?:is|was)\s+better)\b/i,
 ];
 
 export function detectBackReference(query: string): boolean {
