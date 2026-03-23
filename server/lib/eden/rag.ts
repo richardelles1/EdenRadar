@@ -1208,6 +1208,103 @@ export async function* aggregationQuery(
   }
 }
 
+// ── Comparative query detection ───────────────────────────────────────────
+//
+// Matches head-to-head comparison intent:
+//   "compare X to Y", "X vs Y", "contrast these", "how do they differ"
+//   "which of these is better", "differences between", "side by side"
+//
+// Deliberately broad — entity resolution in the route handler decides whether
+// sufficient prior assets exist; if not, the route falls through to RAG.
+export function isComparativeQuery(text: string): boolean {
+  const COMPARATIVE_PATTERNS = [
+    /\bcompare\b/i,
+    /\bvs\.?\b|\bversus\b/i,
+    /\bcontrast\b/i,
+    /\bhow\s+do\s+(?:these|they|the\s+two)\s+(?:differ|compare|stack\s+up|differ\s+from\s+each\s+other)\b/i,
+    /\bwhich\s+(?:of\s+(?:these|them|the\s+two)|would\s+you|is\s+(?:better|stronger|more\s+interesting|preferred|more\s+attractive))\b/i,
+    /\bdifferences?\s+between\b/i,
+    /\bhead[\s-]to[\s-]head\b/i,
+    /\bside[\s-]by[\s-]side\b/i,
+    /\bstack\s+(?:them|these|it)\s+up\b/i,
+  ];
+  return COMPARATIVE_PATTERNS.some((rx) => rx.test(text));
+}
+
+// ── Comparative / head-to-head query (streaming) ──────────────────────────
+//
+// Produces a structured BD comparison across MoA, stage, IP, innovation claim,
+// unmet need, comparables, and EDEN's professional take.
+// Expects 2–3 fully resolved RetrievedAsset objects.
+export async function* compareQuery(
+  question: string,
+  assets: RetrievedAsset[],
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  userContext?: UserContext,
+  portfolioStats?: PortfolioStats,
+  focusContext?: SessionFocusContext
+): AsyncGenerator<string> {
+  const systemPrompt = buildSystemPrompt(userContext, portfolioStats, focusContext);
+
+  const assetBlock = assets
+    .map((a, i) => {
+      const lines = [
+        `[Asset ${i + 1}] ${a.assetName} (${a.institution})`,
+        a.mechanismOfAction ? `  MoA: ${a.mechanismOfAction}` : null,
+        `  Target: ${a.target} | Modality: ${a.modality}`,
+        `  Stage: ${a.developmentStage}`,
+        a.ipType ? `  IP type: ${a.ipType}` : null,
+        a.innovationClaim ? `  Innovation claim: ${a.innovationClaim}` : null,
+        `  Indication: ${a.indication}`,
+        a.unmetNeed ? `  Unmet need: ${a.unmetNeed}` : null,
+        a.comparableDrugs ? `  Comparable drugs / competitive context: ${a.comparableDrugs}` : null,
+        a.licensingReadiness ? `  Licensing readiness: ${a.licensingReadiness}` : null,
+        a.summary ? `  Summary: ${a.summary.slice(0, 450)}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+      return lines;
+    })
+    .join("\n\n");
+
+  const comparePrompt = `You are doing a head-to-head BD comparison of ${assets.length} TTO assets for a pharma/biotech business development professional. Write a structured but conversational assessment — like a knowledgeable colleague sharing their genuine take.
+
+ASSETS TO COMPARE:
+${assetBlock}
+
+USER QUESTION: ${question}
+
+Structure your comparison across these dimensions (use bold headers for each):
+- **Mechanism / Modality** — how do the mechanisms and modalities differ, and what does that mean for development risk?
+- **Development stage** — where are they relative to each other, and which is closer to de-risked?
+- **IP position** — what does the IP picture look like for each?
+- **Innovation claim** — which has the more differentiated scientific claim?
+- **Unmet need and commercial fit** — which addresses a more commercially compelling gap?
+- **Competitive context** — what does the landscape look like for each based on comparable drugs or prior art?
+- **EDEN take** — your direct, honest professional view on which is more commercially interesting at this stage and why
+
+Be specific using the data provided. Name real tradeoffs. Avoid false balance — if one is clearly stronger on a dimension, say so. Close with one genuinely useful follow-up question.`;
+
+  const messages: Array<{ role: "user" | "assistant" | "system"; content: string }> = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-4),
+    { role: "user", content: comparePrompt },
+  ];
+
+  const stream = await client.chat.completions.create({
+    model: "gpt-4o",
+    messages,
+    stream: true,
+    temperature: 0.5,
+    max_tokens: 1200,
+  });
+
+  for await (const chunk of stream) {
+    const delta = chunk.choices[0]?.delta?.content;
+    if (delta) yield delta;
+  }
+}
+
 // ── Concept / definitional query ──────────────────────────────────────────
 export async function* conceptQuery(
   question: string,

@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2132,11 +2132,13 @@ export async function registerRoutes(
       // Routing priority (evaluated top-to-bottom, first match wins):
       //   1. Back-reference  — must be first; anaphoric phrases like "tell me more about
       //      the second one" look conversational to isConversational(), so checking them
-      //      before conversational routing is essential.
+      //      before conversational routing is essential. Comparative queries are excluded
+      //      here — they resolve their own entities in Path 3.
       //   2. Aggregation     — count phrases lack biotech signals; must beat conversational.
-      //   3. Definitional    — "what is a PROTAC?" beats conversational/RAG.
-      //   4. Conversational  — general chitchat, greetings, out-of-scope.
-      //   5. Standard RAG    — default retrieval path.
+      //   3. Comparative     — head-to-head asset comparisons with prior-context resolution.
+      //   4. Definitional    — "what is a PROTAC?" beats conversational/RAG.
+      //   5. Conversational  — general chitchat, greetings, out-of-scope.
+      //   6. Standard RAG    — default retrieval path.
 
       // Pre-compute back-reference state so we can use it in the routing guard.
       // Find the most recent assistant turn with non-empty assetIds — skips
@@ -2145,7 +2147,10 @@ export async function registerRoutes(
         (m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0
       );
       const priorIds: number[] = (lastAssistantWithAssets?.assetIds ?? []).slice(0, 3);
-      const isBackRef = priorIds.length > 0 && detectBackReference(message.trim());
+      // Comparative queries do their own multi-asset entity resolution — exclude from back-ref
+      // so "compare the first to the second" reaches Path 3 rather than Path 1.
+      const isComparative = isComparativeQuery(message.trim());
+      const isBackRef = !isComparative && priorIds.length > 0 && detectBackReference(message.trim());
 
       // ── Path 1: Back-reference ─────────────────────────────────────────────
       if (isBackRef) {
@@ -2228,7 +2233,89 @@ export async function registerRoutes(
         // fall through to RAG if SQL cannot resolve
       }
 
-      // ── Path 3: Definitional / educational ──────────────────────────────
+      // ── Path 3: Comparative / head-to-head ──────────────────────────────
+      // Entity resolution priority:
+      //   a) Ordinal back-refs ("first", "second") → positional index into priorIds
+      //   b) Institution-qualified ("the MIT one vs. the Stanford one") → scan prior assets
+      //   c) Fallback to all priorIds (up to 3)
+      // If fewer than 2 assets can be resolved, fall through to subsequent paths.
+      if (isComparative) {
+        let compareIds: number[] = [];
+
+        // Collect all prior asset objects from recent assistant turns (for institution matching)
+        const allPriorAssetPayloads = (session.messages ?? [])
+          .filter((m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0)
+          .flatMap((m) => (m as any).assets ?? []) as Array<{
+            id: number;
+            institution?: string;
+          }>;
+
+        // Step a: ordinal back-refs — both must be present to form a pair
+        const msgLower = message.trim().toLowerCase();
+        const ordinalPositions: number[] = [];
+        if (/\bfirst\b|\b1st\b/.test(msgLower) && priorIds[0] !== undefined) ordinalPositions.push(0);
+        if (/\bsecond\b|\b2nd\b/.test(msgLower) && priorIds[1] !== undefined) ordinalPositions.push(1);
+        if (/\bthird\b|\b3rd\b/.test(msgLower) && priorIds[2] !== undefined) ordinalPositions.push(2);
+        if (ordinalPositions.length >= 2) {
+          compareIds = [...new Set(ordinalPositions)].map((p) => priorIds[p]).filter(Boolean);
+        }
+
+        // Step b: institution-qualified refs — find distinct institutions mentioned in message
+        if (compareIds.length < 2 && allPriorAssetPayloads.length >= 2) {
+          const mentionedInsts = portfolioInstitutionNames.filter((inst) =>
+            msgLower.includes(inst.toLowerCase())
+          );
+          if (mentionedInsts.length >= 2) {
+            for (const inst of mentionedInsts.slice(0, 3)) {
+              const match = allPriorAssetPayloads.find(
+                (a) => a.institution?.toLowerCase().includes(inst.toLowerCase())
+              );
+              if (match && !compareIds.includes(match.id)) compareIds.push(match.id);
+            }
+          }
+        }
+
+        // Step c: fallback — use all priorIds (up to 3)
+        if (compareIds.length < 2) {
+          compareIds = priorIds.slice(0, 3);
+        }
+
+        // Only enter comparative path when 2+ assets can be resolved
+        if (compareIds.length >= 2) {
+          const fetchedForCompare = await storage.getIngestedAssetsByIds(compareIds).catch(
+            () => [] as import("./storage").RetrievedAsset[]
+          );
+          // Restore resolution order
+          const compareIdOrder = new Map(compareIds.map((id, i) => [id, i]));
+          fetchedForCompare.sort((a, b) => (compareIdOrder.get(a.id) ?? 99) - (compareIdOrder.get(b.id) ?? 99));
+
+          if (fetchedForCompare.length >= 2) {
+            const compareAssetPayload = fetchedForCompare.map((a) => ({
+              id: a.id, assetName: a.assetName, institution: a.institution,
+              indication: a.indication, modality: a.modality,
+              developmentStage: a.developmentStage, ipType: a.ipType,
+              sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
+            }));
+            sendEvent("context", { sessionId: sid, assets: compareAssetPayload });
+            let fullResponse = "";
+            for await (const token of compareQuery(message.trim(), fetchedForCompare, history, ctx, portfolioStats, focusContext)) {
+              fullResponse += token;
+              sendEvent("token", { text: token });
+            }
+            await storage.appendEdenMessage(sid, {
+              role: "assistant", content: fullResponse,
+              assetIds: fetchedForCompare.map((a) => a.id),
+              assets: compareAssetPayload,
+            });
+            sendEvent("done", { sessionId: sid });
+            return;
+          }
+          // fetchedForCompare < 2: fall through
+        }
+        // < 2 compareIds resolved: fall through to definitional / RAG
+      }
+
+      // ── Path 4: Definitional / educational ──────────────────────────────
       if (definitional) {
         // Start embedding in parallel with the concept stream so portfolio
         // lookup adds minimal latency after the explanation finishes.
@@ -2296,7 +2383,7 @@ export async function registerRoutes(
         return;
       }
 
-      // ── Path 4: Conversational ───────────────────────────────────────────
+      // ── Path 5: Conversational ───────────────────────────────────────────
       if (chat) {
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
@@ -2309,7 +2396,7 @@ export async function registerRoutes(
         return;
       }
 
-      // ── Path 5: Standard RAG (semantic retrieval) ─────────────────────────
+      // ── Path 6: Standard RAG (semantic retrieval) ─────────────────────────
 
       // Standard semantic retrieval (two-pass institution detection with portfolio names)
       const institutionName = detectInstitutionName(message.trim(), portfolioInstitutionNames);
