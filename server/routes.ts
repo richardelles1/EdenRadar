@@ -2284,17 +2284,28 @@ export async function registerRoutes(
         }
 
         // ── Step c: institution-qualified resolution ───────────────────────
-        // Uses detectAllInstitutionNames — alias-aware, same pattern logic as detectInstitutionName.
-        // Returns a partial-resolution error when 1 institution resolves but another does not.
+        // Uses detectAllInstitutionNames (alias-aware) for query-side detection.
+        // Normalizes asset institution labels to canonical form via detectInstitutionName
+        // so "WUSTL" matches query "Washington University" and "MIT" matches "MIT".
+        // Partial match (1/2 resolved) is recorded but does NOT hard-fail here —
+        // steps d and e run first; the error is only surfaced if all steps fail.
+        let instPartialResolvedMsg: string | null = null;
         if (compareIds.length < 2 && !ordinalFailed && allPriorAssetPayloads.length >= 1) {
           const mentionedInsts = detectAllInstitutionNames(message.trim(), portfolioInstitutionNames);
           if (mentionedInsts.length >= 2) {
             const instMatched: number[] = [];
             let firstUnresolved: string | null = null;
             for (const inst of mentionedInsts.slice(0, 3)) {
-              const match = allPriorAssetPayloads.find(
-                (a) => a.institution?.toLowerCase().includes(inst.toLowerCase())
-              );
+              const instKey = inst.toLowerCase();
+              const match = allPriorAssetPayloads.find((a) => {
+                if (!a.institution) return false;
+                const aInstLower = a.institution.toLowerCase();
+                // Direct substring (e.g., "stanford" in "Stanford University")
+                if (aInstLower.includes(instKey)) return true;
+                // Canonical alias match — normalizes abbreviations like WUSTL → "washington university"
+                const canonical = detectInstitutionName(a.institution) ?? "";
+                return canonical === instKey;
+              });
               if (match && !instMatched.includes(match.id)) {
                 instMatched.push(match.id);
               } else if (!firstUnresolved) {
@@ -2304,15 +2315,10 @@ export async function registerRoutes(
             if (instMatched.length >= 2) {
               compareIds = instMatched;
             } else if (instMatched.length === 1 && firstUnresolved) {
-              // Partial resolution — be explicit rather than silently continuing
+              // Store partial-resolution message but let steps d/e attempt to resolve first
               const resolvedName = allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
                 ?? "one institution";
-              const partialErrMsg = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
-              sendEvent("context", { sessionId: sid, assets: [] });
-              sendEvent("token", { text: partialErrMsg });
-              await storage.appendEdenMessage(sid, { role: "assistant", content: partialErrMsg, assetIds: [], assets: [] });
-              sendEvent("done", { sessionId: sid });
-              return;
+              instPartialResolvedMsg = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
             }
           }
         }
@@ -2347,6 +2353,16 @@ export async function registerRoutes(
           sendEvent("context", { sessionId: sid, assets: [] });
           sendEvent("token", { text: ordinalErrMsg });
           await storage.appendEdenMessage(sid, { role: "assistant", content: ordinalErrMsg, assetIds: [], assets: [] });
+          sendEvent("done", { sessionId: sid });
+          return;
+        }
+
+        // ── Institution partial-resolution error (after d/e have run) ─────
+        // Only surfaces when steps d/e also failed to produce 2 assets.
+        if (compareIds.length < 2 && instPartialResolvedMsg) {
+          sendEvent("context", { sessionId: sid, assets: [] });
+          sendEvent("token", { text: instPartialResolvedMsg });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: instPartialResolvedMsg, assetIds: [], assets: [] });
           sendEvent("done", { sessionId: sid });
           return;
         }
