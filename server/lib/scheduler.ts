@@ -168,8 +168,10 @@ export function startScheduler(): { ok: boolean; message: string } {
   if (isIngestionRunning()) {
     return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
   }
-
+  // Eagerly persist the running state so a crash immediately after Start still
+  // restores correctly on next boot instead of reverting to paused.
   schedulerState = "running";
+  persistState();
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
     console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
