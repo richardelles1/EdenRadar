@@ -37,8 +37,18 @@ export type SessionFocusContext = {
   institution?: string;
 };
 
+// In-session engagement signals: tracks which modalities/indications the user
+// has engaged with across turns (frequency-weighted, resets on focus clear).
+export type EngagementSignals = {
+  modalities: Record<string, number>;   // canonical modality → frequency count
+  indications: Record<string, number>;  // indication keyword → frequency count
+};
+
 // In-memory session focus store (ephemeral — fine for this use case)
 const _sessionFocusMap = new Map<string, SessionFocusContext>();
+
+// In-memory engagement signal store (parallel to focus map)
+const _sessionEngagementMap = new Map<string, EngagementSignals>();
 
 // ── Vocabulary tables ─────────────────────────────────────────────────────
 
@@ -300,10 +310,41 @@ function extractFocusUpdates(message: string, current: SessionFocusContext, port
   return { ...current, ...newFilters };
 }
 
+// ── In-session engagement signal management ───────────────────────────────
+
+export function getEngagementSignals(sessionId: string): EngagementSignals {
+  return _sessionEngagementMap.get(sessionId) ?? { modalities: {}, indications: {} };
+}
+
+export function updateEngagementSignals(
+  sessionId: string,
+  assets: Array<{ modality?: string | null; indication?: string | null }>
+): void {
+  const current = _sessionEngagementMap.get(sessionId) ?? { modalities: {}, indications: {} };
+  for (const a of assets) {
+    if (a.modality && a.modality !== "unknown") {
+      current.modalities[a.modality] = (current.modalities[a.modality] ?? 0) + 1;
+    }
+    if (a.indication && a.indication !== "unknown") {
+      current.indications[a.indication] = (current.indications[a.indication] ?? 0) + 1;
+    }
+  }
+  _sessionEngagementMap.set(sessionId, current);
+}
+
+export function clearEngagementSignals(sessionId: string): void {
+  _sessionEngagementMap.delete(sessionId);
+}
+
 export function getOrUpdateSessionFocus(sessionId: string, message: string, portfolioInstitutions?: string[]): SessionFocusContext {
   const current = _sessionFocusMap.get(sessionId) ?? {};
   const updated = extractFocusUpdates(message, current, portfolioInstitutions);
   _sessionFocusMap.set(sessionId, updated);
+  // When focus transitions from non-empty → empty (explicit reset), also reset
+  // adaptive engagement signals so ranking returns to profile-only baseline.
+  if (Object.keys(updated).length === 0 && Object.keys(current).length > 0) {
+    clearEngagementSignals(sessionId);
+  }
   return updated;
 }
 
@@ -816,18 +857,39 @@ function buildContext(assets: RetrievedAsset[]): string {
     .join("\n\n");
 }
 
-// ── User-profile reranking ────────────────────────────────────────────────
-export function rerankAssets(assets: RetrievedAsset[], userContext?: UserContext): RetrievedAsset[] {
+// ── User-profile reranking (with optional adaptive engagement tier) ────────
+//
+// Tier 1 (static profile): modality match +3, indication match +2
+// Tier 2 (adaptive, additive): modality match +Math.min(2, freq), indication +Math.min(1, freq)
+// Only applied when assets.length > LIMIT so top-N selection is meaningful.
+export function rerankAssets(
+  assets: RetrievedAsset[],
+  userContext?: UserContext,
+  engagementSignals?: EngagementSignals
+): RetrievedAsset[] {
   const LIMIT = 8;
-  if (!userContext || assets.length <= LIMIT) return assets.slice(0, LIMIT);
 
-  const preferredModalities = (userContext.modalities ?? []).map((m) => m.toLowerCase());
-  const preferredAreas = (userContext.therapeuticAreas ?? []).map((a) => a.toLowerCase());
+  const preferredModalities = (userContext?.modalities ?? []).map((m) => m.toLowerCase());
+  const preferredAreas = (userContext?.therapeuticAreas ?? []).map((a) => a.toLowerCase());
 
-  if (!preferredModalities.length && !preferredAreas.length) return assets.slice(0, LIMIT);
+  const engagedModalities = Object.entries(engagementSignals?.modalities ?? {}).map(
+    ([m, count]) => ({ key: m.toLowerCase(), count })
+  );
+  const engagedIndications = Object.entries(engagementSignals?.indications ?? {}).map(
+    ([ind, count]) => ({ key: ind.toLowerCase(), count })
+  );
+
+  const hasProfileBoosts = preferredModalities.length > 0 || preferredAreas.length > 0;
+  const hasEngagementBoosts = engagedModalities.length > 0 || engagedIndications.length > 0;
+
+  if (assets.length <= LIMIT && !hasProfileBoosts && !hasEngagementBoosts) {
+    return assets.slice(0, LIMIT);
+  }
 
   const scored = assets.map((a) => {
     let boost = 0;
+
+    // Tier 1: static user-profile boost
     if (a.modality && a.modality !== "unknown") {
       const m = a.modality.toLowerCase();
       if (preferredModalities.some((pm) => m.includes(pm) || pm.includes(m))) boost += 3;
@@ -836,6 +898,19 @@ export function rerankAssets(assets: RetrievedAsset[], userContext?: UserContext
       const ind = a.indication.toLowerCase();
       if (preferredAreas.some((pa) => ind.includes(pa) || pa.includes(ind))) boost += 2;
     }
+
+    // Tier 2: adaptive in-session engagement boost (smaller, capped)
+    if (a.modality && a.modality !== "unknown") {
+      const m = a.modality.toLowerCase();
+      const match = engagedModalities.find((em) => m.includes(em.key) || em.key.includes(m));
+      if (match) boost += Math.min(2, match.count);
+    }
+    if (a.indication && a.indication !== "unknown") {
+      const ind = a.indication.toLowerCase();
+      const match = engagedIndications.find((ei) => ind.includes(ei.key) || ei.key.includes(ind));
+      if (match) boost += Math.min(1, match.count);
+    }
+
     return { asset: a, boost };
   });
 

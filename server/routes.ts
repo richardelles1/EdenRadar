@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, getEngagementSignals, updateEngagementSignals, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2328,8 +2328,9 @@ export async function registerRoutes(
         ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
       ].slice(0, 15);
 
-      // User-profile reranking (top 8 profile-boosted from up to 15 candidates)
-      const retrieved = rerankAssets(merged, ctx);
+      // User-profile + adaptive engagement reranking (top 8 from up to 15 candidates)
+      const engagementSignals = getEngagementSignals(sid);
+      const retrieved = rerankAssets(merged, ctx, engagementSignals);
 
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
@@ -2349,6 +2350,8 @@ export async function registerRoutes(
         // Store exactly last 3 IDs for turn-memory contract (ordinal back-refs: first/second/third)
         assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
+      // Update in-session adaptive signals with the top-3 shown assets
+      updateEngagementSignals(sid, retrieved.slice(0, 3));
 
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {
