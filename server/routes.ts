@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, getEngagementSignals, updateEngagementSignals, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2103,6 +2103,12 @@ export async function registerRoutes(
       // ── Session focus context + filter extraction ──────────────────────────
       // Pass portfolio institution names so pass-2 detected institutions persist to focusContext
       const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
+      // Explicit reset: when focus was already empty and the user says "start fresh",
+      // getOrUpdateSessionFocus does not detect a non-empty → empty transition.
+      // Call markEngagementReset directly so adaptive signals are cleared regardless.
+      if (isEngagementResetMessage(message.trim()) && Object.keys(focusContext).length === 0) {
+        markEngagementReset(sid);
+      }
       const filters = parseQueryFilters(message.trim(), focusContext);
 
       // Override filters.institution with two-pass detection if not already set.
@@ -2328,8 +2334,9 @@ export async function registerRoutes(
         ...allSemantic.filter((a) => a.similarity > threshold && !institutionIds.has(a.id)),
       ].slice(0, 15);
 
-      // User-profile + adaptive engagement reranking (top 8 from up to 15 candidates)
-      const engagementSignals = getEngagementSignals(sid);
+      // Derive engagement signals from session message history (includes back-refs
+      // and follow-up turns already persisted to DB) then rerank with profile + adaptive tiers.
+      const engagementSignals = deriveEngagementSignals(sid, session.messages ?? []);
       const retrieved = rerankAssets(merged, ctx, engagementSignals);
 
       const assetPayload = retrieved.map((a) => ({
@@ -2350,8 +2357,6 @@ export async function registerRoutes(
         // Store exactly last 3 IDs for turn-memory contract (ordinal back-refs: first/second/third)
         assetIds: retrieved.slice(0, 3).map((a) => a.id), assets: assetPayload,
       });
-      // Update in-session adaptive signals with the top-3 shown assets
-      updateEngagementSignals(sid, retrieved.slice(0, 3));
 
       sendEvent("done", { sessionId: sid });
     } catch (err: unknown) {

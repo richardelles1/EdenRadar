@@ -38,17 +38,34 @@ export type SessionFocusContext = {
 };
 
 // In-session engagement signals: tracks which modalities/indications the user
-// has engaged with across turns (frequency-weighted, resets on focus clear).
+// has engaged with across turns (frequency-weighted, resets on explicit clear).
 export type EngagementSignals = {
   modalities: Record<string, number>;   // canonical modality → frequency count
   indications: Record<string, number>;  // indication keyword → frequency count
 };
 
+// Minimal shape of a stored session message (matches edenSessions.messages jsonb)
+type SessionMessage = {
+  role: "user" | "assistant";
+  content: string;
+  assetIds?: number[];
+  assets?: Array<{
+    id: number;
+    assetName: string;
+    institution: string;
+    indication: string;
+    modality: string;
+    developmentStage?: string;
+  }>;
+  ts: string;
+};
+
 // In-memory session focus store (ephemeral — fine for this use case)
 const _sessionFocusMap = new Map<string, SessionFocusContext>();
 
-// In-memory engagement signal store (parallel to focus map)
-const _sessionEngagementMap = new Map<string, EngagementSignals>();
+// Per-session reset timestamps: engagement signals derived from history only
+// count messages whose ts is AFTER the last reset for that session (ms epoch).
+const _sessionResetMap = new Map<string, number>();
 
 // ── Vocabulary tables ─────────────────────────────────────────────────────
 
@@ -311,39 +328,70 @@ function extractFocusUpdates(message: string, current: SessionFocusContext, port
 }
 
 // ── In-session engagement signal management ───────────────────────────────
+//
+// Signals are derived fresh from stored session message history at each query.
+// This means engagement is correctly inferred from back-references and follow-ups
+// (which the DB already persists as assistant messages with assets arrays) and
+// is consistent with server restarts since it reads from durable storage.
+//
+// Reset is handled by recording a per-session "reset timestamp" in memory. When
+// deriving signals, messages with ts < resetAt are excluded, so new turns build
+// a clean engagement baseline.
 
-export function getEngagementSignals(sessionId: string): EngagementSignals {
-  return _sessionEngagementMap.get(sessionId) ?? { modalities: {}, indications: {} };
+export function markEngagementReset(sessionId: string): void {
+  _sessionResetMap.set(sessionId, Date.now());
 }
 
-export function updateEngagementSignals(
+// Derive engagement signals from stored session message history.
+// Only scans assistant messages (which carry the `assets` field) after any
+// active reset timestamp for this session, so "start fresh" commands work.
+export function deriveEngagementSignals(
   sessionId: string,
-  assets: Array<{ modality?: string | null; indication?: string | null }>
-): void {
-  const current = _sessionEngagementMap.get(sessionId) ?? { modalities: {}, indications: {} };
-  for (const a of assets) {
-    if (a.modality && a.modality !== "unknown") {
-      current.modalities[a.modality] = (current.modalities[a.modality] ?? 0) + 1;
-    }
-    if (a.indication && a.indication !== "unknown") {
-      current.indications[a.indication] = (current.indications[a.indication] ?? 0) + 1;
+  messages: SessionMessage[]
+): EngagementSignals {
+  const resetAt = _sessionResetMap.get(sessionId) ?? 0;
+  const signals: EngagementSignals = { modalities: {}, indications: {} };
+
+  for (const msg of messages) {
+    if (msg.role !== "assistant") continue;
+    if (!msg.assets?.length) continue;
+    // Skip messages that predate the last explicit reset
+    const msgTs = msg.ts ? new Date(msg.ts).getTime() : 0;
+    if (resetAt > 0 && msgTs < resetAt) continue;
+
+    for (const a of msg.assets) {
+      if (a.modality && a.modality !== "unknown") {
+        signals.modalities[a.modality] = (signals.modalities[a.modality] ?? 0) + 1;
+      }
+      if (a.indication && a.indication !== "unknown") {
+        signals.indications[a.indication] = (signals.indications[a.indication] ?? 0) + 1;
+      }
     }
   }
-  _sessionEngagementMap.set(sessionId, current);
+
+  return signals;
 }
 
-export function clearEngagementSignals(sessionId: string): void {
-  _sessionEngagementMap.delete(sessionId);
+// Export the reset pattern test so the route handler can detect resets even
+// when session focus is already empty (which avoids the non-empty → empty guard
+// in getOrUpdateSessionFocus).
+export function isEngagementResetMessage(message: string): boolean {
+  const PURE_RESET = [
+    /\b(?:start fresh|start over|reset|clear filters?|new search|forget that|remove filter|show everything|all assets?|no filter|broaden)\b/i,
+    /\b(?:never ?mind|ignore (?:that|the filter))\b/i,
+  ];
+  const PIVOT = [/\b(?:actually|scratch that|let'?s try something different|instead let'?s)\b/i];
+  return PURE_RESET.some((r) => r.test(message)) || PIVOT.some((r) => r.test(message));
 }
 
 export function getOrUpdateSessionFocus(sessionId: string, message: string, portfolioInstitutions?: string[]): SessionFocusContext {
   const current = _sessionFocusMap.get(sessionId) ?? {};
   const updated = extractFocusUpdates(message, current, portfolioInstitutions);
   _sessionFocusMap.set(sessionId, updated);
-  // When focus transitions from non-empty → empty (explicit reset), also reset
-  // adaptive engagement signals so ranking returns to profile-only baseline.
+  // When focus transitions from non-empty → empty (explicit reset), mark
+  // the engagement reset timestamp so ranking returns to profile-only baseline.
   if (Object.keys(updated).length === 0 && Object.keys(current).length > 0) {
-    clearEngagementSignals(sessionId);
+    markEngagementReset(sessionId);
   }
   return updated;
 }
