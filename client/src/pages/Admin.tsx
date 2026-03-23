@@ -983,51 +983,71 @@ function DataHealth({ pw }: { pw: string }) {
 
         <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="scheduler-strip">
           <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <button onClick={() => setSchedulerOpen((v) => !v)} className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity">
+            <div className="flex items-center gap-3 min-w-0">
+              <button onClick={() => setSchedulerOpen((v) => !v)} className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity flex-shrink-0">
                 <Activity className="w-4 h-4 text-primary" />
-                <span className="font-semibold text-foreground text-sm">Sequential Sync</span>
+                <span className="font-semibold text-foreground text-sm">Scheduler</span>
               </button>
-              {sched.state === "idle" && sched.lastCycleCompletedAt && (
-                <span className="text-[11px] text-muted-foreground/60">Last full cycle: {relativeTime(sched.lastCycleCompletedAt)}</span>
+
+              {/* Always-visible status pill */}
+              {schedRunning ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-running">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Running
+                </span>
+              ) : schedPaused ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-paused">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Paused
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/50 border border-border rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-idle">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/40" />
+                  Idle
+                </span>
               )}
-              {sched.state === "idle" && !sched.lastCycleCompletedAt && (
-                <span className="text-[11px] text-muted-foreground/60">No cycles completed yet</span>
+
+              {/* Activity detail */}
+              {(sched.state === "idle" || schedPaused) && sched.lastCycleCompletedAt && (
+                <span className="text-[11px] text-muted-foreground/60 hidden sm:inline">Last full cycle: {relativeTime(sched.lastCycleCompletedAt)}</span>
+              )}
+              {(sched.state === "idle" || schedPaused) && !sched.lastCycleCompletedAt && (
+                <span className="text-[11px] text-muted-foreground/60 hidden sm:inline">No cycles completed yet</span>
+              )}
+              {schedPaused && (
+                <span className="text-[11px] text-amber-600/70 hidden sm:inline">{sched.queuePosition}/{sched.queueTotal}</span>
               )}
               {schedRunning && (sched.currentInstitutions ?? []).length > 0 && (
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1 min-w-0">
                   {(sched.currentInstitutions ?? [sched.currentInstitution]).filter(Boolean).map((inst) => (
-                    <Badge key={inst} variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                    <Badge key={inst} variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10 max-w-[140px] truncate">
+                      <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
                       {inst}
                     </Badge>
                   ))}
                 </div>
               )}
               {schedRunning && (sched.currentInstitutions ?? []).length === 0 && !sched.currentInstitution && (
-                <span className="text-xs text-blue-600 font-medium">Waiting for next...</span>
-              )}
-              {schedPaused && (
-                <span className="text-xs text-amber-600 font-medium">Paused at {sched.queuePosition}/{sched.queueTotal}</span>
+                <span className="text-xs text-blue-600/70">Waiting for next...</span>
               )}
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-shrink-0">
               {schedRunning ? (
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs border-amber-500/30 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950"
+                  className="h-8 text-xs border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 font-medium"
                   onClick={() => schedulerPauseMutation.mutate()}
                   disabled={schedulerPauseMutation.isPending}
                   data-testid="button-pause-scheduler"
                 >
-                  <AlertCircle className="w-3 h-3 mr-1" />
+                  {schedulerPauseMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <AlertCircle className="w-3 h-3 mr-1" />}
                   Pause
                 </Button>
               ) : (
                 <Button
                   size="sm"
-                  className="h-8 text-sm bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-transform"
+                  className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95 transition-transform font-medium"
                   onClick={() => schedulerStartMutation.mutate()}
                   disabled={schedulerStartMutation.isPending}
                   data-testid="button-start-scheduler"
@@ -1037,7 +1057,7 @@ function DataHealth({ pw }: { pw: string }) {
                   ) : (
                     <Zap className="w-3 h-3 mr-1" />
                   )}
-                  {schedPaused ? "Resume" : "Start Cycle"}
+                  {schedPaused ? "Resume" : "Start"}
                 </Button>
               )}
             </div>

@@ -8,6 +8,7 @@ export interface SchedulerStateRow {
   completedThisCycle: number;
   failedThisCycle: number;
   lastCycleCompletedAt: Date | null;
+  schedulerRunning: boolean;
 }
 
 export interface ScraperHealthRow {
@@ -25,8 +26,8 @@ const BACKOFF_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
 export async function saveSchedulerState(state: SchedulerStateRow): Promise<void> {
   try {
     await db.execute(sql`
-      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, updated_at)
-      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, NOW())
+      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, scheduler_running, updated_at)
+      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, ${state.schedulerRunning}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         queue_index = EXCLUDED.queue_index,
         cycle_count = EXCLUDED.cycle_count,
@@ -34,6 +35,7 @@ export async function saveSchedulerState(state: SchedulerStateRow): Promise<void
         completed_this_cycle = EXCLUDED.completed_this_cycle,
         failed_this_cycle = EXCLUDED.failed_this_cycle,
         last_cycle_completed_at = EXCLUDED.last_cycle_completed_at,
+        scheduler_running = EXCLUDED.scheduler_running,
         updated_at = NOW()
     `);
   } catch (err: any) {
@@ -53,6 +55,7 @@ export async function loadSchedulerState(): Promise<SchedulerStateRow | null> {
       completedThisCycle: Number(row.completed_this_cycle ?? 0),
       failedThisCycle: Number(row.failed_this_cycle ?? 0),
       lastCycleCompletedAt: row.last_cycle_completed_at ? new Date(row.last_cycle_completed_at) : null,
+      schedulerRunning: row.scheduler_running === true || row.scheduler_running === 't' || row.scheduler_running === 'true',
     };
   } catch (err: any) {
     console.warn(`[scraperState] loadSchedulerState failed: ${err?.message}`);

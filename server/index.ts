@@ -289,9 +289,11 @@ app.use((req, res, next) => {
         completed_this_cycle INTEGER NOT NULL DEFAULT 0,
         failed_this_cycle INTEGER NOT NULL DEFAULT 0,
         last_cycle_completed_at TIMESTAMP,
+        scheduler_running BOOLEAN NOT NULL DEFAULT false,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS scheduler_running BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS scraper_health (
         institution TEXT PRIMARY KEY,
@@ -410,17 +412,24 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  // ── Restore scheduler state from DB, then auto-start ────────────────────
+  // ── Restore scheduler state from DB ──────────────────────────────────────
+  // Only auto-resume if the scheduler was actively running when the server last
+  // shut down (crash recovery). If it was paused — or there is no saved state —
+  // leave it paused so the admin has full control.
   try {
-    await loadAndRestoreScheduler();
-    const started = startScheduler();
-    if (started.ok) {
-      log("[startup] Scheduler auto-started after state restore", "startup");
+    const wasRunning = await loadAndRestoreScheduler();
+    if (wasRunning) {
+      const started = startScheduler();
+      if (started.ok) {
+        log("[startup] Scheduler auto-resumed (was running before restart)", "startup");
+      } else {
+        log(`[startup] Scheduler resume skipped: ${started.message}`, "startup");
+      }
     } else {
-      log(`[startup] Scheduler not auto-started: ${started.message}`, "startup");
+      log("[startup] Scheduler paused — press Start in the Admin panel to begin syncing", "startup");
     }
   } catch (err: any) {
-    log(`[startup] Scheduler restore/start failed: ${err?.message}`, "startup");
+    log(`[startup] Scheduler restore failed: ${err?.message}`, "startup");
   }
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"

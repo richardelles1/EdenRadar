@@ -75,6 +75,7 @@ function persistState(): void {
     completedThisCycle,
     failedThisCycle,
     lastCycleCompletedAt,
+    schedulerRunning: schedulerState === "running",
   }).catch(() => {});
 }
 
@@ -127,15 +128,16 @@ export function setDelay(ms: number): { ok: boolean; message: string } {
   return { ok: true, message: `Delay set to ${ms}ms` };
 }
 
-export async function loadAndRestoreScheduler(): Promise<void> {
+/** Restores scheduler state from DB. Returns true if the scheduler was running when the server last shut down (so the caller can decide to auto-resume). */
+export async function loadAndRestoreScheduler(): Promise<boolean> {
   try {
     scraperHealthCache = await loadAllScraperHealth();
     console.log(`[scheduler] Loaded health data for ${scraperHealthCache.size} institutions`);
 
     const saved = await loadSchedulerState();
     if (!saved) {
-      console.log("[scheduler] No saved state found — starting fresh when triggered");
-      return;
+      console.log("[scheduler] No saved state — scheduler will wait for manual Start");
+      return false;
     }
 
     queueIndex = saved.queueIndex;
@@ -145,9 +147,12 @@ export async function loadAndRestoreScheduler(): Promise<void> {
     failedThisCycle = saved.failedThisCycle;
     lastCycleCompletedAt = saved.lastCycleCompletedAt;
 
-    console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${getInstitutionQueue().length}`);
+    const wasRunning = saved.schedulerRunning;
+    console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${getInstitutionQueue().length}, was ${wasRunning ? "running" : "paused"}`);
+    return wasRunning;
   } catch (err: any) {
     console.warn(`[scheduler] Failed to restore state: ${err?.message}`);
+    return false;
   }
 }
 
