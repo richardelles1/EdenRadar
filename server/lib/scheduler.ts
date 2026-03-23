@@ -51,6 +51,11 @@ function getInstitutionQueue(): string[] {
   return ALL_SCRAPERS.map((s) => s.institution);
 }
 
+// Playwright scraper audit (all 11 confirmed via chromium.launch grep across all scraper files):
+// cwru.ts, gatech.ts, Leeds, Fred Hutchinson, Moffitt, UniQuest (Queensland), NUS Enterprise,
+// TechLink (DoD), Ghent University (researchportal.be), UCL Business, Cancer Research Horizons.
+// Leeds has 2 internal chromium.launch calls (licensor + TechPublisher) but is one scraper object.
+// All above carry scraperType: "playwright" → 720s timeout; everything else defaults to "http" (90s) or "api" (3m).
 function getScraperType(institution: string): "playwright" | "http" | "api" {
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
   return scraper?.scraperType ?? "http";
@@ -323,8 +328,10 @@ async function runOne(institution: string): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
-    console.log(`[scheduler] Could not acquire lock for ${institution}, skipping`);
-    failedThisCycle++;
+    // Lock contention (e.g. manual sync still running) — deferred, not a scraper failure.
+    // Increment skipped so stats are accurate; do NOT touch health or backoff counter.
+    console.log(`[scheduler] Lock unavailable for ${institution} — deferring (skipped, not failed)`);
+    skippedThisCycle++;
     return;
   }
 
