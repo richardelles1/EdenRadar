@@ -156,26 +156,39 @@ export function detectInstitutionName(query: string, portfolioInstitutions?: str
 // Like detectInstitutionName but returns ALL institutions mentioned in the query.
 // Uses the same two-pass approach (alias patterns first, then portfolio substring scan)
 // so abbreviations like MIT, UCSF, WUSTL are handled correctly.
+// Dedup is unified: canonical names from pass 1 are also stored in the seen set
+// under their lowercase key so pass 2 cannot re-add a portfolio variant of the
+// same institution (e.g., "Washington University" already resolved from WUSTL pattern
+// will block "washington university" substring match in pass 2).
 export function detectAllInstitutionNames(query: string, portfolioInstitutions?: string[]): string[] {
   const found: string[] = [];
   const seen = new Set<string>();
-  // Pass 1: pattern-based (each match recorded by canonical name)
+  // Pass 1: pattern-based (each match recorded by canonical name; add both
+  // the canonical string and its lowercase key to prevent pass-2 re-addition)
   for (const { pattern, name } of INSTITUTION_PATTERNS) {
     if (pattern.test(query) && !seen.has(name)) {
       found.push(name);
-      seen.add(name);
+      seen.add(name);           // canonical, already lowercase in INSTITUTION_PATTERNS
     }
   }
-  // Pass 2: portfolio institution substring scan (respects length >= 4 guard)
+  // Pass 2: portfolio institution substring scan (respects length >= 4 guard).
+  // Before adding, attempt canonical normalization so that a portfolio name that
+  // aliases to an already-seen canonical key is silently skipped.
   if (portfolioInstitutions?.length) {
     const lowerQuery = query.toLowerCase();
     for (const inst of portfolioInstitutions) {
       if (!inst || inst.length < 4) continue;
       const key = inst.toLowerCase();
-      if (lowerQuery.includes(key) && !seen.has(key)) {
-        found.push(inst);
-        seen.add(key);
-      }
+      if (!lowerQuery.includes(key)) continue;
+      // Check raw key first
+      if (seen.has(key)) continue;
+      // Normalize via alias patterns to catch e.g. "Washington University of Medicine"
+      // already resolved by the WUSTL/WashU pattern in pass 1
+      const canonical = detectInstitutionName(inst);
+      if (canonical && seen.has(canonical)) continue;
+      found.push(inst);
+      seen.add(key);
+      if (canonical) seen.add(canonical);
     }
   }
   return found;
