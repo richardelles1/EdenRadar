@@ -2297,44 +2297,74 @@ export async function registerRoutes(
         }
 
         // ── Step c: institution-qualified resolution ───────────────────────
-        // detectAllInstitutionNames returns canonical forms (e.g., "washington university")
-        // for ALL institutions mentioned. Asset institution labels (e.g., "WUSTL") are
-        // canonicalized via detectInstitutionName for bidirectional alias matching.
-        // When >= 2 institutions are explicitly named but < 2 resolve → terminal error
-        // naming the unresolved institution, because the user gave us something concrete.
+        // detectAllInstitutionNames returns canonical forms ("washington university",
+        // "mit", etc.) for all institutions mentioned in the query.
+        // Resolution is two-pass per institution:
+        //   1. Session history — checks allPriorAssetPayloads with bidirectional
+        //      canonical normalization so "WUSTL" matches "washington university".
+        //   2. Portfolio semantic search — embeds "institution + query" and
+        //      filters results by institution name; lets "compare the MIT CAR-T
+        //      to the Stanford one" work on a fresh session.
+        // Partial resolution (1 found, 1 missing after both passes) → terminal error.
         if (compareIds.length < 2 && !terminalError) {
           const mentionedInsts = detectAllInstitutionNames(message.trim(), portfolioInstitutionNames);
           if (mentionedInsts.length >= 2) {
             hasExplicitRefs = true;
             const instMatched: number[] = [];
             let firstUnresolved: string | null = null;
+
+            // Helper: check if an asset's institution matches a canonical key
+            const institutionMatches = (institution: string | null | undefined, instKey: string): boolean => {
+              if (!institution) return false;
+              const aInstLower = institution.toLowerCase();
+              if (aInstLower.includes(instKey)) return true;
+              const canonical = detectInstitutionName(institution) ?? "";
+              return canonical === instKey;
+            };
+
             for (const inst of mentionedInsts.slice(0, 3)) {
               const instKey = inst.toLowerCase();
-              const match = allPriorAssetPayloads.find((a) => {
-                if (!a.institution) return false;
-                const aInstLower = a.institution.toLowerCase();
-                // Direct substring (e.g., "stanford" in "Stanford University")
-                if (aInstLower.includes(instKey)) return true;
-                // Canonical alias match — maps WUSTL → "washington university" for comparison
-                const canonical = detectInstitutionName(a.institution) ?? "";
-                return canonical === instKey;
-              });
-              if (match && !instMatched.includes(match.id)) {
-                instMatched.push(match.id);
-              } else if (!firstUnresolved) {
+
+              // Pass 1: session history
+              const sessionMatch = allPriorAssetPayloads.find((a) => institutionMatches(a.institution, instKey));
+              if (sessionMatch && !instMatched.includes(sessionMatch.id)) {
+                instMatched.push(sessionMatch.id);
+                continue;
+              }
+
+              // Pass 2: portfolio-level semantic search with institution context
+              let portfolioResolved = false;
+              try {
+                const instQueryText = `${inst} ${message.trim()}`;
+                const instEmbedding = await embedQuery(instQueryText);
+                const instHits = await storage.semanticSearch(instEmbedding, 8);
+                const portfolioHit = instHits.find(
+                  (h) => institutionMatches(h.institution, instKey) && !instMatched.includes(h.id)
+                );
+                if (portfolioHit) {
+                  instMatched.push(portfolioHit.id);
+                  portfolioResolved = true;
+                }
+              } catch (instSearchErr) {
+                console.warn("[eden/comparative] institution portfolio search failed:", (instSearchErr as Error)?.message);
+              }
+
+              if (!portfolioResolved && !firstUnresolved) {
                 firstUnresolved = inst;
               }
             }
+
             if (instMatched.length >= 2) {
               compareIds = instMatched;
             } else {
-              // Partial or total failure on explicit institution reference → terminal error
+              // Both session history and portfolio search could not resolve ≥2 institutions
               if (instMatched.length === 1 && firstUnresolved) {
-                const resolvedName = allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
-                  ?? "one institution";
-                terminalError = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
+                const resolvedName = (
+                  allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
+                ) ?? mentionedInsts.find((i) => i !== firstUnresolved) ?? "one institution";
+                terminalError = `I found assets from ${resolvedName}, but couldn't locate any licensable assets from "${firstUnresolved}" in the portfolio. Try searching for that institution directly first.`;
               } else if (firstUnresolved) {
-                terminalError = `I don't have any recently shown assets from "${firstUnresolved}" to compare. Try searching for assets from that institution first.`;
+                terminalError = `I couldn't find any licensable assets from "${firstUnresolved}" in the portfolio. Try searching for that institution directly.`;
               }
             }
           }
