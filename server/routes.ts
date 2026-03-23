@@ -2234,15 +2234,22 @@ export async function registerRoutes(
           sendEvent("token", { text: token });
         }
 
-        // Portfolio lookup — find assets related to the concept
+        // Portfolio lookup — find assets related to the concept.
+        // Guard the parallel embedding promise against unhandled rejection.
         const CONCEPT_SIMILARITY_THRESHOLD = 0.50;
         let relatedAssets: import("./storage").RetrievedAsset[] = [];
         try {
-          const conceptEmbedding = await conceptEmbeddingPromise;
-          const hits = await storage.semanticSearch(conceptEmbedding, 5);
-          relatedAssets = hits
-            .filter((a) => a.similarity >= CONCEPT_SIMILARITY_THRESHOLD)
-            .slice(0, 3);
+          const conceptEmbedding = await conceptEmbeddingPromise.catch(() => null);
+          if (conceptEmbedding) {
+            const hits = await storage.semanticSearch(conceptEmbedding, 5);
+            const passing = hits.filter((a) => a.similarity >= CONCEPT_SIMILARITY_THRESHOLD);
+            // Log threshold misses so the cutoff can be tuned from real data
+            if (hits.length > 0 && passing.length === 0) {
+              const topSim = hits[0]?.similarity ?? 0;
+              console.log(`[eden/definitional] 0 hits above ${CONCEPT_SIMILARITY_THRESHOLD} threshold (top sim: ${topSim.toFixed(3)}) for: "${message.trim().slice(0, 80)}"`);
+            }
+            relatedAssets = passing.slice(0, 3);
+          }
         } catch (lookupErr) {
           console.warn("[eden/definitional] portfolio lookup failed:", (lookupErr as Error)?.message ?? lookupErr);
         }
