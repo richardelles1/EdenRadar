@@ -22,8 +22,8 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
-import { getAllScraperHealth, clearScraperBackoff } from "./lib/scraperState";
+import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry } from "./lib/scheduler";
+import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -1494,6 +1494,7 @@ export async function registerRoutes(
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const institution = decodeURIComponent(req.params.institution);
       await clearScraperBackoff(institution);
+      invalidateHealthCacheEntry(institution);  // immediate effect on scheduling decisions
       res.json({ ok: true, message: `Backoff cleared for ${institution}` });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Clear backoff failed" });
@@ -1545,9 +1546,15 @@ export async function registerRoutes(
       const sessionId = crypto.randomUUID();
       res.json({ message: "Sync started", institution, sessionId });
 
-      runInstitutionSync(institution, sessionId).catch((err) => {
-        console.error(`[sync] Background sync failed for ${institution}:`, err?.message);
-      });
+      runInstitutionSync(institution, sessionId)
+        .then(() => {
+          updateScraperHealth(institution, true).catch(() => {});
+          invalidateHealthCacheEntry(institution);
+        })
+        .catch((err) => {
+          console.error(`[sync] Background sync failed for ${institution}:`, err?.message);
+          updateScraperHealth(institution, false, err?.message).catch(() => {});
+        });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Sync failed" });
     }

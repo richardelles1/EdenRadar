@@ -187,6 +187,20 @@ export function pauseScheduler(): { ok: boolean; message: string } {
   return { ok: true, message: "Scheduler paused" };
 }
 
+/** Immediately removes an institution's backoff from the in-memory cache so scheduling decisions take effect without waiting for a cycle rollover. */
+export function invalidateHealthCacheEntry(institution: string): void {
+  const entry = scraperHealthCache.get(institution);
+  if (entry) {
+    scraperHealthCache.set(institution, {
+      ...entry,
+      consecutiveFailures: 0,
+      backoffUntil: null,
+      lastFailureReason: null,
+      lastFailureAt: null,
+    });
+  }
+}
+
 export function bumpToFront(institution: string): { ok: boolean; message: string } {
   const queue = getInstitutionQueue();
   if (!queue.includes(institution)) {
@@ -267,9 +281,13 @@ function scheduleNext(): void {
     }
   }
 
-  queueIndex = i;
+  // Do NOT advance queueIndex yet — keep it pointing to the start of this batch.
+  // Only advance after the batch fully completes so a mid-batch crash resumes from
+  // the beginning of the current batch rather than skipping unfinished institutions.
+  const nextQueueIndex = i;
 
   if (batch.length === 0) {
+    queueIndex = nextQueueIndex;
     if (queueIndex >= queue.length) {
       schedulerTimer = setTimeout(() => scheduleNext(), 500);
     } else {
@@ -282,12 +300,13 @@ function scheduleNext(): void {
   const batchStart = Date.now();
 
   if (batch.length === 1) {
-    console.log(`[scheduler] Syncing ${batch[0]} [${batchType}] (${queueIndex}/${queue.length})...`);
+    console.log(`[scheduler] Syncing ${batch[0]} [${batchType}] (${nextQueueIndex}/${queue.length})...`);
   } else {
-    console.log(`[scheduler] Batch syncing ${batch.length} institutions [http]: ${batch.join(", ")} (${queueIndex}/${queue.length})...`);
+    console.log(`[scheduler] Batch syncing ${batch.length} institutions [http]: ${batch.join(", ")} (${nextQueueIndex}/${queue.length})...`);
   }
 
   Promise.allSettled(batch.map((inst) => runOne(inst))).finally(() => {
+    queueIndex = nextQueueIndex;  // advance only after all batch members settle
     const elapsed = Date.now() - batchStart;
     syncDurations.push(Math.round(elapsed / batch.length));
     if (syncDurations.length > 20) syncDurations.shift();
