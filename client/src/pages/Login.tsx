@@ -83,7 +83,7 @@ export default function Login() {
                 <Sprout className="w-3.5 h-3.5 text-primary-foreground" />
               </div>
               <span className="font-bold text-sm text-foreground">
-                Eden<span className="text-primary">Radar</span>
+                Eden<span className="text-primary">Scout</span>
               </span>
             </div>
           </div>

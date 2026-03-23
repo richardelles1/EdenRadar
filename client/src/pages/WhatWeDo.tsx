@@ -167,7 +167,7 @@ const PORTALS = [
   },
   {
     icon: TrendingUp,
-    title: "EdenRadar",
+    title: "EdenScout",
     tier: "Tier 3",
     tagline: "Industry intelligence platform",
     color: "hsl(142 65% 48%)",
@@ -182,7 +182,7 @@ const PORTALS = [
       "EDEN-compiled dossiers and board-ready reports",
     ],
     vision:
-      "EdenRadar is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously enriched window into every major TTO on the planet.",
+      "EdenScout is the platform your BD team has always needed. Instead of cold calls and conference hallways, you get a continuously enriched window into every major TTO on the planet.",
   },
 ];
 

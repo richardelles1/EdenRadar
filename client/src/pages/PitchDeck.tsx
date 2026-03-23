@@ -1010,7 +1010,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
         </div>
         <div>
           <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
-            Eden<span style={{ color: colors.green }}>Radar</span>
+            Eden<span style={{ color: colors.green }}>Scout</span>
           </h2>
         </div>
       </div>
