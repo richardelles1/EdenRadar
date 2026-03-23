@@ -212,6 +212,7 @@ async function apiScrape(orgId: number, accessKey: string): Promise<ScrapedListi
 
 export const gatechScraper: InstitutionScraper = {
   institution: INST,
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const pwResults = await playwrightScrape();
     if (pwResults.length > 0) {

@@ -21,8 +21,9 @@ import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
-import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
+import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
 import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay } from "./lib/scheduler";
+import { getAllScraperHealth, clearScraperBackoff } from "./lib/scraperState";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -1468,6 +1469,37 @@ export async function registerRoutes(
     res.json(result);
   });
 
+  app.get("/api/admin/scraper-health", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const rows = await getAllScraperHealth();
+      const now = Date.now();
+      const enriched = rows.map((r) => ({
+        ...r,
+        lastFailureAt: r.lastFailureAt?.toISOString() ?? null,
+        lastSuccessAt: r.lastSuccessAt?.toISOString() ?? null,
+        backoffUntil: r.backoffUntil?.toISOString() ?? null,
+        inBackoff: r.backoffUntil ? r.backoffUntil.getTime() > now : false,
+      }));
+      res.json({ rows: enriched, total: enriched.length, inBackoff: enriched.filter((r) => r.inBackoff).length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch scraper health" });
+    }
+  });
+
+  app.post("/api/admin/scraper-health/:institution/clear-backoff", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const institution = decodeURIComponent(req.params.institution);
+      await clearScraperBackoff(institution);
+      res.json({ ok: true, message: `Backoff cleared for ${institution}` });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Clear backoff failed" });
+    }
+  });
+
   app.post("/api/ingest/sync/:institution/cancel", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
@@ -1486,9 +1518,7 @@ export async function registerRoutes(
         errorMessage: "Cancelled by admin (stale session)",
       });
 
-      if (isSyncRunning() && getSyncRunningFor() === institution) {
-        releaseSyncLock();
-      }
+      releaseSyncLock(institution);
 
       res.json({ ok: true, message: `Session for ${institution} cancelled` });
     } catch (err: any) {
@@ -1507,8 +1537,9 @@ export async function registerRoutes(
       const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
       if (!scraper) return res.status(404).json({ error: `No scraper found for: ${institution}` });
 
-      if (!tryAcquireSyncLock(institution)) {
-        return res.status(409).json({ error: `Sync already running for ${getSyncRunningFor()}` });
+      const scraperType = scraper.scraperType ?? "http";
+      if (!tryAcquireSyncLock(institution, scraperType)) {
+        return res.status(409).json({ error: `Sync already running or lock unavailable for ${getSyncRunningFor()}` });
       }
 
       const sessionId = crypto.randomUUID();

@@ -201,6 +201,7 @@ async function discoverApiCredentials(): Promise<{ orgId: number; accessKey: str
 
 export const cwruScraper: InstitutionScraper = {
   institution: INST,
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     // Primary: Playwright traversal of /technologies with Next-button pagination
     const pwResults = await playwrightScrape();

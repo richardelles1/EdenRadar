@@ -98,11 +98,13 @@ interface CollectorHealthRow {
 interface SchedulerStatus {
   state: "idle" | "running" | "paused";
   currentInstitution: string | null;
+  currentInstitutions: string[];
   nextInstitution: string | null;
   queuePosition: number;
   queueTotal: number;
   completedThisCycle: number;
   failedThisCycle: number;
+  skippedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
   cycleCount: number;
@@ -636,6 +638,7 @@ function DataHealth({ pw }: { pw: string }) {
   const [liveOpen, setLiveOpen] = useState(true);
   const [activeSearchOpen, setActiveSearchOpen] = useState(false);
   const [activeSearchQuery, setActiveSearchQuery] = useState("");
+  const [healthPanelOpen, setHealthPanelOpen] = useState(false);
   const lastStableOrder = useRef<string[]>([]);
   const { toast } = useToast();
 
@@ -770,6 +773,47 @@ function DataHealth({ pw }: { pw: string }) {
     },
     onError: (err: Error) => {
       toast({ title: "Pause failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  type ScraperHealthRow = {
+    institution: string;
+    consecutiveFailures: number;
+    lastFailureReason: string | null;
+    lastFailureAt: string | null;
+    lastSuccessAt: string | null;
+    backoffUntil: string | null;
+    inBackoff: boolean;
+  };
+
+  const { data: scraperHealthData, refetch: refetchScraperHealth } = useQuery<{ rows: ScraperHealthRow[]; total: number; inBackoff: number }>({
+    queryKey: ["/api/admin/scraper-health", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/scraper-health", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load scraper health");
+      return res.json();
+    },
+    enabled: healthPanelOpen,
+  });
+
+  const clearBackoffMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch(`/api/admin/scraper-health/${encodeURIComponent(institution)}/clear-backoff`, {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Failed" }));
+        throw new Error(d.error || "Clear backoff failed");
+      }
+      return res.json();
+    },
+    onSuccess: (_d, institution) => {
+      toast({ title: "Backoff cleared", description: `${institution} will be included in the next cycle` });
+      refetchScraperHealth();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Clear backoff failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -950,13 +994,17 @@ function DataHealth({ pw }: { pw: string }) {
               {sched.state === "idle" && !sched.lastCycleCompletedAt && (
                 <span className="text-[11px] text-muted-foreground/60">No cycles completed yet</span>
               )}
-              {schedRunning && sched.currentInstitution && (
-                <Badge variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  {sched.currentInstitution}
-                </Badge>
+              {schedRunning && (sched.currentInstitutions ?? []).length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {(sched.currentInstitutions ?? [sched.currentInstitution]).filter(Boolean).map((inst) => (
+                    <Badge key={inst} variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      {inst}
+                    </Badge>
+                  ))}
+                </div>
               )}
-              {schedRunning && !sched.currentInstitution && (
+              {schedRunning && (sched.currentInstitutions ?? []).length === 0 && !sched.currentInstitution && (
                 <span className="text-xs text-blue-600 font-medium">Waiting for next...</span>
               )}
               {schedPaused && (
@@ -1368,6 +1416,96 @@ function DataHealth({ pw }: { pw: string }) {
           </>
         )}
       </div>
+
+      {/* ── Scraper Health section ─────────────────────────── */}
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 border-b border-border bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+        onClick={() => setHealthPanelOpen((v) => !v)}
+        data-testid="section-scraper-health"
+      >
+        <div className="flex items-center gap-2">
+          <Server className="h-4 w-4 text-primary" />
+          <span className="font-semibold text-foreground text-sm">Scraper Health</span>
+          {scraperHealthData?.inBackoff ? (
+            <span className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
+              {scraperHealthData.inBackoff} in backoff
+            </span>
+          ) : scraperHealthData ? (
+            <span className="text-[11px] text-emerald-600/70">all active</span>
+          ) : null}
+        </div>
+        <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${healthPanelOpen ? "rotate-90" : ""}`} />
+      </button>
+
+      {healthPanelOpen && (
+        <div className="px-4 py-3" data-testid="scraper-health-panel">
+          {!scraperHealthData ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : scraperHealthData.rows.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              No failure data recorded yet. Scrapers will appear here after their first run.
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-border">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Institution</th>
+                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Failures</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Last Error</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Backoff Until</th>
+                    <th className="px-3 py-2" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {scraperHealthData.rows.map((row) => (
+                    <tr
+                      key={row.institution}
+                      className={`border-b border-border/40 last:border-0 ${row.inBackoff ? "bg-red-500/5" : row.consecutiveFailures >= 3 ? "bg-amber-500/5" : ""}`}
+                      data-testid={`scraper-health-row-${row.institution}`}
+                    >
+                      <td className="px-3 py-2 font-medium text-foreground max-w-[180px] truncate">{row.institution}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className={`font-bold tabular-nums ${row.consecutiveFailures >= 5 ? "text-red-500" : row.consecutiveFailures >= 3 ? "text-amber-500" : "text-muted-foreground"}`}>
+                          {row.consecutiveFailures}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground max-w-[260px] truncate" title={row.lastFailureReason ?? ""}>
+                        {row.lastFailureReason ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                        {row.inBackoff && row.backoffUntil
+                          ? <span className="text-red-500 font-medium">{new Date(row.backoffUntil).toLocaleDateString()}</span>
+                          : row.backoffUntil
+                            ? <span className="text-emerald-600">Expired</span>
+                            : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        {(row.inBackoff || row.consecutiveFailures > 0) && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[11px] px-2 border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+                            onClick={() => clearBackoffMutation.mutate(row.institution)}
+                            disabled={clearBackoffMutation.isPending && clearBackoffMutation.variables === row.institution}
+                            data-testid={`button-clear-backoff-${row.institution}`}
+                          >
+                            {clearBackoffMutation.isPending && clearBackoffMutation.variables === row.institution
+                              ? <Loader2 className="h-3 w-3 animate-spin" />
+                              : "Clear"}
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </>
   );
 }

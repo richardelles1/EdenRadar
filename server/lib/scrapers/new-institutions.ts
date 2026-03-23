@@ -576,6 +576,7 @@ export const olemissScraper = createTechPublisherScraper("olemiss", "University 
 // Overall cap: 120 s (DEADLINE) enforced across all strategies.
 export const leedsScraper: InstitutionScraper = {
   institution: "University of Leeds",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "University of Leeds";
     const BASE = "https://licensing.leeds.ac.uk";
@@ -3134,6 +3135,7 @@ export const foxChaseScraper: InstitutionScraper = {
 //   Verified: 61 tech-details links returned in one load (2026-03-18).
 export const fredHutchScraper: InstitutionScraper = {
   institution: "Fred Hutchinson Cancer Center",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Fred Hutchinson Cancer Center";
     const BASE = "https://www.fredhutch.org";
@@ -3220,6 +3222,7 @@ export const fredHutchScraper: InstitutionScraper = {
 // Smoke-tested: 158 listings from 4 archived categories (as of 2026-03-17).
 export const moffittScraper: InstitutionScraper = {
   institution: "Moffitt Cancer Center",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Moffitt Cancer Center";
     const MOFFITT_BASE = "https://www.moffitt.org/research-science/academic-and-industry-partnerships/office-of-innovation/available-technologies";
@@ -3875,6 +3878,7 @@ export const ghentScraper: InstitutionScraper = createStubScraper(
 // including WordPress REST API. Playwright attempt to bypass WAF.
 export const uniquestScraper: InstitutionScraper = {
   institution: "UniQuest (University of Queensland)",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "UniQuest (University of Queensland)";
     const LIST_URL = "https://uniquest.com.au/technologies/";
@@ -3965,6 +3969,7 @@ export const tuDelftScraper: InstitutionScraper = createStubScraper(
 // Playwright fallback — Incapsula may still block headless browsers.
 export const nusScraper: InstitutionScraper = {
   institution: "NUS Enterprise",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "NUS Enterprise";
     const LIST_URL = "https://enterprise.nus.edu.sg/technologies/";
@@ -4146,6 +4151,7 @@ export const nottinghamScraper = createTechPublisherScraper(
 //      collecting data from both the DOM and intercepted XHR responses.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "TechLink (DoD Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
@@ -4900,6 +4906,7 @@ export const cernKtScraper: InstitutionScraper = {
 //   Added 3-attempt retry loop in case the first attempt catches the challenge page.
 export const cancerResearchHorizonsScraper: InstitutionScraper = {
   institution: "Cancer Research Horizons",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Cancer Research Horizons";
     const BASE = "https://www.cancerresearchhorizons.com";

@@ -7,6 +7,7 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { existsSync } from "fs";
 import { execSync } from "child_process";
+import { loadAndRestoreScheduler } from "./lib/scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -277,6 +278,36 @@ app.use((req, res, next) => {
     log(`[startup] manual_institutions migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Ensure scheduler_state + scraper_health tables exist ─────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS scheduler_state (
+        id INTEGER PRIMARY KEY DEFAULT 1,
+        queue_index INTEGER NOT NULL DEFAULT 0,
+        cycle_count INTEGER NOT NULL DEFAULT 0,
+        cycle_started_at TIMESTAMP,
+        completed_this_cycle INTEGER NOT NULL DEFAULT 0,
+        failed_this_cycle INTEGER NOT NULL DEFAULT 0,
+        last_cycle_completed_at TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS scraper_health (
+        institution TEXT PRIMARY KEY,
+        consecutive_failures INTEGER NOT NULL DEFAULT 0,
+        last_failure_reason TEXT,
+        last_failure_at TIMESTAMP,
+        last_success_at TIMESTAMP,
+        backoff_until TIMESTAMP,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] scheduler_state + scraper_health tables ready", "startup");
+  } catch (err: any) {
+    log(`[startup] scheduler_state/scraper_health migration failed: ${err?.message}`, "startup");
+  }
+
   // ── Ensure research_projects + related tables exist ───────────────────────
   try {
     await db.execute(sql`
@@ -378,6 +409,13 @@ app.use((req, res, next) => {
   }
 
   await registerRoutes(httpServer, app);
+
+  // ── Restore scheduler state from DB ──────────────────────────────────────
+  try {
+    await loadAndRestoreScheduler();
+  } catch (err: any) {
+    log(`[startup] Scheduler state restore failed: ${err?.message}`, "startup");
+  }
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"
   // so the UI never shows a permanent stuck spinner after a server restart

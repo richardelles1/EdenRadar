@@ -45,8 +45,9 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     const lastRun = await storage.getLastIngestionRun();
     return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
   }
-  if (syncRunning) {
-    console.log(`[ingestion] Institution sync running for ${syncInstitution}, skipping full ingestion.`);
+  if (activeSyncs.size > 0) {
+    const first = activeSyncs.keys().next().value;
+    console.log(`[ingestion] Institution sync running for ${first}, skipping full ingestion.`);
     const lastRun = await storage.getLastIngestionRun();
     return { totalFound: lastRun?.totalFound ?? 0, newCount: lastRun?.newCount ?? 0, runId: lastRun?.id ?? 0 };
   }
@@ -208,28 +209,62 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
   }
 }
 
-let syncRunning = false;
-let syncInstitution: string | null = null;
+// ── Concurrent sync lock ──────────────────────────────────────────────────────
+// Tracks all currently active institution syncs.
+// Playwright scrapers require full exclusivity (activeSyncs.size === 0).
+// HTTP/API scrapers allow up to MAX_HTTP_CONCURRENT concurrent instances.
+
+const MAX_HTTP_CONCURRENT = 5;
+const activeSyncs: Map<string, "playwright" | "http" | "api"> = new Map();
+
+function hasPlaywrightSync(): boolean {
+  for (const type of activeSyncs.values()) {
+    if (type === "playwright") return true;
+  }
+  return false;
+}
 
 export function isSyncRunning(): boolean {
-  return syncRunning;
+  return activeSyncs.size > 0;
 }
 
 export function getSyncRunningFor(): string | null {
-  return syncInstitution;
+  const first = activeSyncs.keys().next();
+  return first.done ? null : first.value;
 }
 
-export function tryAcquireSyncLock(institution: string): boolean {
-  if (ingestionRunning || syncRunning) return false;
-  syncRunning = true;
-  syncInstitution = institution;
+export function getActiveSyncs(): string[] {
+  return Array.from(activeSyncs.keys());
+}
+
+export function tryAcquireSyncLock(institution: string, scraperType: "playwright" | "http" | "api" = "http"): boolean {
+  if (ingestionRunning) return false;
+  if (activeSyncs.has(institution)) return false;
+
+  if (scraperType === "playwright") {
+    if (activeSyncs.size > 0) return false;
+  } else {
+    if (hasPlaywrightSync()) return false;
+    if (activeSyncs.size >= MAX_HTTP_CONCURRENT) return false;
+  }
+
+  activeSyncs.set(institution, scraperType);
   return true;
 }
 
-export function releaseSyncLock(): void {
-  syncRunning = false;
-  syncInstitution = null;
+export function releaseSyncLock(institution?: string): void {
+  if (institution) {
+    activeSyncs.delete(institution);
+  } else {
+    activeSyncs.clear();
+  }
 }
+
+const TIMEOUT_BY_TYPE: Record<string, number> = {
+  playwright: 12 * 60 * 1000,
+  api: 3 * 60 * 1000,
+  http: 90 * 1000,
+};
 
 export interface SyncResult {
   sessionId: string;
@@ -241,32 +276,38 @@ export interface SyncResult {
 export async function runInstitutionSync(institutionName: string, providedSessionId?: string): Promise<SyncResult> {
   if (ingestionRunning) throw new Error("Full ingestion is running — cannot sync");
 
-  const alreadyLocked = syncRunning && syncInstitution === institutionName;
-  if (syncRunning && !alreadyLocked) throw new Error(`Sync already running for ${syncInstitution}`);
+  const alreadyLocked = activeSyncs.has(institutionName);
+  if (!alreadyLocked && activeSyncs.size > 0 && hasPlaywrightSync()) {
+    throw new Error(`A Playwright sync is running — cannot start concurrent sync`);
+  }
 
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institutionName);
   if (!scraper) throw new Error(`No scraper found for institution: ${institutionName}`);
 
+  const scraperType = scraper.scraperType ?? "http";
+
   if (!alreadyLocked) {
-    syncRunning = true;
-    syncInstitution = institutionName;
+    if (!tryAcquireSyncLock(institutionName, scraperType)) {
+      const first = getSyncRunningFor();
+      throw new Error(`Sync lock unavailable — active: ${first ?? "unknown"}`);
+    }
   }
 
   const sessionId = providedSessionId ?? crypto.randomUUID();
+  const SCRAPER_TIMEOUT_MS = TIMEOUT_BY_TYPE[scraperType] ?? TIMEOUT_BY_TYPE.http;
 
   try {
     const currentIndexed = await storage.getInstitutionIndexedCount(institutionName);
     const session = await storage.createSyncSession(sessionId, institutionName, currentIndexed);
 
-    console.log(`[sync] ${institutionName}: starting sync (${currentIndexed} currently indexed)...`);
+    console.log(`[sync] ${institutionName}: starting sync (type=${scraperType}, timeout=${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s, ${currentIndexed} currently indexed)...`);
 
-    const SCRAPER_TIMEOUT_MS = 5 * 60 * 1000;
     let listings;
     try {
       listings = await Promise.race([
         scraper.scrape(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("scraper timeout (5 min)")), SCRAPER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 60000)} min)`)), SCRAPER_TIMEOUT_MS)
         ),
       ]);
     } catch (err: any) {
@@ -387,7 +428,6 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     }
     throw err;
   } finally {
-    syncRunning = false;
-    syncInstitution = null;
+    activeSyncs.delete(institutionName);
   }
 }

@@ -1,14 +1,25 @@
 import { ALL_SCRAPERS } from "./scrapers/index";
-import { runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, isIngestionRunning, isSyncRunning } from "./ingestion";
+import { runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, isIngestionRunning, isSyncRunning, getActiveSyncs } from "./ingestion";
+import {
+  saveSchedulerState,
+  loadSchedulerState,
+  loadAllScraperHealth,
+  updateScraperHealth,
+  type ScraperHealthRow,
+} from "./scraperState";
+
+const MAX_HTTP_BATCH = 5;
 
 export interface SchedulerStatus {
   state: "idle" | "running" | "paused";
   currentInstitution: string | null;
+  currentInstitutions: string[];
   nextInstitution: string | null;
   queuePosition: number;
   queueTotal: number;
   completedThisCycle: number;
   failedThisCycle: number;
+  skippedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
   cycleCount: number;
@@ -20,28 +31,51 @@ export interface SchedulerStatus {
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
-let currentInstitution: string | null = null;
+let currentInstitutions: string[] = [];
 let queueIndex = 0;
 let completedThisCycle = 0;
 let failedThisCycle = 0;
+let skippedThisCycle = 0;
 let cycleStartedAt: Date | null = null;
 let lastActivityAt: Date | null = null;
 let schedulerTimer: ReturnType<typeof setTimeout> | null = null;
 let cycleCount = 0;
 let priorityQueue: string[] = [];
 let syncDurations: number[] = [];
-let syncStartedAt: number | null = null;
 let lastCycleCompletedAt: Date | null = null;
-
 let delayBetweenSyncsMs = 5_000;
+
+let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
 function getInstitutionQueue(): string[] {
   return ALL_SCRAPERS.map((s) => s.institution);
 }
 
+function getScraperType(institution: string): "playwright" | "http" | "api" {
+  const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
+  return scraper?.scraperType ?? "http";
+}
+
+function isInBackoff(institution: string): boolean {
+  const health = scraperHealthCache.get(institution);
+  if (!health?.backoffUntil) return false;
+  return health.backoffUntil > new Date();
+}
+
+function persistState(): void {
+  saveSchedulerState({
+    queueIndex,
+    cycleCount,
+    cycleStartedAt,
+    completedThisCycle,
+    failedThisCycle,
+    lastCycleCompletedAt,
+  }).catch(() => {});
+}
+
 export function getSchedulerStatus(): SchedulerStatus {
   const queue = getInstitutionQueue();
-  const remaining = queue.length - queueIndex + priorityQueue.length;
+  const remaining = Math.max(0, queue.length - queueIndex) + priorityQueue.length;
   const avgMs = syncDurations.length > 0
     ? Math.round(syncDurations.reduce((a, b) => a + b, 0) / syncDurations.length)
     : null;
@@ -53,17 +87,22 @@ export function getSchedulerStatus(): SchedulerStatus {
   if (priorityQueue.length > 0) {
     nextInst = priorityQueue[0];
   } else if (queueIndex < queue.length) {
-    nextInst = currentInstitution ? (queue[queueIndex + 1] ?? queue[0]) : queue[queueIndex];
+    nextInst = queue[queueIndex];
+    if (currentInstitutions.includes(nextInst)) {
+      nextInst = queue[queueIndex + currentInstitutions.length] ?? null;
+    }
   }
 
   return {
     state: schedulerState,
-    currentInstitution,
+    currentInstitution: currentInstitutions[0] ?? null,
+    currentInstitutions: [...currentInstitutions],
     nextInstitution: nextInst,
     queuePosition: queueIndex,
     queueTotal: queue.length,
     completedThisCycle,
     failedThisCycle,
+    skippedThisCycle,
     cycleStartedAt: cycleStartedAt?.toISOString() ?? null,
     lastActivityAt: lastActivityAt?.toISOString() ?? null,
     cycleCount,
@@ -83,6 +122,30 @@ export function setDelay(ms: number): { ok: boolean; message: string } {
   return { ok: true, message: `Delay set to ${ms}ms` };
 }
 
+export async function loadAndRestoreScheduler(): Promise<void> {
+  try {
+    scraperHealthCache = await loadAllScraperHealth();
+    console.log(`[scheduler] Loaded health data for ${scraperHealthCache.size} institutions`);
+
+    const saved = await loadSchedulerState();
+    if (!saved) {
+      console.log("[scheduler] No saved state found — starting fresh when triggered");
+      return;
+    }
+
+    queueIndex = saved.queueIndex;
+    cycleCount = saved.cycleCount;
+    cycleStartedAt = saved.cycleStartedAt;
+    completedThisCycle = saved.completedThisCycle;
+    failedThisCycle = saved.failedThisCycle;
+    lastCycleCompletedAt = saved.lastCycleCompletedAt;
+
+    console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${getInstitutionQueue().length}`);
+  } catch (err: any) {
+    console.warn(`[scheduler] Failed to restore state: ${err?.message}`);
+  }
+}
+
 export function startScheduler(): { ok: boolean; message: string } {
   if (schedulerState === "running") {
     return { ok: false, message: "Scheduler is already running" };
@@ -92,16 +155,20 @@ export function startScheduler(): { ok: boolean; message: string } {
   }
 
   schedulerState = "running";
-  if (schedulerState === "running" && cycleStartedAt && queueIndex < getInstitutionQueue().length) {
+
+  if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
     console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
   } else {
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
+    skippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
     console.log(`[scheduler] Started cycle #${cycleCount} — ${getInstitutionQueue().length} institutions`);
   }
+
+  loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
   scheduleNext();
   return { ok: true, message: "Scheduler started" };
 }
@@ -115,6 +182,7 @@ export function pauseScheduler(): { ok: boolean; message: string } {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
   }
+  persistState();
   console.log(`[scheduler] Paused at position ${queueIndex}/${getInstitutionQueue().length}`);
   return { ok: true, message: "Scheduler paused" };
 }
@@ -133,24 +201,22 @@ export function bumpToFront(institution: string): { ok: boolean; message: string
 function scheduleNext(): void {
   if (schedulerState !== "running") return;
 
-  if (isSyncRunning() || isIngestionRunning()) {
+  if (isIngestionRunning()) {
     schedulerTimer = setTimeout(() => scheduleNext(), 10_000);
     return;
   }
 
   if (priorityQueue.length > 0) {
     const institution = priorityQueue.shift()!;
-    currentInstitution = institution;
-    syncStartedAt = Date.now();
+    currentInstitutions = [institution];
     console.log(`[scheduler] Priority sync: ${institution}`);
+    const batchStart = Date.now();
     runOne(institution).finally(() => {
-      if (syncStartedAt) {
-        syncDurations.push(Date.now() - syncStartedAt);
-        if (syncDurations.length > 20) syncDurations.shift();
-        syncStartedAt = null;
-      }
-      currentInstitution = null;
+      syncDurations.push(Date.now() - batchStart);
+      if (syncDurations.length > 20) syncDurations.shift();
+      currentInstitutions = [];
       lastActivityAt = new Date();
+      persistState();
       if (schedulerState === "running") {
         schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
       }
@@ -159,30 +225,75 @@ function scheduleNext(): void {
   }
 
   const queue = getInstitutionQueue();
+
   if (queueIndex >= queue.length) {
-    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} succeeded, ${failedThisCycle} failed. Starting next cycle...`);
+    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (backoff). Starting next cycle...`);
     lastCycleCompletedAt = new Date();
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
+    skippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
+    persistState();
+    loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
   }
 
-  const institution = queue[queueIndex];
-  currentInstitution = institution;
-  syncStartedAt = Date.now();
+  const batch: string[] = [];
+  let batchType: "playwright" | "http" | "api" = "http";
+  let i = queueIndex;
 
-  runOne(institution).finally(() => {
-    if (syncStartedAt) {
-      syncDurations.push(Date.now() - syncStartedAt);
-      if (syncDurations.length > 20) syncDurations.shift();
-      syncStartedAt = null;
+  while (i < queue.length) {
+    const inst = queue[i];
+    i++;
+
+    if (isInBackoff(inst)) {
+      skippedThisCycle++;
+      continue;
     }
-    queueIndex++;
-    currentInstitution = null;
-    lastActivityAt = new Date();
 
+    const type = getScraperType(inst);
+
+    if (type === "playwright") {
+      if (batch.length === 0) {
+        batch.push(inst);
+        batchType = "playwright";
+      }
+      break;
+    } else {
+      batch.push(inst);
+      batchType = type;
+      if (batch.length >= MAX_HTTP_BATCH) break;
+    }
+  }
+
+  queueIndex = i;
+
+  if (batch.length === 0) {
+    if (queueIndex >= queue.length) {
+      schedulerTimer = setTimeout(() => scheduleNext(), 500);
+    } else {
+      schedulerTimer = setTimeout(() => scheduleNext(), 500);
+    }
+    return;
+  }
+
+  currentInstitutions = [...batch];
+  const batchStart = Date.now();
+
+  if (batch.length === 1) {
+    console.log(`[scheduler] Syncing ${batch[0]} [${batchType}] (${queueIndex}/${queue.length})...`);
+  } else {
+    console.log(`[scheduler] Batch syncing ${batch.length} institutions [http]: ${batch.join(", ")} (${queueIndex}/${queue.length})...`);
+  }
+
+  Promise.allSettled(batch.map((inst) => runOne(inst))).finally(() => {
+    const elapsed = Date.now() - batchStart;
+    syncDurations.push(Math.round(elapsed / batch.length));
+    if (syncDurations.length > 20) syncDurations.shift();
+    currentInstitutions = [];
+    lastActivityAt = new Date();
+    persistState();
     if (schedulerState === "running") {
       schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
     }
@@ -190,7 +301,8 @@ function scheduleNext(): void {
 }
 
 async function runOne(institution: string): Promise<void> {
-  const acquired = tryAcquireSyncLock(institution);
+  const scraperType = getScraperType(institution);
+  const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
     console.log(`[scheduler] Could not acquire lock for ${institution}, skipping`);
     failedThisCycle++;
@@ -198,12 +310,31 @@ async function runOne(institution: string): Promise<void> {
   }
 
   try {
-    console.log(`[scheduler] Syncing ${institution} (${queueIndex + 1}/${getInstitutionQueue().length})...`);
     await runInstitutionSync(institution);
     completedThisCycle++;
     console.log(`[scheduler] ${institution} complete`);
+    await updateScraperHealth(institution, true);
+    scraperHealthCache.set(institution, {
+      institution,
+      consecutiveFailures: 0,
+      lastFailureReason: null,
+      lastFailureAt: null,
+      lastSuccessAt: new Date(),
+      backoffUntil: null,
+    });
   } catch (err: any) {
     failedThisCycle++;
     console.error(`[scheduler] ${institution} failed: ${err?.message}`);
+    await updateScraperHealth(institution, false, err?.message);
+    const current = scraperHealthCache.get(institution);
+    const newFailures = (current?.consecutiveFailures ?? 0) + 1;
+    scraperHealthCache.set(institution, {
+      institution,
+      consecutiveFailures: newFailures,
+      lastFailureReason: err?.message ?? null,
+      lastFailureAt: new Date(),
+      lastSuccessAt: current?.lastSuccessAt ?? null,
+      backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
+    });
   }
 }

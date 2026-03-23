@@ -17,6 +17,7 @@ export interface ScrapedListing {
 
 export interface InstitutionScraper {
   institution: string;
+  scraperType?: "playwright" | "http" | "api";
   scrape(): Promise<ScrapedListing[]>;
   probe?(maxResults?: number): Promise<ScrapedListing[]>;
 }
