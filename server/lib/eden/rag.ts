@@ -342,9 +342,18 @@ export function markEngagementReset(sessionId: string): void {
   _sessionResetMap.set(sessionId, Date.now());
 }
 
+// Back-reference patterns used to detect explicit follow-up turns during
+// engagement derivation. Inline subset so this function doesn't depend on
+// the full BACK_REF_PATTERNS constant defined later in the file.
+const BACK_REF_RX =
+  /\b(?:tell|give)\s+me\s+more\s+(?:about|on)|more\s+(?:details?|info)\s+(?:about|on)\s+(?:it|that|this)\b|\bthe\s+(?:first|second|third)\b|\b(?:number|#)\s*[123]\b|\bexpand\s+(?:on|into)\s+(?:that|this|it)\b/i;
+
 // Derive engagement signals from stored session message history.
 // Only scans assistant messages (which carry the `assets` field) after any
 // active reset timestamp for this session, so "start fresh" commands work.
+// Back-reference / follow-up turns (detected via the preceding user message)
+// are weighted 2x — explicit user engagement is a stronger signal than
+// assets merely shown in the first retrieval pass.
 export function deriveEngagementSignals(
   sessionId: string,
   messages: SessionMessage[]
@@ -352,19 +361,25 @@ export function deriveEngagementSignals(
   const resetAt = _sessionResetMap.get(sessionId) ?? 0;
   const signals: EngagementSignals = { modalities: {}, indications: {} };
 
-  for (const msg of messages) {
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
     if (msg.role !== "assistant") continue;
     if (!msg.assets?.length) continue;
     // Skip messages that predate the last explicit reset
     const msgTs = msg.ts ? new Date(msg.ts).getTime() : 0;
     if (resetAt > 0 && msgTs < resetAt) continue;
 
+    // Find the most recent preceding user message to detect back-refs/follow-ups.
+    const prevUser = messages.slice(0, i).reverse().find((m) => m.role === "user");
+    // Explicit back-reference / follow-up → user actively engaged → weight 2x
+    const weight = prevUser && BACK_REF_RX.test(prevUser.content) ? 2 : 1;
+
     for (const a of msg.assets) {
       if (a.modality && a.modality !== "unknown") {
-        signals.modalities[a.modality] = (signals.modalities[a.modality] ?? 0) + 1;
+        signals.modalities[a.modality] = (signals.modalities[a.modality] ?? 0) + weight;
       }
       if (a.indication && a.indication !== "unknown") {
-        signals.indications[a.indication] = (signals.indications[a.indication] ?? 0) + 1;
+        signals.indications[a.indication] = (signals.indications[a.indication] ?? 0) + weight;
       }
     }
   }
