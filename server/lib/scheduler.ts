@@ -148,6 +148,11 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
     lastCycleCompletedAt = saved.lastCycleCompletedAt;
 
     const wasRunning = saved.schedulerRunning;
+    // Restore in-memory state: if it was paused when last saved, mark it paused
+    // so the UI shows "Paused" (and the Resume button) rather than "Idle"
+    if (!wasRunning) {
+      schedulerState = "paused";
+    }
     console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${getInstitutionQueue().length}, was ${wasRunning ? "running" : "paused"}`);
     return wasRunning;
   } catch (err: any) {
