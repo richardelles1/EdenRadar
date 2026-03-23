@@ -328,9 +328,11 @@ async function runOne(institution: string): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
-    // Lock contention (e.g. manual sync still running) — deferred, not a scraper failure.
-    // Increment skipped so stats are accurate; do NOT touch health or backoff counter.
-    console.log(`[scheduler] Lock unavailable for ${institution} — deferring (skipped, not failed)`);
+    // Lock contention (e.g. a manual sync is still running) — defer, not a failure.
+    // Push to the front of priorityQueue so it retries at the next scheduleNext() call
+    // rather than waiting for the next full cycle.
+    console.log(`[scheduler] Lock unavailable for ${institution} — requeueing for retry`);
+    if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
     skippedThisCycle++;
     return;
   }

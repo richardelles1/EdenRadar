@@ -89,6 +89,7 @@ export async function updateScraperHealth(institution: string, success: boolean,
         ON CONFLICT (institution) DO UPDATE SET
           consecutive_failures = 0,
           last_failure_reason = NULL,
+          last_failure_at = NULL,
           last_success_at = NOW(),
           backoff_until = NULL,
           updated_at = NOW()
