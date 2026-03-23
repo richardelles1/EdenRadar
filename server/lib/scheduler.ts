@@ -336,5 +336,8 @@ async function runOne(institution: string): Promise<void> {
       lastSuccessAt: current?.lastSuccessAt ?? null,
       backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
     });
+  } finally {
+    // Persist per-institution so progress survives a mid-batch restart
+    persistState();
   }
 }

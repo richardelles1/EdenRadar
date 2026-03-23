@@ -4305,6 +4305,7 @@ export const techLinkScraper: InstitutionScraper = {
 // URL: /en/search?f[0]=fris_content_type:patent&f[1]=fris_knowledge_institution:131211
 export const researchPortalGhentScraper: InstitutionScraper = {
   institution: "Ghent University (researchportal.be)",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "Ghent University (researchportal.be)";
     const BASE = "https://www.researchportal.be";
@@ -4704,6 +4705,7 @@ export const queensBelfastScraper = createTechPublisherScraper("qub", "Queen's U
 // harvesting a[href*='/product/'] links with their text labels.
 export const uclBusinessScraper: InstitutionScraper = {
   institution: "UCL Business",
+  scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "UCL Business";
     const BASE = "https://xip.uclb.com";

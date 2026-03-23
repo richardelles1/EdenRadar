@@ -7,7 +7,7 @@ import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { existsSync } from "fs";
 import { execSync } from "child_process";
-import { loadAndRestoreScheduler } from "./lib/scheduler";
+import { loadAndRestoreScheduler, startScheduler } from "./lib/scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -410,11 +410,17 @@ app.use((req, res, next) => {
 
   await registerRoutes(httpServer, app);
 
-  // ── Restore scheduler state from DB ──────────────────────────────────────
+  // ── Restore scheduler state from DB, then auto-start ────────────────────
   try {
     await loadAndRestoreScheduler();
+    const started = startScheduler();
+    if (started.ok) {
+      log("[startup] Scheduler auto-started after state restore", "startup");
+    } else {
+      log(`[startup] Scheduler not auto-started: ${started.message}`, "startup");
+    }
   } catch (err: any) {
-    log(`[startup] Scheduler state restore failed: ${err?.message}`, "startup");
+    log(`[startup] Scheduler restore/start failed: ${err?.message}`, "startup");
   }
 
   // On startup, mark any orphaned "running" ingestion runs as "failed"

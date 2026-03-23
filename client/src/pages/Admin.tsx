@@ -1454,6 +1454,7 @@ function DataHealth({ pw }: { pw: string }) {
                   <tr className="border-b border-border bg-muted/30">
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Institution</th>
                     <th className="text-center px-3 py-2 font-medium text-muted-foreground">Failures</th>
+                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Last Success</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Last Error</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Backoff Until</th>
                     <th className="px-3 py-2" />
@@ -1471,6 +1472,11 @@ function DataHealth({ pw }: { pw: string }) {
                         <span className={`font-bold tabular-nums ${row.consecutiveFailures >= 5 ? "text-red-500" : row.consecutiveFailures >= 3 ? "text-amber-500" : "text-muted-foreground"}`}>
                           {row.consecutiveFailures}
                         </span>
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap" data-testid={`last-success-${row.institution}`}>
+                        {row.lastSuccessAt
+                          ? new Date(row.lastSuccessAt).toLocaleDateString()
+                          : <span className="text-muted-foreground/40">never</span>}
                       </td>
                       <td className="px-3 py-2 text-muted-foreground max-w-[260px] truncate" title={row.lastFailureReason ?? ""}>
                         {row.lastFailureReason ?? "—"}
