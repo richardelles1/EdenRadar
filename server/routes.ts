@@ -2234,17 +2234,23 @@ export async function registerRoutes(
       }
 
       // ── Path 3: Comparative / head-to-head ──────────────────────────────
-      // Entity resolution priority (evaluated in order, first successful wins):
-      //   a) Ordinal back-refs ("first", "second", "third") → positional index into priorIds.
-      //      Explicit ordinal failure → clear error message (not silent fall-through).
-      //   b) Named-asset matching — prior asset names mentioned verbatim in the query.
-      //   c) Institution-qualified — detectAllInstitutionNames (alias-aware) against prior payloads.
-      //      Partial resolution (1 found, 1 missing) → explicit error naming the missing institution.
-      //   d) All priorIds fallback ("compare these", "which is better?") — up to 3.
-      //   e) Semantic fallback — embed query, retrieve 2–3 assets from the portfolio vector index.
+      // Resolver contract:
+      //   hasExplicitRefs — true when the user cited specific ordinals, asset names,
+      //   or institutions. Explicit references are terminal on partial failure; the
+      //   user named something concrete and we must say what we could not find.
+      //   Steps d/e (priorIds fallback, semantic) are only used for implicit queries
+      //   like "compare these" or "compare gene therapy assets" that carry no specific ref.
+      //
+      // Resolution order (first successful path wins):
+      //   a) Ordinal back-refs   — "first"/"second"/"third" → priorIds positional index
+      //   b) Named-asset refs    — prior asset names (>=5 chars) verbatim in query
+      //   c) Institution refs    — detectAllInstitutionNames (alias-aware, canonical-normalized)
+      //   d) All priorIds        — implicit "compare these" (only when !hasExplicitRefs)
+      //   e) Semantic fallback   — embed + retrieve from portfolio (only when !hasExplicitRefs)
       if (isComparative) {
         let compareIds: number[] = [];
-        let ordinalFailed = false;
+        let terminalError: string | null = null;
+        let hasExplicitRefs = false;
 
         // All prior asset payloads from typed session messages (assets is schema-typed on EdenSession)
         const allPriorAssetPayloads = (session.messages ?? [])
@@ -2259,18 +2265,24 @@ export async function registerRoutes(
         if (/\bsecond\b|\b2nd\b/.test(msgLower)) ordinalPositions.push(1);
         if (/\bthird\b|\b3rd\b/.test(msgLower)) ordinalPositions.push(2);
         if (ordinalPositions.length >= 2) {
+          hasExplicitRefs = true;
           const resolvable = ordinalPositions.filter((p) => priorIds[p] !== undefined);
           if (resolvable.length >= 2) {
             compareIds = [...new Set(resolvable)].map((p) => priorIds[p]);
           } else {
-            ordinalFailed = true;
+            const avail = priorIds.length;
+            terminalError = avail === 0
+              ? "I don't have any previously shown assets to reference — search for a set of assets first, then ask me to compare them."
+              : `I can see ${avail} previously shown asset${avail === 1 ? "" : "s"}, but your message references positions beyond what's available. Ask me to find more assets or compare the ones already shown.`;
           }
         }
 
         // ── Step b: named-asset matching ──────────────────────────────────
-        // Match asset names from prior turns verbatim in the user query.
-        // Requires asset name >= 5 chars to avoid spurious hits on short tokens.
-        if (compareIds.length < 2 && !ordinalFailed) {
+        // Detects prior asset names (>=5 chars) verbatim in the query.
+        // >= 2 hits → explicit successful resolution. 1 hit → still a reference intent
+        // but falls through; no partial error emitted here since names aren't asserted
+        // against each other the way ordinals and institutions are.
+        if (compareIds.length < 2 && !terminalError) {
           const namedMatches: number[] = [];
           for (const a of allPriorAssetPayloads) {
             if (!a.assetName || a.assetName.length < 5) continue;
@@ -2279,20 +2291,21 @@ export async function registerRoutes(
             }
           }
           if (namedMatches.length >= 2) {
+            hasExplicitRefs = true;
             compareIds = namedMatches.slice(0, 3);
           }
         }
 
         // ── Step c: institution-qualified resolution ───────────────────────
-        // Uses detectAllInstitutionNames (alias-aware) for query-side detection.
-        // Normalizes asset institution labels to canonical form via detectInstitutionName
-        // so "WUSTL" matches query "Washington University" and "MIT" matches "MIT".
-        // Partial match (1/2 resolved) is recorded but does NOT hard-fail here —
-        // steps d and e run first; the error is only surfaced if all steps fail.
-        let instPartialResolvedMsg: string | null = null;
-        if (compareIds.length < 2 && !ordinalFailed && allPriorAssetPayloads.length >= 1) {
+        // detectAllInstitutionNames returns canonical forms (e.g., "washington university")
+        // for ALL institutions mentioned. Asset institution labels (e.g., "WUSTL") are
+        // canonicalized via detectInstitutionName for bidirectional alias matching.
+        // When >= 2 institutions are explicitly named but < 2 resolve → terminal error
+        // naming the unresolved institution, because the user gave us something concrete.
+        if (compareIds.length < 2 && !terminalError) {
           const mentionedInsts = detectAllInstitutionNames(message.trim(), portfolioInstitutionNames);
           if (mentionedInsts.length >= 2) {
+            hasExplicitRefs = true;
             const instMatched: number[] = [];
             let firstUnresolved: string | null = null;
             for (const inst of mentionedInsts.slice(0, 3)) {
@@ -2302,7 +2315,7 @@ export async function registerRoutes(
                 const aInstLower = a.institution.toLowerCase();
                 // Direct substring (e.g., "stanford" in "Stanford University")
                 if (aInstLower.includes(instKey)) return true;
-                // Canonical alias match — normalizes abbreviations like WUSTL → "washington university"
+                // Canonical alias match — maps WUSTL → "washington university" for comparison
                 const canonical = detectInstitutionName(a.institution) ?? "";
                 return canonical === instKey;
               });
@@ -2314,23 +2327,30 @@ export async function registerRoutes(
             }
             if (instMatched.length >= 2) {
               compareIds = instMatched;
-            } else if (instMatched.length === 1 && firstUnresolved) {
-              // Store partial-resolution message but let steps d/e attempt to resolve first
-              const resolvedName = allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
-                ?? "one institution";
-              instPartialResolvedMsg = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
+            } else {
+              // Partial or total failure on explicit institution reference → terminal error
+              if (instMatched.length === 1 && firstUnresolved) {
+                const resolvedName = allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
+                  ?? "one institution";
+                terminalError = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
+              } else if (firstUnresolved) {
+                terminalError = `I don't have any recently shown assets from "${firstUnresolved}" to compare. Try searching for assets from that institution first.`;
+              }
             }
           }
         }
 
         // ── Step d: all priorIds fallback ─────────────────────────────────
-        if (compareIds.length < 2 && !ordinalFailed && priorIds.length >= 2) {
+        // Only for implicit comparative queries ("compare these", "which is better?").
+        // Skipped when the user cited specific refs that could not be resolved.
+        if (compareIds.length < 2 && !terminalError && !hasExplicitRefs && priorIds.length >= 2) {
           compareIds = priorIds.slice(0, 3);
         }
 
         // ── Step e: semantic fallback ─────────────────────────────────────
-        // Covers fresh-session comparisons ("compare gene therapy assets for ALS").
-        if (compareIds.length < 2 && !ordinalFailed) {
+        // Only for implicit queries. Covers fresh-session comparisons like
+        // "compare gene therapy assets for ALS" with no prior context.
+        if (compareIds.length < 2 && !terminalError && !hasExplicitRefs) {
           try {
             const compareEmbedding = await embedQuery(message.trim());
             const semanticHits = await storage.semanticSearch(compareEmbedding, 3);
@@ -2344,25 +2364,11 @@ export async function registerRoutes(
           }
         }
 
-        // ── Ordinal failure: explicit error ───────────────────────────────
-        if (ordinalFailed) {
-          const avail = priorIds.length;
-          const ordinalErrMsg = avail === 0
-            ? "I don't have any previously shown assets to reference — search for a set of assets first, then ask me to compare them."
-            : `I can see ${avail} previously shown asset${avail === 1 ? "" : "s"}, but your message references positions beyond what's available. Ask me to find more assets or compare the ones already shown.`;
+        // ── Terminal error emission ────────────────────────────────────────
+        if (terminalError) {
           sendEvent("context", { sessionId: sid, assets: [] });
-          sendEvent("token", { text: ordinalErrMsg });
-          await storage.appendEdenMessage(sid, { role: "assistant", content: ordinalErrMsg, assetIds: [], assets: [] });
-          sendEvent("done", { sessionId: sid });
-          return;
-        }
-
-        // ── Institution partial-resolution error (after d/e have run) ─────
-        // Only surfaces when steps d/e also failed to produce 2 assets.
-        if (compareIds.length < 2 && instPartialResolvedMsg) {
-          sendEvent("context", { sessionId: sid, assets: [] });
-          sendEvent("token", { text: instPartialResolvedMsg });
-          await storage.appendEdenMessage(sid, { role: "assistant", content: instPartialResolvedMsg, assetIds: [], assets: [] });
+          sendEvent("token", { text: terminalError });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: terminalError, assetIds: [], assets: [] });
           sendEvent("done", { sessionId: sid });
           return;
         }
