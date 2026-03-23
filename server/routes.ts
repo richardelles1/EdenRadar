@@ -2234,34 +2234,42 @@ export async function registerRoutes(
       }
 
       // ── Path 3: Comparative / head-to-head ──────────────────────────────
-      // Entity resolution priority:
-      //   a) Ordinal back-refs ("first", "second") → positional index into priorIds
-      //   b) Institution-qualified ("the MIT one vs. the Stanford one") → scan prior assets
-      //   c) Fallback to all priorIds (up to 3)
-      // If fewer than 2 assets can be resolved, fall through to subsequent paths.
+      // Entity resolution priority (evaluated in order, first successful wins):
+      //   a) Ordinal back-refs ("first", "second") → positional index into priorIds.
+      //      If the user cites ordinals that exceed the number of prior assets, a clear
+      //      error message is returned rather than silently falling through.
+      //   b) Institution-qualified ("the MIT one vs. Stanford one") → scan prior asset payloads
+      //   c) All priorIds (up to 3) — "compare these"
+      //   d) Semantic fallback — embed the query and retrieve 2–3 assets from the portfolio
+      //      so comparative intent on a fresh session produces a meaningful comparison
       if (isComparative) {
         let compareIds: number[] = [];
+        let ordinalFailed = false; // tracks failed explicit ordinal resolution for error messaging
 
-        // Collect all prior asset objects from recent assistant turns (for institution matching)
+        // Collect all prior asset objects from typed session messages (assets field is schema-typed)
         const allPriorAssetPayloads = (session.messages ?? [])
           .filter((m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0)
-          .flatMap((m) => (m as any).assets ?? []) as Array<{
-            id: number;
-            institution?: string;
-          }>;
+          .flatMap((m) => m.assets ?? []);
 
-        // Step a: ordinal back-refs — both must be present to form a pair
         const msgLower = message.trim().toLowerCase();
+
+        // Step a: ordinal back-refs — require both ordinals to be present and resolvable
         const ordinalPositions: number[] = [];
-        if (/\bfirst\b|\b1st\b/.test(msgLower) && priorIds[0] !== undefined) ordinalPositions.push(0);
-        if (/\bsecond\b|\b2nd\b/.test(msgLower) && priorIds[1] !== undefined) ordinalPositions.push(1);
-        if (/\bthird\b|\b3rd\b/.test(msgLower) && priorIds[2] !== undefined) ordinalPositions.push(2);
+        if (/\bfirst\b|\b1st\b/.test(msgLower)) ordinalPositions.push(0);
+        if (/\bsecond\b|\b2nd\b/.test(msgLower)) ordinalPositions.push(1);
+        if (/\bthird\b|\b3rd\b/.test(msgLower)) ordinalPositions.push(2);
         if (ordinalPositions.length >= 2) {
-          compareIds = [...new Set(ordinalPositions)].map((p) => priorIds[p]).filter(Boolean);
+          const resolvable = ordinalPositions.filter((p) => priorIds[p] !== undefined);
+          if (resolvable.length >= 2) {
+            compareIds = [...new Set(resolvable)].map((p) => priorIds[p]);
+          } else {
+            // User cited ordinals but we don't have enough prior assets — set flag for error msg
+            ordinalFailed = true;
+          }
         }
 
-        // Step b: institution-qualified refs — find distinct institutions mentioned in message
-        if (compareIds.length < 2 && allPriorAssetPayloads.length >= 2) {
+        // Step b: institution-qualified refs
+        if (compareIds.length < 2 && !ordinalFailed && allPriorAssetPayloads.length >= 2) {
           const mentionedInsts = portfolioInstitutionNames.filter((inst) =>
             msgLower.includes(inst.toLowerCase())
           );
@@ -2275,12 +2283,42 @@ export async function registerRoutes(
           }
         }
 
-        // Step c: fallback — use all priorIds (up to 3)
-        if (compareIds.length < 2) {
+        // Step c: use all priorIds when no more specific resolution applies
+        if (compareIds.length < 2 && !ordinalFailed && priorIds.length >= 2) {
           compareIds = priorIds.slice(0, 3);
         }
 
-        // Only enter comparative path when 2+ assets can be resolved
+        // Step d: semantic fallback — embed the query and retrieve from the portfolio
+        // Used when there are no (or insufficient) prior context assets
+        if (compareIds.length < 2 && !ordinalFailed) {
+          try {
+            const compareEmbedding = await embedQuery(message.trim());
+            const semanticHits = await storage.semanticSearch(compareEmbedding, 3);
+            const COMPARE_SIM_THRESHOLD = 0.45;
+            const passing = semanticHits.filter((a) => a.similarity >= COMPARE_SIM_THRESHOLD);
+            if (passing.length >= 2) {
+              compareIds = passing.slice(0, 3).map((a) => a.id);
+            }
+          } catch (semErr) {
+            console.warn("[eden/comparative] semantic fallback failed:", (semErr as Error)?.message ?? semErr);
+          }
+        }
+
+        // Explicit error when the user cited ordinals we couldn't resolve
+        if (ordinalFailed) {
+          const avail = priorIds.length;
+          const errorMsg = avail === 0
+            ? "I don't have any previously shown assets to compare — search for a set of assets first and then ask me to compare them."
+            : `I can only reference ${avail} previously shown asset${avail === 1 ? "" : "s"}, but you've referenced positions that go beyond what I have. Ask me to find more assets, or compare the ones already shown.`;
+          sendEvent("context", { sessionId: sid, assets: [] });
+          let fullResponse = errorMsg;
+          sendEvent("token", { text: errorMsg });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+          sendEvent("done", { sessionId: sid });
+          return;
+        }
+
+        // Attempt comparison when 2+ assets are resolved
         if (compareIds.length >= 2) {
           const fetchedForCompare = await storage.getIngestedAssetsByIds(compareIds).catch(
             () => [] as import("./storage").RetrievedAsset[]
@@ -2310,9 +2348,8 @@ export async function registerRoutes(
             sendEvent("done", { sessionId: sid });
             return;
           }
-          // fetchedForCompare < 2: fall through
         }
-        // < 2 compareIds resolved: fall through to definitional / RAG
+        // < 2 assets after all resolution steps: fall through to definitional / RAG
       }
 
       // ── Path 4: Definitional / educational ──────────────────────────────
