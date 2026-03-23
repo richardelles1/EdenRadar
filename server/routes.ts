@@ -2223,13 +2223,61 @@ export async function registerRoutes(
 
       // ── Path 3: Definitional / educational ──────────────────────────────
       if (definitional) {
+        // Start embedding in parallel with the concept stream so portfolio
+        // lookup adds minimal latency after the explanation finishes.
+        const conceptEmbeddingPromise = embedQuery(message.trim());
+
         sendEvent("context", { sessionId: sid, assets: [] });
         let fullResponse = "";
         for await (const token of conceptQuery(message.trim(), history, ctx, portfolioStats, focusContext)) {
           fullResponse += token;
           sendEvent("token", { text: token });
         }
-        await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+
+        // Portfolio lookup — find assets related to the concept
+        const CONCEPT_SIMILARITY_THRESHOLD = 0.50;
+        let relatedAssets: import("./storage").RetrievedAsset[] = [];
+        try {
+          const conceptEmbedding = await conceptEmbeddingPromise;
+          const hits = await storage.semanticSearch(conceptEmbedding, 5);
+          relatedAssets = hits
+            .filter((a) => a.similarity >= CONCEPT_SIMILARITY_THRESHOLD)
+            .slice(0, 3);
+        } catch (lookupErr) {
+          console.warn("[eden/definitional] portfolio lookup failed:", (lookupErr as Error)?.message ?? lookupErr);
+        }
+
+        if (relatedAssets.length > 0) {
+          const relatedAssetPayload = relatedAssets.map((a) => ({
+            id: a.id, assetName: a.assetName, institution: a.institution,
+            indication: a.indication, modality: a.modality,
+            developmentStage: a.developmentStage, ipType: a.ipType,
+            sourceName: a.sourceName, sourceUrl: a.sourceUrl,
+            similarity: Math.round(a.similarity * 100) / 100,
+          }));
+          // Update context with found assets (client replaces the empty array)
+          sendEvent("context", { sessionId: sid, assets: relatedAssetPayload });
+
+          // Stream bridge section after the concept explanation
+          const bridgeIntro = "\n\n";
+          sendEvent("token", { text: bridgeIntro });
+          fullResponse += bridgeIntro;
+
+          const bridgePrompt = `You just explained a concept. Now briefly introduce these ${relatedAssets.length} portfolio asset${relatedAssets.length > 1 ? "s" : ""} that relate to it. Lead with "There ${relatedAssets.length === 1 ? "is" : "are"} ${relatedAssets.length} related asset${relatedAssets.length > 1 ? "s" : ""} in the portfolio:" then list each with one concise hook sentence (standard **Asset Name** (Institution) — hook format). Keep it under 80 words total.`;
+          for await (const token of ragQuery(bridgePrompt, relatedAssets, [], ctx, portfolioStats, focusContext)) {
+            fullResponse += token;
+            sendEvent("token", { text: token });
+          }
+
+          await storage.appendEdenMessage(sid, {
+            role: "assistant", content: fullResponse,
+            assetIds: relatedAssets.slice(0, 3).map((a) => a.id),
+            assets: relatedAssetPayload,
+          });
+        } else {
+          await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+        }
+
         sendEvent("done", { sessionId: sid });
         return;
       }
