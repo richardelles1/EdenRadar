@@ -27,7 +27,7 @@ import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
-import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
+import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -2235,25 +2235,25 @@ export async function registerRoutes(
 
       // ── Path 3: Comparative / head-to-head ──────────────────────────────
       // Entity resolution priority (evaluated in order, first successful wins):
-      //   a) Ordinal back-refs ("first", "second") → positional index into priorIds.
-      //      If the user cites ordinals that exceed the number of prior assets, a clear
-      //      error message is returned rather than silently falling through.
-      //   b) Institution-qualified ("the MIT one vs. Stanford one") → scan prior asset payloads
-      //   c) All priorIds (up to 3) — "compare these"
-      //   d) Semantic fallback — embed the query and retrieve 2–3 assets from the portfolio
-      //      so comparative intent on a fresh session produces a meaningful comparison
+      //   a) Ordinal back-refs ("first", "second", "third") → positional index into priorIds.
+      //      Explicit ordinal failure → clear error message (not silent fall-through).
+      //   b) Named-asset matching — prior asset names mentioned verbatim in the query.
+      //   c) Institution-qualified — detectAllInstitutionNames (alias-aware) against prior payloads.
+      //      Partial resolution (1 found, 1 missing) → explicit error naming the missing institution.
+      //   d) All priorIds fallback ("compare these", "which is better?") — up to 3.
+      //   e) Semantic fallback — embed query, retrieve 2–3 assets from the portfolio vector index.
       if (isComparative) {
         let compareIds: number[] = [];
-        let ordinalFailed = false; // tracks failed explicit ordinal resolution for error messaging
+        let ordinalFailed = false;
 
-        // Collect all prior asset objects from typed session messages (assets field is schema-typed)
+        // All prior asset payloads from typed session messages (assets is schema-typed on EdenSession)
         const allPriorAssetPayloads = (session.messages ?? [])
           .filter((m) => m.role === "assistant" && (m.assetIds?.length ?? 0) > 0)
           .flatMap((m) => m.assets ?? []);
 
         const msgLower = message.trim().toLowerCase();
 
-        // Step a: ordinal back-refs — require both ordinals to be present and resolvable
+        // ── Step a: ordinal back-refs ─────────────────────────────────────
         const ordinalPositions: number[] = [];
         if (/\bfirst\b|\b1st\b/.test(msgLower)) ordinalPositions.push(0);
         if (/\bsecond\b|\b2nd\b/.test(msgLower)) ordinalPositions.push(1);
@@ -2263,33 +2263,67 @@ export async function registerRoutes(
           if (resolvable.length >= 2) {
             compareIds = [...new Set(resolvable)].map((p) => priorIds[p]);
           } else {
-            // User cited ordinals but we don't have enough prior assets — set flag for error msg
             ordinalFailed = true;
           }
         }
 
-        // Step b: institution-qualified refs
-        if (compareIds.length < 2 && !ordinalFailed && allPriorAssetPayloads.length >= 2) {
-          const mentionedInsts = portfolioInstitutionNames.filter((inst) =>
-            msgLower.includes(inst.toLowerCase())
-          );
+        // ── Step b: named-asset matching ──────────────────────────────────
+        // Match asset names from prior turns verbatim in the user query.
+        // Requires asset name >= 5 chars to avoid spurious hits on short tokens.
+        if (compareIds.length < 2 && !ordinalFailed) {
+          const namedMatches: number[] = [];
+          for (const a of allPriorAssetPayloads) {
+            if (!a.assetName || a.assetName.length < 5) continue;
+            if (msgLower.includes(a.assetName.toLowerCase()) && !namedMatches.includes(a.id)) {
+              namedMatches.push(a.id);
+            }
+          }
+          if (namedMatches.length >= 2) {
+            compareIds = namedMatches.slice(0, 3);
+          }
+        }
+
+        // ── Step c: institution-qualified resolution ───────────────────────
+        // Uses detectAllInstitutionNames — alias-aware, same pattern logic as detectInstitutionName.
+        // Returns a partial-resolution error when 1 institution resolves but another does not.
+        if (compareIds.length < 2 && !ordinalFailed && allPriorAssetPayloads.length >= 1) {
+          const mentionedInsts = detectAllInstitutionNames(message.trim(), portfolioInstitutionNames);
           if (mentionedInsts.length >= 2) {
+            const instMatched: number[] = [];
+            let firstUnresolved: string | null = null;
             for (const inst of mentionedInsts.slice(0, 3)) {
               const match = allPriorAssetPayloads.find(
                 (a) => a.institution?.toLowerCase().includes(inst.toLowerCase())
               );
-              if (match && !compareIds.includes(match.id)) compareIds.push(match.id);
+              if (match && !instMatched.includes(match.id)) {
+                instMatched.push(match.id);
+              } else if (!firstUnresolved) {
+                firstUnresolved = inst;
+              }
+            }
+            if (instMatched.length >= 2) {
+              compareIds = instMatched;
+            } else if (instMatched.length === 1 && firstUnresolved) {
+              // Partial resolution — be explicit rather than silently continuing
+              const resolvedName = allPriorAssetPayloads.find((a) => a.id === instMatched[0])?.institution
+                ?? "one institution";
+              const partialErrMsg = `I found a prior result from ${resolvedName}, but I don't have a recently shown asset from "${firstUnresolved}" to compare it to. Try pulling results for both institutions first, then ask me to compare.`;
+              sendEvent("context", { sessionId: sid, assets: [] });
+              sendEvent("token", { text: partialErrMsg });
+              await storage.appendEdenMessage(sid, { role: "assistant", content: partialErrMsg, assetIds: [], assets: [] });
+              sendEvent("done", { sessionId: sid });
+              return;
             }
           }
         }
 
-        // Step c: use all priorIds when no more specific resolution applies
+        // ── Step d: all priorIds fallback ─────────────────────────────────
         if (compareIds.length < 2 && !ordinalFailed && priorIds.length >= 2) {
           compareIds = priorIds.slice(0, 3);
         }
 
-        // Step d: semantic fallback — embed the query and retrieve from the portfolio
-        // Used when there are no (or insufficient) prior context assets
+        // ── Step e: semantic fallback ─────────────────────────────────────
+        // Covers fresh-session comparisons ("compare gene therapy assets for ALS").
         if (compareIds.length < 2 && !ordinalFailed) {
           try {
             const compareEmbedding = await embedQuery(message.trim());
@@ -2304,26 +2338,24 @@ export async function registerRoutes(
           }
         }
 
-        // Explicit error when the user cited ordinals we couldn't resolve
+        // ── Ordinal failure: explicit error ───────────────────────────────
         if (ordinalFailed) {
           const avail = priorIds.length;
-          const errorMsg = avail === 0
-            ? "I don't have any previously shown assets to compare — search for a set of assets first and then ask me to compare them."
-            : `I can only reference ${avail} previously shown asset${avail === 1 ? "" : "s"}, but you've referenced positions that go beyond what I have. Ask me to find more assets, or compare the ones already shown.`;
+          const ordinalErrMsg = avail === 0
+            ? "I don't have any previously shown assets to reference — search for a set of assets first, then ask me to compare them."
+            : `I can see ${avail} previously shown asset${avail === 1 ? "" : "s"}, but your message references positions beyond what's available. Ask me to find more assets or compare the ones already shown.`;
           sendEvent("context", { sessionId: sid, assets: [] });
-          let fullResponse = errorMsg;
-          sendEvent("token", { text: errorMsg });
-          await storage.appendEdenMessage(sid, { role: "assistant", content: fullResponse, assetIds: [], assets: [] });
+          sendEvent("token", { text: ordinalErrMsg });
+          await storage.appendEdenMessage(sid, { role: "assistant", content: ordinalErrMsg, assetIds: [], assets: [] });
           sendEvent("done", { sessionId: sid });
           return;
         }
 
-        // Attempt comparison when 2+ assets are resolved
+        // ── Comparison execution ──────────────────────────────────────────
         if (compareIds.length >= 2) {
           const fetchedForCompare = await storage.getIngestedAssetsByIds(compareIds).catch(
             () => [] as import("./storage").RetrievedAsset[]
           );
-          // Restore resolution order
           const compareIdOrder = new Map(compareIds.map((id, i) => [id, i]));
           fetchedForCompare.sort((a, b) => (compareIdOrder.get(a.id) ?? 99) - (compareIdOrder.get(b.id) ?? 99));
 
@@ -2349,7 +2381,7 @@ export async function registerRoutes(
             return;
           }
         }
-        // < 2 assets after all resolution steps: fall through to definitional / RAG
+        // < 2 assets after all steps: fall through to definitional / RAG
       }
 
       // ── Path 4: Definitional / educational ──────────────────────────────

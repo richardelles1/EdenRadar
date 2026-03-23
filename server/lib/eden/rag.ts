@@ -153,6 +153,34 @@ export function detectInstitutionName(query: string, portfolioInstitutions?: str
   return null;
 }
 
+// Like detectInstitutionName but returns ALL institutions mentioned in the query.
+// Uses the same two-pass approach (alias patterns first, then portfolio substring scan)
+// so abbreviations like MIT, UCSF, WUSTL are handled correctly.
+export function detectAllInstitutionNames(query: string, portfolioInstitutions?: string[]): string[] {
+  const found: string[] = [];
+  const seen = new Set<string>();
+  // Pass 1: pattern-based (each match recorded by canonical name)
+  for (const { pattern, name } of INSTITUTION_PATTERNS) {
+    if (pattern.test(query) && !seen.has(name)) {
+      found.push(name);
+      seen.add(name);
+    }
+  }
+  // Pass 2: portfolio institution substring scan (respects length >= 4 guard)
+  if (portfolioInstitutions?.length) {
+    const lowerQuery = query.toLowerCase();
+    for (const inst of portfolioInstitutions) {
+      if (!inst || inst.length < 4) continue;
+      const key = inst.toLowerCase();
+      if (lowerQuery.includes(key) && !seen.has(key)) {
+        found.push(inst);
+        seen.add(key);
+      }
+    }
+  }
+  return found;
+}
+
 const GEO_DETECT: Record<string, GeoKey> = {
   "american": "us",
   " us ": "us",
