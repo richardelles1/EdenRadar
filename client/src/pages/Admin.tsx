@@ -4316,7 +4316,7 @@ function SubscriptionData() {
     { name: "EdenDiscovery", price: 14.99, subscribers: 8, color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
     { name: "EdenLab", price: 29.99, subscribers: 5, color: "bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800" },
     { name: "TechTransfer", price: 34.99, subscribers: 3, color: "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800" },
-    { name: "EdenRadar", price: 49.99, subscribers: 2, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
+    { name: "EdenScout", price: 59.99, subscribers: 2, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
     { name: "EdenSignal", price: 99.99, subscribers: 1, color: "bg-rose-500/10 text-rose-600 border-rose-200 dark:border-rose-800" },
   ];
   const totalMRR = tiers.reduce((sum, t) => sum + t.price * t.subscribers, 0);

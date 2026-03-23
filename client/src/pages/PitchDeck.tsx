@@ -617,12 +617,12 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
       items: ["Literature search across 40+ data sources", "Structured 11-section project canvas", "AI synthesis and evidence extraction"],
     },
     {
-      title: "EdenRadar", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
+      title: "EdenScout", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
       items: ["300+ TTOs monitored continuously", "EDEN-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
     },
   ];
   return (
-    <Slide index={6} section="Our Solution" accent={colors.green} colors={colors}>
+    <Slide index={4} section="Our Solution" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={4} seed={0} />
       <PitchDots color={colors.violet} count={4} seed={1} />
       <PitchDots color={colors.green} count={4} seed={2} />
@@ -1001,7 +1001,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
-    <Slide index={5} section="EdenRadar" accent={colors.green} colors={colors}>
+    <Slide index={6} section="EdenScout" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.12} />
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
@@ -1015,7 +1015,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
         </div>
       </div>
       <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
-        The industry-facing layer. EdenRadar monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
+        The industry-facing layer. EdenScout monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {features.map((f) => (
@@ -1046,11 +1046,11 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
     { icon: Workflow, text: "11-section structured research project canvas" },
     { icon: BookOpen, text: "Literature synthesis across 40+ academic sources" },
     { icon: Award, text: "Grants matched to your research profile" },
-    { icon: Link2, text: "Signals flow directly to EdenRadar subscribers" },
+    { icon: Link2, text: "Signals flow directly to EdenScout subscribers" },
   ];
 
   return (
-    <Slide index={4} section="Supply Side" accent={colors.green} colors={colors}>
+    <Slide index={5} section="Supply Side" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={5} seed={0} />
       <PitchDots color={colors.violet} count={5} seed={2} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
@@ -1137,13 +1137,13 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
             style={{ background: `${colors.violet}22`, color: colors.violet, border: `1px solid ${colors.violet}44` }}
           >
             <ArrowRight className="w-3 h-3" />
-            Signals flow directly to EdenRadar
+            Signals flow directly to EdenScout
           </div>
         </div>
       </div>
 
       <p className="text-[10px] sm:text-xs text-center mt-4 sm:mt-5 max-w-2xl mx-auto leading-relaxed" style={{ color: colors.textMuted }}>
-        Every concept submitted and every research project published becomes an enriched, scored signal visible to EdenRadar subscribers.
+        Every concept submitted and every research project published becomes an enriched, scored signal visible to EdenScout subscribers.
       </p>
     </Slide>
   );
@@ -1185,7 +1185,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
   const tiers = [
     { name: "EdenDiscovery", price: "$14.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
     { name: "EdenLab", price: "$29.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
-    { name: "EdenRadar", price: "$59.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 300+ Tech Transfer Offices, EDEN dossiers, convergence signals, full ecosystem access" },
+    { name: "EdenScout", price: "$59.99", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Industry intelligence, 300+ Tech Transfer Offices, EDEN dossiers, convergence signals, full ecosystem access" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
@@ -1342,9 +1342,9 @@ export default function PitchDeck() {
       <CoverSlide colors={colors} />
       <WhoWeAreSlide colors={colors} />
       <ProblemSlide colors={colors} />
+      <SolutionPortalsSlide colors={colors} />
       <EarlySignalSlide colors={colors} />
       <RadarSlide colors={colors} />
-      <SolutionPortalsSlide colors={colors} />
       <PitchEdenChatSlide colors={colors} />
       <TractionSlide colors={colors} />
       <ContactSlide colors={colors} />

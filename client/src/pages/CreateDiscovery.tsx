@@ -156,7 +156,7 @@ export default function CreateDiscovery() {
           headers: researcherHeaders,
         });
         toast({
-          title: "Published to EdenRadar Industry!",
+          title: "Published to EdenScout!",
           description: "Your discovery is now visible to industry buyers in the Scout portal.",
         });
       } else {
@@ -192,7 +192,7 @@ export default function CreateDiscovery() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Create Discovery Card</h1>
           <p className="text-sm text-muted-foreground">
-            Publish your research to reach industry partners through EdenRadar.
+            Publish your research to reach industry partners through EdenScout.
           </p>
         </div>
       </div>
@@ -458,7 +458,7 @@ export default function CreateDiscovery() {
               data-testid="button-publish-to-industry"
             >
               <Send className="w-4 h-4" />
-              Publish to EdenRadar Industry
+              Publish to EdenScout
             </Button>
           </div>
         </form>

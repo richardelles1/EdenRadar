@@ -97,7 +97,7 @@ const TIERS = [
     ],
   },
   {
-    name: "EdenRadar",
+    name: "EdenScout",
     tier: "Tier 3",
     icon: TrendingUp,
     color: "hsl(142 65% 48%)",
@@ -513,7 +513,7 @@ const HOW_STEPS = [
   {
     number: "01",
     title: "Sign up and choose your tier",
-    desc: "Create your account in under two minutes. Select the tier that fits your team, starting from EdenDiscovery for early exploration all the way to the full EdenRadar intelligence suite.",
+    desc: "Create your account in under two minutes. Select the tier that fits your team, starting from EdenDiscovery for early exploration all the way to the full EdenScout intelligence suite.",
   },
   {
     number: "02",
@@ -562,7 +562,7 @@ export default function HowItWorks() {
             <span className="gradient-text">Powerful intelligence.</span>
           </h1>
           <p className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Three tiers built for every stage of biotech discovery. Start exploring free-range assets today, or go all-in with the full EdenRadar suite.
+            Three tiers built for every stage of biotech discovery. Start exploring free-range assets today, or go all-in with the full EdenScout suite.
           </p>
         </section>
 
