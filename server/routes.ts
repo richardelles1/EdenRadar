@@ -2103,10 +2103,11 @@ export async function registerRoutes(
       // ── Session focus context + filter extraction ──────────────────────────
       // Pass portfolio institution names so pass-2 detected institutions persist to focusContext
       const focusContext = getOrUpdateSessionFocus(sid, message.trim(), portfolioInstitutionNames);
-      // Explicit reset: when focus was already empty and the user says "start fresh",
-      // getOrUpdateSessionFocus does not detect a non-empty → empty transition.
-      // Call markEngagementReset directly so adaptive signals are cleared regardless.
-      if (isEngagementResetMessage(message.trim()) && Object.keys(focusContext).length === 0) {
+      // Unconditional reset: any reset-intent message clears adaptive engagement
+      // signals regardless of whether focus itself transitioned to empty.
+      // This covers "start fresh with gene therapy" (focus becomes non-empty
+      // but old engagement signals must still be wiped).
+      if (isEngagementResetMessage(message.trim())) {
         markEngagementReset(sid);
       }
       const filters = parseQueryFilters(message.trim(), focusContext);

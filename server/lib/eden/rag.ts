@@ -942,12 +942,14 @@ export function rerankAssets(
     ([ind, count]) => ({ key: ind.toLowerCase(), count })
   );
 
+  // Short-circuit: when candidates fit within the limit, ordering is irrelevant;
+  // skip scoring to preserve existing top-N semantic-similarity ordering.
+  if (assets.length <= LIMIT) return assets.slice(0, LIMIT);
+
   const hasProfileBoosts = preferredModalities.length > 0 || preferredAreas.length > 0;
   const hasEngagementBoosts = engagedModalities.length > 0 || engagedIndications.length > 0;
 
-  if (assets.length <= LIMIT && !hasProfileBoosts && !hasEngagementBoosts) {
-    return assets.slice(0, LIMIT);
-  }
+  if (!hasProfileBoosts && !hasEngagementBoosts) return assets.slice(0, LIMIT);
 
   const scored = assets.map((a) => {
     let boost = 0;
