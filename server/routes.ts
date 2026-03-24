@@ -4663,7 +4663,93 @@ If a field cannot be determined, use "N/A".`
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    const PARSE_PROMPT = `You are a biotech technology transfer analyst. Extract every distinct licensable asset from the provided TTO (Technology Transfer Office) content for institution: ${institution}.
+    // Layout-aware prompt: describes the standard two-column TTO listing page structure
+    // so the model hunts each field in its expected zone rather than guessing.
+    const buildParsePrompt = (inst: string) =>
+      `You are a biotech technology transfer analyst extracting a single licensable asset from a TTO (Technology Transfer Office) listing page for institution: ${inst}.
+
+TTO listing pages typically follow this two-column layout:
+- LEFT SIDEBAR: technology ID / IDF number / case number (look for labels like "IDF #:", "Case #:", "Tech ID:"), inventor names (under "Meet the Inventors" or "Inventors"), contact person name and email (under "Contact For More Info"), school or department name.
+- MAIN CONTENT AREA: the technology title (large heading at top), then labelled sections such as "Unmet Need", "Technology", "Other Applications", "Advantages" (bullet list), "Background", "Description".
+
+Extract exactly one asset from this page. Return ONLY valid JSON with a single key "assets" containing a one-item array. The item must have these fields:
+- name: the technology title from the main heading (string)
+- description: 2-3 sentence summary combining the Technology and Unmet Need sections (string, "" if not visible)
+- abstract: the full verbatim text from all main content sections concatenated (string, "" if not visible)
+- sourceUrl: the page URL if visible in a browser address bar or breadcrumb (string, "" if not)
+- inventors: array of inventor full names from the sidebar (string[], [] if none listed)
+- technologyId: the technology ID, IDF number, or case number from the sidebar — look for "IDF #:", "T-" prefixed codes, "Case #:" (string, "" if not visible)
+- contactEmail: the contact email address from the sidebar (string, "" if not visible)
+- patentStatus: one of "patented", "patent pending", "provisional", "unknown" — infer from any patent application links or text mentioning PCT/provisional
+- target: molecular or biological target if determinable, e.g. "AAV capsid", "PD-1" ("unknown" if not stated)
+- modality: one of "small molecule", "antibody", "gene therapy", "cell therapy", "peptide", "vaccine", "nanoparticle", "medical device", "diagnostic", "platform technology", "research tool", "unknown"
+- indication: disease or condition being targeted ("unknown" if not stated)
+- developmentStage: one of "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"
+- categories: array of 2-4 therapeutic area tags e.g. ["oncology", "gene therapy"] ([] if not determinable)
+- innovationClaim: 1-sentence key innovation from the Advantages or Technology section ("unknown" if not clear)
+- mechanismOfAction: brief mechanism description ("unknown" if not stated)`;
+
+    // Normalise a raw AI response into a typed asset array
+    function normaliseAssets(raw: any[]): any[] {
+      return raw.slice(0, 200).map((a: any) => ({
+        name: String(a.name || "Unknown Asset"),
+        description: String(a.description || ""),
+        sourceUrl: String(a.sourceUrl || ""),
+        inventors: Array.isArray(a.inventors) ? a.inventors.map(String) : [],
+        patentStatus: String(a.patentStatus || "unknown"),
+        technologyId: String(a.technologyId || ""),
+        contactEmail: String(a.contactEmail || ""),
+        target: String(a.target || "unknown"),
+        modality: String(a.modality || "unknown"),
+        indication: String(a.indication || "unknown"),
+        developmentStage: String(a.developmentStage || "unknown"),
+        abstract: String(a.abstract || ""),
+        categories: Array.isArray(a.categories) ? a.categories.map(String) : [],
+        innovationClaim: String(a.innovationClaim || "unknown"),
+        mechanismOfAction: String(a.mechanismOfAction || "unknown"),
+      }));
+    }
+
+    try {
+      let assets: any[] = [];
+
+      if (imageFiles.length > 0) {
+        // ── Image mode: gpt-4o, one API call per image ──────────────────────────
+        // Processing images individually eliminates cross-page content bleed and
+        // gives each screenshot its own full context window.
+        const prompt = buildParsePrompt(institution);
+        for (const file of imageFiles) {
+          const b64 = file.buffer.toString("base64");
+          const parts: any[] = [
+            { type: "text", text: prompt },
+            { type: "image_url", image_url: { url: `data:${file.mimetype};base64,${b64}`, detail: "high" as const } },
+          ];
+          // If supplementary text was also uploaded, append it as context
+          if (combinedText) {
+            parts.push({ type: "text", text: `\n\n---\nSupplementary text (may relate to the same page):\n${combinedText.slice(0, 8000)}` });
+          }
+          try {
+            const response = await openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [{ role: "user", content: parts }],
+              response_format: { type: "json_object" },
+              temperature: 0.1,
+              max_tokens: 2048,
+            });
+            const aiContent = response.choices[0]?.message?.content ?? "";
+            let parsedJson: any;
+            try { parsedJson = JSON.parse(aiContent); } catch { continue; }
+            const rawAssets: any[] = Array.isArray(parsedJson?.assets) ? parsedJson.assets
+              : Array.isArray(parsedJson) ? parsedJson : [];
+            assets.push(...normaliseAssets(rawAssets));
+          } catch (imgErr: any) {
+            console.warn(`[manual-import/parse] gpt-4o call failed for image ${file.originalname}: ${imgErr?.message}`);
+          }
+        }
+      } else if (combinedText) {
+        // ── Text-only mode: gpt-4o-mini, single call ────────────────────────────
+        // No vision needed — keep the cheaper model and a multi-asset prompt.
+        const textPrompt = `You are a biotech technology transfer analyst. Extract every distinct licensable asset from the provided TTO (Technology Transfer Office) content for institution: ${institution}.
 
 Return ONLY valid JSON with a single key "assets" containing an array (up to 200 items). Each item must have these fields:
 - name: the technology/asset name as listed (string)
@@ -4673,63 +4759,34 @@ Return ONLY valid JSON with a single key "assets" containing an array (up to 200
 - patentStatus: one of "patented", "patent pending", "provisional", "unknown"
 - technologyId: technology ID or case number if visible (string, "" if not)
 - contactEmail: contact email if listed (string, "" if not)
-- target: molecular or biological target if determinable, e.g. "EGFR", "PD-1" ("unknown" if not stated)
+- target: molecular or biological target if determinable ("unknown" if not stated)
 - modality: one of "small molecule", "antibody", "gene therapy", "cell therapy", "peptide", "vaccine", "nanoparticle", "medical device", "diagnostic", "platform technology", "research tool", "unknown"
 - indication: disease or condition being targeted ("unknown" if not stated)
 - developmentStage: one of "discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"
 - abstract: full description text from listing if visible (string, "" if not)
-- categories: array of 2-4 therapeutic area tags e.g. ["oncology", "immunotherapy"] ([] if not determinable)
+- categories: array of 2-4 therapeutic area tags ([] if not determinable)
 - innovationClaim: 1-sentence key innovation ("unknown" if not clear)
 - mechanismOfAction: brief MoA description ("unknown" if not stated)
 
-If multiple assets appear, return each as a separate array item. If only one asset, return a one-item array.`;
+If multiple assets appear, return each as a separate array item.`;
 
-    try {
-      const messageParts: any[] = [{ type: "text", text: PARSE_PROMPT }];
-
-      for (const file of imageFiles) {
-        const b64 = file.buffer.toString("base64");
-        messageParts.push({ type: "image_url", image_url: { url: `data:${file.mimetype};base64,${b64}`, detail: "high" as const } });
+        const response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: [
+            { type: "text", text: textPrompt },
+            { type: "text", text: `\n\n---\nContent:\n${combinedText.slice(0, 16000)}` },
+          ] }],
+          response_format: { type: "json_object" },
+          temperature: 0.1,
+          max_tokens: 4096,
+        });
+        const aiContent = response.choices[0]?.message?.content ?? "";
+        let parsedJson: any;
+        try { parsedJson = JSON.parse(aiContent); } catch { return res.status(500).json({ error: "AI returned invalid JSON" }); }
+        const rawAssets: any[] = Array.isArray(parsedJson?.assets) ? parsedJson.assets
+          : Array.isArray(parsedJson) ? parsedJson : [];
+        assets = normaliseAssets(rawAssets);
       }
-
-      if (combinedText) {
-        messageParts.push({ type: "text", text: `\n\n---\nContent:\n${combinedText.slice(0, 16000)}` });
-      }
-
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [{ role: "user", content: messageParts }],
-        response_format: { type: "json_object" },
-        temperature: 0.1,
-        max_tokens: 4096,
-      });
-
-      const aiContent = response.choices[0]?.message?.content ?? "";
-      let parsedJson: any;
-      try { parsedJson = JSON.parse(aiContent); } catch { return res.status(500).json({ error: "AI returned invalid JSON" }); }
-
-      const rawAssets: any[] = Array.isArray(parsedJson?.assets) ? parsedJson.assets
-        : Array.isArray(parsedJson) ? parsedJson : [];
-
-      const assets = rawAssets.slice(0, 200).map((a: any) => {
-        const name: string = String(a.name || "Unknown Asset");
-        const description: string = String(a.description || "");
-        const sourceUrl: string = String(a.sourceUrl || "");
-        const inventors: string[] = Array.isArray(a.inventors) ? a.inventors.map(String) : [];
-        const patentStatus: string = String(a.patentStatus || "unknown");
-        const technologyId: string = String(a.technologyId || "");
-        const contactEmail: string = String(a.contactEmail || "");
-        const target: string = String(a.target || "unknown");
-        const modality: string = String(a.modality || "unknown");
-        const indication: string = String(a.indication || "unknown");
-        const developmentStage: string = String(a.developmentStage || "unknown");
-        const abstract: string = String(a.abstract || "");
-        const categories: string[] = Array.isArray(a.categories) ? a.categories.map(String) : [];
-        const innovationClaim: string = String(a.innovationClaim || "unknown");
-        const mechanismOfAction: string = String(a.mechanismOfAction || "unknown");
-
-        return { name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage, abstract, categories, innovationClaim, mechanismOfAction };
-      });
 
       return res.json({ assets, institution });
     } catch (err: any) {
