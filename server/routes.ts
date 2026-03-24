@@ -22,7 +22,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -1462,6 +1462,13 @@ export async function registerRoutes(
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const result = pauseScheduler();
     res.json(result);
+  });
+
+  app.post("/api/ingest/scheduler/reset", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const result = resetAndStartScheduler();
+    res.json({ ...result, status: getSchedulerStatus() });
   });
 
   app.post("/api/ingest/scheduler/bump", async (req, res) => {

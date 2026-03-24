@@ -776,6 +776,47 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const resetConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulerResetMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/ingest/scheduler/reset", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      setResetConfirm(false);
+      if (d.ok) {
+        toast({ title: "Restarted from scratch", description: d.message });
+      } else {
+        toast({ title: "Cannot reset", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      setResetConfirm(false);
+      toast({ title: "Reset failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleResetClick = () => {
+    if (!resetConfirm) {
+      setResetConfirm(true);
+      if (resetConfirmTimer.current) clearTimeout(resetConfirmTimer.current);
+      resetConfirmTimer.current = setTimeout(() => setResetConfirm(false), 4000);
+    } else {
+      if (resetConfirmTimer.current) clearTimeout(resetConfirmTimer.current);
+      schedulerResetMutation.mutate();
+    }
+  };
+
   type ScraperHealthRow = {
     institution: string;
     consecutiveFailures: number;
@@ -1060,6 +1101,22 @@ function DataHealth({ pw }: { pw: string }) {
                   {schedPaused ? "Resume" : "Start"}
                 </Button>
               )}
+              <Button
+                size="sm"
+                variant="outline"
+                className={`h-8 text-xs font-medium transition-colors ${resetConfirm
+                  ? "border-red-500 text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/50"
+                  : "border-border text-muted-foreground hover:text-foreground hover:border-red-400/60"}`}
+                onClick={handleResetClick}
+                disabled={schedulerResetMutation.isPending}
+                data-testid="button-reset-scheduler"
+              >
+                {schedulerResetMutation.isPending
+                  ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  : <RefreshCw className="w-3 h-3 mr-1" />
+                }
+                {resetConfirm ? "Confirm Reset?" : "Reset"}
+              </Button>
             </div>
           </div>
 

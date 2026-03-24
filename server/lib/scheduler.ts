@@ -190,6 +190,30 @@ export function startScheduler(): { ok: boolean; message: string } {
   return { ok: true, message: "Scheduler started" };
 }
 
+export function resetAndStartScheduler(): { ok: boolean; message: string } {
+  if (isIngestionRunning()) {
+    return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
+  }
+  // Stop any in-flight timer immediately
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+    schedulerTimer = null;
+  }
+  queueIndex = 0;
+  completedThisCycle = 0;
+  failedThisCycle = 0;
+  skippedThisCycle = 0;
+  cycleStartedAt = new Date();
+  cycleCount++;
+  priorityQueue = [];
+  schedulerState = "running";
+  persistState();
+  console.log(`[scheduler] Reset — starting fresh cycle #${cycleCount} from position 0/${getInstitutionQueue().length}`);
+  loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
+  scheduleNext();
+  return { ok: true, message: `Started fresh cycle #${cycleCount}` };
+}
+
 export function pauseScheduler(): { ok: boolean; message: string } {
   if (schedulerState !== "running") {
     return { ok: false, message: "Scheduler is not running" };
