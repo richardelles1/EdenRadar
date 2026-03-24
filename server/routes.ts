@@ -1414,7 +1414,8 @@ export async function registerRoutes(
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-      await storage.rejectStagingItem(id);
+      const found = await storage.rejectStagingItem(id);
+      if (!found) return res.status(404).json({ error: "Item not found" });
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Reject failed" });

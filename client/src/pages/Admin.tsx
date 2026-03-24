@@ -2796,7 +2796,7 @@ type NewArrivalsData = {
 
 function NewArrivals({ pw }: { pw: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [pendingRejectId, setPendingRejectId] = useState<number | null>(null);
+  const [pendingRejectIds, setPendingRejectIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<NewArrivalsData>({
@@ -2814,7 +2814,7 @@ function NewArrivals({ pw }: { pw: string }) {
 
   const rejectMutation = useMutation({
     mutationFn: async (id: number) => {
-      setPendingRejectId(id);
+      setPendingRejectIds((prev) => new Set(prev).add(id));
       const res = await fetch(`/api/admin/new-arrivals/${id}`, {
         method: "DELETE",
         headers: { "x-admin-password": pw },
@@ -2828,8 +2828,8 @@ function NewArrivals({ pw }: { pw: string }) {
     onError: (err: Error) => {
       toast({ title: "Reject failed", description: err.message, variant: "destructive" });
     },
-    onSettled: () => {
-      setPendingRejectId(null);
+    onSettled: (_data, _err, id) => {
+      setPendingRejectIds((prev) => { const next = new Set(prev); next.delete(id); return next; });
     },
   });
 
@@ -2982,11 +2982,11 @@ function NewArrivals({ pw }: { pw: string }) {
                             <button
                               className="ml-1 h-5 w-5 flex items-center justify-center rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
                               onClick={() => rejectMutation.mutate(asset.id)}
-                              disabled={pendingRejectId === asset.id}
+                              disabled={pendingRejectIds.has(asset.id)}
                               title="Remove from queue"
                               data-testid={`button-reject-${asset.id}`}
                             >
-                              {pendingRejectId === asset.id
+                              {pendingRejectIds.has(asset.id)
                                 ? <Loader2 className="h-3 w-3 animate-spin" />
                                 : <X className="h-3 w-3" />
                               }

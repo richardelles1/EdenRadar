@@ -184,7 +184,7 @@ export interface IStorage {
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>>;
   pushNewArrivals(institution?: string): Promise<{ updated: number }>;
-  rejectStagingItem(id: number): Promise<void>;
+  rejectStagingItem(id: number): Promise<boolean>;
 
   getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
   getAssetsNeedingEmbedding(): Promise<Array<{
@@ -1228,8 +1228,9 @@ export class DatabaseStorage implements IStorage {
     return { updated: stagingRows.length };
   }
 
-  async rejectStagingItem(id: number): Promise<void> {
-    await db.update(syncStaging).set({ status: "skipped" }).where(eq(syncStaging.id, id));
+  async rejectStagingItem(id: number): Promise<boolean> {
+    const rows = await db.update(syncStaging).set({ status: "skipped" }).where(eq(syncStaging.id, id)).returning({ id: syncStaging.id });
+    return rows.length > 0;
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
