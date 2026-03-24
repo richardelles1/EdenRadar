@@ -258,16 +258,12 @@ function scheduleNext(): void {
   const queue = getInstitutionQueue();
 
   if (queueIndex >= queue.length) {
-    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (backoff). Starting next cycle...`);
+    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (backoff). Scheduler stopping — click Start for a new run.`);
     lastCycleCompletedAt = new Date();
-    queueIndex = 0;
-    completedThisCycle = 0;
-    failedThisCycle = 0;
-    skippedThisCycle = 0;
-    cycleStartedAt = new Date();
-    cycleCount++;
+    schedulerState = "idle";
     persistState();
     loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
+    return;
   }
 
   const batch: string[] = [];
