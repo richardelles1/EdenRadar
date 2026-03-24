@@ -1115,7 +1115,7 @@ function DataHealth({ pw }: { pw: string }) {
                   ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                   : <RefreshCw className="w-3 h-3 mr-1" />
                 }
-                {resetConfirm ? "Confirm Reset?" : "Reset"}
+                {resetConfirm ? "Confirm Reset & Restart?" : "Reset & Restart"}
               </Button>
             </div>
           </div>
