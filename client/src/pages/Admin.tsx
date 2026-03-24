@@ -3943,7 +3943,7 @@ function assetGrade(score: number): "pass" | "revisions" | "incomplete" {
 function getMissingFields(a: ParsedImportAsset): string[] {
   const missing: string[] = [];
   const isMissing = (v: string | string[]) =>
-    !v || v === "unknown" || (typeof v === "string" && v.length < 3) || (Array.isArray(v) && v.length === 0);
+    !v || v === "unknown" || v === "n/a" || v === "" || (Array.isArray(v) && v.length === 0);
   if (isMissing(a.technologyId)) missing.push("Tech ID");
   if (isMissing(a.description)) missing.push("description");
   if (isMissing(a.abstract)) missing.push("abstract");
