@@ -2796,6 +2796,7 @@ type NewArrivalsData = {
 
 function NewArrivals({ pw }: { pw: string }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [pendingRejectId, setPendingRejectId] = useState<number | null>(null);
   const { toast } = useToast();
 
   const { data, isLoading } = useQuery<NewArrivalsData>({
@@ -2809,6 +2810,27 @@ function NewArrivals({ pw }: { pw: string }) {
     },
     staleTime: 30000,
     enabled: !!pw,
+  });
+
+  const rejectMutation = useMutation({
+    mutationFn: async (id: number) => {
+      setPendingRejectId(id);
+      const res = await fetch(`/api/admin/new-arrivals/${id}`, {
+        method: "DELETE",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Reject failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/new-arrivals"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Reject failed", description: err.message, variant: "destructive" });
+    },
+    onSettled: () => {
+      setPendingRejectId(null);
+    },
   });
 
   const pushMutation = useMutation({
@@ -2954,9 +2976,21 @@ function NewArrivals({ pw }: { pw: string }) {
                               <span className="text-sm text-foreground line-clamp-1">{asset.assetName}</span>
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0">
                             <Clock className="h-3 w-3 text-muted-foreground" />
                             <span className="text-xs text-muted-foreground">{formatDate(asset.firstSeenAt)}</span>
+                            <button
+                              className="ml-1 h-5 w-5 flex items-center justify-center rounded text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                              onClick={() => rejectMutation.mutate(asset.id)}
+                              disabled={pendingRejectId === asset.id}
+                              title="Remove from queue"
+                              data-testid={`button-reject-${asset.id}`}
+                            >
+                              {pendingRejectId === asset.id
+                                ? <Loader2 className="h-3 w-3 animate-spin" />
+                                : <X className="h-3 w-3" />
+                              }
+                            </button>
                           </div>
                         </div>
                       ))}

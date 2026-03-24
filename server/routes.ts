@@ -1408,6 +1408,19 @@ export async function registerRoutes(
     }
   });
 
+  app.delete("/api/admin/new-arrivals/:id", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      await storage.rejectStagingItem(id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Reject failed" });
+    }
+  });
+
   app.get("/api/ingest/sync/sessions", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

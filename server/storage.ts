@@ -184,6 +184,7 @@ export interface IStorage {
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>>;
   pushNewArrivals(institution?: string): Promise<{ updated: number }>;
+  rejectStagingItem(id: number): Promise<void>;
 
   getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
   getAssetsNeedingEmbedding(): Promise<Array<{
@@ -1135,15 +1136,18 @@ export class DatabaseStorage implements IStorage {
     count: number;
     assets: Array<{ id: number; assetName: string; firstSeenAt: Date; sourceUrl: string | null }>;
   }>> {
+    // DISTINCT ON (asset_name, institution) keeps only the newest staging row per
+    // title+institution pair, collapsing duplicates created by back-to-back scraper runs.
     const result = await db.execute(sql`
-      SELECT ss.id, ss.asset_name, ss.institution, ss.created_at, ss.source_url
+      SELECT DISTINCT ON (ss.asset_name, ss.institution)
+             ss.id, ss.asset_name, ss.institution, ss.created_at, ss.source_url
       FROM sync_staging ss
       JOIN sync_sessions ses ON ses.session_id = ss.session_id
       WHERE ss.is_new = true
         AND ss.relevant = true
         AND ss.status NOT IN ('pushed', 'skipped')
         AND ses.status = 'enriched'
-      ORDER BY ss.created_at DESC
+      ORDER BY ss.asset_name, ss.institution, ss.created_at DESC
     `);
     const rows = result.rows as Array<{
       id: number; asset_name: string; institution: string; created_at: string; source_url: string | null;
@@ -1222,6 +1226,10 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { updated: stagingRows.length };
+  }
+
+  async rejectStagingItem(id: number): Promise<void> {
+    await db.update(syncStaging).set({ status: "skipped" }).where(eq(syncStaging.id, id));
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {
