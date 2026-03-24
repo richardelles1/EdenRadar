@@ -4746,6 +4746,10 @@ Extract exactly one asset from this page. Return ONLY valid JSON with a single k
             console.warn(`[manual-import/parse] gpt-4o call failed for image ${file.originalname}: ${imgErr?.message}`);
           }
         }
+        // If every image call failed or returned empty JSON, surface a real error
+        if (assets.length === 0) {
+          return res.status(500).json({ error: "No assets could be extracted from the uploaded images. The image quality may be too low, or the AI vision call failed — check server logs for details." });
+        }
       } else if (combinedText) {
         // ── Text-only mode: gpt-4o-mini, single call ────────────────────────────
         // No vision needed — keep the cheaper model and a multi-asset prompt.
