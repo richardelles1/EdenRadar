@@ -293,7 +293,7 @@ function scheduleNext(): void {
   const queue = getInstitutionQueue();
 
   if (queueIndex >= queue.length) {
-    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (backoff). Scheduler stopping — click Start for a new run.`);
+    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (lock contention). Scheduler stopping — click Start for a new run.`);
     lastCycleCompletedAt = new Date();
     schedulerState = "idle";
     persistState();
@@ -308,11 +308,6 @@ function scheduleNext(): void {
   while (i < queue.length) {
     const inst = queue[i];
     i++;
-
-    if (isInBackoff(inst)) {
-      skippedThisCycle++;
-      continue;
-    }
 
     const type = getScraperType(inst);
 
