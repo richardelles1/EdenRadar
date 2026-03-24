@@ -107,6 +107,7 @@ export interface IStorage {
   updateSyncSession(sessionId: string, data: Partial<Pick<SyncSession, "status" | "phase" | "rawCount" | "newCount" | "relevantCount" | "pushedCount" | "completedAt" | "lastRefreshedAt" | "errorMessage">>): Promise<SyncSession>;
   getSyncSession(sessionId: string): Promise<SyncSession | undefined>;
   getLatestSyncSessions(): Promise<SyncSession[]>;
+  markRunningSessionsFailed(): Promise<number>;
   getInstitutionSyncHistory(institution: string, limit?: number): Promise<SyncSession[]>;
   clearSyncStaging(institution: string): Promise<void>;
   insertSyncStagingBatch(rows: Array<Omit<SyncStagingRow, "id" | "createdAt">>): Promise<void>;
@@ -695,6 +696,21 @@ export class DatabaseStorage implements IStorage {
 
   async getLatestSyncSessions(): Promise<SyncSession[]> {
     return db.select().from(syncSessions).orderBy(desc(syncSessions.createdAt));
+  }
+
+  async markRunningSessionsFailed(): Promise<number> {
+    const now = new Date();
+    const rows = await db
+      .update(syncSessions)
+      .set({
+        status: "failed",
+        phase: "done",
+        completedAt: now,
+        errorMessage: "Server restarted during sync",
+      })
+      .where(and(eq(syncSessions.status, "running"), isNull(syncSessions.completedAt)))
+      .returning({ sessionId: syncSessions.sessionId });
+    return rows.length;
   }
 
   async getInstitutionSyncHistory(institution: string, limit = 5): Promise<SyncSession[]> {

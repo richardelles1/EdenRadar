@@ -7,8 +7,7 @@ import {
   updateScraperHealth,
   type ScraperHealthRow,
 } from "./scraperState";
-
-const MAX_HTTP_BATCH = 5;
+import { storage } from "../storage";
 
 export interface SchedulerStatus {
   state: "idle" | "running" | "paused";
@@ -134,6 +133,14 @@ export function setDelay(ms: number): { ok: boolean; message: string } {
 /** Restores scheduler state from DB. Returns true if the scheduler was running when the server last shut down (so the caller can decide to auto-resume). */
 export async function loadAndRestoreScheduler(): Promise<boolean> {
   try {
+    // Clean up any sessions left in "running" state by a previous server instance
+    // that was killed mid-sync. These would otherwise appear as "Stale" in the
+    // health dashboard indefinitely.
+    const cleaned = await storage.markRunningSessionsFailed();
+    if (cleaned > 0) {
+      console.log(`[scheduler] Cleaned up ${cleaned} interrupted session(s) from previous server instance`);
+    }
+
     scraperHealthCache = await loadAllScraperHealth();
     console.log(`[scheduler] Loaded health data for ${scraperHealthCache.size} institutions`);
 
@@ -301,54 +308,23 @@ function scheduleNext(): void {
     return;
   }
 
-  const batch: string[] = [];
-  let batchType: "playwright" | "http" | "api" = "http";
-  let i = queueIndex;
+  // Fully sequential: one institution at a time regardless of scraper type.
+  // This matches manual sync behaviour exactly and prevents concurrent requests
+  // to shared external platforms (InPart/Flintbox, CDNs) from triggering rate limits.
+  const institution = queue[queueIndex];
+  const scraperType = getScraperType(institution);
+  const nextQueueIndex = queueIndex + 1;
 
-  while (i < queue.length) {
-    const inst = queue[i];
-    i++;
+  currentInstitutions = [institution];
+  const syncStart = Date.now();
+  console.log(`[scheduler] Syncing ${institution} [${scraperType}] (${nextQueueIndex}/${queue.length})...`);
 
-    const type = getScraperType(inst);
-
-    if (type === "playwright") {
-      if (batch.length === 0) {
-        batch.push(inst);
-        batchType = "playwright";
-      }
-      break;
-    } else {
-      batch.push(inst);
-      batchType = type;
-      if (batch.length >= MAX_HTTP_BATCH) break;
-    }
-  }
-
-  // Do NOT advance queueIndex yet — keep it pointing to the start of this batch.
-  // Only advance after the batch fully completes so a mid-batch crash resumes from
-  // the beginning of the current batch rather than skipping unfinished institutions.
-  const nextQueueIndex = i;
-
-  if (batch.length === 0) {
-    queueIndex = nextQueueIndex;
-    schedulerTimer = setTimeout(() => scheduleNext(), 500);
-    return;
-  }
-
-  currentInstitutions = [...batch];
-  const batchStart = Date.now();
-
-  if (batch.length === 1) {
-    console.log(`[scheduler] Syncing ${batch[0]} [${batchType}] (${nextQueueIndex}/${queue.length})...`);
-  } else {
-    console.log(`[scheduler] Batch syncing ${batch.length} institutions [http]: ${batch.join(", ")} (${nextQueueIndex}/${queue.length})...`);
-  }
-
-  Promise.allSettled(batch.map((inst) => runOne(inst, gen))).finally(() => {
+  // Do NOT advance queueIndex yet — only advance after the sync completes so a
+  // mid-sync crash resumes from this institution rather than skipping it.
+  runOne(institution, gen).finally(() => {
     if (runGeneration !== gen) return;  // stale — reset happened mid-flight
-    queueIndex = nextQueueIndex;  // advance only after all batch members settle
-    const elapsed = Date.now() - batchStart;
-    syncDurations.push(Math.round(elapsed / batch.length));
+    queueIndex = nextQueueIndex;
+    syncDurations.push(Date.now() - syncStart);
     if (syncDurations.length > 20) syncDurations.shift();
     currentInstitutions = [];
     lastActivityAt = new Date();
@@ -392,7 +368,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
   } catch (err: any) {
     if (runGeneration === gen) {
       failedThisCycle++;
-      console.error(`[scheduler] ${institution} failed: ${err?.message}`);
+      console.log(`[scheduler] ${institution} failed: ${err?.message}`);
     }
     await updateScraperHealth(institution, false, err?.message);
     const current = scraperHealthCache.get(institution);

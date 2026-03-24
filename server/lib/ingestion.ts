@@ -311,7 +311,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         ),
       ]);
     } catch (err: any) {
-      console.error(`[sync] ${institutionName}: scrape failed — ${err?.message}`);
+      console.log(`[sync] ${institutionName}: scrape failed — ${err?.message}`);
       await storage.updateSyncSession(sessionId, {
         status: "failed",
         phase: "done",
