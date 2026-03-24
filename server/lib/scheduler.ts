@@ -44,6 +44,9 @@ let priorityQueue: string[] = [];
 let syncDurations: number[] = [];
 let lastCycleCompletedAt: Date | null = null;
 let delayBetweenSyncsMs = 5_000;
+/** Monotonically increasing. Incremented on every reset so in-flight batch
+ * callbacks can detect they belong to a superseded cycle and no-op. */
+let runGeneration = 0;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
@@ -194,7 +197,9 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   if (isIngestionRunning()) {
     return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
   }
-  // Stop any in-flight timer immediately
+  // Bump generation first so any in-flight batch callbacks become no-ops
+  runGeneration++;
+  // Stop any pending timer
   if (schedulerTimer) {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
@@ -203,12 +208,14 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   completedThisCycle = 0;
   failedThisCycle = 0;
   skippedThisCycle = 0;
+  currentInstitutions = [];
+  lastActivityAt = null;
   cycleStartedAt = new Date();
   cycleCount++;
   priorityQueue = [];
   schedulerState = "running";
   persistState();
-  console.log(`[scheduler] Reset — starting fresh cycle #${cycleCount} from position 0/${getInstitutionQueue().length}`);
+  console.log(`[scheduler] Reset (gen=${runGeneration}) — starting fresh cycle #${cycleCount} from position 0/${getInstitutionQueue().length}`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
   scheduleNext();
   return { ok: true, message: `Started fresh cycle #${cycleCount}` };
@@ -256,6 +263,9 @@ export function bumpToFront(institution: string): { ok: boolean; message: string
 function scheduleNext(): void {
   if (schedulerState !== "running") return;
 
+  // Capture current generation so callbacks can detect a superseded cycle
+  const gen = runGeneration;
+
   if (isIngestionRunning()) {
     schedulerTimer = setTimeout(() => scheduleNext(), 10_000);
     return;
@@ -266,7 +276,8 @@ function scheduleNext(): void {
     currentInstitutions = [institution];
     console.log(`[scheduler] Priority sync: ${institution}`);
     const batchStart = Date.now();
-    runOne(institution).finally(() => {
+    runOne(institution, gen).finally(() => {
+      if (runGeneration !== gen) return;  // stale — reset happened mid-flight
       syncDurations.push(Date.now() - batchStart);
       if (syncDurations.length > 20) syncDurations.shift();
       currentInstitutions = [];
@@ -325,11 +336,7 @@ function scheduleNext(): void {
 
   if (batch.length === 0) {
     queueIndex = nextQueueIndex;
-    if (queueIndex >= queue.length) {
-      schedulerTimer = setTimeout(() => scheduleNext(), 500);
-    } else {
-      schedulerTimer = setTimeout(() => scheduleNext(), 500);
-    }
+    schedulerTimer = setTimeout(() => scheduleNext(), 500);
     return;
   }
 
@@ -342,7 +349,8 @@ function scheduleNext(): void {
     console.log(`[scheduler] Batch syncing ${batch.length} institutions [http]: ${batch.join(", ")} (${nextQueueIndex}/${queue.length})...`);
   }
 
-  Promise.allSettled(batch.map((inst) => runOne(inst))).finally(() => {
+  Promise.allSettled(batch.map((inst) => runOne(inst, gen))).finally(() => {
+    if (runGeneration !== gen) return;  // stale — reset happened mid-flight
     queueIndex = nextQueueIndex;  // advance only after all batch members settle
     const elapsed = Date.now() - batchStart;
     syncDurations.push(Math.round(elapsed / batch.length));
@@ -356,7 +364,7 @@ function scheduleNext(): void {
   });
 }
 
-async function runOne(institution: string): Promise<void> {
+async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
@@ -364,15 +372,19 @@ async function runOne(institution: string): Promise<void> {
     // Push to the front of priorityQueue so it retries at the next scheduleNext() call
     // rather than waiting for the next full cycle.
     console.log(`[scheduler] Lock unavailable for ${institution} — requeueing for retry`);
-    if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
-    skippedThisCycle++;
+    if (runGeneration === gen) {
+      if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
+      skippedThisCycle++;
+    }
     return;
   }
 
   try {
     await runInstitutionSync(institution);
-    completedThisCycle++;
-    console.log(`[scheduler] ${institution} complete`);
+    if (runGeneration === gen) {
+      completedThisCycle++;
+      console.log(`[scheduler] ${institution} complete`);
+    }
     await updateScraperHealth(institution, true);
     scraperHealthCache.set(institution, {
       institution,
@@ -383,8 +395,10 @@ async function runOne(institution: string): Promise<void> {
       backoffUntil: null,
     });
   } catch (err: any) {
-    failedThisCycle++;
-    console.error(`[scheduler] ${institution} failed: ${err?.message}`);
+    if (runGeneration === gen) {
+      failedThisCycle++;
+      console.error(`[scheduler] ${institution} failed: ${err?.message}`);
+    }
     await updateScraperHealth(institution, false, err?.message);
     const current = scraperHealthCache.get(institution);
     const newFailures = (current?.consecutiveFailures ?? 0) + 1;
@@ -397,7 +411,10 @@ async function runOne(institution: string): Promise<void> {
       backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
     });
   } finally {
-    // Persist per-institution so progress survives a mid-batch restart
-    persistState();
+    // Always persist scraper health (health DB writes are safe regardless of gen)
+    // but only persist scheduler position if still in the same cycle
+    if (runGeneration === gen) {
+      persistState();
+    }
   }
 }
