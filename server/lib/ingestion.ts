@@ -263,7 +263,7 @@ export function releaseSyncLock(institution?: string): void {
 const TIMEOUT_BY_TYPE: Record<string, number> = {
   playwright: 12 * 60 * 1000,
   api: 3 * 60 * 1000,
-  http: 90 * 1000,
+  http: 3 * 60 * 1000,
 };
 
 export interface SyncResult {
@@ -307,7 +307,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       listings = await Promise.race([
         scraper.scrape(),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 60000)} min)`)), SCRAPER_TIMEOUT_MS)
+          setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`)), SCRAPER_TIMEOUT_MS)
         ),
       ]);
     } catch (err: any) {

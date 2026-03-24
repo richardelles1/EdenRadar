@@ -1318,7 +1318,7 @@ export async function registerRoutes(
           const elapsed = now - new Date(heartbeat).getTime();
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "failed") {
-          health = consecutiveFailures >= 3 ? "failing" : "degraded";
+          health = consecutiveFailures >= 3 ? "failing" : consecutiveFailures >= 2 ? "degraded" : "ok";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           health = "ok";
         } else {
