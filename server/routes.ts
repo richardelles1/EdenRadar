@@ -4670,11 +4670,11 @@ If a field cannot be determined, use "N/A".`
 
 TTO listing pages typically follow this two-column layout:
 - LEFT SIDEBAR: technology ID / IDF number / case number (look for labels like "IDF #:", "Case #:", "Tech ID:"), inventor names (under "Meet the Inventors" or "Inventors"), contact person name and email (under "Contact For More Info"), school or department name.
-- MAIN CONTENT AREA: the technology title (large heading at top), then labelled sections such as "Unmet Need", "Technology", "Other Applications", "Advantages" (bullet list), "Background", "Description".
+- MAIN CONTENT AREA: the technology title (large heading at top), then labelled sections such as "Unmet Need", "Value Proposition" (used by Duke and some others as an equivalent to "Unmet Need"), "Technology", "Other Applications", "Advantages" (bullet list), "Background", "Description".
 
 Extract exactly one asset from this page. Return ONLY valid JSON with a single key "assets" containing a one-item array. The item must have these fields:
 - name: the technology title from the main heading (string)
-- description: 2-3 sentence summary combining the Technology and Unmet Need sections (string, "" if not visible)
+- description: 2-3 sentence summary combining the Technology, Unmet Need, and/or Value Proposition sections (string, "" if not visible)
 - abstract: the full verbatim text from all main content sections concatenated (string, "" if not visible)
 - sourceUrl: the page URL if visible in a browser address bar or breadcrumb (string, "" if not)
 - inventors: array of inventor full names from the sidebar (string[], [] if none listed)
@@ -4712,6 +4712,7 @@ Extract exactly one asset from this page. Return ONLY valid JSON with a single k
 
     try {
       let assets: any[] = [];
+      const failedImages: string[] = [];
 
       if (imageFiles.length > 0) {
         // ── Image mode: gpt-4o, one API call per image ──────────────────────────
@@ -4738,12 +4739,21 @@ Extract exactly one asset from this page. Return ONLY valid JSON with a single k
             });
             const aiContent = response.choices[0]?.message?.content ?? "";
             let parsedJson: any;
-            try { parsedJson = JSON.parse(aiContent); } catch { continue; }
+            try { parsedJson = JSON.parse(aiContent); } catch {
+              failedImages.push(file.originalname);
+              continue;
+            }
             const rawAssets: any[] = Array.isArray(parsedJson?.assets) ? parsedJson.assets
               : Array.isArray(parsedJson) ? parsedJson : [];
-            assets.push(...normaliseAssets(rawAssets));
+            const normalised = normaliseAssets(rawAssets);
+            if (normalised.length === 0) {
+              failedImages.push(file.originalname);
+            } else {
+              assets.push(...normalised);
+            }
           } catch (imgErr: any) {
             console.warn(`[manual-import/parse] gpt-4o call failed for image ${file.originalname}: ${imgErr?.message}`);
+            failedImages.push(file.originalname);
           }
         }
         // If every image call failed or returned empty JSON, surface a real error
@@ -4792,7 +4802,7 @@ If multiple assets appear, return each as a separate array item.`;
         assets = normaliseAssets(rawAssets);
       }
 
-      return res.json({ assets, institution });
+      return res.json({ assets, institution, failedImages });
     } catch (err: any) {
       console.error("[manual-import/parse] Error:", err);
       return res.status(500).json({ error: err.message ?? "Parse failed" });
@@ -4807,6 +4817,7 @@ If multiple assets appear, return each as a separate array item.`;
     const assetSchema = z.object({
       name: z.string().min(1),
       description: z.string().default(""),
+      abstract: z.string().default(""),
       sourceUrl: z.string().default(""),
       inventors: z.array(z.string()).default([]),
       patentStatus: z.string().default("unknown"),
@@ -4839,7 +4850,7 @@ If multiple assets appear, return each as a separate array item.`;
         indication: a.indication && a.indication !== "unknown" ? a.indication : "unknown",
         developmentStage: a.developmentStage && a.developmentStage !== "unknown" ? a.developmentStage : "unknown",
         summary: a.description || a.name,
-        abstract: null as string | null,
+        abstract: a.abstract || null,
         sourceType: "tech_transfer" as const,
         sourceName: "manual",
         sourceUrl: a.sourceUrl || null,

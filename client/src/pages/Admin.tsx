@@ -3940,6 +3940,21 @@ function assetGrade(score: number): "pass" | "revisions" | "incomplete" {
   return score >= 75 ? "pass" : score >= 50 ? "revisions" : "incomplete";
 }
 
+function getMissingFields(a: ParsedImportAsset): string[] {
+  const missing: string[] = [];
+  const isMissing = (v: string | string[]) =>
+    !v || v === "unknown" || (typeof v === "string" && v.length < 3) || (Array.isArray(v) && v.length === 0);
+  if (isMissing(a.technologyId)) missing.push("Tech ID");
+  if (isMissing(a.description)) missing.push("description");
+  if (isMissing(a.abstract)) missing.push("abstract");
+  if (isMissing(a.inventors)) missing.push("inventors");
+  if (isMissing(a.contactEmail)) missing.push("contact email");
+  if (isMissing(a.target)) missing.push("target");
+  if (isMissing(a.modality)) missing.push("modality");
+  if (isMissing(a.indication)) missing.push("indication");
+  return missing;
+}
+
 function GradeBadge({ grade, score }: { grade: string; score: number }) {
   if (grade === "pass") return (
     <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 border-emerald-200">
@@ -3990,6 +4005,9 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
 
   // Done stage
   const [importResult, setImportResult] = useState<{ imported: number; skipped: number } | null>(null);
+
+  // Per-image parse warnings
+  const [failedImages, setFailedImages] = useState<string[]>([]);
 
   const { data: instData } = useQuery<{ institutions: string[]; manual: { name: string; ttoUrl: string }[] }>({
     queryKey: ["/api/admin/institutions", pw],
@@ -4055,12 +4073,13 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || "Parse failed");
-      return d as { assets: ParsedImportAsset[]; institution: string };
+      return d as { assets: ParsedImportAsset[]; institution: string; failedImages?: string[] };
     },
     onSuccess: (data) => {
       setParsedAssets(data.assets);
       setChecked(data.assets.map(() => true));
       setParsedInstitution(data.institution);
+      setFailedImages(data.failedImages ?? []);
       setStage("preview");
     },
     onError: (err: Error) => toast({ title: "Parse failed", description: err.message, variant: "destructive" }),
@@ -4075,8 +4094,8 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
         headers: { "Content-Type": "application/json", "x-admin-password": pw },
         body: JSON.stringify({
           institution: parsedInstitution,
-          assets: selected.map(({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage }) =>
-            ({ name, description, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage })
+          assets: selected.map(({ name, description, abstract, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage }) =>
+            ({ name, description, abstract, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage })
           ),
         }),
       });
@@ -4110,6 +4129,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
     setParsedAssets([]);
     setChecked([]);
     setImportResult(null);
+    setFailedImages([]);
     setPastedText("");
     setImageFiles([]);
     setImagePreviews([]);
@@ -4359,6 +4379,20 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
             </Button>
           </div>
 
+          {failedImages.length > 0 && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 flex items-start gap-2.5" data-testid="failed-images-warning">
+              <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-medium text-amber-700 dark:text-amber-400">
+                  {failedImages.length} image{failedImages.length !== 1 ? "s" : ""} yielded no asset
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
+                  {failedImages.join(", ")} — the screenshot may be too low resolution, cropped, or show a listing index rather than a single asset page. Try re-uploading a cleaner screenshot.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-xl border border-border overflow-hidden" data-testid="preview-table">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 border-b border-border">
@@ -4410,6 +4444,15 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                       </td>
                       <td className="px-3 py-2.5">
                         <GradeBadge grade={grade} score={score} />
+                        {(() => {
+                          const missing = getMissingFields(asset);
+                          if (missing.length === 0) return null;
+                          return (
+                            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1" data-testid={`missing-fields-${i}`}>
+                              Missing: {missing.join(" · ")}
+                            </p>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );
