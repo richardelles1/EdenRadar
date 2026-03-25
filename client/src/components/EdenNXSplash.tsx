@@ -1,4 +1,6 @@
 import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
+import edenNxLogo from "@assets/EdenNX_Logo_T_1774480105524.png";
 
 type Phase = "entering" | "holding" | "exiting" | "done";
 
@@ -6,7 +8,14 @@ const ENTER_MS = 500;
 const HOLD_MS = 1100;
 const EXIT_MS = 500;
 
+const PUBLIC_ROUTES = new Set(["/", "/login", "/about", "/what-we-do", "/how-it-works", "/pitch"]);
+
+function isPublicRoute(path: string): boolean {
+  return PUBLIC_ROUTES.has(path);
+}
+
 export function EdenNXSplash() {
+  const [location] = useLocation();
   const [phase, setPhase] = useState<Phase>(() => {
     if (typeof window !== "undefined" && sessionStorage.getItem("edennx-splash-seen")) {
       return "done";
@@ -14,8 +23,10 @@ export function EdenNXSplash() {
     return "entering";
   });
 
+  const skip = !isPublicRoute(location);
+
   useEffect(() => {
-    if (phase === "done") return;
+    if (phase === "done" || skip) return;
 
     sessionStorage.setItem("edennx-splash-seen", "1");
 
@@ -28,9 +39,9 @@ export function EdenNXSplash() {
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, []);
+  }, [phase, skip]);
 
-  if (phase === "done") return null;
+  if (phase === "done" || skip) return null;
 
   const overlayOpacity = phase === "exiting" ? 0 : 1;
   const logoScale = phase === "entering" ? 0.8 : 1;
@@ -42,10 +53,6 @@ export function EdenNXSplash() {
         @keyframes edennx-glow-pulse {
           0%, 100% { opacity: 0.4; transform: scale(1); }
           50%       { opacity: 0.85; transform: scale(1.07); }
-        }
-        @keyframes edennx-ring-spin {
-          from { transform: rotate(0deg) scale(1.18); }
-          to   { transform: rotate(360deg) scale(1.18); }
         }
       `}</style>
 
@@ -83,7 +90,8 @@ export function EdenNXSplash() {
 
         {/* Logo */}
         <img
-          src="/edennx-logo.png"
+          src={edenNxLogo}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/edennx-logo.png"; }}
           alt="EdenNX"
           style={{
             position: "relative",

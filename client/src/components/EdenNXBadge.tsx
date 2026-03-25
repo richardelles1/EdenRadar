@@ -1,3 +1,5 @@
+import edenNxLogo from "@assets/EdenNX_Logo_T_1774480105524.png";
+
 export function EdenNXBadge() {
   return (
     <>
@@ -22,7 +24,8 @@ export function EdenNXBadge() {
         title="EdenNX — Parent Company"
       >
         <img
-          src="/edennx-logo.png"
+          src={edenNxLogo}
+          onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/edennx-logo.png"; }}
           alt="EdenNX"
           style={{ height: 18, width: "auto", objectFit: "contain", display: "block" }}
         />
