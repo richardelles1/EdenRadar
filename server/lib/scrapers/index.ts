@@ -352,6 +352,119 @@ import {
 
 export { ScrapedListing, InstitutionScraper };
 
+// ── Scraper Tier Map ──────────────────────────────────────────────────────────
+// Tier 1: API/RSS-based (structured data, fastest)
+// Tier 2: Platform factory (TechPublisher / Flintbox platform crawl)
+// Tier 3: Custom bespoke HTML (not Playwright)
+// Tier 4: Playwright (headless browser — slowest, most resource-intensive)
+// Scrapers not listed here are inferred: playwright → 4, otherwise → 3.
+
+const TIER1_INSTITUTIONS = new Set<string>([
+  // Government / foundation API
+  "NIH Office of Technology Transfer",
+  "NCI Technology Transfer Center",
+  "Max Planck Innovation",
+  "LifeArc",
+  "Kyoto University TLO",
+  // Yissum — WP REST API
+  "Yissum",
+  // In-part non-playwright (Flintbox API)
+  "University of Central Florida",
+  "Florida International University",
+  "Rice University",
+  "Utah State University",
+  "Auburn University",
+  "University of Georgia",
+  "University of Connecticut",
+  "Dartmouth College",
+  "University of British Columbia",
+  "University of Victoria",
+  "Monash University",
+  // Task #109/#112 in-part API
+  "Dana-Farber Cancer Institute",
+  "Children's Hospital Los Angeles",
+  "Lurie Children's Hospital",
+  "Baylor College of Medicine",
+  "Children's National",
+  "Children's Hospital of Philadelphia",
+  // Task #113/#114 in-part API
+  "University of Glasgow",
+  "University of Southern Denmark",
+  "University of East Anglia",
+  "University of Sussex",
+  "Newcastle University",
+  "University of Plymouth",
+  "Saarland University",
+  "Stellenbosch University",
+  "Macquarie University",
+  // Task #115 in-part API
+  "Nagoya University",
+  "Okinawa Institute of Science and Technology",
+  "Hokkaido University",
+  "University of St Andrews",
+  "University of Salford",
+  // Task #120/#134 Flintbox
+  "University of Birmingham",
+  "University of Dundee",
+  "McGill University",
+  "University of Calgary",
+]);
+
+const TIER2_INSTITUTIONS = new Set<string>([
+  // TechPublisher factory
+  "Princeton University", "UCLA", "Brown University", "University of Rochester",
+  "Tufts University", "UTHealth Houston", "Colorado State University", "Virginia Tech",
+  "University of South Florida", "Wayne State University", "UT Dallas",
+  "Mississippi State University", "University of Toledo", "NJIT",
+  "Cal Poly San Luis Obispo", "Saint Louis University", "UC Davis", "UC Irvine",
+  "UC Riverside", "UC Santa Barbara", "UC Santa Cruz", "University of Utah",
+  "University of Virginia", "University of Oregon", "George Washington University",
+  "CZ Biohub", "MUSC", "University of South Carolina", "Lehigh University",
+  "Clemson University", "Iowa State University", "TGen", "Washington State University",
+  "University of Arizona", "Penn State", "Rutgers University", "Stevens Institute of Technology",
+  "Rensselaer Polytechnic Institute", "Stony Brook University",
+  "University of Cincinnati", "University at Buffalo", "Rowan University",
+  "George Mason University", "University of Maine", "Binghamton University",
+  "University of Southern California", "Oregon State University",
+  "Georgia State University", "Northeastern University", "University of Vermont",
+  "University of San Diego", "Texas State University", "University of Miami",
+  "SUNY Upstate Medical University", "SUNY Research Foundation", "University of Alabama",
+  "University of Wyoming", "University of Idaho", "University of Alaska Fairbanks",
+  "South Dakota State University", "University of Mississippi", "Drexel University",
+  "University of Leeds", "University of Southampton", "University of Saskatchewan", "UNLV",
+  // Task #118 TechPublisher international
+  "University of New South Wales", "Loughborough University", "University of Ottawa",
+  "University of Surrey", "La Trobe University", "Vanderbilt University",
+  "Queen's University Belfast",
+  // TechPublisher misc
+  "Boston Children's Hospital", "University of Nottingham",
+  // Flintbox HTML fallback batch (platform-based, roughly tier 2)
+  "Texas A&M University", "University of Iowa", "BIDMC", "Northumbria University",
+  "Carnegie Mellon University", "SMU", "Cleveland Clinic", "UAB",
+  "Cerca Nostra", "Kansas State University", "Cedars-Sinai", "Florida Atlantic University",
+  "Tulane University", "University of Louisville", "Louisiana State University Health Sciences Center",
+  "University Health Network", "Louisiana State University", "University of Alabama in Huntsville",
+  "West Virginia University", "Children's Mercy Hospital", "KC Ventures", "University of Strathclyde",
+  "Syracuse University", "Swansea University", "UT San Antonio", "NC State University",
+  "Dalhousie University", "University of Florida", "UC Merced", "San Diego State University",
+  "University of Southern Mississippi", "Michigan State University", "University of Denver",
+  "University of Kansas", "Southern Illinois University", "University of Kentucky",
+  "Boise State University", "Northern Arizona University", "University of Tennessee",
+  "North Carolina A&T", "Morgan State University", "Howard University",
+  "UNC Chapel Hill", "PR Science Trust", "UMass Amherst", "University of South Alabama",
+  "UMBC", "Boston College",
+]);
+
+export function getScraperTier(institution: string): 1 | 2 | 3 | 4 {
+  const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
+  if (!scraper) return 3;
+  if (scraper.scraperType === "playwright") return 4;
+  if (scraper.scraperType === "api") return 1;
+  if (TIER1_INSTITUTIONS.has(institution)) return 1;
+  if (TIER2_INSTITUTIONS.has(institution)) return 2;
+  return 3;
+}
+
 export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ── Custom scrapers (verified working) ────────────────────────────────────
   stanfordScraper,

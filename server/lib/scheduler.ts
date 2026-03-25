@@ -1,5 +1,5 @@
 import { ALL_SCRAPERS } from "./scrapers/index";
-import { runInstitutionSync, tryAcquireSyncLock, releaseSyncLock, isIngestionRunning, isSyncRunning, getActiveSyncs } from "./ingestion";
+import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs } from "./ingestion";
 import {
   saveSchedulerState,
   loadSchedulerState,
@@ -8,6 +8,9 @@ import {
   type ScraperHealthRow,
 } from "./scraperState";
 import { storage } from "../storage";
+
+const MAX_HTTP_CONCURRENT = 5;
+const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
 
 export interface SchedulerStatus {
   state: "idle" | "running" | "paused";
@@ -19,6 +22,7 @@ export interface SchedulerStatus {
   completedThisCycle: number;
   failedThisCycle: number;
   skippedThisCycle: number;
+  freshSkippedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
   cycleCount: number;
@@ -27,6 +31,7 @@ export interface SchedulerStatus {
   avgSyncMs: number | null;
   estimatedRemainingMs: number | null;
   lastCycleCompletedAt: string | null;
+  concurrentSyncs: number;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -35,6 +40,7 @@ let queueIndex = 0;
 let completedThisCycle = 0;
 let failedThisCycle = 0;
 let skippedThisCycle = 0;
+let freshSkippedThisCycle = 0;
 let cycleStartedAt: Date | null = null;
 let lastActivityAt: Date | null = null;
 let schedulerTimer: ReturnType<typeof setTimeout> | null = null;
@@ -69,6 +75,12 @@ function isInBackoff(institution: string): boolean {
   return health.backoffUntil > new Date();
 }
 
+function isFresh(institution: string): boolean {
+  const health = scraperHealthCache.get(institution);
+  if (!health?.lastSuccessAt) return false;
+  return (Date.now() - health.lastSuccessAt.getTime()) < FRESH_THRESHOLD_MS;
+}
+
 function persistState(): void {
   saveSchedulerState({
     queueIndex,
@@ -83,21 +95,27 @@ function persistState(): void {
 
 export function getSchedulerStatus(): SchedulerStatus {
   const queue = getInstitutionQueue();
+  const activeSyncs = getActiveSyncs();
   const remaining = Math.max(0, queue.length - queueIndex) + priorityQueue.length;
   const avgMs = syncDurations.length > 0
     ? Math.round(syncDurations.reduce((a, b) => a + b, 0) / syncDurations.length)
     : null;
+  // ETA: concurrent mode means we can drain MAX_HTTP_CONCURRENT entries per avg-sync-time window
+  const effectiveConcurrency = Math.min(MAX_HTTP_CONCURRENT, Math.max(1, activeSyncs.length || 1));
   const estimatedRemainingMs = avgMs && remaining > 0
-    ? remaining * (avgMs + delayBetweenSyncsMs)
+    ? Math.ceil(remaining / effectiveConcurrency) * (avgMs + delayBetweenSyncsMs)
     : null;
 
   let nextInst: string | null = null;
   if (priorityQueue.length > 0) {
     nextInst = priorityQueue[0];
-  } else if (queueIndex < queue.length) {
-    nextInst = queue[queueIndex];
-    if (currentInstitutions.includes(nextInst)) {
-      nextInst = queue[queueIndex + currentInstitutions.length] ?? null;
+  } else {
+    for (let i = queueIndex; i < queue.length; i++) {
+      const candidate = queue[i];
+      if (!currentInstitutions.includes(candidate)) {
+        nextInst = candidate;
+        break;
+      }
     }
   }
 
@@ -111,6 +129,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     completedThisCycle,
     failedThisCycle,
     skippedThisCycle,
+    freshSkippedThisCycle,
     cycleStartedAt: cycleStartedAt?.toISOString() ?? null,
     lastActivityAt: lastActivityAt?.toISOString() ?? null,
     cycleCount,
@@ -119,6 +138,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     avgSyncMs: avgMs,
     estimatedRemainingMs,
     lastCycleCompletedAt: lastCycleCompletedAt?.toISOString() ?? null,
+    concurrentSyncs: activeSyncs.length,
   };
 }
 
@@ -190,9 +210,10 @@ export function startScheduler(): { ok: boolean; message: string } {
     completedThisCycle = 0;
     failedThisCycle = 0;
     skippedThisCycle = 0;
+    freshSkippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
-    console.log(`[scheduler] Started cycle #${cycleCount} — ${getInstitutionQueue().length} institutions`);
+    console.log(`[scheduler] Started cycle #${cycleCount} — ${getInstitutionQueue().length} institutions, up to ${MAX_HTTP_CONCURRENT} concurrent`);
   }
 
   loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
@@ -215,6 +236,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   completedThisCycle = 0;
   failedThisCycle = 0;
   skippedThisCycle = 0;
+  freshSkippedThisCycle = 0;
   currentInstitutions = [];
   lastActivityAt = null;
   cycleStartedAt = new Date();
@@ -270,7 +292,6 @@ export function bumpToFront(institution: string): { ok: boolean; message: string
 function scheduleNext(): void {
   if (schedulerState !== "running") return;
 
-  // Capture current generation so callbacks can detect a superseded cycle
   const gen = runGeneration;
 
   if (isIngestionRunning()) {
@@ -278,61 +299,121 @@ function scheduleNext(): void {
     return;
   }
 
-  if (priorityQueue.length > 0) {
-    const institution = priorityQueue.shift()!;
-    currentInstitutions = [institution];
-    console.log(`[scheduler] Priority sync: ${institution}`);
-    const batchStart = Date.now();
+  // ── Priority queue: fill available slots from priority queue first ─────────
+  while (priorityQueue.length > 0) {
+    const institution = priorityQueue[0];
+    const scraperType = getScraperType(institution);
+    const liveCount = getActiveSyncs().length;
+
+    // Playwright from priority queue: only when no other syncs are active
+    if (scraperType === "playwright" && liveCount > 0) break;
+
+    // HTTP concurrent limit
+    if (scraperType !== "playwright" && liveCount >= MAX_HTTP_CONCURRENT) break;
+
+    priorityQueue.shift();
+    const syncStart = Date.now();
+    currentInstitutions = scraperType === "playwright"
+      ? [institution]
+      : [...currentInstitutions, institution];
+
+    console.log(`[scheduler] [priority] [${scraperType}] ${institution}`);
+
     runOne(institution, gen).finally(() => {
-      if (runGeneration !== gen) return;  // stale — reset happened mid-flight
-      syncDurations.push(Date.now() - batchStart);
+      if (runGeneration !== gen) return;
+      syncDurations.push(Date.now() - syncStart);
       if (syncDurations.length > 20) syncDurations.shift();
-      currentInstitutions = [];
+      currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       lastActivityAt = new Date();
       persistState();
-      if (schedulerState === "running") {
-        schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
-      }
+      scheduleNext();
     });
-    return;
+
+    // Playwright must be exclusive — stop dispatching more
+    if (scraperType === "playwright") return;
   }
 
   const queue = getInstitutionQueue();
 
-  if (queueIndex >= queue.length) {
-    console.log(`[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ${failedThisCycle} failed, ${skippedThisCycle} skipped (lock contention). Scheduler stopping — click Start for a new run.`);
+  // ── Main queue: fill concurrent slots ─────────────────────────────────────
+  while (queueIndex < queue.length) {
+    const institution = queue[queueIndex];
+    const scraperType = getScraperType(institution);
+    const liveCount = getActiveSyncs().length;
+
+    if (scraperType === "playwright") {
+      // Playwright: only run when no other syncs active
+      if (liveCount > 0) break;
+
+      queueIndex++;
+      const syncStart = Date.now();
+      currentInstitutions = [institution];
+      console.log(`[scheduler] [playwright] ${institution} (${queueIndex}/${queue.length})`);
+
+      runOne(institution, gen).finally(() => {
+        if (runGeneration !== gen) return;
+        syncDurations.push(Date.now() - syncStart);
+        if (syncDurations.length > 20) syncDurations.shift();
+        currentInstitutions = [];
+        lastActivityAt = new Date();
+        persistState();
+        scheduleNext();
+      });
+
+      // Playwright exclusive — stop dispatching more until this one finishes
+      return;
+    }
+
+    // HTTP/API: check concurrent limit
+    if (liveCount >= MAX_HTTP_CONCURRENT) break;
+
+    // Staleness gate: skip if successfully synced within FRESH_THRESHOLD_MS
+    if (isFresh(institution)) {
+      queueIndex++;
+      freshSkippedThisCycle++;
+      continue;
+    }
+
+    // Backoff gate: skip if institution is in exponential backoff
+    if (isInBackoff(institution)) {
+      queueIndex++;
+      skippedThisCycle++;
+      continue;
+    }
+
+    // Dispatch this institution
+    queueIndex++;
+    const syncStart = Date.now();
+    currentInstitutions = [...currentInstitutions, institution];
+    console.log(`[scheduler] [${scraperType}] ${institution} (${queueIndex}/${queue.length})`);
+
+    runOne(institution, gen).finally(() => {
+      if (runGeneration !== gen) return;
+      syncDurations.push(Date.now() - syncStart);
+      if (syncDurations.length > 20) syncDurations.shift();
+      currentInstitutions = currentInstitutions.filter((i) => i !== institution);
+      lastActivityAt = new Date();
+      persistState();
+      // Each completion fills freed slot immediately — no fixed delay between HTTP syncs
+      scheduleNext();
+    });
+
+    // Continue the loop to fill remaining concurrent slots
+  }
+
+  // ── Cycle completion check ─────────────────────────────────────────────────
+  // Queue is exhausted AND all in-flight syncs have completed
+  if (queueIndex >= queue.length && getActiveSyncs().length === 0 && priorityQueue.length === 0) {
+    console.log(
+      `[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ` +
+      `${failedThisCycle} failed, ${freshSkippedThisCycle} fresh-skipped, ${skippedThisCycle} backoff-skipped.`
+    );
     lastCycleCompletedAt = new Date();
     schedulerState = "idle";
     persistState();
-    loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
-    return;
-  }
-
-  // Fully sequential: one institution at a time regardless of scraper type.
-  // This matches manual sync behaviour exactly and prevents concurrent requests
-  // to shared external platforms (InPart/Flintbox, CDNs) from triggering rate limits.
-  const institution = queue[queueIndex];
-  const scraperType = getScraperType(institution);
-  const nextQueueIndex = queueIndex + 1;
-
-  currentInstitutions = [institution];
-  const syncStart = Date.now();
-  console.log(`[scheduler] Syncing ${institution} [${scraperType}] (${nextQueueIndex}/${queue.length})...`);
-
-  // Do NOT advance queueIndex yet — only advance after the sync completes so a
-  // mid-sync crash resumes from this institution rather than skipping it.
-  runOne(institution, gen).finally(() => {
-    if (runGeneration !== gen) return;  // stale — reset happened mid-flight
-    queueIndex = nextQueueIndex;
-    syncDurations.push(Date.now() - syncStart);
-    if (syncDurations.length > 20) syncDurations.shift();
     currentInstitutions = [];
-    lastActivityAt = new Date();
-    persistState();
-    if (schedulerState === "running") {
-      schedulerTimer = setTimeout(() => scheduleNext(), delayBetweenSyncsMs);
-    }
-  });
+    loadAllScraperHealth().then((h) => { scraperHealthCache = h; }).catch(() => {});
+  }
 }
 
 async function runOne(institution: string, gen: number): Promise<void> {

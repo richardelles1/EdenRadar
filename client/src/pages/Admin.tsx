@@ -79,6 +79,18 @@ function timeAgo(iso: string) {
 
 type HealthStatus = "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
 
+type ErrorType = "all" | "Timeout" | "Blocked" | "Network" | "Parsing" | "Unknown";
+
+function getErrorType(reason: string | null | undefined): Exclude<ErrorType, "all"> {
+  if (!reason) return "Unknown";
+  const r = reason.toLowerCase();
+  if (r.includes("timeout") || r.includes("timed out") || r.includes("aborted")) return "Timeout";
+  if (r.includes("403") || r.includes("cloudflare") || r.includes("blocked") || r.includes("bot challenge")) return "Blocked";
+  if (r.includes("econnrefused") || r.includes("enotfound") || r.includes("network") || r.includes("fetch failed")) return "Network";
+  if (r.includes("parse") || r.includes("selector") || r.includes("json") || r.includes("syntax")) return "Parsing";
+  return "Unknown";
+}
+
 interface CollectorHealthRow {
   institution: string;
   totalInDb: number;
@@ -93,6 +105,7 @@ interface CollectorHealthRow {
   sessionId: string | null;
   consecutiveFailures: number;
   health: HealthStatus;
+  tier: 1 | 2 | 3 | 4;
 }
 
 interface SchedulerStatus {
@@ -105,6 +118,7 @@ interface SchedulerStatus {
   completedThisCycle: number;
   failedThisCycle: number;
   skippedThisCycle: number;
+  freshSkippedThisCycle: number;
   cycleStartedAt: string | null;
   lastActivityAt: string | null;
   cycleCount: number;
@@ -113,6 +127,7 @@ interface SchedulerStatus {
   avgSyncMs: number | null;
   estimatedRemainingMs: number | null;
   lastCycleCompletedAt: string | null;
+  concurrentSyncs: number;
 }
 
 interface ActiveSearchRow {
@@ -630,6 +645,7 @@ type SortKey = "institution" | "health" | "totalInDb" | "biotechRelevant" | "las
 
 function DataHealth({ pw }: { pw: string }) {
   const [statusFilter, setStatusFilter] = useState<"all" | HealthStatus>("all");
+  const [errorTypeFilter, setErrorTypeFilter] = useState<ErrorType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const [schedulerOpen, setSchedulerOpen] = useState(true);
@@ -928,6 +944,10 @@ function DataHealth({ pw }: { pw: string }) {
 
   const displayRows = sortedRows.filter((r) => {
     if (statusFilter !== "all" && r.health !== statusFilter) return false;
+    if (errorTypeFilter !== "all") {
+      if (!r.lastSyncError) return false;
+      if (getErrorType(r.lastSyncError) !== errorTypeFilter) return false;
+    }
     if (searchQuery.trim()) {
       return r.institution.toLowerCase().includes(searchQuery.toLowerCase().trim());
     }
@@ -1140,6 +1160,12 @@ function DataHealth({ pw }: { pw: string }) {
                       {sched.failedThisCycle > 0 && (
                         <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
                       )}
+                      {(sched.freshSkippedThisCycle ?? 0) > 0 && (
+                        <span className="text-sky-500 font-medium">{sched.freshSkippedThisCycle} fresh-skipped</span>
+                      )}
+                      {(sched.concurrentSyncs ?? 0) > 1 && (
+                        <span className="text-violet-500 font-medium">{sched.concurrentSyncs} concurrent</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-3">
                       {sched.estimatedRemainingMs != null && (
@@ -1218,6 +1244,39 @@ function DataHealth({ pw }: { pw: string }) {
                   );
                 }))}
               </div>
+              {/* Error type filter — only visible when there are failing/degraded rows */}
+              {sortedRows.some((r) => r.lastSyncError) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider font-semibold">Error type:</span>
+                  {(["all", "Timeout", "Blocked", "Network", "Parsing", "Unknown"] as ErrorType[]).map((et) => {
+                    const count = et === "all"
+                      ? sortedRows.filter((r) => r.lastSyncError).length
+                      : sortedRows.filter((r) => r.lastSyncError && getErrorType(r.lastSyncError) === et).length;
+                    if (et !== "all" && count === 0) return null;
+                    const activeClass =
+                      et === "Timeout" ? "bg-orange-500 text-white border-orange-500" :
+                      et === "Blocked" ? "bg-red-600 text-white border-red-600" :
+                      et === "Network" ? "bg-rose-500 text-white border-rose-500" :
+                      et === "Parsing" ? "bg-amber-500 text-white border-amber-500" :
+                      et === "Unknown" ? "bg-slate-500 text-white border-slate-500" :
+                      "bg-muted text-foreground border-border";
+                    return (
+                      <button
+                        key={et}
+                        onClick={() => setErrorTypeFilter(et)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+                          errorTypeFilter === et
+                            ? activeClass
+                            : "border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                        data-testid={`filter-error-${et}`}
+                      >
+                        {et === "all" ? "All errors" : et} {et !== "all" && `(${count})`}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
               <div className="flex items-center justify-between gap-3">
                 <Input
                   placeholder="Search institutions…"
@@ -1276,6 +1335,15 @@ function DataHealth({ pw }: { pw: string }) {
                           <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
                             <div className="flex items-center gap-1.5">
                               <span className="truncate">{row.institution}</span>
+                              {row.tier === 1 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-sky-600 border-sky-500/30 bg-sky-500/5" title="Tier 1: API/RSS">T1</Badge>
+                              )}
+                              {row.tier === 2 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-violet-600 border-violet-500/30 bg-violet-500/5" title="Tier 2: Platform factory">T2</Badge>
+                              )}
+                              {row.tier === 4 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-orange-600 border-orange-500/30 bg-orange-500/5" title="Tier 4: Playwright">T4</Badge>
+                              )}
                               {row.consecutiveFailures >= 3 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
                                   Broken Connection

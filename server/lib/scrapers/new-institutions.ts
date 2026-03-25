@@ -412,7 +412,7 @@ export const wsuScraper = createTechPublisherScraper(
 export const arizonaScraper = createTechPublisherScraper(
   "arizona",
   "University of Arizona",
-  { selector: "a[href*='/tech/'],a[href*='/tech?']", maxPg: 80, maxCats: 30, institutionTimeoutMs: 270_000 }
+  { maxPg: 20, maxCats: 20, institutionTimeoutMs: 90_000 }
 );
 
 export const pennStateScraper = createFlintboxScraper(
