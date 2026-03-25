@@ -5885,7 +5885,7 @@ function DispatchTab({ pw }: { pw: string }) {
 
 function SubscriptionData() {
   const tiers = [
-    { name: "EdenDiscovery", price: 19.99, subscribers: 8, color: "bg-amber-500/10 text-amber-600 border-amber-200 dark:border-amber-800" },
+    { name: "EdenDiscovery", price: 19.99, subscribers: 8, color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
     { name: "EdenLab", price: 29.99, subscribers: 5, color: "bg-violet-500/10 text-violet-600 border-violet-200 dark:border-violet-800" },
     { name: "EdenScout", price: 299, subscribers: 2, color: "bg-emerald-500/10 text-emerald-600 border-emerald-200 dark:border-emerald-800" },
   ];
