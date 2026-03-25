@@ -54,6 +54,17 @@ function PageBackground() {
   );
 }
 
+const YEARLY_DISCOUNT = 0.95;
+
+function derivedYearly(monthlyUsd: number): { yearlyPrice: string; yearlySavings: string } {
+  const discounted = monthlyUsd * YEARLY_DISCOUNT;
+  const savedPerYear = Math.round(monthlyUsd * 12 * (1 - YEARLY_DISCOUNT));
+  return {
+    yearlyPrice: `$${discounted.toFixed(2)}`,
+    yearlySavings: `$${savedPerYear}`,
+  };
+}
+
 const TIERS = [
   {
     name: "EdenDiscovery",
@@ -64,8 +75,7 @@ const TIERS = [
     borderColor: "hsl(38 92% 50% / 0.3)",
     headerBg: "hsl(38 92% 50%)",
     price: "$19.99",
-    yearlyPrice: "$18.99",
-    yearlySavings: "$12",
+    ...derivedYearly(19.99),
     period: "/mo",
     tagline: "Ideal for early discovery and concept validation",
     popular: false,
@@ -86,8 +96,7 @@ const TIERS = [
     borderColor: "hsl(265 60% 60% / 0.3)",
     headerBg: "hsl(265 60% 60%)",
     price: "$29.99",
-    yearlyPrice: "$28.49",
-    yearlySavings: "$18",
+    ...derivedYearly(29.99),
     period: "/mo",
     tagline: "For research teams and active deal flow exploration",
     popular: true,
@@ -109,8 +118,7 @@ const TIERS = [
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
     price: "$299",
-    yearlyPrice: "$284.05",
-    yearlySavings: "$179",
+    ...derivedYearly(299),
     period: "/mo",
     tagline: "Full platform access for serious BD teams",
     popular: false,
