@@ -19,6 +19,7 @@ import {
   edenMessageFeedback,
   userAlerts, type UserAlert, type InsertUserAlert,
   manualInstitutions, type ManualInstitution, type InsertManualInstitution,
+  dispatchLogs, type DispatchLog, type InsertDispatchLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike } from "drizzle-orm";
@@ -213,6 +214,14 @@ export interface IStorage {
 
   getManualInstitutions(): Promise<ManualInstitution[]>;
   createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
+
+  getNewDiscoveries(windowHours: number): Promise<Array<{
+    id: number; assetName: string; institution: string; indication: string;
+    modality: string; developmentStage: string; summary: string | null;
+    sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
+  }>>;
+  createDispatchLog(data: InsertDispatchLog): Promise<DispatchLog>;
+  getDispatchHistory(limit?: number): Promise<DispatchLog[]>;
 
   getPlatformStats(): Promise<{
     totalUsers: number;
@@ -1593,6 +1602,61 @@ export class DatabaseStorage implements IStorage {
   async createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution> {
     const [row] = await db.insert(manualInstitutions).values(data).returning();
     return row;
+  }
+
+  async getNewDiscoveries(windowHours: number): Promise<Array<{
+    id: number; assetName: string; institution: string; indication: string;
+    modality: string; developmentStage: string; summary: string | null;
+    sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
+  }>> {
+    const cutoff = new Date(Date.now() - windowHours * 3600 * 1000);
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        indication: ingestedAssets.indication,
+        modality: ingestedAssets.modality,
+        developmentStage: ingestedAssets.developmentStage,
+        summary: ingestedAssets.summary,
+        sourceUrl: ingestedAssets.sourceUrl,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+      })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.relevant, true), gte(ingestedAssets.firstSeenAt, cutoff)))
+      .orderBy(desc(ingestedAssets.firstSeenAt))
+      .limit(500);
+
+    const allIds = rows.map((r) => r.id);
+    const sentIds = new Set<number>();
+    if (allIds.length > 0) {
+      const logs = await db.select({ assetIds: dispatchLogs.assetIds }).from(dispatchLogs).where(eq(dispatchLogs.isTest, false));
+      for (const log of logs) {
+        for (const id of (log.assetIds ?? [])) sentIds.add(id);
+      }
+    }
+
+    return rows.map((r) => ({
+      id: r.id,
+      assetName: r.assetName,
+      institution: r.institution ?? "",
+      indication: r.indication ?? "",
+      modality: r.modality ?? "",
+      developmentStage: r.developmentStage ?? "",
+      summary: r.summary,
+      sourceUrl: r.sourceUrl,
+      firstSeenAt: r.firstSeenAt ?? new Date(),
+      previouslySent: sentIds.has(r.id),
+    }));
+  }
+
+  async createDispatchLog(data: InsertDispatchLog): Promise<DispatchLog> {
+    const [row] = await db.insert(dispatchLogs).values(data).returning();
+    return row;
+  }
+
+  async getDispatchHistory(limit = 20): Promise<DispatchLog[]> {
+    return db.select().from(dispatchLogs).orderBy(desc(dispatchLogs.sentAt)).limit(limit);
   }
 
   async getPlatformStats(): Promise<{

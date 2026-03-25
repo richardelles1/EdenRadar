@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, type LucideIcon } from "lucide-react";
+import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -4609,6 +4609,641 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   );
 }
 
+type DiscoveryAsset = {
+  id: number;
+  assetName: string;
+  institution: string;
+  indication: string;
+  modality: string;
+  developmentStage: string;
+  summary: string | null;
+  sourceUrl: string | null;
+  firstSeenAt: string;
+  previouslySent: boolean;
+};
+
+type DispatchLogEntry = {
+  id: number;
+  sentAt: string;
+  subject: string;
+  recipients: string[];
+  assetIds: number[];
+  assetCount: number;
+  windowHours: number;
+  isTest: boolean;
+};
+
+function StagePill({ stage }: { stage: string }) {
+  const s = stage.toLowerCase();
+  let cls = "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300";
+  if (s.includes("phase 3") || s.includes("approved")) cls = "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400";
+  else if (s.includes("phase 2")) cls = "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400";
+  else if (s.includes("phase 1")) cls = "bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400";
+  else if (s.includes("preclinical")) cls = "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400";
+  const label = stage && stage !== "unknown" ? stage.charAt(0).toUpperCase() + stage.slice(1) : "Unknown";
+  return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}>{label}</span>;
+}
+
+function DispatchTab({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [windowHours, setWindowHours] = useState(72);
+  const [filterInstitution, setFilterInstitution] = useState("");
+  const [filterModality, setFilterModality] = useState("");
+  const [filterSearch, setFilterSearch] = useState("");
+  const [digestAssets, setDigestAssets] = useState<DiscoveryAsset[]>([]);
+  const [subject, setSubject] = useState(`EdenRadar TTO Digest - ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
+  const [recipients, setRecipients] = useState<string[]>([]);
+  const [recipientInput, setRecipientInput] = useState("");
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isTest, setIsTest] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  const windowOptions = [
+    { label: "Last 24 hours", value: 24 },
+    { label: "Last 48 hours", value: 48 },
+    { label: "Last 72 hours", value: 72 },
+    { label: "Last 7 days", value: 168 },
+    { label: "Last 14 days", value: 336 },
+    { label: "Last 30 days", value: 720 },
+  ];
+
+  const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
+    queryKey: ["/api/admin/new-discoveries", windowHours],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/new-discoveries?hours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      if (!r.ok) throw new Error("Failed to load discoveries");
+      return r.json();
+    },
+  });
+
+  const historyQuery = useQuery<{ history: DispatchLogEntry[] }>({
+    queryKey: ["/api/admin/dispatch/history"],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/dispatch/history`, { headers: { "x-admin-password": pw } });
+      if (!r.ok) throw new Error("Failed to load history");
+      return r.json();
+    },
+    enabled: historyOpen,
+  });
+
+  const sendMutation = useMutation({
+    mutationFn: async (payload: { isTest: boolean }) => {
+      const r = await fetch("/api/admin/dispatch/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({
+          subject,
+          recipients,
+          assetIds: digestAssets.map((a) => a.id),
+          windowHours,
+          isTest: payload.isTest,
+          htmlBody: previewHtml,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: "Send failed" }));
+        throw new Error(err.error ?? "Send failed");
+      }
+      return r.json();
+    },
+    onSuccess: (data, payload) => {
+      toast({
+        title: payload.isTest ? "Test email sent" : "Digest dispatched",
+        description: payload.isTest
+          ? `Test sent to ${data.sentTo} recipient`
+          : `Sent to ${data.sentTo} recipient${data.sentTo !== 1 ? "s" : ""}`,
+      });
+      setShowConfirm(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/history"] });
+      if (!payload.isTest) setDigestAssets([]);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const allAssets = discoveriesQuery.data?.assets ?? [];
+  const digestIds = new Set(digestAssets.map((a) => a.id));
+
+  const filteredAssets = allAssets.filter((a) => {
+    if (digestIds.has(a.id)) return false;
+    if (filterInstitution && !a.institution.toLowerCase().includes(filterInstitution.toLowerCase())) return false;
+    if (filterModality && a.modality.toLowerCase() !== filterModality.toLowerCase()) return false;
+    if (filterSearch && !a.assetName.toLowerCase().includes(filterSearch.toLowerCase()) && !a.indication.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  const institutionOptions = Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
+  const modalityOptions = Array.from(new Set(allAssets.map((a) => a.modality).filter((m) => m && m !== "unknown"))).sort();
+
+  function addToDigest(asset: DiscoveryAsset) {
+    setDigestAssets((prev) => [...prev, asset]);
+  }
+
+  function removeFromDigest(id: number) {
+    setDigestAssets((prev) => prev.filter((a) => a.id !== id));
+  }
+
+  function moveUp(index: number) {
+    if (index === 0) return;
+    setDigestAssets((prev) => {
+      const arr = [...prev];
+      [arr[index - 1], arr[index]] = [arr[index], arr[index - 1]];
+      return arr;
+    });
+  }
+
+  function moveDown(index: number) {
+    setDigestAssets((prev) => {
+      if (index >= prev.length - 1) return prev;
+      const arr = [...prev];
+      [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
+      return arr;
+    });
+  }
+
+  function addRecipient() {
+    const email = recipientInput.trim().toLowerCase();
+    const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRx.test(email)) {
+      toast({ title: "Invalid email", description: `"${email}" is not a valid email address.`, variant: "destructive" });
+      return;
+    }
+    if (recipients.includes(email)) {
+      toast({ title: "Already added", description: `${email} is already in the recipient list.` });
+      setRecipientInput("");
+      return;
+    }
+    setRecipients((prev) => [...prev, email]);
+    setRecipientInput("");
+  }
+
+  async function generatePreview() {
+    if (digestAssets.length === 0) {
+      toast({ title: "No assets selected", description: "Add at least one asset to the Digest Zone first.", variant: "destructive" });
+      return;
+    }
+    setPreviewLoading(true);
+    const windowLabel = windowOptions.find((o) => o.value === windowHours)?.label ?? `${windowHours}h`;
+    const html = buildFallbackPreview(subject, digestAssets, windowLabel);
+    setPreviewHtml(html);
+    setShowPreview(true);
+    setPreviewLoading(false);
+  }
+
+  function buildFallbackPreview(subj: string, assets: DiscoveryAsset[], windowLabel: string): string {
+    const byInst = new Map<string, DiscoveryAsset[]>();
+    for (const a of assets) {
+      const inst = a.institution || "Unknown";
+      if (!byInst.has(inst)) byInst.set(inst, []);
+      byInst.get(inst)!.push(a);
+    }
+    const cards = Array.from(byInst.entries()).map(([inst, items]) => `
+      <div style="margin-bottom:20px;">
+        <p style="margin:0 0 8px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#6b7280;">${inst}</p>
+        ${items.map((a) => `
+          <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px 18px;margin-bottom:10px;">
+            <p style="margin:0 0 6px;font-size:14px;font-weight:600;color:#111827;">${a.assetName}</p>
+            <p style="margin:0 0 8px;font-size:12px;color:#6b7280;">${a.indication !== "unknown" ? a.indication : ""} &bull; ${a.modality !== "unknown" ? a.modality : ""}</p>
+            ${a.summary ? `<p style="margin:0;font-size:12px;color:#4b5563;">${a.summary.slice(0, 180)}...</p>` : ""}
+            ${a.sourceUrl ? `<a href="${a.sourceUrl}" style="font-size:11px;color:#4f46e5;">View Listing &rarr;</a>` : ""}
+          </div>`).join("")}
+      </div>`).join("");
+    return `<!DOCTYPE html><html><body style="font-family:sans-serif;padding:24px;background:#f3f4f6;">
+      <div style="max-width:620px;margin:0 auto;background:#fff;border-radius:12px;overflow:hidden;">
+        <div style="background:linear-gradient(135deg,#1e1b4b,#312e81);padding:24px 28px;">
+          <p style="margin:0;color:#fff;font-size:20px;font-weight:800;">EdenRadar</p>
+          <p style="margin:4px 0 0;color:#a5b4fc;font-size:13px;">TTO Intelligence Digest &mdash; ${windowLabel}</p>
+        </div>
+        <div style="padding:24px 28px;">${cards}</div>
+        <div style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:16px 28px;">
+          <p style="margin:0;font-size:11px;color:#9ca3af;">&copy; ${new Date().getFullYear()} EdenRadar. All rights reserved.</p>
+        </div>
+      </div></body></html>`;
+  }
+
+  function handleSendClick(test: boolean) {
+    if (digestAssets.length === 0) {
+      toast({ title: "Digest Zone is empty", description: "Add assets to the Digest Zone before dispatching.", variant: "destructive" });
+      return;
+    }
+    if (recipients.length === 0) {
+      toast({ title: "No recipients", description: "Add at least one recipient email address.", variant: "destructive" });
+      return;
+    }
+    if (!subject.trim()) {
+      toast({ title: "Subject required", description: "Enter a subject line for the digest.", variant: "destructive" });
+      return;
+    }
+    if (!previewHtml) {
+      toast({ title: "Preview required", description: "Generate a preview first to confirm the email looks correct.", variant: "destructive" });
+      return;
+    }
+    setIsTest(test);
+    setShowConfirm(true);
+  }
+
+  const windowLabel = windowOptions.find((o) => o.value === windowHours)?.label ?? `${windowHours}h`;
+
+  return (
+    <div className="space-y-0">
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Dispatch</h2>
+        <p className="text-sm text-muted-foreground mt-1">Curate new TTO discoveries into a branded email digest and send to subscriber lists.</p>
+      </div>
+
+      <div className="flex gap-4 items-start">
+
+        {/* LEFT: Discovery Browser */}
+        <div className="w-80 shrink-0 flex flex-col gap-3">
+          <div className="border border-border rounded-xl p-4 bg-card space-y-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">New Discoveries</p>
+              {discoveriesQuery.isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+              {!discoveriesQuery.isLoading && (
+                <span className="text-[11px] text-muted-foreground">{filteredAssets.length + digestIds.size} found</span>
+              )}
+            </div>
+
+            <Select value={String(windowHours)} onValueChange={(v) => setWindowHours(Number(v))}>
+              <SelectTrigger className="h-8 text-xs" data-testid="select-window-hours">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {windowOptions.map((o) => (
+                  <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <input
+              type="text"
+              placeholder="Search by name or indication..."
+              value={filterSearch}
+              onChange={(e) => setFilterSearch(e.target.value)}
+              className="w-full h-8 px-3 text-xs border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+              data-testid="input-filter-search"
+            />
+
+            <div className="flex gap-2">
+              <Select value={filterModality || "__all__"} onValueChange={(v) => setFilterModality(v === "__all__" ? "" : v)}>
+                <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-filter-modality">
+                  <SelectValue placeholder="Modality" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All modalities</SelectItem>
+                  {modalityOptions.map((m) => (
+                    <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {filterInstitution && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground">Institution:</span>
+                <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{filterInstitution}</span>
+                <button onClick={() => setFilterInstitution("")} className="text-muted-foreground hover:text-foreground" data-testid="button-clear-institution-filter">
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="border border-border rounded-xl bg-card overflow-hidden flex flex-col" style={{ maxHeight: "calc(100vh - 320px)" }}>
+            <div className="overflow-y-auto flex-1 divide-y divide-border">
+              {discoveriesQuery.isLoading && (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                  Loading discoveries...
+                </div>
+              )}
+              {!discoveriesQuery.isLoading && filteredAssets.length === 0 && (
+                <div className="p-6 text-center text-sm text-muted-foreground">
+                  {allAssets.length === 0 ? "No new assets in this window." : "No assets match your filters."}
+                </div>
+              )}
+              {filteredAssets.map((asset) => (
+                <div key={asset.id} className="p-3 hover:bg-muted/40 transition-colors group" data-testid={`card-discovery-${asset.id}`}>
+                  <div className="flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
+                      <button
+                        onClick={() => setFilterInstitution(asset.institution)}
+                        className="text-[10px] text-muted-foreground hover:text-primary truncate block"
+                      >
+                        {asset.institution}
+                      </button>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <StagePill stage={asset.developmentStage} />
+                        {asset.previouslySent && (
+                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 text-[9px] font-semibold">
+                            <Check className="h-2.5 w-2.5" /> Sent
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => addToDigest(asset)}
+                      className="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all"
+                      data-testid={`button-add-asset-${asset.id}`}
+                      title="Add to digest"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* RIGHT: Compose + Digest Zone */}
+        <div className="flex-1 space-y-4">
+
+          {/* Subject Line */}
+          <div className="border border-border rounded-xl p-4 bg-card space-y-2">
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Subject Line</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value.slice(0, 200))}
+                maxLength={200}
+                className="w-full h-9 px-3 pr-16 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                data-testid="input-subject"
+              />
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 180 ? "text-orange-500" : "text-muted-foreground"}`}>
+                {subject.length}/200
+              </span>
+            </div>
+          </div>
+
+          {/* Recipients */}
+          <div className="border border-border rounded-xl p-4 bg-card space-y-2">
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Recipients</label>
+            <div className="flex gap-2">
+              <input
+                type="email"
+                placeholder="name@company.com"
+                value={recipientInput}
+                onChange={(e) => setRecipientInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addRecipient(); } }}
+                className="flex-1 h-8 px-3 text-sm border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                data-testid="input-recipient"
+              />
+              <Button size="sm" variant="outline" onClick={addRecipient} className="h-8 px-3" data-testid="button-add-recipient">
+                <Tag className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+            {recipients.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {recipients.map((email) => (
+                  <span key={email} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium" data-testid={`tag-recipient-${email}`}>
+                    {email}
+                    <button onClick={() => setRecipients((prev) => prev.filter((r) => r !== email))} className="text-primary/60 hover:text-primary" data-testid={`button-remove-recipient-${email}`}>
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            {recipients.length === 0 && (
+              <p className="text-xs text-muted-foreground">Enter emails and press Enter or comma to add. First recipient used for test sends.</p>
+            )}
+          </div>
+
+          {/* Digest Zone */}
+          <div className="border border-border rounded-xl bg-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Digest Zone</p>
+                <span className="text-[10px] bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{digestAssets.length} asset{digestAssets.length !== 1 ? "s" : ""}</span>
+              </div>
+              {digestAssets.length > 0 && (
+                <button onClick={() => setDigestAssets([])} className="text-xs text-muted-foreground hover:text-destructive transition-colors" data-testid="button-clear-digest">
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {digestAssets.length === 0 ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">
+                <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                <p>Click the + button on any discovery to add it here.</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border">
+                {digestAssets.map((asset, i) => (
+                  <div key={asset.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors" data-testid={`digest-item-${asset.id}`}>
+                    <div className="flex flex-col gap-0.5 pt-0.5">
+                      <button onClick={() => moveUp(i)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-up-${asset.id}`}>
+                        <ArrowUp className="h-3 w-3" />
+                      </button>
+                      <button onClick={() => moveDown(i)} disabled={i === digestAssets.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-down-${asset.id}`}>
+                        <ArrowDown className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground truncate">{asset.assetName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{asset.institution}</p>
+                      <div className="mt-1 flex gap-1.5 flex-wrap">
+                        <StagePill stage={asset.developmentStage} />
+                        {asset.modality && asset.modality !== "unknown" && (
+                          <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-2 py-0.5 rounded-full">
+                            {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
+                          </span>
+                        )}
+                        {asset.previouslySent && (
+                          <span className="text-[9px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-semibold">
+                            Previously sent
+                          </span>
+                        )}
+                      </div>
+                      {asset.summary && (
+                        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{asset.summary}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => removeFromDigest(asset.id)}
+                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5"
+                      data-testid={`button-remove-digest-${asset.id}`}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Action Bar */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={generatePreview}
+              disabled={previewLoading || digestAssets.length === 0}
+              className="gap-1.5"
+              data-testid="button-generate-preview"
+            >
+              {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              Preview Email
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => handleSendClick(true)}
+              disabled={sendMutation.isPending || digestAssets.length === 0}
+              className="gap-1.5"
+              data-testid="button-test-send"
+            >
+              <Send className="h-3.5 w-3.5" />
+              Test Send
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => handleSendClick(false)}
+              disabled={sendMutation.isPending || digestAssets.length === 0}
+              className="gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+              data-testid="button-dispatch"
+            >
+              {sendMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+              Dispatch Digest
+            </Button>
+            {recipients.length > 0 && (
+              <span className="text-xs text-muted-foreground">{recipients.length} recipient{recipients.length !== 1 ? "s" : ""}</span>
+            )}
+          </div>
+
+          {/* Preview Modal */}
+          {showPreview && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" data-testid="modal-preview">
+              <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                  <p className="font-semibold text-foreground text-sm">Email Preview</p>
+                  <button onClick={() => setShowPreview(false)} className="text-muted-foreground hover:text-foreground" data-testid="button-close-preview">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-hidden p-4">
+                  <iframe
+                    srcDoc={previewHtml}
+                    title="Email Preview"
+                    className="w-full h-full rounded-md border border-border"
+                    style={{ minHeight: "500px" }}
+                    data-testid="iframe-email-preview"
+                    sandbox="allow-same-origin"
+                  />
+                </div>
+                <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowPreview(false)} data-testid="button-close-preview-2">Close</Button>
+                  <Button size="sm" onClick={() => { setShowPreview(false); handleSendClick(false); }} className="bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-dispatch-from-preview">
+                    <Send className="h-3.5 w-3.5 mr-1.5" /> Dispatch
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Confirm Modal */}
+          {showConfirm && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" data-testid="modal-confirm">
+              <div className="bg-card rounded-xl shadow-2xl w-full max-w-md p-6 space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center ${isTest ? "bg-blue-100 dark:bg-blue-900/30" : "bg-orange-100 dark:bg-orange-900/30"}`}>
+                    <Send className={`h-5 w-5 ${isTest ? "text-blue-600" : "text-orange-600"}`} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">{isTest ? "Send test email" : "Dispatch to all recipients"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {isTest
+                        ? `Will send to ${recipients[0] ?? "—"} only`
+                        : `Will send to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-xs text-muted-foreground">
+                  <p><span className="font-medium text-foreground">Subject:</span> {isTest ? `[TEST] ${subject}` : subject}</p>
+                  <p><span className="font-medium text-foreground">Assets:</span> {digestAssets.length} selected</p>
+                  <p><span className="font-medium text-foreground">Recipients:</span> {isTest ? recipients[0] : recipients.join(", ")}</p>
+                </div>
+
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" size="sm" onClick={() => setShowConfirm(false)} data-testid="button-cancel-confirm">Cancel</Button>
+                  <Button
+                    size="sm"
+                    onClick={() => sendMutation.mutate({ isTest })}
+                    disabled={sendMutation.isPending}
+                    className={isTest ? "" : "bg-indigo-600 hover:bg-indigo-700 text-white"}
+                    data-testid="button-confirm-send"
+                  >
+                    {sendMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
+                    {isTest ? "Send Test" : "Confirm Dispatch"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Dispatch History */}
+      <div className="mt-6 border border-border rounded-xl overflow-hidden bg-card">
+        <button
+          onClick={() => setHistoryOpen((o) => !o)}
+          className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/40 transition-colors"
+          data-testid="button-toggle-history"
+        >
+          <span className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            Dispatch History
+            {historyQuery.data && (
+              <span className="text-[11px] text-muted-foreground">({historyQuery.data.history.length} entries)</span>
+            )}
+          </span>
+          {historyOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        </button>
+
+        {historyOpen && (
+          <div className="border-t border-border">
+            {historyQuery.isLoading && (
+              <div className="p-6 text-center text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                Loading history...
+              </div>
+            )}
+            {historyQuery.data?.history.length === 0 && (
+              <div className="p-6 text-center text-sm text-muted-foreground">No dispatches sent yet.</div>
+            )}
+            {(historyQuery.data?.history ?? []).map((log) => (
+              <div key={log.id} className="flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/30" data-testid={`history-row-${log.id}`}>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-foreground truncate">{log.subject}</p>
+                    {log.isTest && (
+                      <span className="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-semibold">TEST</span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {log.assetCount} asset{log.assetCount !== 1 ? "s" : ""} &bull; {log.recipients.length} recipient{log.recipients.length !== 1 ? "s" : ""} &bull; {log.windowHours}h window
+                  </p>
+                  <p className="text-[11px] text-muted-foreground/70 mt-0.5 truncate">{log.recipients.join(", ")}</p>
+                </div>
+                <span className="text-[11px] text-muted-foreground shrink-0">{timeAgo(log.sentAt)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SubscriptionData() {
   const tiers = [
     { name: "EdenDiscovery", price: 14.99, subscribers: 8, color: "bg-blue-500/10 text-blue-600 border-blue-200 dark:border-blue-800" },
@@ -4911,6 +5546,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <Inbox className="h-4 w-4" />
               Indexing Queue
             </button>
+            <button
+              onClick={() => setActiveTab("dispatch")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "dispatch" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-dispatch"
+            >
+              <Send className="h-4 w-4" />
+              Dispatch
+            </button>
 
             {/* ── PRODUCT CONTROLS ── */}
             <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-product-controls">
@@ -5011,6 +5656,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <NewArrivals pw={pw} />
             </>
           )}
+
+          {activeTab === "dispatch" && <DispatchTab pw={pw} />}
 
           {activeTab === "manual-import" && (
             <>

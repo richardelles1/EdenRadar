@@ -558,3 +558,17 @@ export const edenSessions = pgTable("eden_sessions", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type EdenSession = typeof edenSessions.$inferSelect;
+
+export const dispatchLogs = pgTable("dispatch_logs", {
+  id: serial("id").primaryKey(),
+  sentAt: timestamp("sent_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  subject: text("subject").notNull(),
+  recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
+  assetIds: integer("asset_ids").array().notNull().default(sql`'{}'::integer[]`),
+  assetCount: integer("asset_count").notNull().default(0),
+  windowHours: integer("window_hours").notNull().default(72),
+  isTest: boolean("is_test").notNull().default(false),
+});
+export const insertDispatchLogSchema = createInsertSchema(dispatchLogs).omit({ id: true, sentAt: true });
+export type InsertDispatchLog = z.infer<typeof insertDispatchLogSchema>;
+export type DispatchLog = typeof dispatchLogs.$inferSelect;
