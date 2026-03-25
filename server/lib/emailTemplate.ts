@@ -20,17 +20,51 @@ function escapeHtml(str: string): string {
 
 function stageColor(stage: string): string {
   const s = stage.toLowerCase();
-  if (s.includes("phase 3") || s.includes("phase-3") || s.includes("approved")) return "#10b981";
-  if (s.includes("phase 2") || s.includes("phase-2")) return "#3b82f6";
-  if (s.includes("phase 1") || s.includes("phase-1")) return "#8b5cf6";
-  if (s.includes("preclinical")) return "#f59e0b";
+  if (s.includes("phase 3") || s.includes("phase-3") || s.includes("approved")) return "#059669";
+  if (s.includes("phase 2") || s.includes("phase-2")) return "#2563eb";
+  if (s.includes("phase 1") || s.includes("phase-1")) return "#7c3aed";
+  if (s.includes("preclinical")) return "#d97706";
   return "#6b7280";
 }
 
+function stageBg(stage: string): string {
+  const s = stage.toLowerCase();
+  if (s.includes("phase 3") || s.includes("phase-3") || s.includes("approved")) return "#d1fae5";
+  if (s.includes("phase 2") || s.includes("phase-2")) return "#dbeafe";
+  if (s.includes("phase 1") || s.includes("phase-1")) return "#ede9fe";
+  if (s.includes("preclinical")) return "#fef3c7";
+  return "#f3f4f6";
+}
+
+function stageText(stage: string): string {
+  const s = stage.toLowerCase();
+  if (s.includes("phase 3") || s.includes("phase-3") || s.includes("approved")) return "#065f46";
+  if (s.includes("phase 2") || s.includes("phase-2")) return "#1e40af";
+  if (s.includes("phase 1") || s.includes("phase-1")) return "#5b21b6";
+  if (s.includes("preclinical")) return "#92400e";
+  return "#374151";
+}
+
 function capitalize(str: string): string {
-  if (!str || str === "unknown") return "Unknown";
+  if (!str || str === "unknown") return "";
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
+
+const LOGO_SVG = `<svg width="36" height="36" viewBox="0 0 36 36" style="display:block;" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="18" cy="18" r="18" fill="#f59e0b" fill-opacity="0.18"/>
+  <path d="M18 8C12.5 8 8 12.5 8 18c0 4.1 2.5 7.7 6.1 9.3L18 29l3.9-1.7C25.5 25.7 28 22.1 28 18c0-5.5-4.5-10-10-10z" fill="#f59e0b"/>
+  <line x1="18" y1="10" x2="18" y2="22" stroke="#0c0a1e" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M12.5 15.5c1.5-1.4 3.3-2.1 5.5-2.1s4 .7 5.5 2.1" stroke="#0c0a1e" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <path d="M14.5 19c.9-.8 2.1-1.3 3.5-1.3s2.6.5 3.5 1.3" stroke="#0c0a1e" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+</svg>`;
+
+const BUILDING_SVG = `<svg width="13" height="13" viewBox="0 0 13 13" style="display:inline-block;vertical-align:middle;margin-right:5px;margin-top:-1px;" xmlns="http://www.w3.org/2000/svg">
+  <rect x="1" y="3" width="11" height="9" rx="1" fill="none" stroke="#f59e0b" stroke-width="1.2"/>
+  <rect x="3" y="5.5" width="2" height="2" rx=".3" fill="#f59e0b"/>
+  <rect x="8" y="5.5" width="2" height="2" rx=".3" fill="#f59e0b"/>
+  <rect x="5.5" y="8" width="2" height="4" rx=".3" fill="#f59e0b"/>
+  <path d="M1 3L6.5 1 12 3" stroke="#f59e0b" stroke-width="1.2" fill="none"/>
+</svg>`;
 
 export function renderDispatchEmail(opts: {
   subject: string;
@@ -49,44 +83,51 @@ export function renderDispatchEmail(opts: {
 
   const institutionBlocks = Array.from(byInstitution.entries()).map(([institution, items]) => {
     const cards = items.map((a) => {
-      const stageBg = stageColor(a.developmentStage);
+      const borderColor = stageColor(a.developmentStage);
+      const badgeBg = stageBg(a.developmentStage);
+      const badgeTxt = stageText(a.developmentStage);
+      const stageLabel = capitalize(a.developmentStage);
+      const modalityLabel = capitalize(a.modality);
+      const indicationLabel = a.indication && a.indication !== "unknown" ? capitalize(a.indication) : "";
       const summarySnippet = a.summary
-        ? escapeHtml(a.summary.slice(0, 220)) + (a.summary.length > 220 ? "..." : "")
+        ? escapeHtml(a.summary.slice(0, 240)) + (a.summary.length > 240 ? "..." : "")
         : "";
-      const linkHtml = a.sourceUrl
-        ? `<a href="${escapeHtml(a.sourceUrl)}" style="color:#4f46e5;text-decoration:none;font-size:12px;">View Listing &rarr;</a>`
+
+      const stageBadge = stageLabel
+        ? `<span style="display:inline-block;background:${badgeBg};color:${badgeTxt};font-size:11px;font-weight:600;padding:2px 9px;border-radius:999px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;">${escapeHtml(stageLabel)}</span>`
+        : "";
+
+      const modalityBadge = modalityLabel
+        ? `<span style="display:inline-block;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:500;padding:2px 9px;border-radius:999px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;">${escapeHtml(modalityLabel)}</span>`
+        : "";
+
+      const indicationBadge = indicationLabel
+        ? `<span style="display:inline-block;background:#f0fdf4;color:#166534;font-size:11px;font-weight:500;padding:2px 9px;border-radius:999px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;">${escapeHtml(indicationLabel)}</span>`
+        : "";
+
+      const badgesHtml = [stageBadge, modalityBadge, indicationBadge].filter(Boolean).join(`<span style="display:inline-block;width:6px;"></span>`);
+
+      const ctaButton = a.sourceUrl
+        ? `<a href="${escapeHtml(a.sourceUrl)}" style="display:inline-block;background:#f59e0b;color:#0c0a1e;font-size:12px;font-weight:700;padding:7px 18px;border-radius:6px;text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.01em;">View Listing &rarr;</a>`
         : "";
 
       return `
       <tr>
-        <td style="padding:0 0 16px 0;">
-          <table cellpadding="0" cellspacing="0" width="100%" style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+        <td style="padding:0 0 14px 0;">
+          <table cellpadding="0" cellspacing="0" width="100%" style="border-radius:8px;overflow:hidden;border:1px solid #e5e7eb;">
             <tr>
-              <td style="padding:16px 20px 12px 20px;">
-                <table cellpadding="0" cellspacing="0" width="100%">
-                  <tr>
-                    <td>
-                      <p style="margin:0 0 6px 0;font-size:15px;font-weight:600;color:#111827;font-family:sans-serif;">${escapeHtml(a.assetName)}</p>
-                      <table cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td style="padding-right:6px;">
-                            <span style="display:inline-block;background:${stageBg}22;color:${stageBg};font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;font-family:sans-serif;">${escapeHtml(capitalize(a.developmentStage))}</span>
-                          </td>
-                          <td style="padding-right:6px;">
-                            <span style="display:inline-block;background:#e0e7ff;color:#4338ca;font-size:11px;padding:2px 8px;border-radius:999px;font-family:sans-serif;">${escapeHtml(capitalize(a.modality))}</span>
-                          </td>
-                          <td>
-                            <span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:11px;padding:2px 8px;border-radius:999px;font-family:sans-serif;">${escapeHtml(a.indication !== "unknown" ? capitalize(a.indication) : "")}</span>
-                          </td>
-                        </tr>
-                      </table>
-                    </td>
-                  </tr>
-                </table>
-                ${summarySnippet ? `<p style="margin:10px 0 0 0;font-size:13px;color:#4b5563;line-height:1.6;font-family:sans-serif;">${summarySnippet}</p>` : ""}
+              <td width="4" style="background:${borderColor};border-radius:8px 0 0 8px;font-size:0;line-height:0;">&nbsp;</td>
+              <td style="background:#ffffff;padding:16px 20px 14px 18px;">
+                <p style="margin:0 0 8px 0;font-size:15px;font-weight:700;color:#0f0e1a;line-height:1.3;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">${escapeHtml(a.assetName)}</p>
+                <div style="margin-bottom:${summarySnippet ? "10px" : "0"};">${badgesHtml}</div>
+                ${summarySnippet ? `<p style="margin:0;font-size:13px;color:#4b5563;line-height:1.65;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">${summarySnippet}</p>` : ""}
               </td>
             </tr>
-            ${linkHtml ? `<tr><td style="padding:8px 20px 12px 20px;border-top:1px solid #e5e7eb;">${linkHtml}</td></tr>` : ""}
+            ${ctaButton ? `
+            <tr>
+              <td width="4" style="background:${borderColor};font-size:0;line-height:0;">&nbsp;</td>
+              <td style="background:#fafafa;border-top:1px solid #f0f0f0;padding:10px 20px 10px 18px;">${ctaButton}</td>
+            </tr>` : ""}
           </table>
         </td>
       </tr>`;
@@ -94,14 +135,18 @@ export function renderDispatchEmail(opts: {
 
     return `
     <tr>
-      <td style="padding:0 0 24px 0;">
+      <td style="padding:0 0 28px 0;">
         <table cellpadding="0" cellspacing="0" width="100%">
           <tr>
-            <td style="padding:0 0 10px 0;">
-              <p style="margin:0;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#6b7280;font-family:sans-serif;">${escapeHtml(institution)}</p>
+            <td style="padding:0 0 10px 0;border-bottom:1px solid #f3f4f6;">
+              <p style="margin:0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;color:#6b7280;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">${BUILDING_SVG}${escapeHtml(institution)}</p>
             </td>
           </tr>
-          ${cards}
+          <tr><td style="padding:12px 0 0 0;">
+            <table cellpadding="0" cellspacing="0" width="100%">
+              ${cards}
+            </table>
+          </td></tr>
         </table>
       </td>
     </tr>`;
@@ -109,10 +154,12 @@ export function renderDispatchEmail(opts: {
 
   const testBanner = isTest ? `
   <tr>
-    <td style="padding:10px 24px;background:#fef9c3;border-bottom:1px solid #fde047;">
-      <p style="margin:0;font-size:12px;font-weight:600;color:#854d0e;font-family:sans-serif;">TEST SEND — This email was sent as a preview only and was not delivered to subscribers.</p>
+    <td style="padding:10px 32px;background:#fffbeb;border-bottom:2px solid #f59e0b;">
+      <p style="margin:0;font-size:12px;font-weight:700;color:#92400e;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.01em;">TEST SEND &mdash; This email was sent as a preview only and was not delivered to subscribers.</p>
     </td>
   </tr>` : "";
+
+  const year = new Date().getFullYear();
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -121,37 +168,67 @@ export function renderDispatchEmail(opts: {
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>${escapeHtml(subject)}</title>
 </head>
-<body style="margin:0;padding:0;background:#f3f4f6;font-family:sans-serif;">
-<table cellpadding="0" cellspacing="0" width="100%" style="background:#f3f4f6;padding:32px 0;">
+<body style="margin:0;padding:0;background:#f0f0f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+<table cellpadding="0" cellspacing="0" width="100%" style="background:#f0f0f5;padding:36px 0 48px 0;">
   <tr>
     <td align="center">
-      <table cellpadding="0" cellspacing="0" width="640" style="max-width:640px;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <table cellpadding="0" cellspacing="0" width="620" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.10);">
+
+        <!-- Amber accent bar -->
+        <tr>
+          <td height="5" style="background:linear-gradient(90deg,#f59e0b 0%,#d97706 100%);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
 
         <!-- Header -->
         <tr>
-          <td style="background:linear-gradient(135deg,#1e1b4b 0%,#312e81 100%);padding:28px 32px;">
+          <td style="background:#0c0a1e;padding:28px 32px 24px 32px;">
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
-                <td>
-                  <p style="margin:0;font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;font-family:sans-serif;">EdenRadar</p>
-                  <p style="margin:4px 0 0 0;font-size:13px;color:#a5b4fc;font-family:sans-serif;">TTO Intelligence Digest &mdash; ${escapeHtml(windowLabel)}</p>
+                <td width="48" valign="middle" style="padding-right:14px;">${LOGO_SVG}</td>
+                <td valign="middle">
+                  <p style="margin:0;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.03em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1;">EdenRadar</p>
+                  <p style="margin:4px 0 0 0;font-size:12px;color:#f59e0b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.04em;font-weight:600;text-transform:uppercase;">TTO Intelligence Digest</p>
                 </td>
-                <td align="right">
-                  <span style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:999px;padding:4px 14px;font-size:12px;color:#e0e7ff;font-family:sans-serif;">${assets.length} asset${assets.length !== 1 ? "s" : ""}</span>
+                <td align="right" valign="middle">
+                  <table cellpadding="0" cellspacing="0">
+                    <tr>
+                      <td style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);border-radius:999px;padding:5px 14px;">
+                        <p style="margin:0;font-size:13px;font-weight:700;color:#f59e0b;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;">${assets.length}&nbsp;asset${assets.length !== 1 ? "s" : ""}</p>
+                      </td>
+                    </tr>
+                  </table>
                 </td>
               </tr>
             </table>
           </td>
         </tr>
 
+        <!-- Window label strip -->
+        <tr>
+          <td style="background:#17132e;padding:10px 32px;">
+            <p style="margin:0;font-size:12px;color:#a78bfa;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <span style="color:#6d6a8a;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}&nbsp;&nbsp;&bull;&nbsp;&nbsp;<span style="color:#6d6a8a;">Institutions:</span>&nbsp;&nbsp;${byInstitution.size}
+            </p>
+          </td>
+        </tr>
+
         ${testBanner}
 
-        <!-- Body -->
+        <!-- Intro -->
         <tr>
           <td style="padding:28px 32px 8px 32px;">
-            <p style="margin:0 0 20px 0;font-size:14px;color:#374151;line-height:1.7;font-family:sans-serif;">
-              Here are the latest licensable TTO assets discovered across ${byInstitution.size} institution${byInstitution.size !== 1 ? "s" : ""} in the past ${escapeHtml(windowLabel.toLowerCase())}.
+            <p style="margin:0 0 24px 0;font-size:14px;color:#374151;line-height:1.75;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              Here are the latest licensable TTO assets discovered across <strong style="color:#0f0e1a;">${byInstitution.size}&nbsp;institution${byInstitution.size !== 1 ? "s" : ""}</strong> during the <strong style="color:#0f0e1a;">${escapeHtml(windowLabel.toLowerCase())}</strong>. Each listing is sourced directly from institutional technology transfer offices.
             </p>
+
+            <!-- Divider -->
+            <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;">
+              <tr>
+                <td width="32" height="2" style="background:#f59e0b;border-radius:2px;font-size:0;line-height:0;">&nbsp;</td>
+                <td height="2" style="background:#f3f4f6;font-size:0;line-height:0;">&nbsp;</td>
+              </tr>
+            </table>
+
             <table cellpadding="0" cellspacing="0" width="100%">
               ${institutionBlocks}
             </table>
@@ -160,12 +237,28 @@ export function renderDispatchEmail(opts: {
 
         <!-- Footer -->
         <tr>
-          <td style="background:#f9fafb;border-top:1px solid #e5e7eb;padding:20px 32px;">
-            <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.6;font-family:sans-serif;">
-              You received this digest because you subscribed to EdenRadar TTO intelligence alerts.<br />
-              &copy; ${new Date().getFullYear()} EdenRadar. All rights reserved.
-            </p>
+          <td style="background:#0c0a1e;padding:24px 32px;">
+            <table cellpadding="0" cellspacing="0" width="100%">
+              <tr>
+                <td>
+                  <p style="margin:0 0 2px 0;font-size:14px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">EdenRadar</p>
+                  <p style="margin:0 0 12px 0;font-size:11px;color:#6d6a8a;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
+                  <p style="margin:0;font-size:11px;color:#4a4870;line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                    You received this digest because you are subscribed to EdenRadar TTO intelligence alerts.<br />
+                    &copy; ${year} EdenRadar. All rights reserved.
+                  </p>
+                </td>
+                <td align="right" valign="bottom">
+                  <p style="margin:0;font-size:11px;color:#3d3a5c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">Powered by EdenRadar</p>
+                </td>
+              </tr>
+            </table>
           </td>
+        </tr>
+
+        <!-- Bottom amber bar -->
+        <tr>
+          <td height="4" style="background:linear-gradient(90deg,#d97706 0%,#f59e0b 100%);font-size:0;line-height:0;">&nbsp;</td>
         </tr>
 
       </table>
