@@ -2507,6 +2507,7 @@ interface AdminUser {
   id: string;
   email: string;
   role: PortalRole | null;
+  subscribedToDigest: boolean;
   createdAt: string;
   lastSignInAt: string | null;
 }
@@ -2562,6 +2563,38 @@ function AccountCenter({ pw }: { pw: string }) {
     },
   });
 
+  const updateSubscribed = useMutation({
+    mutationFn: async ({ userId, subscribedToDigest }: { userId: string; subscribedToDigest: boolean }) => {
+      const res = await fetch(`/api/admin/users/${userId}/subscribed`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ subscribedToDigest }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to update subscription");
+      }
+      return res.json();
+    },
+    onMutate: async ({ userId, subscribedToDigest }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/admin/users"] });
+      const prev = queryClient.getQueryData<{ users: AdminUser[] }>(["/api/admin/users"]);
+      queryClient.setQueryData<{ users: AdminUser[] }>(["/api/admin/users"], (old) => {
+        if (!old) return old;
+        return { users: old.users.map((u) => u.id === userId ? { ...u, subscribedToDigest } : u) };
+      });
+      return { prev };
+    },
+    onSuccess: (_data, { subscribedToDigest }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: subscribedToDigest ? "Subscribed to digest" : "Unsubscribed from digest" });
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const inviteUser = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/users/invite", {
@@ -2592,12 +2625,14 @@ function AccountCenter({ pw }: { pw: string }) {
 
   const portalCounts: Record<string, number> = {};
   let unassignedCount = 0;
+  let subscriberCount = 0;
   for (const u of users) {
     if (u.role) {
       portalCounts[u.role] = (portalCounts[u.role] ?? 0) + 1;
     } else {
       unassignedCount++;
     }
+    if (u.subscribedToDigest) subscriberCount++;
   }
 
   function copyInviteLink(role: PortalRole) {
@@ -2629,13 +2664,16 @@ function AccountCenter({ pw }: { pw: string }) {
   return (
     <div className="space-y-6" data-testid="account-center-tab">
       <div className="flex items-center justify-between">
-        <div>
+        <div className="space-y-1">
           <div className="flex items-center gap-3">
             <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-users">{users.length}</div>
             <span className="text-sm text-muted-foreground">total users</span>
+            <span className="text-xs text-muted-foreground">&bull;</span>
+            <div className="text-sm font-semibold tabular-nums text-foreground" data-testid="stat-digest-subscribers">{subscriberCount}</div>
+            <span className="text-sm text-muted-foreground">digest subscriber{subscriberCount !== 1 ? "s" : ""}</span>
           </div>
           {unassignedCount > 0 && (
-            <p className="text-xs text-amber-600 dark:text-amber-400 mt-1" data-testid="text-unassigned-count">
+            <p className="text-xs text-amber-600 dark:text-amber-400" data-testid="text-unassigned-count">
               {unassignedCount} user{unassignedCount !== 1 ? "s" : ""} without a portal assignment
             </p>
           )}
@@ -2724,6 +2762,7 @@ function AccountCenter({ pw }: { pw: string }) {
               <tr className="border-b border-border bg-muted/30">
                 <th className="text-left py-3 px-4 font-semibold text-foreground">Email</th>
                 <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[160px]">Portal</th>
+                <th className="text-center py-3 px-4 font-semibold text-foreground">Digest</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Last Seen</th>
               </tr>
@@ -2765,6 +2804,16 @@ function AccountCenter({ pw }: { pw: string }) {
                         </span>
                       )}
                     </td>
+                    <td className="text-center py-2.5 px-4">
+                      <input
+                        type="checkbox"
+                        checked={user.subscribedToDigest}
+                        onChange={(e) => updateSubscribed.mutate({ userId: user.id, subscribedToDigest: e.target.checked })}
+                        className="w-4 h-4 accent-primary cursor-pointer"
+                        title={user.subscribedToDigest ? "Unsubscribe from digest" : "Subscribe to digest"}
+                        data-testid={`toggle-digest-${user.id}`}
+                      />
+                    </td>
                     <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
                       {formatDate(user.createdAt)}
                     </td>
@@ -2776,7 +2825,7 @@ function AccountCenter({ pw }: { pw: string }) {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="text-center py-8 text-muted-foreground">No users found</td>
+                  <td colSpan={5} className="text-center py-8 text-muted-foreground">No users found</td>
                 </tr>
               )}
             </tbody>
@@ -4683,6 +4732,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [isTest, setIsTest] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [loadingSubscribers, setLoadingSubscribers] = useState(false);
 
   const windowOptions = [
     { label: "Last 24 hours", value: 24 },
@@ -4873,6 +4923,33 @@ function DispatchTab({ pw }: { pw: string }) {
       [arr[index], arr[index + 1]] = [arr[index + 1], arr[index]];
       return arr;
     });
+  }
+
+  async function loadSubscribers() {
+    setLoadingSubscribers(true);
+    try {
+      const res = await fetch("/api/admin/dispatch/subscribers", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load subscribers");
+      const { subscribers } = await res.json() as { subscribers: { id: string; username: string; effectiveEmail: string }[] };
+      const newEmails = subscribers.map((s) => s.effectiveEmail).filter(Boolean);
+      setRecipients((prev) => {
+        const combined = [...prev];
+        for (const email of newEmails) {
+          if (!combined.includes(email)) combined.push(email);
+        }
+        return combined;
+      });
+      toast({
+        title: `${newEmails.length} subscriber${newEmails.length !== 1 ? "s" : ""} loaded`,
+        description: newEmails.length === 0 ? "No subscribed users found. Subscribe users in Account Center." : `${newEmails.join(", ")}`,
+      });
+    } catch (err: any) {
+      toast({ title: "Failed to load subscribers", description: err.message, variant: "destructive" });
+    } finally {
+      setLoadingSubscribers(false);
+    }
   }
 
   function addRecipient() {
@@ -5266,7 +5343,24 @@ function DispatchTab({ pw }: { pw: string }) {
 
           {/* Recipients */}
           <div className="border border-border rounded-xl p-4 bg-card space-y-3">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Subscriber Recipients</label>
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Subscriber Recipients</label>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={loadSubscribers}
+                disabled={loadingSubscribers}
+                className="h-7 px-2.5 text-xs gap-1.5"
+                data-testid="button-load-subscribers"
+              >
+                {loadingSubscribers ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Users className="h-3 w-3" />
+                )}
+                Load subscribers
+              </Button>
+            </div>
             <div className="flex gap-2">
               <input
                 type="email"

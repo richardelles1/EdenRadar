@@ -3903,11 +3903,40 @@ If a field cannot be determined, use "N/A".`
         id: u.id,
         email: u.email ?? "",
         role: u.user_metadata?.role ?? null,
+        subscribedToDigest: u.user_metadata?.subscribedToDigest === true,
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at ?? null,
       }));
       res.json({ users });
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/subscribed", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { id } = req.params;
+      const schema = z.object({ subscribedToDigest: z.boolean() });
+      const { subscribedToDigest } = schema.parse(req.body);
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data: existing, error: fetchErr } = await adminSupabase.auth.admin.getUserById(id);
+      if (fetchErr || !existing?.user) return res.status(404).json({ error: "User not found" });
+      const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
+        user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({
+        id: data.user.id,
+        subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false,
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Invalid body" });
       res.status(500).json({ error: err.message });
     }
   });
@@ -5106,6 +5135,31 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[dispatch/send] Error:", err);
       return res.status(500).json({ error: err.message ?? "Dispatch failed" });
+    }
+  });
+
+  app.get("/api/admin/dispatch/subscribers", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
+      if (error) return res.status(500).json({ error: error.message });
+      const subscribers = (data?.users ?? [])
+        .filter((u) => u.user_metadata?.subscribedToDigest === true)
+        .map((u) => ({
+          id: u.id,
+          username: u.email ?? "",
+          effectiveEmail: u.email ?? "",
+        }));
+      return res.json({ subscribers });
+    } catch (err: any) {
+      console.error("[dispatch/subscribers] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load subscribers" });
     }
   });
 
