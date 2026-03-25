@@ -409,11 +409,72 @@ export const wsuScraper = createTechPublisherScraper(
   { selector: "a[href*='/techcase']", maxPg: 80 }
 );
 
-export const arizonaScraper = createTechPublisherScraper(
-  "arizona",
-  "University of Arizona",
-  { maxPg: 20, maxCats: 20, institutionTimeoutMs: 90_000 }
-);
+// University of Arizona uses Inteum + Algolia InstantSearch on arizona.technologypublisher.com
+// (public search-only key embedded in the site's own JS bundle).
+// Querying Algolia directly is cleaner than scraping the JS-rendered HTML.
+export const arizonaScraper: InstitutionScraper = {
+  institution: "University of Arizona",
+  scraperType: "api",
+  async scrape(): Promise<ScrapedListing[]> {
+    const APP_ID = "FXYPBJV847";
+    const API_KEY = "dc5e756eb21643534a7780c3bc930540";
+    const INDEX = "Prod_Inteum_TechnologyPublisher_arizona";
+    const PAGE_SIZE = 100;
+    const results: ScrapedListing[] = [];
+    let page = 0;
+    let nbPages = 1;
+    do {
+      const res = await fetch(
+        `https://${APP_ID}-dsn.algolia.net/1/indexes/${INDEX}/query`,
+        {
+          method: "POST",
+          headers: {
+            "X-Algolia-Application-Id": APP_ID,
+            "X-Algolia-API-Key": API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ params: `hitsPerPage=${PAGE_SIZE}&page=${page}` }),
+        }
+      );
+      if (!res.ok) throw new Error(`Algolia ${res.status}`);
+      const data = await res.json() as {
+        hits: Array<{
+          title?: string;
+          descriptionTruncated?: string;
+          descriptionFull?: string;
+          Url?: string;
+          finalPathCategories?: string;
+          finalPathInventors?: string;
+          techID?: string;
+          disclosureDate?: string;
+        }>;
+        nbPages: number;
+      };
+      nbPages = data.nbPages;
+      for (const hit of data.hits) {
+        if (!hit.title || !hit.Url) continue;
+        const categories = hit.finalPathCategories
+          ? hit.finalPathCategories.split(",").map((c) => c.trim().split(" > ").pop() ?? c.trim())
+          : undefined;
+        const inventors = hit.finalPathInventors
+          ? hit.finalPathInventors.split(",").map((s) => s.trim()).filter(Boolean)
+          : undefined;
+        results.push({
+          title: hit.title,
+          description: hit.descriptionFull ?? hit.descriptionTruncated ?? "",
+          url: hit.Url,
+          institution: "University of Arizona",
+          technologyId: hit.techID,
+          categories,
+          inventors,
+          publishedDate: hit.disclosureDate,
+        });
+      }
+      page++;
+    } while (page < nbPages);
+    return results;
+  },
+};
 
 export const pennStateScraper = createFlintboxScraper(
   { slug: "psu", orgId: 196, accessKey: "4aaaa84c-fa95-4181-bd42-b907e00a73f7" },

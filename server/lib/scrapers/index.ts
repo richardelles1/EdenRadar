@@ -408,6 +408,8 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "University of Dundee",
   "McGill University",
   "University of Calgary",
+  // Inteum + Algolia API (arizona.technologypublisher.com)
+  "University of Arizona",
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([
@@ -421,7 +423,7 @@ const TIER2_INSTITUTIONS = new Set<string>([
   "University of Virginia", "University of Oregon", "George Washington University",
   "CZ Biohub", "MUSC", "University of South Carolina", "Lehigh University",
   "Clemson University", "Iowa State University", "TGen", "Washington State University",
-  "University of Arizona", "Penn State", "Rutgers University", "Stevens Institute of Technology",
+  "Penn State", "Rutgers University", "Stevens Institute of Technology",
   "Rensselaer Polytechnic Institute", "Stony Brook University",
   "University of Cincinnati", "University at Buffalo", "Rowan University",
   "George Mason University", "University of Maine", "Binghamton University",
@@ -766,6 +768,13 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   argonneScraper,                 // Argonne National Laboratory — proxy-routed — ~200+ techs
   pnnlScraper,                    // Pacific Northwest National Laboratory — proxy-routed — ~150+ techs
 ];
+
+// Stamp the tier field on every scraper object at startup so that
+// both `scraper.tier` (property) and `getScraperTier()` (function) agree,
+// without requiring every individual scraper file to declare it explicitly.
+for (const s of ALL_SCRAPERS) {
+  s.tier = getScraperTier(s.institution);
+}
 
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],

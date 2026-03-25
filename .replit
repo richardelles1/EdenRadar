@@ -48,12 +48,12 @@ waitForPort = 5000
 name = "typecheck"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "npx tsc --noEmit 2>&1 | head -100"
-
 [workflows.workflow.metadata]
 isValidation = true
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npx tsc --noEmit 2>&1 | head -80"
 
 [agent]
 integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_database:1.0.0"]

@@ -108,8 +108,12 @@ function isFresh(institution: string): boolean {
 }
 
 function persistState(): void {
+  // On crash/restart, don't skip institutions that were still in-flight when we
+  // last persisted. Roll back the checkpoint to the start of the current in-flight
+  // batch so those institutions will be retried in the next cycle.
+  const safeCheckpoint = Math.max(0, queueIndex - currentInstitutions.length);
   saveSchedulerState({
-    queueIndex,
+    queueIndex: safeCheckpoint,
     cycleCount,
     cycleStartedAt,
     completedThisCycle,
