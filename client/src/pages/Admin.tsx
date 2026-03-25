@@ -4666,6 +4666,8 @@ function DispatchTab({ pw }: { pw: string }) {
   const [instDropOpen, setInstDropOpen] = useState(false);
   const [modalDropOpen, setModalDropOpen] = useState(false);
   const [instFilterSearch, setInstFilterSearch] = useState("");
+  const instDropRef = useRef<HTMLDivElement>(null);
+  const modalDropRef = useRef<HTMLDivElement>(null);
   const [dragOverDigest, setDragOverDigest] = useState(false);
   const [dragDigestIdx, setDragDigestIdx] = useState<number | null>(null);
   const [previewAutoLoading, setPreviewAutoLoading] = useState(false);
@@ -4692,25 +4694,13 @@ function DispatchTab({ pw }: { pw: string }) {
   ];
 
   const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
-    queryKey: ["/api/admin/new-discoveries", windowHours, filterInstitutions, filterModalities],
+    queryKey: ["/api/admin/new-discoveries", windowHours],
     queryFn: async () => {
       const params = new URLSearchParams({ windowHours: String(windowHours) });
-      if (filterInstitutions.length > 0) params.set("institutions", filterInstitutions.join(","));
-      if (filterModalities.length > 0) params.set("modalities", filterModalities.join(","));
       const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { "x-admin-password": pw } });
       if (!r.ok) throw new Error("Failed to load discoveries");
       return r.json();
     },
-  });
-
-  const filterOptionsQuery = useQuery<{ institutions: string[]; modalities: string[] }>({
-    queryKey: ["/api/admin/dispatch/filter-options"],
-    queryFn: async () => {
-      const r = await fetch("/api/admin/dispatch/filter-options", { headers: { "x-admin-password": pw } });
-      if (!r.ok) throw new Error("Failed to load filter options");
-      return r.json();
-    },
-    staleTime: 5 * 60 * 1000,
   });
 
   const historyQuery = useQuery<{ history: DispatchLogEntry[] }>({
@@ -4765,14 +4755,30 @@ function DispatchTab({ pw }: { pw: string }) {
   const filteredAssets = allAssets.filter((a) => {
     if (digestIds.has(a.id)) return false;
     if (filterSearch && !a.assetName.toLowerCase().includes(filterSearch.toLowerCase()) && !a.indication.toLowerCase().includes(filterSearch.toLowerCase())) return false;
+    if (filterInstitutions.length > 0 && !filterInstitutions.includes(a.institution)) return false;
+    if (filterModalities.length > 0 && !filterModalities.includes(a.modality ?? "")) return false;
     return true;
   });
 
-  const institutionOptions = filterOptionsQuery.data?.institutions ?? [];
-  const modalityOptions = filterOptionsQuery.data?.modalities ?? [];
+  const institutionOptions = Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
+  const modalityOptions = Array.from(new Set(allAssets.map((a) => a.modality).filter((m): m is string => !!m && m !== "unknown"))).sort();
   const visibleInstOptions = instFilterSearch
     ? institutionOptions.filter((n) => n.toLowerCase().includes(instFilterSearch.toLowerCase()))
     : institutionOptions;
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (instDropRef.current && !instDropRef.current.contains(e.target as Node)) {
+        setInstDropOpen(false);
+        setInstFilterSearch("");
+      }
+      if (modalDropRef.current && !modalDropRef.current.contains(e.target as Node)) {
+        setModalDropOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
 
   useEffect(() => {
     if (digestAssets.length === 0) return;
@@ -4990,7 +4996,7 @@ function DispatchTab({ pw }: { pw: string }) {
               )}
             </div>
 
-            <Select value={String(windowHours)} onValueChange={(v) => setWindowHours(Number(v))}>
+            <Select value={String(windowHours)} onValueChange={(v) => { setWindowHours(Number(v)); setFilterInstitutions([]); setFilterModalities([]); }}>
               <SelectTrigger className="h-8 text-xs" data-testid="select-window-hours">
                 <SelectValue />
               </SelectTrigger>
@@ -5025,14 +5031,14 @@ function DispatchTab({ pw }: { pw: string }) {
 
             <div className="flex gap-2">
               {/* Institution multi-select */}
-              <div className="relative flex-1">
+              <div className="relative flex-1" ref={instDropRef}>
                 <button
                   onClick={() => { setInstDropOpen((o) => !o); setModalDropOpen(false); if (!instDropOpen) setInstFilterSearch(""); }}
                   className={`w-full h-7 px-2.5 text-xs border rounded-md bg-background text-left flex items-center justify-between gap-1 ${filterInstitutions.length > 0 ? "border-primary/50 text-primary" : "border-border text-muted-foreground"}`}
                   data-testid="button-filter-institutions"
                 >
                   <span className="truncate">{filterInstitutions.length > 0 ? `Inst (${filterInstitutions.length})` : "Institution"}</span>
-                  {filterOptionsQuery.isLoading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+                  <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
                 {instDropOpen && (
                   <div className="absolute z-30 top-8 left-0 w-64 bg-popover border border-border rounded-lg shadow-lg flex flex-col max-h-64">
@@ -5048,15 +5054,15 @@ function DispatchTab({ pw }: { pw: string }) {
                       />
                     </div>
                     <div className="overflow-y-auto flex-1 p-1">
-                      {filterOptionsQuery.isLoading && (
+                      {discoveriesQuery.isLoading && (
                         <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">Loading...</div>
                       )}
-                      {!filterOptionsQuery.isLoading && visibleInstOptions.length === 0 && (
+                      {!discoveriesQuery.isLoading && visibleInstOptions.length === 0 && (
                         <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">
-                          {instFilterSearch ? `No match for "${instFilterSearch}"` : "No institutions available"}
+                          {instFilterSearch ? `No match for "${instFilterSearch}"` : "No institutions in this window"}
                         </div>
                       )}
-                      {!filterOptionsQuery.isLoading && visibleInstOptions.length > 0 && (
+                      {!discoveriesQuery.isLoading && visibleInstOptions.length > 0 && (
                         <>
                           <button onClick={() => setFilterInstitutions([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded" data-testid="button-clear-inst-filter">Clear all</button>
                           {visibleInstOptions.map((inst) => (
@@ -5072,25 +5078,25 @@ function DispatchTab({ pw }: { pw: string }) {
                 )}
               </div>
               {/* Modality multi-select */}
-              <div className="relative flex-1">
+              <div className="relative flex-1" ref={modalDropRef}>
                 <button
                   onClick={() => { setModalDropOpen((o) => !o); setInstDropOpen(false); }}
                   className={`w-full h-7 px-2.5 text-xs border rounded-md bg-background text-left flex items-center justify-between gap-1 ${filterModalities.length > 0 ? "border-primary/50 text-primary" : "border-border text-muted-foreground"}`}
                   data-testid="button-filter-modalities"
                 >
                   <span className="truncate">{filterModalities.length > 0 ? `Mod (${filterModalities.length})` : "Modality"}</span>
-                  {filterOptionsQuery.isLoading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
+                  <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
                 {modalDropOpen && (
                   <div className="absolute z-30 top-8 left-0 w-48 bg-popover border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
                     <div className="p-1">
-                      {filterOptionsQuery.isLoading && (
+                      {discoveriesQuery.isLoading && (
                         <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">Loading...</div>
                       )}
-                      {!filterOptionsQuery.isLoading && modalityOptions.length === 0 && (
-                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">No modalities available</div>
+                      {!discoveriesQuery.isLoading && modalityOptions.length === 0 && (
+                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">No modalities in this window</div>
                       )}
-                      {!filterOptionsQuery.isLoading && modalityOptions.length > 0 && (
+                      {!discoveriesQuery.isLoading && modalityOptions.length > 0 && (
                         <>
                           <button onClick={() => setFilterModalities([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded">Clear all</button>
                           {modalityOptions.map((m) => (
