@@ -4192,11 +4192,13 @@ export const techLinkScraper: InstitutionScraper = {
           if (!title || title.length < 4) continue;
 
           // The UUID comes from the ES document id (src.id or h._id).
-          // The name-slug is derived from the technology title.
+          // The name-slug prefers the ES source slug field (most faithful to
+          // TechLink's routing); falls back to a title-derived slug if absent.
           // URL format: /technologies/{name-slug}/{uuid}
           const uuid = String(src.id ?? h._id ?? "").trim();
+          const nameSlug = String(src.slug ?? "").trim() || toNameSlug(title);
           const url = UUID_RE.test(uuid)
-            ? `${BASE}/technologies/${toNameSlug(title)}/${uuid}`
+            ? `${BASE}/technologies/${nameSlug}/${uuid}`
             : `${BASE}/technologies`; // no valid UUID — link to search root
 
           const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
