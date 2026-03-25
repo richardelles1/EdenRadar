@@ -66,7 +66,7 @@ export function EdenNXSplash() {
           alignItems: "center",
           justifyContent: "center",
           flexDirection: "column",
-          background: "hsl(0 0% 4%)",
+          background: "hsl(0 0% 5%)",
           opacity: overlayOpacity,
           transition: `opacity ${phase === "exiting" ? EXIT_MS : ENTER_MS}ms ease`,
           pointerEvents: phase === "exiting" ? "none" : "all",

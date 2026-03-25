@@ -19,7 +19,6 @@ export function EdenNXBadge() {
           alignItems: "center",
           gap: 6,
           textDecoration: "none",
-          animation: "edennx-badge-breathe 3s ease-in-out infinite",
         }}
         title="EdenNX — Parent Company"
       >
@@ -27,7 +26,13 @@ export function EdenNXBadge() {
           src={edenNxLogo}
           onError={(e) => { (e.currentTarget as HTMLImageElement).src = "/edennx-logo.png"; }}
           alt="EdenNX"
-          style={{ height: 18, width: "auto", objectFit: "contain", display: "block" }}
+          style={{
+            height: 18,
+            width: "auto",
+            objectFit: "contain",
+            display: "block",
+            animation: "edennx-badge-breathe 3s ease-in-out infinite",
+          }}
         />
         <span
           style={{
