@@ -4949,6 +4949,16 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  function resolveSubjectTokens(subject: string, assets: Array<{ institution?: string | null }>): string {
+    const count = assets.length;
+    const institutionCount = new Set(assets.map((a) => a.institution ?? "")).size;
+    const date = new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return subject
+      .replace(/\{count\}/g, String(count))
+      .replace(/\{institution_count\}/g, String(institutionCount))
+      .replace(/\{date\}/g, date);
+  }
+
   app.get("/api/admin/new-discoveries", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
@@ -4995,8 +5005,9 @@ If multiple assets appear, return each as a separate array item.`;
         168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
-      const html = renderDispatchEmail({ subject, assets: selectedAssets, windowLabel, isTest });
-      return res.json({ html });
+      const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
+      const html = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest });
+      return res.json({ html, resolvedSubject });
     } catch (err: any) {
       console.error("[dispatch/preview] Error:", err);
       return res.status(500).json({ error: err.message ?? "Preview failed" });
@@ -5039,35 +5050,34 @@ If multiple assets appear, return each as a separate array item.`;
         168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
-      const htmlBody = renderDispatchEmail({ subject, assets: selectedAssets, windowLabel, isTest });
+      const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
+      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {
         return res.status(503).json({ error: "RESEND_API_KEY is not configured. Add it to your environment secrets to enable email dispatch." });
       }
 
+      const { Resend } = await import("resend");
+      const resendClient = new Resend(apiKey);
       const toList = isTest ? [testAddress ?? recipients[0]] : recipients;
+      const finalSubject = isTest ? `[TEST] ${resolvedSubject}` : resolvedSubject;
 
-      const emailRes = await fetch("https://api.resend.com/emails", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          from: "EdenRadar Digest <digest@edenradar.com>",
-          to: toList,
-          subject: isTest ? `[TEST] ${subject}` : subject,
-          html: htmlBody,
-        }),
+      const { error: sendError } = await resendClient.emails.send({
+        from: "EdenRadar Digest <digest@edenradar.com>",
+        to: toList,
+        subject: finalSubject,
+        html: htmlBody,
       });
 
-      if (!emailRes.ok) {
-        const errText = await emailRes.text();
-        console.error("[dispatch/send] Resend API error:", errText);
-        return res.status(502).json({ error: `Email provider error: ${errText}` });
+      if (sendError) {
+        console.error("[dispatch/send] Resend error:", sendError);
+        return res.status(502).json({ error: `Email provider error: ${sendError.message}` });
       }
 
       if (!isTest) {
         await storage.createDispatchLog({
-          subject,
+          subject: resolvedSubject,
           recipients,
           assetIds,
           assetNames: selectedAssets.map((a) => a.assetName),

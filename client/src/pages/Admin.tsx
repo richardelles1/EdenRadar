@@ -5155,16 +5155,16 @@ function DispatchTab({ pw }: { pw: string }) {
             <div className="flex items-center gap-1.5 flex-wrap">
               <span className="text-[10px] text-muted-foreground">Insert value:</span>
               {[
-                { label: "{count}", value: String(digestAssets.length || 0), hint: `${digestAssets.length} assets` },
-                { label: "{institution_count}", value: String(new Set(digestAssets.map((a) => a.institution)).size || 0), hint: `${new Set(digestAssets.map((a) => a.institution)).size} institutions` },
-                { label: "{date}", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), hint: "today's date" },
-              ].map(({ label, value, hint }) => (
+                { label: "{count}", hint: `will resolve to: ${digestAssets.length}` },
+                { label: "{institution_count}", hint: `will resolve to: ${new Set(digestAssets.map((a) => a.institution)).size}` },
+                { label: "{date}", hint: `will resolve to: ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}` },
+              ].map(({ label, hint }) => (
                 <button
                   key={label}
-                  onClick={() => insertSubjectToken(value)}
+                  onClick={() => insertSubjectToken(label)}
                   className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors font-mono"
                   data-testid={`button-token-${label.replace(/[{}]/g, "")}`}
-                  title={`Insert "${value}" (${hint})`}
+                  title={hint}
                 >
                   {label}
                 </button>
