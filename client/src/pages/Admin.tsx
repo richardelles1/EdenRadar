@@ -77,7 +77,7 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-type HealthStatus = "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
+type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never";
 
 type ErrorType = "all" | "Timeout" | "Blocked" | "Network" | "Parsing" | "Unknown";
 
@@ -154,6 +154,7 @@ interface CollectorHealthData {
 function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid="health-ok" />;
   if (health === "syncing") return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" data-testid="health-syncing" />;
+  if (health === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-warning" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
   if (health === "stale") return <AlertCircle className="h-4 w-4 text-orange-500" data-testid="health-stale" />;
   if (health === "never") return <Database className="h-4 w-4 text-muted-foreground/40" data-testid="health-never" />;
@@ -163,6 +164,7 @@ function HealthDot({ health }: { health: HealthStatus }) {
 function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "ok") return <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Working</span>;
   if (health === "syncing") return <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">Syncing</span>;
+  if (health === "warning") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Warning</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
   if (health === "stale") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Stale</span>;
   if (health === "never") return <span className="text-muted-foreground/50 text-xs font-medium">Never synced</span>;
@@ -796,6 +798,48 @@ function DataHealth({ pw }: { pw: string }) {
   const [resetConfirm, setResetConfirm] = useState(false);
   const resetConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [tierConfirm, setTierConfirm] = useState<1 | 2 | 3 | 4 | null>(null);
+  const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulerRunTierMutation = useMutation({
+    mutationFn: async (tier: 1 | 2 | 3 | 4) => {
+      const res = await fetch("/api/ingest/scheduler/run-tier", {
+        method: "POST",
+        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }) => {
+      setTierConfirm(null);
+      if (d.ok) {
+        toast({ title: "Tier scan started", description: d.message });
+      } else {
+        toast({ title: "Cannot run tier", description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      setTierConfirm(null);
+      toast({ title: "Tier scan failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
+    if (tierConfirm === tier) {
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      schedulerRunTierMutation.mutate(tier);
+    } else {
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      setTierConfirm(tier);
+      tierConfirmTimer.current = setTimeout(() => setTierConfirm(null), 4000);
+    }
+  };
+
   const schedulerResetMutation = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/ingest/scheduler/reset", {
@@ -875,7 +919,7 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, degraded: 2, syncing: 3, never: 4, ok: 5 };
+  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, degraded: 2, warning: 3, syncing: 4, never: 5, ok: 6 };
 
   const sortedRowsForFreeze = React.useMemo(() => {
     if (!data) return [];
@@ -1148,6 +1192,38 @@ function DataHealth({ pw }: { pw: string }) {
                 }
                 {resetConfirm ? "Confirm Reset & Restart?" : "Reset & Restart"}
               </Button>
+              <div className="flex items-center gap-1 border-l border-border/50 pl-2">
+                {([1, 2, 3, 4] as const).map((tier) => {
+                  const colors: Record<number, string> = {
+                    1: "text-sky-600 border-sky-500/40 hover:bg-sky-50 dark:hover:bg-sky-950/40",
+                    2: "text-violet-600 border-violet-500/40 hover:bg-violet-50 dark:hover:bg-violet-950/40",
+                    3: "text-emerald-600 border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40",
+                    4: "text-orange-600 border-orange-500/40 hover:bg-orange-50 dark:hover:bg-orange-950/40",
+                  };
+                  const confirmColors: Record<number, string> = {
+                    1: "border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300",
+                    2: "border-violet-500 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300",
+                    3: "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
+                    4: "border-orange-500 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300",
+                  };
+                  const isConfirming = tierConfirm === tier;
+                  const isPending = schedulerRunTierMutation.isPending;
+                  return (
+                    <Button
+                      key={tier}
+                      size="sm"
+                      variant="outline"
+                      className={`h-8 text-[11px] font-semibold px-2 transition-colors ${isConfirming ? confirmColors[tier] : colors[tier]}`}
+                      onClick={() => !schedRunning && handleTierClick(tier)}
+                      disabled={isPending || schedRunning}
+                      title={schedRunning ? "Pause scheduler first to run a single tier" : `Run Tier ${tier} institutions only`}
+                      data-testid={`button-run-tier-${tier}`}
+                    >
+                      {isPending && tierConfirm === tier ? <Loader2 className="w-3 h-3 animate-spin" /> : isConfirming ? `T${tier}?` : `T${tier}`}
+                    </Button>
+                  );
+                })}
+              </div>
             </div>
           </div>
 
@@ -1233,6 +1309,7 @@ function DataHealth({ pw }: { pw: string }) {
                 {(([
                   { key: "all",      label: "All",          activeClass: "bg-primary text-primary-foreground border-primary" },
                   { key: "ok",       label: "Working",      activeClass: "bg-emerald-600 text-white border-emerald-600" },
+                  { key: "warning",  label: "Warning",      activeClass: "bg-yellow-500 text-white border-yellow-500" },
                   { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
                   { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
                   { key: "failing",  label: "Failing",      activeClass: "bg-red-600 text-white border-red-600" },
@@ -1339,7 +1416,7 @@ function DataHealth({ pw }: { pw: string }) {
                     return (
                       <React.Fragment key={row.institution}>
                         <tr
-                          className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${row.consecutiveFailures >= 3 ? "bg-red-500/5" : ""} ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
+                          className={`border-b border-border/50 hover:bg-muted/20 cursor-pointer ${row.consecutiveFailures >= 4 ? "bg-red-500/5" : row.consecutiveFailures >= 2 ? "bg-amber-500/5" : row.consecutiveFailures >= 1 ? "bg-yellow-500/5" : ""} ${isExpanded ? "bg-primary/5 border-b-0" : ""}`}
                           data-testid={`health-row-${instSlug}`}
                           onClick={() => handleRowClick(row.institution)}
                         >
@@ -1358,14 +1435,19 @@ function DataHealth({ pw }: { pw: string }) {
                               {row.tier === 4 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-orange-600 border-orange-500/30 bg-orange-500/5" title="Tier 4: Playwright (headless browser)">T4</Badge>
                               )}
-                              {row.consecutiveFailures >= 3 && (
+                              {row.consecutiveFailures >= 4 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
                                   Sync Error
                                 </Badge>
                               )}
-                              {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (
+                              {row.consecutiveFailures >= 2 && row.consecutiveFailures < 4 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-amber-500 border-amber-500/30 bg-amber-500/5">
                                   {row.consecutiveFailures}x failed
+                                </Badge>
+                              )}
+                              {row.consecutiveFailures === 1 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-yellow-600 border-yellow-500/30 bg-yellow-500/5">
+                                  1x failed
                                 </Badge>
                               )}
                             </div>

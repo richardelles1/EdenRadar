@@ -22,8 +22,8 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry } from "./lib/scheduler";
-import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly } from "./lib/scheduler";
+import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth, loadAllScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -1279,7 +1279,10 @@ export async function registerRoutes(
 
       const allInstitutionNames = ALL_SCRAPERS.map((s) => s.institution);
 
-      const healthData = await storage.getCollectorHealthData();
+      const [healthData, scraperHealthMap] = await Promise.all([
+        storage.getCollectorHealthData(),
+        loadAllScraperHealth(),
+      ]);
       const { institutions: instRows, syncSessions: sessions } = healthData;
 
       const instMap = new Map(instRows.map((r) => [r.institution, r]));
@@ -1304,16 +1307,14 @@ export async function registerRoutes(
         const instSessions = sessionsByInstitution.get(name) ?? [];
         const session = instSessions[0] ?? null;
 
-        let consecutiveFailures = 0;
-        for (const s of instSessions) {
-          if (s.status === "failed") {
-            consecutiveFailures++;
-          } else {
-            break;
-          }
-        }
+        // Use scraper_health table consecutiveFailures — this is maintained by the
+        // scheduler and correctly excludes transient DB/server-restart errors via
+        // isTransientDbError(). Computing from session history would count transient
+        // errors that never incremented the real failure counter.
+        const scraperHealth = scraperHealthMap.get(name);
+        const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        let health: "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
+        let health: "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never";
         // Live lock takes precedence: if ingestion is actively holding a lock for this
         // institution, it's definitively "syncing" regardless of DB session state.
         if (liveActiveSyncs.has(name)) {
@@ -1324,10 +1325,12 @@ export async function registerRoutes(
           const heartbeat = session.lastRefreshedAt ?? session.createdAt;
           const elapsed = now - new Date(heartbeat).getTime();
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
-        } else if (session.status === "failed") {
-          health = consecutiveFailures >= 3 ? "failing" : consecutiveFailures >= 2 ? "degraded" : "ok";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           health = "ok";
+        } else if (session.status === "failed") {
+          health = consecutiveFailures >= 4 ? "failing" :
+                   consecutiveFailures >= 2 ? "degraded" :
+                   consecutiveFailures >= 1 ? "warning" : "ok";
         } else {
           health = "degraded";
         }
@@ -1476,6 +1479,15 @@ export async function registerRoutes(
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const result = resetAndStartScheduler();
+    res.json({ ...result, status: getSchedulerStatus() });
+  });
+
+  app.post("/api/ingest/scheduler/run-tier", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { tier } = req.body ?? {};
+    if (![1, 2, 3, 4].includes(tier)) return res.status(400).json({ error: "tier must be 1, 2, 3, or 4" });
+    const result = startTierOnly(tier as 1 | 2 | 3 | 4);
     res.json({ ...result, status: getSchedulerStatus() });
   });
 

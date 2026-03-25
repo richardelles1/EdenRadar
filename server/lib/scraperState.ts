@@ -23,8 +23,7 @@ export interface ScraperHealthRow {
   lastSuccessNewCount: number | null;
 }
 
-const BACKOFF_FAILURE_THRESHOLD = 5;
-const BACKOFF_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+// Graduated backoff: 3→6h, 5→24h, 8→3 days, 12→7 days
 
 export async function saveSchedulerState(state: SchedulerStateRow): Promise<void> {
   try {
@@ -131,7 +130,7 @@ export async function updateScraperHealth(institution: string, success: boolean,
           ${failureReason ?? null},
           NOW(),
           NULL,
-          CASE WHEN 1 >= ${BACKOFF_FAILURE_THRESHOLD} THEN NOW() + INTERVAL '7 days' ELSE NULL END,
+          NULL,
           NOW()
         )
         ON CONFLICT (institution) DO UPDATE SET
@@ -139,8 +138,10 @@ export async function updateScraperHealth(institution: string, success: boolean,
           last_failure_reason = ${failureReason ?? null},
           last_failure_at = NOW(),
           backoff_until = CASE
-            WHEN scraper_health.consecutive_failures + 1 >= ${BACKOFF_FAILURE_THRESHOLD}
-            THEN NOW() + INTERVAL '7 days'
+            WHEN scraper_health.consecutive_failures + 1 >= 12 THEN NOW() + INTERVAL '7 days'
+            WHEN scraper_health.consecutive_failures + 1 >= 8  THEN NOW() + INTERVAL '3 days'
+            WHEN scraper_health.consecutive_failures + 1 >= 5  THEN NOW() + INTERVAL '24 hours'
+            WHEN scraper_health.consecutive_failures + 1 >= 3  THEN NOW() + INTERVAL '6 hours'
             ELSE scraper_health.backoff_until
           END,
           updated_at = NOW()

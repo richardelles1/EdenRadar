@@ -50,7 +50,7 @@ let cycleCount = 0;
 let priorityQueue: string[] = [];
 let syncDurations: number[] = [];
 let lastCycleCompletedAt: Date | null = null;
-let delayBetweenSyncsMs = 5_000;
+let delayBetweenSyncsMs = 0;
 /** Tier-sorted queue for the current cycle. Re-built at every cycle start.
  * Tier 1 (API/RSS) → Tier 2 (platform factory) → Tier 3 (bespoke HTML) → Tier 4 (Playwright). */
 let tieredQueue: string[] = [];
@@ -176,8 +176,8 @@ export function getSchedulerStatus(): SchedulerStatus {
 }
 
 export function setDelay(ms: number): { ok: boolean; message: string } {
-  if (ms < 1000 || ms > 300_000) {
-    return { ok: false, message: "Delay must be between 1000ms and 300000ms" };
+  if (ms < 0 || ms > 300_000) {
+    return { ok: false, message: "Delay must be between 0ms and 300000ms" };
   }
   delayBetweenSyncsMs = ms;
   return { ok: true, message: `Delay set to ${ms}ms` };
@@ -288,6 +288,39 @@ export function pauseScheduler(): { ok: boolean; message: string } {
   persistState();
   console.log(`[scheduler] Paused at position ${queueIndex}/${getInstitutionQueue().length}`);
   return { ok: true, message: "Scheduler paused" };
+}
+
+export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: string } {
+  if (isIngestionRunning()) {
+    return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
+  }
+  runGeneration++;
+  if (schedulerTimer) {
+    clearTimeout(schedulerTimer);
+    schedulerTimer = null;
+  }
+  const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
+  for (const s of ALL_SCRAPERS) {
+    const t = getScraperTier(s.institution);
+    buckets[t].push(s.institution);
+  }
+  tieredQueue = buckets[tier];
+  queueIndex = 0;
+  completedThisCycle = 0;
+  failedThisCycle = 0;
+  skippedThisCycle = 0;
+  freshSkippedThisCycle = 0;
+  currentInstitutions = [];
+  lastActivityAt = null;
+  cycleStartedAt = new Date();
+  cycleCount++;
+  priorityQueue = [];
+  schedulerState = "running";
+  persistState();
+  console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
+  loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+  scheduleNext();
+  return { ok: true, message: `Tier ${tier} scan started — ${tieredQueue.length} institutions` };
 }
 
 export function invalidateHealthCacheEntry(institution: string): void {
@@ -451,8 +484,9 @@ function scheduleNext(): void {
   }
 }
 
-/** Returns true when the error comes from the database connection pool being exhausted
- * or the Supabase connection being dropped — NOT from the target website failing.
+/** Returns true when the error comes from the database connection pool being exhausted,
+ * the Supabase connection being dropped, or our own server restarting mid-sync —
+ * NOT from the target website failing.
  * These are transient infrastructure blips and must NOT count as scraper failures or
  * increment consecutiveFailures, which would trigger multi-day backoff. */
 function isTransientDbError(msg: string): boolean {
@@ -465,7 +499,9 @@ function isTransientDbError(msg: string): boolean {
     m.includes("econnrefused") ||
     m.includes("pool") ||
     m.includes("during authentication") ||
-    m.includes("client checkout timed out")
+    m.includes("client checkout timed out") ||
+    m.includes("server restarted during sync") ||
+    m.includes("scraper failed: scraper failed: server restarted")
   );
 }
 
@@ -524,7 +560,11 @@ async function runOne(institution: string, gen: number): Promise<void> {
         lastFailureReason: msg || null,
         lastFailureAt: new Date(),
         lastSuccessAt: current?.lastSuccessAt ?? null,
-        backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
+        backoffUntil: newFailures >= 12 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 8  ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) :
+                     newFailures >= 5  ? new Date(Date.now() + 24 * 60 * 60 * 1000) :
+                     newFailures >= 3  ? new Date(Date.now() + 6 * 60 * 60 * 1000) :
+                     (current?.backoffUntil ?? null),
         lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
       });
     }

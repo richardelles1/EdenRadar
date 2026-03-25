@@ -1,5 +1,5 @@
 import { storage } from "../storage";
-import { runAllScrapers, ALL_SCRAPERS } from "./scrapers/index";
+import { runAllScrapers, ALL_SCRAPERS, type ScrapedListing } from "./scrapers/index";
 import { enrichBatch } from "./scrapers/enrichAsset";
 import { preFilterBatch } from "./pipeline/relevancePreFilter";
 import { classifyBatch, type AssetClassification } from "./pipeline/classifyAsset";
@@ -214,7 +214,6 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 // Playwright scrapers require full exclusivity (activeSyncs.size === 0).
 // HTTP/API scrapers allow up to MAX_HTTP_CONCURRENT concurrent instances.
 
-const MAX_HTTP_CONCURRENT = 5;
 const activeSyncs: Map<string, "playwright" | "http" | "api"> = new Map();
 
 function hasPlaywrightSync(): boolean {
@@ -245,7 +244,7 @@ export function tryAcquireSyncLock(institution: string, scraperType: "playwright
     if (activeSyncs.size > 0) return false;
   } else {
     if (hasPlaywrightSync()) return false;
-    if (activeSyncs.size >= MAX_HTTP_CONCURRENT) return false;
+    if (activeSyncs.size >= 2) return false;
   }
 
   activeSyncs.set(institution, scraperType);
@@ -262,9 +261,11 @@ export function releaseSyncLock(institution?: string): void {
 
 const TIMEOUT_BY_TYPE: Record<string, number> = {
   playwright: 12 * 60 * 1000,
-  api: 3 * 60 * 1000,
-  http: 3 * 60 * 1000,
+  api: 5 * 60 * 1000,
+  http: 10 * 60 * 1000,
 };
+const SCRAPE_RETRY_DELAY_MS = 20_000;
+const SCRAPE_MAX_ATTEMPTS = 2;
 
 export interface SyncResult {
   sessionId: string;
@@ -302,26 +303,39 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 
     console.log(`[sync] ${institutionName}: starting sync (type=${scraperType}, timeout=${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s, ${currentIndexed} currently indexed)...`);
 
-    let listings;
-    try {
-      listings = await Promise.race([
-        scraper.scrape(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`)), SCRAPER_TIMEOUT_MS)
-        ),
-      ]);
-    } catch (err: any) {
-      console.log(`[sync] ${institutionName}: scrape failed — ${err?.message}`);
+    let listings: ScrapedListing[] | undefined;
+    let lastScrapeError: Error | null = null;
+    for (let attempt = 1; attempt <= SCRAPE_MAX_ATTEMPTS; attempt++) {
+      try {
+        listings = await Promise.race([
+          scraper.scrape(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`)), SCRAPER_TIMEOUT_MS)
+          ),
+        ]);
+        lastScrapeError = null;
+        break;
+      } catch (err: any) {
+        lastScrapeError = err;
+        if (attempt < SCRAPE_MAX_ATTEMPTS) {
+          console.log(`[sync] ${institutionName}: attempt ${attempt} failed (${err?.message}) — retrying in ${SCRAPE_RETRY_DELAY_MS / 1000}s...`);
+          await new Promise((resolve) => setTimeout(resolve, SCRAPE_RETRY_DELAY_MS));
+        }
+      }
+    }
+    if (lastScrapeError || !listings) {
+      const errMsg = lastScrapeError?.message ?? "Unknown scraper error";
+      console.log(`[sync] ${institutionName}: scrape failed after ${SCRAPE_MAX_ATTEMPTS} attempt(s) — ${errMsg}`);
       await storage.updateSyncSession(sessionId, {
         status: "failed",
         phase: "done",
         completedAt: new Date(),
-        errorMessage: err?.message ?? "Unknown scraper error",
+        errorMessage: errMsg,
       });
-      throw new Error(`Scraper failed: ${err?.message}`);
+      throw new Error(`Scraper failed: ${errMsg}`);
     }
 
-    const rawCount = listings.length;
+    const rawCount: number = listings.length;
     console.log(`[sync] ${institutionName}: scraped ${rawCount} raw listings`);
 
     await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing", lastRefreshedAt: new Date() });
