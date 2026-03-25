@@ -1360,7 +1360,7 @@ function DataHealth({ pw }: { pw: string }) {
                               )}
                               {row.consecutiveFailures >= 3 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>
-                                  Broken Connection
+                                  Sync Error
                                 </Badge>
                               )}
                               {row.consecutiveFailures >= 1 && row.consecutiveFailures < 3 && (

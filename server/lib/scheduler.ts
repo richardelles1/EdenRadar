@@ -9,7 +9,7 @@ import {
 } from "./scraperState";
 import { storage } from "../storage";
 
-const MAX_HTTP_CONCURRENT = 5;
+const MAX_HTTP_CONCURRENT = 2;
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
 const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
 
@@ -451,6 +451,24 @@ function scheduleNext(): void {
   }
 }
 
+/** Returns true when the error comes from the database connection pool being exhausted
+ * or the Supabase connection being dropped — NOT from the target website failing.
+ * These are transient infrastructure blips and must NOT count as scraper failures or
+ * increment consecutiveFailures, which would trigger multi-day backoff. */
+function isTransientDbError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("connection failure") ||
+    m.includes("connection timeout") ||
+    m.includes("connectiontimeout") ||
+    m.includes("econnreset") ||
+    m.includes("econnrefused") ||
+    m.includes("pool") ||
+    m.includes("during authentication") ||
+    m.includes("client checkout timed out")
+  );
+}
+
 async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
@@ -469,7 +487,6 @@ async function runOne(institution: string, gen: number): Promise<void> {
       completedThisCycle++;
       console.log(`[scheduler] ${institution} complete — ${result.newCount} new, ${result.relevantCount} relevant`);
     }
-    // Persist success with newCount so the staleness gate works after restarts
     await updateScraperHealth(institution, true, undefined, result.newCount);
     scraperHealthCache.set(institution, {
       institution,
@@ -481,22 +498,36 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastSuccessNewCount: result.newCount,
     });
   } catch (err: any) {
+    const msg = err?.message ?? "";
+    const transient = isTransientDbError(msg);
+
     if (runGeneration === gen) {
-      failedThisCycle++;
-      console.log(`[scheduler] ${institution} failed: ${err?.message}`);
+      if (transient) {
+        // Log as infrastructure blip — do not count as a scraper failure
+        console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg}`);
+        // Put back in queue at front so it retries next cycle slot
+        if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
+      } else {
+        failedThisCycle++;
+        console.log(`[scheduler] ${institution} failed: ${msg}`);
+      }
     }
-    await updateScraperHealth(institution, false, err?.message);
-    const current = scraperHealthCache.get(institution);
-    const newFailures = (current?.consecutiveFailures ?? 0) + 1;
-    scraperHealthCache.set(institution, {
-      institution,
-      consecutiveFailures: newFailures,
-      lastFailureReason: err?.message ?? null,
-      lastFailureAt: new Date(),
-      lastSuccessAt: current?.lastSuccessAt ?? null,
-      backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
-      lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
-    });
+
+    if (!transient) {
+      // Only write failure to health DB when the error is a real scraper problem
+      await updateScraperHealth(institution, false, msg);
+      const current = scraperHealthCache.get(institution);
+      const newFailures = (current?.consecutiveFailures ?? 0) + 1;
+      scraperHealthCache.set(institution, {
+        institution,
+        consecutiveFailures: newFailures,
+        lastFailureReason: msg || null,
+        lastFailureAt: new Date(),
+        lastSuccessAt: current?.lastSuccessAt ?? null,
+        backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
+        lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
+      });
+    }
   } finally {
     if (runGeneration === gen) {
       persistState();
