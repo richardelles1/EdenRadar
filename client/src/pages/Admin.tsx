@@ -4629,6 +4629,7 @@ type DispatchLogEntry = {
   recipients: string[];
   assetIds: number[];
   assetNames: string[];
+  assetSourceUrls: string[];
   assetCount: number;
   windowHours: number;
   isTest: boolean;
@@ -4657,7 +4658,7 @@ function assetAge(isoDate: string): string {
 
 function DispatchTab({ pw }: { pw: string }) {
   const { toast } = useToast();
-  const [windowHours, setWindowHours] = useState(72);
+  const [windowHours, setWindowHours] = useState(168);
   const [filterInstitutions, setFilterInstitutions] = useState<string[]>([]);
   const [filterModalities, setFilterModalities] = useState<string[]>([]);
   const [filterSearch, setFilterSearch] = useState("");
@@ -4668,7 +4669,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const [previewAutoLoading, setPreviewAutoLoading] = useState(false);
   const [historyExpandedId, setHistoryExpandedId] = useState<number | null>(null);
   const [digestAssets, setDigestAssets] = useState<DiscoveryAsset[]>([]);
-  const [subject, setSubject] = useState(`EdenRadar TTO Digest - ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
+  const [subject, setSubject] = useState("EdenRadar: {count} new TTO assets from {institution_count} institutions");
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientInput, setRecipientInput] = useState("");
   const [testAddress, setTestAddress] = useState("");
@@ -4691,7 +4692,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
     queryKey: ["/api/admin/new-discoveries", windowHours, filterInstitutions, filterModalities],
     queryFn: async () => {
-      const params = new URLSearchParams({ hours: String(windowHours) });
+      const params = new URLSearchParams({ windowHours: String(windowHours) });
       if (filterInstitutions.length > 0) params.set("institutions", filterInstitutions.join(","));
       if (filterModalities.length > 0) params.set("modalities", filterModalities.join(","));
       const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { "x-admin-password": pw } });
@@ -4936,8 +4937,12 @@ function DispatchTab({ pw }: { pw: string }) {
       toast({ title: "Digest Zone is empty", description: "Add assets to the Digest Zone before dispatching.", variant: "destructive" });
       return;
     }
-    if (recipients.length === 0) {
-      toast({ title: "No recipients", description: "Add at least one recipient email address.", variant: "destructive" });
+    if (!test && recipients.length === 0) {
+      toast({ title: "No recipients", description: "Add at least one subscriber email address.", variant: "destructive" });
+      return;
+    }
+    if (test && !testAddress && recipients.length === 0) {
+      toast({ title: "No test address", description: "Enter a test send address or add a subscriber.", variant: "destructive" });
       return;
     }
     if (!subject.trim()) {
@@ -5082,17 +5087,30 @@ function DispatchTab({ pw }: { pw: string }) {
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
                         <button
                           onClick={() => setFilterInstitutions((p) => p.includes(asset.institution) ? p : [...p, asset.institution])}
-                          className="text-[10px] text-muted-foreground hover:text-primary truncate"
+                          className="text-[10px] bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary px-1.5 py-0.5 rounded truncate"
                         >
                           {asset.institution}
                         </button>
-                        <span className="text-[9px] text-muted-foreground/60">{assetAge(asset.firstSeenAt)}</span>
+                        <span className="text-[9px] text-muted-foreground/50">{assetAge(asset.firstSeenAt)}</span>
+                        {asset.sourceUrl && (
+                          <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary/60 hover:text-primary" title="View source" onClick={(e) => e.stopPropagation()} data-testid={`link-source-${asset.id}`}>
+                            <ExternalLink className="h-2.5 w-2.5" />
+                          </a>
+                        )}
                       </div>
+                      {asset.indication && (
+                        <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{asset.indication}</p>
+                      )}
                       <div className="mt-1 flex flex-wrap gap-1">
                         <StagePill stage={asset.developmentStage} />
+                        {asset.modality && asset.modality !== "unknown" && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-[9px] font-medium">
+                            {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
+                          </span>
+                        )}
                         {asset.previouslySent && (
                           <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 text-[9px] font-semibold">
                             <Check className="h-2.5 w-2.5" /> Sent
@@ -5135,18 +5153,18 @@ function DispatchTab({ pw }: { pw: string }) {
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] text-muted-foreground">Insert token:</span>
+              <span className="text-[10px] text-muted-foreground">Insert value:</span>
               {[
-                { label: "{date}", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
-                { label: "{count}", value: String(digestAssets.length || 0) },
-                { label: "{institution}", value: digestAssets[0]?.institution ?? "Institution" },
-              ].map(({ label, value }) => (
+                { label: "{count}", value: String(digestAssets.length || 0), hint: `${digestAssets.length} assets` },
+                { label: "{institution_count}", value: String(new Set(digestAssets.map((a) => a.institution)).size || 0), hint: `${new Set(digestAssets.map((a) => a.institution)).size} institutions` },
+                { label: "{date}", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }), hint: "today's date" },
+              ].map(({ label, value, hint }) => (
                 <button
                   key={label}
                   onClick={() => insertSubjectToken(value)}
                   className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors font-mono"
                   data-testid={`button-token-${label.replace(/[{}]/g, "")}`}
-                  title={`Insert: ${value}`}
+                  title={`Insert "${value}" (${hint})`}
                 >
                   {label}
                 </button>
@@ -5441,14 +5459,24 @@ function DispatchTab({ pw }: { pw: string }) {
                       <p className="text-xs text-muted-foreground">{log.recipients.join(", ")}</p>
                       {(log.assetNames ?? []).length > 0 && (
                         <>
-                          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mt-2">Assets included</p>
+                          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mt-2">Assets dispatched</p>
                           <ul className="space-y-0.5">
-                            {(log.assetNames ?? []).map((name, idx) => (
-                              <li key={idx} className="text-xs text-foreground flex items-center gap-1.5">
-                                <span className="h-1 w-1 rounded-full bg-primary/60 shrink-0" />
-                                {name}
-                              </li>
-                            ))}
+                            {(log.assetNames ?? []).map((name, idx) => {
+                              const url = (log.assetSourceUrls ?? [])[idx];
+                              return (
+                                <li key={idx} className="text-xs text-foreground flex items-center gap-1.5">
+                                  <span className="h-1 w-1 rounded-full bg-primary/60 shrink-0" />
+                                  {url ? (
+                                    <a href={url} target="_blank" rel="noopener noreferrer" className="hover:text-primary hover:underline flex items-center gap-1">
+                                      {name}
+                                      <ExternalLink className="h-2.5 w-2.5 opacity-50" />
+                                    </a>
+                                  ) : (
+                                    <span>{name}</span>
+                                  )}
+                                </li>
+                              );
+                            })}
                           </ul>
                         </>
                       )}

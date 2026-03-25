@@ -4953,7 +4953,7 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const hours = Math.max(1, Math.min(8760, Number(req.query.hours ?? 72)));
+      const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours ?? 168)));
       const parseList = (val: unknown): string[] => {
         if (typeof val === "string" && val) return val.split(",").map((s) => s.trim()).filter(Boolean);
         if (Array.isArray(val)) return (val as string[]).filter((s) => typeof s === "string" && s);
@@ -4961,8 +4961,8 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const institutions = parseList(req.query.institutions);
       const modalities = parseList(req.query.modalities);
-      const assets = await storage.getNewDiscoveries(hours, { institutions, modalities });
-      return res.json({ assets, windowHours: hours });
+      const assets = await storage.getNewDiscoveries(windowHours, { institutions, modalities });
+      return res.json({ assets, windowHours });
     } catch (err: any) {
       console.error("[new-discoveries] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load discoveries" });
@@ -5010,15 +5010,22 @@ If multiple assets appear, return each as a separate array item.`;
 
       const schema = z.object({
         subject: z.string().min(1).max(200),
-        recipients: z.array(z.string().email()).min(1).max(50),
+        recipients: z.array(z.string().email()).max(50).default([]),
         testAddress: z.string().email().optional(),
         assetIds: z.array(z.number().int()).min(1).max(200),
-        windowHours: z.number().int().min(1).default(72),
+        windowHours: z.number().int().min(1).default(168),
         isTest: z.boolean().default(false),
       });
 
       const body = schema.parse(req.body);
       const { subject, recipients, testAddress, assetIds, windowHours, isTest } = body;
+
+      if (!isTest && recipients.length === 0) {
+        return res.status(400).json({ error: "At least one recipient required for a non-test dispatch." });
+      }
+      if (isTest && !testAddress && recipients.length === 0) {
+        return res.status(400).json({ error: "Provide a test address or at least one recipient for test sends." });
+      }
 
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
       const assets = await storage.getNewDiscoveries(windowHours);
@@ -5064,6 +5071,7 @@ If multiple assets appear, return each as a separate array item.`;
           recipients,
           assetIds,
           assetNames: selectedAssets.map((a) => a.assetName),
+          assetSourceUrls: selectedAssets.map((a) => a.sourceUrl ?? ""),
           assetCount: selectedAssets.length,
           windowHours,
           isTest: false,

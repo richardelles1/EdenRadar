@@ -22,7 +22,7 @@ import {
   dispatchLogs, type DispatchLog, type InsertDispatchLog,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike } from "drizzle-orm";
+import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
 
 export type RetrievedAsset = {
   id: number;
@@ -1610,17 +1610,18 @@ export class DatabaseStorage implements IStorage {
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
   }>> {
     const cutoff = new Date(Date.now() - windowHours * 3600 * 1000);
-    const conditions: ReturnType<typeof and>[] = [
-      eq(ingestedAssets.relevant, true) as any,
-      gte(ingestedAssets.firstSeenAt, cutoff) as any,
-    ];
-    if (filters?.institutions && filters.institutions.length > 0) {
-      const instConds = filters.institutions.map((inst) => ilike(ingestedAssets.institution, `%${inst}%`));
-      conditions.push(or(...instConds) as any);
-    }
-    if (filters?.modalities && filters.modalities.length > 0) {
-      conditions.push(inArray(ingestedAssets.modality, filters.modalities) as any);
-    }
+    const instCond = filters?.institutions?.length
+      ? or(...filters.institutions.map((inst) => ilike(ingestedAssets.institution, `%${inst}%`)))
+      : undefined;
+    const modalCond = filters?.modalities?.length
+      ? inArray(ingestedAssets.modality, filters.modalities)
+      : undefined;
+    const whereClause = and(
+      eq(ingestedAssets.relevant, true),
+      gte(ingestedAssets.firstSeenAt, cutoff),
+      instCond,
+      modalCond,
+    );
     const rows = await db
       .select({
         id: ingestedAssets.id,
@@ -1634,7 +1635,7 @@ export class DatabaseStorage implements IStorage {
         firstSeenAt: ingestedAssets.firstSeenAt,
       })
       .from(ingestedAssets)
-      .where(and(...conditions))
+      .where(whereClause)
       .orderBy(desc(ingestedAssets.firstSeenAt))
       .limit(500);
 
