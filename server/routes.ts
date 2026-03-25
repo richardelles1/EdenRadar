@@ -5074,9 +5074,10 @@ If multiple assets appear, return each as a separate array item.`;
         assetIds: z.array(z.number().int()).min(1).max(200),
         windowHours: z.number().int().min(1).default(72),
         isTest: z.boolean().default(false),
+        colorMode: z.enum(["light", "dark"]).default("light"),
       });
 
-      const { subject, assetIds, windowHours, isTest } = schema.parse(req.body);
+      const { subject, assetIds, windowHours, isTest, colorMode } = schema.parse(req.body);
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
 
       const selectedAssets = await storage.getAssetsByIds(assetIds);
@@ -5087,7 +5088,7 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
       const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
-      const html = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest });
+      const html = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode });
       return res.json({ html, resolvedSubject });
     } catch (err: any) {
       console.error("[dispatch/preview] Error:", err);
@@ -5107,10 +5108,11 @@ If multiple assets appear, return each as a separate array item.`;
         assetIds: z.array(z.number().int()).min(1).max(200),
         windowHours: z.number().int().min(1).default(168),
         isTest: z.boolean().default(false),
+        colorMode: z.enum(["light", "dark"]).default("light"),
       });
 
       const body = schema.parse(req.body);
-      const { subject, recipients, testAddress, assetIds, windowHours, isTest } = body;
+      const { subject, recipients, testAddress, assetIds, windowHours, isTest, colorMode } = body;
 
       if (!isTest && recipients.length === 0) {
         return res.status(400).json({ error: "At least one recipient required for a non-test dispatch." });
@@ -5131,7 +5133,7 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
       const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
-      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest });
+      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {

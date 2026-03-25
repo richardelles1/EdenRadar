@@ -4884,6 +4884,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
   const [showInlinePreview, setShowInlinePreview] = useState(false);
+  const [colorMode, setColorMode] = useState<"light" | "dark">("light");
   const [showConfirm, setShowConfirm] = useState(false);
   const [isTest, setIsTest] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -4941,6 +4942,7 @@ function DispatchTab({ pw }: { pw: string }) {
           assetIds: digestAssets.map((a) => a.id),
           windowHours,
           isTest: payload.isTest,
+          colorMode,
         }),
       });
       if (!r.ok) {
@@ -5004,7 +5006,7 @@ function DispatchTab({ pw }: { pw: string }) {
         const r = await fetch("/api/admin/dispatch/preview", {
           method: "POST",
           headers: { "Content-Type": "application/json", "x-admin-password": pw },
-          body: JSON.stringify({ subject, assetIds: digestAssets.map((a) => a.id), windowHours, isTest: false }),
+          body: JSON.stringify({ subject, assetIds: digestAssets.map((a) => a.id), windowHours, isTest: false, colorMode }),
         });
         if (!r.ok) return;
         const { html } = await r.json();
@@ -5016,7 +5018,7 @@ function DispatchTab({ pw }: { pw: string }) {
       }
     }, 700);
     return () => clearTimeout(timer);
-  }, [digestAssets, subject, windowHours]);
+  }, [digestAssets, subject, windowHours, colorMode]);
 
   function insertSubjectToken(token: string) {
     const input = document.querySelector<HTMLInputElement>("[data-testid='input-subject']");
@@ -5149,6 +5151,7 @@ function DispatchTab({ pw }: { pw: string }) {
           assetIds: digestAssets.map((a) => a.id),
           windowHours,
           isTest: false,
+          colorMode,
         }),
       });
       if (!r.ok) throw new Error("Preview failed");
@@ -5649,6 +5652,24 @@ function DispatchTab({ pw }: { pw: string }) {
 
           {/* Action Bar */}
           <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex rounded-md border border-border overflow-hidden text-[11px] font-medium" data-testid="toggle-color-mode-bar">
+              <button
+                onClick={() => setColorMode("light")}
+                className={`px-2.5 py-1.5 transition-colors ${colorMode === "light" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                data-testid="button-bar-color-mode-light"
+                title="Light email theme"
+              >
+                Light
+              </button>
+              <button
+                onClick={() => setColorMode("dark")}
+                className={`px-2.5 py-1.5 transition-colors ${colorMode === "dark" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                data-testid="button-bar-color-mode-dark"
+                title="Dark email theme"
+              >
+                Dark
+              </button>
+            </div>
             <Button
               variant="outline"
               size="sm"
@@ -5694,9 +5715,27 @@ function DispatchTab({ pw }: { pw: string }) {
                   <Eye className="h-3.5 w-3.5" />
                   Email Preview
                 </p>
-                <button onClick={() => setShowInlinePreview(false)} className="text-muted-foreground hover:text-foreground text-xs" data-testid="button-close-preview">
-                  <X className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <div className="flex rounded-md border border-border overflow-hidden text-[11px] font-medium" data-testid="toggle-color-mode">
+                    <button
+                      onClick={() => setColorMode("light")}
+                      className={`px-2.5 py-1 transition-colors ${colorMode === "light" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                      data-testid="button-color-mode-light"
+                    >
+                      Light
+                    </button>
+                    <button
+                      onClick={() => setColorMode("dark")}
+                      className={`px-2.5 py-1 transition-colors ${colorMode === "dark" ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
+                      data-testid="button-color-mode-dark"
+                    >
+                      Dark
+                    </button>
+                  </div>
+                  <button onClick={() => setShowInlinePreview(false)} className="text-muted-foreground hover:text-foreground text-xs" data-testid="button-close-preview">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
               <iframe
                 srcDoc={previewHtml}

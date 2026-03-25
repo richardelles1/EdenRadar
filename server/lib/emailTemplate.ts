@@ -50,21 +50,21 @@ function capitalize(str: string): string {
   return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-/* EdenRadar green palette (from PortalBackground.tsx: hsl 142 65% 48% family) */
-const G_MAIN   = "#25a15a";  /* hsl(142 65% 48%) */
-const G_BRIGHT = "#36bb6c";  /* hsl(142 65% 55%) */
-const G_DARK   = "#0d1e14";  /* hsl(142 45% 8%)  — header bg */
-const G_MID    = "#1a3325";  /* mid dark green   — footer / strip */
-const G_MUTED  = "#1e4030";  /* slightly lighter strip */
-const G_SOFT   = "#d1fae5";  /* emerald-100 */
+/* EdenRadar green palette */
+const G_MAIN   = "#25a15a";
+const G_BRIGHT = "#36bb6c";
+const G_DARK   = "#0d1e14";
+const G_MID    = "#1a3325";
 
-/* Leaf / radar icon — green version */
-const LOGO_SVG = `<svg width="38" height="38" viewBox="0 0 38 38" style="display:block;" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="19" cy="19" r="19" fill="${G_BRIGHT}" fill-opacity="0.15"/>
-  <path d="M19 8C13 8 8 13 8 19c0 4.4 2.6 8.2 6.5 9.9L19 31l4.5-2.1C27.4 27.2 30 23.4 30 19c0-6-5-11-11-11z" fill="${G_BRIGHT}"/>
-  <line x1="19" y1="10.5" x2="19" y2="23" stroke="${G_DARK}" stroke-width="2" stroke-linecap="round"/>
-  <path d="M13.5 16.5c1.6-1.5 3.5-2.2 5.5-2.2s3.9.7 5.5 2.2" stroke="${G_DARK}" stroke-width="2" stroke-linecap="round" fill="none"/>
-  <path d="M15.5 20.5c.9-.8 2.1-1.3 3.5-1.3s2.6.5 3.5 1.3" stroke="${G_DARK}" stroke-width="1.6" stroke-linecap="round" fill="none"/>
+/* Sprout icon in a rounded green square — matches EdenScout icon from login screen */
+const SPROUT_LOGO_SVG = `<svg width="38" height="38" viewBox="0 0 38 38" style="display:block;" xmlns="http://www.w3.org/2000/svg">
+  <rect width="38" height="38" rx="8" fill="${G_MAIN}"/>
+  <g stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M19 28v-8"/>
+    <path d="M19 20c0-4-2.8-7-7-8 0 5 3 8 7 8z"/>
+    <path d="M19 20c0-4 2.8-7 7-8 0 5-3 8-7 8z"/>
+    <line x1="13" y1="28" x2="25" y2="28"/>
+  </g>
 </svg>`;
 
 /* Building icon for institution headers */
@@ -76,12 +76,8 @@ const BUILDING_SVG = `<svg width="13" height="13" viewBox="0 0 13 13" style="dis
   <path d="M1 3L6.5 1 12 3" stroke="${G_MAIN}" stroke-width="1.2" fill="none"/>
 </svg>`;
 
-/*
- * Header SVG decoration: dot grid + connected-node network on the right side.
- * Nodes are positioned toward the top-right of a 620×140 canvas.
- * All rendering is inline — email-safe in Gmail/Apple Mail/Outlook 365 web.
- */
-const HEADER_SVG = `<svg
+/* Dark mode header SVG decoration */
+const HEADER_SVG_DARK = `<svg
   xmlns="http://www.w3.org/2000/svg"
   width="620" height="140"
   viewBox="0 0 620 140"
@@ -89,23 +85,16 @@ const HEADER_SVG = `<svg
   preserveAspectRatio="xMidYMid slice"
   aria-hidden="true">
   <defs>
-    <pattern id="er-dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+    <pattern id="er-dots-d" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
       <circle cx="1.5" cy="1.5" r="1.5" fill="${G_BRIGHT}" fill-opacity="0.08"/>
     </pattern>
-    <radialGradient id="er-glow" cx="75%" cy="40%" r="45%">
+    <radialGradient id="er-glow-d" cx="75%" cy="40%" r="45%">
       <stop offset="0%" stop-color="${G_BRIGHT}" stop-opacity="0.12"/>
       <stop offset="100%" stop-color="${G_BRIGHT}" stop-opacity="0"/>
     </radialGradient>
   </defs>
-
-  <!-- Dot grid across entire header -->
-  <rect width="620" height="140" fill="url(#er-dots)"/>
-
-  <!-- Radial glow top-right -->
-  <rect width="620" height="140" fill="url(#er-glow)"/>
-
-  <!-- Connected nodes — right side constellation -->
-  <!-- Edges first so nodes render on top -->
+  <rect width="620" height="140" fill="url(#er-dots-d)"/>
+  <rect width="620" height="140" fill="url(#er-glow-d)"/>
   <line x1="490" y1="28" x2="545" y2="55" stroke="${G_BRIGHT}" stroke-width="0.8" stroke-opacity="0.25"/>
   <line x1="545" y1="55" x2="580" y2="30" stroke="${G_BRIGHT}" stroke-width="0.8" stroke-opacity="0.20"/>
   <line x1="545" y1="55" x2="530" y2="100" stroke="${G_BRIGHT}" stroke-width="0.8" stroke-opacity="0.18"/>
@@ -114,8 +103,6 @@ const HEADER_SVG = `<svg
   <line x1="580" y1="30" x2="572" y2="112" stroke="${G_BRIGHT}" stroke-width="0.5" stroke-opacity="0.10"/>
   <line x1="460" y1="72" x2="490" y2="28" stroke="${G_BRIGHT}" stroke-width="0.6" stroke-opacity="0.13"/>
   <line x1="460" y1="72" x2="530" y2="100" stroke="${G_BRIGHT}" stroke-width="0.6" stroke-opacity="0.12"/>
-
-  <!-- Nodes -->
   <circle cx="490" cy="28"  r="4"   fill="${G_BRIGHT}" fill-opacity="0.55"/>
   <circle cx="490" cy="28"  r="7"   fill="${G_BRIGHT}" fill-opacity="0.10"/>
   <circle cx="545" cy="55"  r="5.5" fill="${G_BRIGHT}" fill-opacity="0.45"/>
@@ -129,13 +116,45 @@ const HEADER_SVG = `<svg
   <circle cx="608" cy="68"  r="2"   fill="${G_BRIGHT}" fill-opacity="0.20"/>
 </svg>`;
 
+/* Light mode header SVG decoration — subtle, low-opacity dots and constellation */
+const HEADER_SVG_LIGHT = `<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="620" height="120"
+  viewBox="0 0 620 120"
+  style="position:absolute;top:0;left:0;width:100%;height:100%;display:block;pointer-events:none;"
+  preserveAspectRatio="xMidYMid slice"
+  aria-hidden="true">
+  <defs>
+    <pattern id="er-dots-l" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <circle cx="1.5" cy="1.5" r="1.5" fill="${G_MAIN}" fill-opacity="0.07"/>
+    </pattern>
+    <radialGradient id="er-glow-l" cx="80%" cy="40%" r="40%">
+      <stop offset="0%" stop-color="${G_MAIN}" stop-opacity="0.07"/>
+      <stop offset="100%" stop-color="${G_MAIN}" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="620" height="120" fill="url(#er-dots-l)"/>
+  <rect width="620" height="120" fill="url(#er-glow-l)"/>
+  <line x1="490" y1="22" x2="545" y2="48" stroke="${G_MAIN}" stroke-width="0.7" stroke-opacity="0.15"/>
+  <line x1="545" y1="48" x2="580" y2="24" stroke="${G_MAIN}" stroke-width="0.7" stroke-opacity="0.12"/>
+  <line x1="545" y1="48" x2="530" y2="90" stroke="${G_MAIN}" stroke-width="0.7" stroke-opacity="0.10"/>
+  <line x1="460" y1="65" x2="490" y2="22" stroke="${G_MAIN}" stroke-width="0.5" stroke-opacity="0.10"/>
+  <circle cx="490" cy="22"  r="3.5" fill="${G_MAIN}" fill-opacity="0.30"/>
+  <circle cx="545" cy="48"  r="5"   fill="${G_MAIN}" fill-opacity="0.22"/>
+  <circle cx="580" cy="24"  r="2.5" fill="${G_MAIN}" fill-opacity="0.18"/>
+  <circle cx="530" cy="90"  r="2.5" fill="${G_MAIN}" fill-opacity="0.15"/>
+  <circle cx="460" cy="65"  r="2"   fill="${G_MAIN}" fill-opacity="0.14"/>
+</svg>`;
+
 export function renderDispatchEmail(opts: {
   subject: string;
   assets: DispatchAsset[];
   windowLabel: string;
   isTest?: boolean;
+  colorMode?: "light" | "dark";
 }): string {
-  const { subject, assets, windowLabel, isTest = false } = opts;
+  const { subject, assets, windowLabel, isTest = false, colorMode = "light" } = opts;
+  const isLight = colorMode === "light";
 
   const byInstitution = new Map<string, DispatchAsset[]>();
   for (const a of assets) {
@@ -168,9 +187,8 @@ export function renderDispatchEmail(opts: {
 
       const badgesHtml = [stageBadge, modalityBadge, indicationBadge].filter(Boolean).join(`<span style="display:inline-block;width:6px;"></span>`);
 
-      const ctaButton = a.sourceUrl
-        ? `<a href="${escapeHtml(a.sourceUrl)}" style="display:inline-block;background:${G_MAIN};color:#ffffff;font-size:12px;font-weight:700;padding:7px 18px;border-radius:6px;text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.01em;">View Listing &rarr;</a>`
-        : "";
+      const dossierUrl = `https://edenradar.com/asset/${a.id}`;
+      const ctaButton = `<a href="${dossierUrl}" style="display:inline-block;background:${G_MAIN};color:#ffffff;font-size:12px;font-weight:700;padding:7px 18px;border-radius:6px;text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.01em;">View in EdenRadar &rarr;</a>`;
 
       return `
       <tr>
@@ -184,11 +202,10 @@ export function renderDispatchEmail(opts: {
                 ${summarySnippet ? `<p style="margin:0;font-size:13px;color:#4b5563;line-height:1.65;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">${summarySnippet}</p>` : ""}
               </td>
             </tr>
-            ${ctaButton ? `
             <tr>
               <td width="4" style="background:${borderColor};font-size:0;line-height:0;">&nbsp;</td>
               <td style="background:#f9fdf9;border-top:1px solid #ecf5ec;padding:10px 20px 10px 18px;">${ctaButton}</td>
-            </tr>` : ""}
+            </tr>
           </table>
         </td>
       </tr>`;
@@ -222,6 +239,90 @@ export function renderDispatchEmail(opts: {
 
   const year = new Date().getFullYear();
 
+  /* ---- LIGHT MODE header ---- */
+  const lightHeader = `
+        <!-- Green accent bar top -->
+        <tr>
+          <td height="5" style="background:linear-gradient(90deg,${G_MAIN} 0%,${G_BRIGHT} 60%,${G_MAIN} 100%);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- Header: white + subtle dot grid + light constellation -->
+        <tr>
+          <td style="background:#f7fbf9;padding:0;position:relative;overflow:hidden;">
+            ${HEADER_SVG_LIGHT}
+            <table cellpadding="0" cellspacing="0" width="100%" style="position:relative;">
+              <tr>
+                <td style="padding:24px 32px 20px 32px;">
+                  <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="50" valign="middle" style="padding-right:14px;">${SPROUT_LOGO_SVG}</td>
+                      <td valign="middle">
+                        <p style="margin:0;font-size:24px;font-weight:800;color:#0a1a0f;letter-spacing:-0.03em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1;">EdenRadar</p>
+                        <p style="margin:4px 0 0 0;font-size:11px;color:${G_MAIN};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.07em;font-weight:700;text-transform:uppercase;">TTO Intelligence Digest</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Window strip — light -->
+        <tr>
+          <td style="background:#f0fdf4;border-bottom:1px solid #d1fae5;padding:8px 32px;">
+            <p style="margin:0;font-size:12px;color:#166534;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <span style="color:#4b7a60;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
+            </p>
+          </td>
+        </tr>`;
+
+  /* ---- DARK MODE header ---- */
+  const darkHeader = `
+        <!-- Green accent bar top -->
+        <tr>
+          <td height="5" style="background:linear-gradient(90deg,${G_MAIN} 0%,${G_BRIGHT} 60%,${G_MAIN} 100%);font-size:0;line-height:0;">&nbsp;</td>
+        </tr>
+
+        <!-- Header: dark green + dot grid + connected nodes SVG -->
+        <tr>
+          <td style="background:${G_DARK};padding:0;position:relative;overflow:hidden;">
+            ${HEADER_SVG_DARK}
+            <table cellpadding="0" cellspacing="0" width="100%" style="position:relative;">
+              <tr>
+                <td style="padding:28px 32px 22px 32px;">
+                  <table cellpadding="0" cellspacing="0" width="100%">
+                    <tr>
+                      <td width="50" valign="middle" style="padding-right:14px;">${SPROUT_LOGO_SVG}</td>
+                      <td valign="middle">
+                        <p style="margin:0;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.03em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1;">EdenRadar</p>
+                        <p style="margin:4px 0 0 0;font-size:11px;color:${G_BRIGHT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.07em;font-weight:700;text-transform:uppercase;">TTO Intelligence Digest</p>
+                      </td>
+                    </tr>
+                  </table>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Window strip — dark -->
+        <tr>
+          <td style="background:${G_MID};padding:9px 32px;">
+            <p style="margin:0;font-size:12px;color:#6bac88;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+              <span style="color:#3a6650;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}
+            </p>
+          </td>
+        </tr>`;
+
+  const headerHtml = isLight ? lightHeader : darkHeader;
+
+  /* ---- FOOTER ---- */
+  const footerBg = isLight ? "#f0fdf4" : G_DARK;
+  const footerTitle = isLight ? "#0a1a0f" : "#ffffff";
+  const footerSubtitle = isLight ? G_MAIN : "#3a6650";
+  const footerBody = isLight ? "#4b7a60" : "#2d4d3b";
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -235,52 +336,7 @@ export function renderDispatchEmail(opts: {
     <td align="center">
       <table cellpadding="0" cellspacing="0" width="620" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 2px 20px rgba(15,50,25,0.13);">
 
-        <!-- Green accent bar top -->
-        <tr>
-          <td height="5" style="background:linear-gradient(90deg,${G_MAIN} 0%,${G_BRIGHT} 60%,${G_MAIN} 100%);font-size:0;line-height:0;">&nbsp;</td>
-        </tr>
-
-        <!-- Header: dark green + dot grid + connected nodes SVG -->
-        <tr>
-          <td style="background:${G_DARK};padding:0;position:relative;overflow:hidden;">
-            <!-- SVG decoration layer (dot grid + constellation) -->
-            ${HEADER_SVG}
-            <!-- Header content sits above the SVG via relative positioning -->
-            <table cellpadding="0" cellspacing="0" width="100%" style="position:relative;">
-              <tr>
-                <td style="padding:28px 32px 22px 32px;">
-                  <table cellpadding="0" cellspacing="0" width="100%">
-                    <tr>
-                      <td width="50" valign="middle" style="padding-right:14px;">${LOGO_SVG}</td>
-                      <td valign="middle">
-                        <p style="margin:0;font-size:24px;font-weight:800;color:#ffffff;letter-spacing:-0.03em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;line-height:1;">EdenRadar</p>
-                        <p style="margin:4px 0 0 0;font-size:11px;color:${G_BRIGHT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.07em;font-weight:700;text-transform:uppercase;">TTO Intelligence Digest</p>
-                      </td>
-                      <td align="right" valign="middle">
-                        <table cellpadding="0" cellspacing="0">
-                          <tr>
-                            <td style="background:rgba(54,187,108,0.14);border:1px solid rgba(54,187,108,0.32);border-radius:999px;padding:5px 14px;">
-                              <p style="margin:0;font-size:13px;font-weight:700;color:${G_BRIGHT};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;white-space:nowrap;">${assets.length}&thinsp;asset${assets.length !== 1 ? "s" : ""}</p>
-                            </td>
-                          </tr>
-                        </table>
-                      </td>
-                    </tr>
-                  </table>
-                </td>
-              </tr>
-            </table>
-          </td>
-        </tr>
-
-        <!-- Window + institution strip -->
-        <tr>
-          <td style="background:${G_MID};padding:9px 32px;">
-            <p style="margin:0;font-size:12px;color:#6bac88;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-              <span style="color:#3a6650;">Window:</span>&nbsp;&nbsp;${escapeHtml(windowLabel)}&nbsp;&nbsp;&bull;&nbsp;&nbsp;<span style="color:#3a6650;">Institutions:</span>&nbsp;&nbsp;${byInstitution.size}
-            </p>
-          </td>
-        </tr>
+        ${headerHtml}
 
         ${testBanner}
 
@@ -307,19 +363,18 @@ export function renderDispatchEmail(opts: {
 
         <!-- Footer -->
         <tr>
-          <td style="background:${G_DARK};padding:22px 32px;">
+          <td style="background:${footerBg};padding:22px 32px;">
             <table cellpadding="0" cellspacing="0" width="100%">
               <tr>
                 <td valign="top">
-                  <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:#ffffff;letter-spacing:-0.02em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">EdenRadar</p>
-                  <p style="margin:0 0 12px 0;font-size:11px;color:#3a6650;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
-                  <p style="margin:0;font-size:11px;color:#2d4d3b;line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                  <p style="margin:0 0 2px 0;font-size:15px;font-weight:800;color:${footerTitle};letter-spacing:-0.02em;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">EdenRadar</p>
+                  <p style="margin:0 0 12px 0;font-size:11px;color:${footerSubtitle};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
+                  <p style="margin:0;font-size:11px;color:${footerBody};line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
                     You received this digest because you are subscribed to EdenRadar TTO intelligence alerts.<br />
                     &copy; ${year} EdenRadar. All rights reserved.
                   </p>
                 </td>
                 <td align="right" valign="bottom">
-                  <!-- Small dot constellation in footer -->
                   <svg width="60" height="50" viewBox="0 0 60 50" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <line x1="10" y1="38" x2="30" y2="20" stroke="${G_BRIGHT}" stroke-width="0.6" stroke-opacity="0.2"/>
                     <line x1="30" y1="20" x2="52" y2="30" stroke="${G_BRIGHT}" stroke-width="0.6" stroke-opacity="0.18"/>
