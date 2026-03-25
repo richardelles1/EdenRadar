@@ -4615,6 +4615,7 @@ type DiscoveryAsset = {
   institution: string;
   indication: string;
   modality: string;
+  target: string;
   developmentStage: string;
   summary: string | null;
   sourceUrl: string | null;
@@ -5101,8 +5102,11 @@ function DispatchTab({ pw }: { pw: string }) {
                           </a>
                         )}
                       </div>
-                      {asset.indication && (
+                      {asset.indication && asset.indication !== "unknown" && (
                         <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{asset.indication}</p>
+                      )}
+                      {asset.target && asset.target !== "unknown" && (
+                        <p className="text-[10px] text-amber-600/80 dark:text-amber-400/70 truncate font-mono">&#x2192; {asset.target}</p>
                       )}
                       <div className="mt-1 flex flex-wrap gap-1">
                         <StagePill stage={asset.developmentStage} />

@@ -217,7 +217,7 @@ export interface IStorage {
 
   getNewDiscoveries(windowHours: number, filters?: { institutions?: string[]; modalities?: string[] }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
-    modality: string; developmentStage: string; summary: string | null;
+    modality: string; target: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
   }>>;
   createDispatchLog(data: InsertDispatchLog): Promise<DispatchLog>;
@@ -1606,7 +1606,7 @@ export class DatabaseStorage implements IStorage {
 
   async getNewDiscoveries(windowHours: number, filters?: { institutions?: string[]; modalities?: string[] }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
-    modality: string; developmentStage: string; summary: string | null;
+    modality: string; target: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
   }>> {
     const cutoff = new Date(Date.now() - windowHours * 3600 * 1000);
@@ -1629,6 +1629,7 @@ export class DatabaseStorage implements IStorage {
         institution: ingestedAssets.institution,
         indication: ingestedAssets.indication,
         modality: ingestedAssets.modality,
+        target: ingestedAssets.target,
         developmentStage: ingestedAssets.developmentStage,
         summary: ingestedAssets.summary,
         sourceUrl: ingestedAssets.sourceUrl,
@@ -1654,6 +1655,7 @@ export class DatabaseStorage implements IStorage {
       institution: r.institution ?? "",
       indication: r.indication ?? "",
       modality: r.modality ?? "",
+      target: r.target ?? "",
       developmentStage: r.developmentStage ?? "",
       summary: r.summary,
       sourceUrl: r.sourceUrl,
