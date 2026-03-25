@@ -4644,6 +4644,16 @@ function StagePill({ stage }: { stage: string }) {
   return <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ${cls}`}>{label}</span>;
 }
 
+function assetAge(isoDate: string): string {
+  const diff = Date.now() - new Date(isoDate).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
+}
+
 function DispatchTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [windowHours, setWindowHours] = useState(72);
@@ -4654,9 +4664,10 @@ function DispatchTab({ pw }: { pw: string }) {
   const [subject, setSubject] = useState(`EdenRadar TTO Digest - ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
   const [recipients, setRecipients] = useState<string[]>([]);
   const [recipientInput, setRecipientInput] = useState("");
-  const [showPreview, setShowPreview] = useState(false);
+  const [testAddress, setTestAddress] = useState("");
   const [previewHtml, setPreviewHtml] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [showInlinePreview, setShowInlinePreview] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [isTest, setIsTest] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -4671,9 +4682,12 @@ function DispatchTab({ pw }: { pw: string }) {
   ];
 
   const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
-    queryKey: ["/api/admin/new-discoveries", windowHours],
+    queryKey: ["/api/admin/new-discoveries", windowHours, filterInstitution, filterModality],
     queryFn: async () => {
-      const r = await fetch(`/api/admin/new-discoveries?hours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      const params = new URLSearchParams({ hours: String(windowHours) });
+      if (filterInstitution) params.set("institution", filterInstitution);
+      if (filterModality) params.set("modality", filterModality);
+      const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { "x-admin-password": pw } });
       if (!r.ok) throw new Error("Failed to load discoveries");
       return r.json();
     },
@@ -4697,10 +4711,10 @@ function DispatchTab({ pw }: { pw: string }) {
         body: JSON.stringify({
           subject,
           recipients,
+          testAddress: payload.isTest ? testAddress || recipients[0] : undefined,
           assetIds: digestAssets.map((a) => a.id),
           windowHours,
           isTest: payload.isTest,
-          htmlBody: previewHtml,
         }),
       });
       if (!r.ok) {
@@ -4730,8 +4744,6 @@ function DispatchTab({ pw }: { pw: string }) {
 
   const filteredAssets = allAssets.filter((a) => {
     if (digestIds.has(a.id)) return false;
-    if (filterInstitution && !a.institution.toLowerCase().includes(filterInstitution.toLowerCase())) return false;
-    if (filterModality && a.modality.toLowerCase() !== filterModality.toLowerCase()) return false;
     if (filterSearch && !a.assetName.toLowerCase().includes(filterSearch.toLowerCase()) && !a.indication.toLowerCase().includes(filterSearch.toLowerCase())) return false;
     return true;
   });
@@ -4787,11 +4799,29 @@ function DispatchTab({ pw }: { pw: string }) {
       return;
     }
     setPreviewLoading(true);
-    const windowLabel = windowOptions.find((o) => o.value === windowHours)?.label ?? `${windowHours}h`;
-    const html = buildFallbackPreview(subject, digestAssets, windowLabel);
-    setPreviewHtml(html);
-    setShowPreview(true);
-    setPreviewLoading(false);
+    try {
+      const r = await fetch("/api/admin/dispatch/preview", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({
+          subject,
+          assetIds: digestAssets.map((a) => a.id),
+          windowHours,
+          isTest: false,
+        }),
+      });
+      if (!r.ok) throw new Error("Preview failed");
+      const { html } = await r.json();
+      setPreviewHtml(html);
+      setShowInlinePreview(true);
+    } catch {
+      const windowLabel = windowOptions.find((o) => o.value === windowHours)?.label ?? `${windowHours}h`;
+      const html = buildFallbackPreview(subject, digestAssets, windowLabel);
+      setPreviewHtml(html);
+      setShowInlinePreview(true);
+    } finally {
+      setPreviewLoading(false);
+    }
   }
 
   function buildFallbackPreview(subj: string, assets: DiscoveryAsset[], windowLabel: string): string {
@@ -4836,10 +4866,6 @@ function DispatchTab({ pw }: { pw: string }) {
     }
     if (!subject.trim()) {
       toast({ title: "Subject required", description: "Enter a subject line for the digest.", variant: "destructive" });
-      return;
-    }
-    if (!previewHtml) {
-      toast({ title: "Preview required", description: "Generate a preview first to confirm the email looks correct.", variant: "destructive" });
       return;
     }
     setIsTest(test);
@@ -4931,12 +4957,15 @@ function DispatchTab({ pw }: { pw: string }) {
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
-                      <button
-                        onClick={() => setFilterInstitution(asset.institution)}
-                        className="text-[10px] text-muted-foreground hover:text-primary truncate block"
-                      >
-                        {asset.institution}
-                      </button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <button
+                          onClick={() => setFilterInstitution(asset.institution)}
+                          className="text-[10px] text-muted-foreground hover:text-primary truncate"
+                        >
+                          {asset.institution}
+                        </button>
+                        <span className="text-[9px] text-muted-foreground/60">{assetAge(asset.firstSeenAt)}</span>
+                      </div>
                       <div className="mt-1 flex flex-wrap gap-1">
                         <StagePill stage={asset.developmentStage} />
                         {asset.previouslySent && (
@@ -4976,19 +5005,19 @@ function DispatchTab({ pw }: { pw: string }) {
                 className="w-full h-9 px-3 pr-16 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
                 data-testid="input-subject"
               />
-              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 180 ? "text-orange-500" : "text-muted-foreground"}`}>
-                {subject.length}/200
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 60 ? "text-orange-500 font-semibold" : "text-muted-foreground"}`}>
+                {subject.length}/200 {subject.length > 60 && subject.length <= 200 ? "(long for email)" : ""}
               </span>
             </div>
           </div>
 
           {/* Recipients */}
-          <div className="border border-border rounded-xl p-4 bg-card space-y-2">
-            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Recipients</label>
+          <div className="border border-border rounded-xl p-4 bg-card space-y-3">
+            <label className="text-xs font-semibold text-foreground uppercase tracking-wide">Subscriber Recipients</label>
             <div className="flex gap-2">
               <input
                 type="email"
-                placeholder="name@company.com"
+                placeholder="subscriber@company.com"
                 value={recipientInput}
                 onChange={(e) => setRecipientInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addRecipient(); } }}
@@ -4999,7 +5028,7 @@ function DispatchTab({ pw }: { pw: string }) {
                 <Tag className="h-3.5 w-3.5" />
               </Button>
             </div>
-            {recipients.length > 0 && (
+            {recipients.length > 0 ? (
               <div className="flex flex-wrap gap-1.5">
                 {recipients.map((email) => (
                   <span key={email} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium" data-testid={`tag-recipient-${email}`}>
@@ -5010,10 +5039,21 @@ function DispatchTab({ pw }: { pw: string }) {
                   </span>
                 ))}
               </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Enter emails and press Enter or comma to add.</p>
             )}
-            {recipients.length === 0 && (
-              <p className="text-xs text-muted-foreground">Enter emails and press Enter or comma to add. First recipient used for test sends.</p>
-            )}
+            <div className="border-t border-border pt-3">
+              <label className="text-xs font-semibold text-foreground uppercase tracking-wide block mb-1.5">Test Send Address</label>
+              <input
+                type="email"
+                placeholder="your@email.com (for test sends only)"
+                value={testAddress}
+                onChange={(e) => setTestAddress(e.target.value)}
+                className="w-full h-8 px-3 text-sm border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                data-testid="input-test-address"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">When blank, test send uses the first subscriber above.</p>
+            </div>
           </div>
 
           {/* Digest Zone */}
@@ -5119,33 +5159,26 @@ function DispatchTab({ pw }: { pw: string }) {
             )}
           </div>
 
-          {/* Preview Modal */}
-          {showPreview && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" data-testid="modal-preview">
-              <div className="bg-card rounded-xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
-                <div className="flex items-center justify-between px-5 py-3 border-b border-border">
-                  <p className="font-semibold text-foreground text-sm">Email Preview</p>
-                  <button onClick={() => setShowPreview(false)} className="text-muted-foreground hover:text-foreground" data-testid="button-close-preview">
-                    <X className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="flex-1 overflow-hidden p-4">
-                  <iframe
-                    srcDoc={previewHtml}
-                    title="Email Preview"
-                    className="w-full h-full rounded-md border border-border"
-                    style={{ minHeight: "500px" }}
-                    data-testid="iframe-email-preview"
-                    sandbox="allow-same-origin"
-                  />
-                </div>
-                <div className="px-5 py-3 border-t border-border flex justify-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setShowPreview(false)} data-testid="button-close-preview-2">Close</Button>
-                  <Button size="sm" onClick={() => { setShowPreview(false); handleSendClick(false); }} className="bg-indigo-600 hover:bg-indigo-700 text-white" data-testid="button-dispatch-from-preview">
-                    <Send className="h-3.5 w-3.5 mr-1.5" /> Dispatch
-                  </Button>
-                </div>
+          {/* Inline Preview Panel */}
+          {showInlinePreview && previewHtml && (
+            <div className="border border-border rounded-xl overflow-hidden bg-card" data-testid="panel-email-preview">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+                <p className="text-xs font-semibold text-foreground uppercase tracking-wide flex items-center gap-2">
+                  <Eye className="h-3.5 w-3.5" />
+                  Email Preview
+                </p>
+                <button onClick={() => setShowInlinePreview(false)} className="text-muted-foreground hover:text-foreground text-xs" data-testid="button-close-preview">
+                  <X className="h-4 w-4" />
+                </button>
               </div>
+              <iframe
+                srcDoc={previewHtml}
+                title="Email Preview"
+                className="w-full border-0"
+                style={{ minHeight: "560px" }}
+                data-testid="iframe-email-preview"
+                sandbox="allow-same-origin"
+              />
             </div>
           )}
 
@@ -5161,7 +5194,7 @@ function DispatchTab({ pw }: { pw: string }) {
                     <p className="font-semibold text-foreground">{isTest ? "Send test email" : "Dispatch to all recipients"}</p>
                     <p className="text-sm text-muted-foreground">
                       {isTest
-                        ? `Will send to ${recipients[0] ?? "—"} only`
+                        ? `Will send to ${testAddress || recipients[0] || "—"} only`
                         : `Will send to ${recipients.length} recipient${recipients.length !== 1 ? "s" : ""}`}
                     </p>
                   </div>
@@ -5170,7 +5203,7 @@ function DispatchTab({ pw }: { pw: string }) {
                 <div className="bg-muted/50 rounded-lg p-3 space-y-1 text-xs text-muted-foreground">
                   <p><span className="font-medium text-foreground">Subject:</span> {isTest ? `[TEST] ${subject}` : subject}</p>
                   <p><span className="font-medium text-foreground">Assets:</span> {digestAssets.length} selected</p>
-                  <p><span className="font-medium text-foreground">Recipients:</span> {isTest ? recipients[0] : recipients.join(", ")}</p>
+                  <p><span className="font-medium text-foreground">{isTest ? "Test address" : "Recipients"}:</span> {isTest ? (testAddress || recipients[0] || "—") : recipients.join(", ")}</p>
                 </div>
 
                 <div className="flex gap-2 justify-end">

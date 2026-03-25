@@ -4954,11 +4954,44 @@ If multiple assets appear, return each as a separate array item.`;
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const hours = Math.max(1, Math.min(8760, Number(req.query.hours ?? 72)));
-      const assets = await storage.getNewDiscoveries(hours);
+      const institution = typeof req.query.institution === "string" && req.query.institution ? req.query.institution : undefined;
+      const modality = typeof req.query.modality === "string" && req.query.modality ? req.query.modality : undefined;
+      const assets = await storage.getNewDiscoveries(hours, { institution, modality });
       return res.json({ assets, windowHours: hours });
     } catch (err: any) {
       console.error("[new-discoveries] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load discoveries" });
+    }
+  });
+
+  app.post("/api/admin/dispatch/preview", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"] ?? req.query.pw;
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const schema = z.object({
+        subject: z.string().min(1).max(200),
+        assetIds: z.array(z.number().int()).min(1).max(200),
+        windowHours: z.number().int().min(1).default(72),
+        isTest: z.boolean().default(false),
+      });
+
+      const { subject, assetIds, windowHours, isTest } = schema.parse(req.body);
+      const { renderDispatchEmail } = await import("./lib/emailTemplate");
+
+      const assets = await storage.getNewDiscoveries(windowHours);
+      const selectedAssets = assetIds.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as typeof assets;
+
+      const windowOptions: Record<number, string> = {
+        24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
+        168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
+      };
+      const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
+      const html = renderDispatchEmail({ subject, assets: selectedAssets as any, windowLabel, isTest });
+      return res.json({ html });
+    } catch (err: any) {
+      console.error("[dispatch/preview] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Preview failed" });
     }
   });
 
@@ -4970,28 +5003,36 @@ If multiple assets appear, return each as a separate array item.`;
       const schema = z.object({
         subject: z.string().min(1).max(200),
         recipients: z.array(z.string().email()).min(1).max(50),
+        testAddress: z.string().email().optional(),
         assetIds: z.array(z.number().int()).min(1).max(200),
         windowHours: z.number().int().min(1).default(72),
         isTest: z.boolean().default(false),
-        htmlBody: z.string().min(1),
       });
 
       const body = schema.parse(req.body);
-      const { subject, recipients, assetIds, windowHours, isTest, htmlBody } = body;
+      const { subject, recipients, testAddress, assetIds, windowHours, isTest } = body;
+
+      const { renderDispatchEmail } = await import("./lib/emailTemplate");
+      const assets = await storage.getNewDiscoveries(windowHours);
+      const selectedAssets = assetIds.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as typeof assets;
+
+      const windowOptions: Record<number, string> = {
+        24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
+        168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
+      };
+      const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
+      const htmlBody = renderDispatchEmail({ subject, assets: selectedAssets as any, windowLabel, isTest });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {
         return res.status(503).json({ error: "RESEND_API_KEY is not configured. Add it to your environment secrets to enable email dispatch." });
       }
 
-      const toList = isTest ? [recipients[0]] : recipients;
+      const toList = isTest ? [testAddress ?? recipients[0]] : recipients;
 
       const emailRes = await fetch("https://api.resend.com/emails", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`,
-        },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
         body: JSON.stringify({
           from: "EdenRadar Digest <digest@edenradar.com>",
           to: toList,
@@ -5006,16 +5047,18 @@ If multiple assets appear, return each as a separate array item.`;
         return res.status(502).json({ error: `Email provider error: ${errText}` });
       }
 
-      const log = await storage.createDispatchLog({
-        subject,
-        recipients: isTest ? [recipients[0]] : recipients,
-        assetIds,
-        assetCount: assetIds.length,
-        windowHours,
-        isTest,
-      });
+      if (!isTest) {
+        await storage.createDispatchLog({
+          subject,
+          recipients,
+          assetIds,
+          assetCount: assetIds.length,
+          windowHours,
+          isTest: false,
+        });
+      }
 
-      return res.json({ ok: true, logId: log.id, sentTo: toList.length, isTest });
+      return res.json({ ok: true, sentTo: toList.length, isTest });
     } catch (err: any) {
       console.error("[dispatch/send] Error:", err);
       return res.status(500).json({ error: err.message ?? "Dispatch failed" });

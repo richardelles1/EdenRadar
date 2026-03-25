@@ -215,7 +215,7 @@ export interface IStorage {
   getManualInstitutions(): Promise<ManualInstitution[]>;
   createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
 
-  getNewDiscoveries(windowHours: number): Promise<Array<{
+  getNewDiscoveries(windowHours: number, filters?: { institution?: string; modality?: string }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
     modality: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
@@ -1604,12 +1604,22 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getNewDiscoveries(windowHours: number): Promise<Array<{
+  async getNewDiscoveries(windowHours: number, filters?: { institution?: string; modality?: string }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
     modality: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
   }>> {
     const cutoff = new Date(Date.now() - windowHours * 3600 * 1000);
+    const conditions: ReturnType<typeof and>[] = [
+      eq(ingestedAssets.relevant, true) as any,
+      gte(ingestedAssets.firstSeenAt, cutoff) as any,
+    ];
+    if (filters?.institution) {
+      conditions.push(ilike(ingestedAssets.institution, `%${filters.institution}%`) as any);
+    }
+    if (filters?.modality) {
+      conditions.push(eq(ingestedAssets.modality, filters.modality) as any);
+    }
     const rows = await db
       .select({
         id: ingestedAssets.id,
@@ -1623,7 +1633,7 @@ export class DatabaseStorage implements IStorage {
         firstSeenAt: ingestedAssets.firstSeenAt,
       })
       .from(ingestedAssets)
-      .where(and(eq(ingestedAssets.relevant, true), gte(ingestedAssets.firstSeenAt, cutoff)))
+      .where(and(...conditions))
       .orderBy(desc(ingestedAssets.firstSeenAt))
       .limit(500);
 
