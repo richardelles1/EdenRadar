@@ -264,8 +264,24 @@ const TIMEOUT_BY_TYPE: Record<string, number> = {
   api: 5 * 60 * 1000,
   http: 10 * 60 * 1000,
 };
-const SCRAPE_RETRY_DELAY_MS = 20_000;
+const SCRAPE_RETRY_DELAY_MS = 15_000;
 const SCRAPE_MAX_ATTEMPTS = 2;
+
+/** Returns true if a scrape error is likely transient (network/timeout) and worth retrying.
+ * Deterministic failures (auth/403/parsing/selector bugs) are NOT retried. */
+function isScrapeRetryable(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return (
+    m.includes("timeout") ||
+    m.includes("timed out") ||
+    m.includes("econnreset") ||
+    m.includes("econnrefused") ||
+    m.includes("network") ||
+    m.includes("fetch failed") ||
+    m.includes("socket hang up") ||
+    m.includes("etimedout")
+  );
+}
 
 export interface SyncResult {
   sessionId: string;
@@ -317,9 +333,12 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         break;
       } catch (err: any) {
         lastScrapeError = err;
-        if (attempt < SCRAPE_MAX_ATTEMPTS) {
+        const retryable = attempt < SCRAPE_MAX_ATTEMPTS && isScrapeRetryable(err?.message ?? "");
+        if (retryable) {
           console.log(`[sync] ${institutionName}: attempt ${attempt} failed (${err?.message}) — retrying in ${SCRAPE_RETRY_DELAY_MS / 1000}s...`);
           await new Promise((resolve) => setTimeout(resolve, SCRAPE_RETRY_DELAY_MS));
+        } else {
+          break;
         }
       }
     }

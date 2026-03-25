@@ -320,6 +320,25 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   scheduleNext();
+
+  // Safety drain-poll: if syncs from the prior generation are still running,
+  // scheduleNext() above may immediately stall (liveCount > 0 from old gen).
+  // Old-gen runOne() finally blocks no-op on gen mismatch, so they won't
+  // re-trigger scheduleNext for the new gen. Poll until they drain, then re-kick.
+  const capturedGen = runGeneration;
+  const priorActiveSyncs = getActiveSyncs().length;
+  if (priorActiveSyncs > 0) {
+    const pollForDrain = () => {
+      if (runGeneration !== capturedGen) return; // superseded by another start
+      if (getActiveSyncs().length === 0) {
+        scheduleNext();
+      } else {
+        setTimeout(pollForDrain, 2_000);
+      }
+    };
+    setTimeout(pollForDrain, 2_000);
+  }
+
   return { ok: true, message: `Tier ${tier} scan started — ${tieredQueue.length} institutions` };
 }
 
@@ -501,7 +520,8 @@ function isTransientDbError(msg: string): boolean {
     m.includes("during authentication") ||
     m.includes("client checkout timed out") ||
     m.includes("server restarted during sync") ||
-    m.includes("scraper failed: scraper failed: server restarted")
+    m.includes("scraper failed: scraper failed: server restarted") ||
+    m.includes("markrunningsessionsfailed")
   );
 }
 
