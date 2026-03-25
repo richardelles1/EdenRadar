@@ -220,6 +220,11 @@ export interface IStorage {
     modality: string; target: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
   }>>;
+  getAssetsByIds(ids: number[]): Promise<Array<{
+    id: number; assetName: string; institution: string; indication: string;
+    modality: string; target: string; developmentStage: string; summary: string | null;
+    sourceUrl: string | null; firstSeenAt: Date;
+  }>>;
   createDispatchLog(data: InsertDispatchLog): Promise<DispatchLog>;
   getDispatchHistory(limit?: number): Promise<DispatchLog[]>;
 
@@ -1661,6 +1666,41 @@ export class DatabaseStorage implements IStorage {
       sourceUrl: r.sourceUrl,
       firstSeenAt: r.firstSeenAt ?? new Date(),
       previouslySent: sentIds.has(r.id),
+    }));
+  }
+
+  async getAssetsByIds(ids: number[]): Promise<Array<{
+    id: number; assetName: string; institution: string; indication: string;
+    modality: string; target: string; developmentStage: string; summary: string | null;
+    sourceUrl: string | null; firstSeenAt: Date;
+  }>> {
+    if (ids.length === 0) return [];
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        indication: ingestedAssets.indication,
+        modality: ingestedAssets.modality,
+        target: ingestedAssets.target,
+        developmentStage: ingestedAssets.developmentStage,
+        summary: ingestedAssets.summary,
+        sourceUrl: ingestedAssets.sourceUrl,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+      })
+      .from(ingestedAssets)
+      .where(inArray(ingestedAssets.id, ids));
+    return rows.map((r) => ({
+      id: r.id,
+      assetName: r.assetName,
+      institution: r.institution ?? "",
+      indication: r.indication ?? "",
+      modality: r.modality ?? "",
+      target: r.target ?? "",
+      developmentStage: r.developmentStage ?? "",
+      summary: r.summary,
+      sourceUrl: r.sourceUrl,
+      firstSeenAt: r.firstSeenAt ?? new Date(),
     }));
   }
 

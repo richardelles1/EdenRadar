@@ -4994,11 +4994,7 @@ If multiple assets appear, return each as a separate array item.`;
       const { subject, assetIds, windowHours, isTest } = schema.parse(req.body);
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
 
-      const assets = await storage.getNewDiscoveries(windowHours);
-      type DiscoveryRow = (typeof assets)[number];
-      const selectedAssets: DiscoveryRow[] = assetIds
-        .map((id) => assets.find((a) => a.id === id))
-        .filter((a): a is DiscoveryRow => a != null);
+      const selectedAssets = await storage.getAssetsByIds(assetIds);
 
       const windowOptions: Record<number, string> = {
         24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
@@ -5039,11 +5035,10 @@ If multiple assets appear, return each as a separate array item.`;
       }
 
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
-      const assets = await storage.getNewDiscoveries(windowHours);
-      type DiscoveryRowSend = (typeof assets)[number];
-      const selectedAssets: DiscoveryRowSend[] = assetIds
-        .map((id) => assets.find((a) => a.id === id))
-        .filter((a): a is DiscoveryRowSend => a != null);
+      const selectedAssets = await storage.getAssetsByIds(assetIds);
+      if (selectedAssets.length === 0) {
+        return res.status(400).json({ error: "None of the selected asset IDs could be found. Please refresh and try again." });
+      }
 
       const windowOptions: Record<number, string> = {
         24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
