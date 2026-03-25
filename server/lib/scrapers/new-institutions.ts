@@ -4139,23 +4139,28 @@ export const nottinghamScraper = createTechPublisherScraper(
 // under 15 U.S.C. § 3715; purpose is public discovery and licensing.
 //
 // Verified: 6,626 listings on 663 pages (10/page) as of 2026-03-18.
+// Individual technology URL: /technologies/{name-slug}/{uuid} (confirmed 2026-03).
 //
 // Strategy:
-//   1. XHR Intercept — Playwright captures the Elasticsearch XHR the React app fires.
-//      The request URL contains a `source` param (JSON-encoded ES query).
-//      After capturing the first XHR, we replay it from browser context (page.evaluate)
-//      with modified from/size to bulk-retrieve all results in batches of 100.
-//      This avoids clicking 663 Next buttons (~33 min).
-//   2. Next-button fallback — if XHR replay fails (e.g. auth rejected for direct replay),
-//      fall back to clicking up to MAX_BTN_PAGES (100) pages via the Next button,
-//      collecting data from both the DOM and intercepted XHR responses.
+//   XHR Intercept — Playwright captures the Elasticsearch XHR the React app fires.
+//   The request URL contains a `source` param (JSON-encoded ES query).
+//   After capturing the first XHR URL + Authorization header, the browser is closed
+//   and all pagination is done via Node.js fetch in batches of 100.
+//   If the ES auth capture fails, returns [] so the failure is explicit in logs.
 export const techLinkScraper: InstitutionScraper = {
   institution: "TechLink (DoD Technology Transfer)",
   scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "TechLink (DoD Technology Transfer)";
     const BASE = "https://techlinkcenter.org";
-    const MAX_BTN_PAGES = 100; // fallback cap: ~1,000 listings at 10/page
+
+    // TechLink individual technology page URL format (confirmed 2026-03):
+    //   https://techlinkcenter.org/technologies/{name-slug}/{uuid}
+    // Both components are required. The UUID is the primary identifier;
+    // the name-slug is SEO-derived from the title (lowercase, hyphenated).
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const toNameSlug = (title: string) =>
+      title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 
     let browser: import("playwright").Browser | null = null;
     try {
@@ -4185,10 +4190,17 @@ export const techLinkScraper: InstitutionScraper = {
           const src = (h._source ?? {}) as Record<string, unknown>;
           const title = String(src.title ?? src.name ?? src.techName ?? "").trim();
           if (!title || title.length < 4) continue;
-          const slug = String(src.slug ?? src.id ?? h._id ?? "").trim();
-          const url = slug ? `${BASE}/technologies/${slug}` : BASE;
+
+          // The UUID comes from the ES document id (src.id or h._id).
+          // The name-slug is derived from the technology title.
+          // URL format: /technologies/{name-slug}/{uuid}
+          const uuid = String(src.id ?? h._id ?? "").trim();
+          const url = UUID_RE.test(uuid)
+            ? `${BASE}/technologies/${toNameSlug(title)}/${uuid}`
+            : `${BASE}/technologies`; // no valid UUID — link to search root
+
           const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
-          xhrItems.set(url, { title, description, url });
+          xhrItems.set(uuid || title, { title, description, url });
         }
       };
 
@@ -4240,9 +4252,12 @@ export const techLinkScraper: InstitutionScraper = {
           const baseQuery = JSON.parse(rawSource) as Record<string, unknown>;
           const PAGE_SIZE = 100;
           const totalPages = Math.ceil(esTotal / PAGE_SIZE);
+          const pagesToFetch = Math.min(totalPages, 70);
           let errors = 0;
 
-          for (let pg = 0; pg < Math.min(totalPages, 70); pg++) {
+          console.log(`[scraper] ${INST}: bulk ES replay — ${esTotal} total, fetching ${pagesToFetch} pages of ${PAGE_SIZE}`);
+
+          for (let pg = 0; pg < pagesToFetch; pg++) {
             const newQuery = { ...baseQuery, from: pg * PAGE_SIZE, size: PAGE_SIZE };
             const newUrlObj = new URL(esRequestUrl);
             newUrlObj.searchParams.set("source", JSON.stringify(newQuery));
@@ -4258,6 +4273,7 @@ export const techLinkScraper: InstitutionScraper = {
               });
               if (!r.ok) {
                 errors++;
+                console.log(`[scraper] ${INST}: bulk replay page ${pg} HTTP ${r.status} (error ${errors}/3)`);
                 if (errors > 2) break;
                 continue;
               }
@@ -4267,12 +4283,20 @@ export const techLinkScraper: InstitutionScraper = {
               ) as unknown[];
               extractHits(hits);
               if (hits.length < PAGE_SIZE) break; // last page reached
-            } catch {
+            } catch (fetchErr: unknown) {
               errors++;
+              const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+              console.log(`[scraper] ${INST}: bulk replay page ${pg} failed: ${msg} (error ${errors}/3)`);
               if (errors > 2) break;
             }
           }
+
+          if (xhrItems.size === 0) {
+            console.log(`[scraper] ${INST}: bulk replay returned 0 items — ES auth may have expired`);
+          }
         }
+      } else if (!esRequestUrl || !esAuthHeader) {
+        console.log(`[scraper] ${INST}: ES auth capture failed — no XHR intercepted (esUrl=${!!esRequestUrl} esAuth=${!!esAuthHeader} esTotal=${esTotal})`);
       }
 
       if (xhrItems.size > 0) {
@@ -4280,13 +4304,13 @@ export const techLinkScraper: InstitutionScraper = {
           ...item,
           institution: INST,
         }));
-        console.log(`[scraper] ${INST}: ${results.length} listings (ES Node.js bulk fetch)`);
+        console.log(`[scraper] ${INST}: ${results.length} listings (ES bulk fetch)`);
         return results;
       }
 
       // No results — return empty (fallback Next-button approach removed;
       // if the ES endpoint changes, a failed run will be obvious from count=0)
-      console.log(`[scraper] ${INST}: 0 listings — ES auth capture failed`);
+      console.log(`[scraper] ${INST}: 0 listings — ES auth capture failed or replay returned nothing`);
       return [];
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
