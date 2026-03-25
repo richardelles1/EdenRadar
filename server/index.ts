@@ -302,9 +302,11 @@ app.use((req, res, next) => {
         last_failure_at TIMESTAMP,
         last_success_at TIMESTAMP,
         backoff_until TIMESTAMP,
+        last_success_new_count INTEGER,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_new_count INTEGER`);
     log("[startup] scheduler_state + scraper_health tables ready", "startup");
   } catch (err: any) {
     log(`[startup] scheduler_state/scraper_health migration failed: ${err?.message}`, "startup");

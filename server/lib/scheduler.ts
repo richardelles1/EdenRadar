@@ -149,9 +149,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     }
   }
 
-  const currentTier: 1 | 2 | 3 | 4 | null = currentInstitutions.length > 0
-    ? getScraperTier(currentInstitutions[0])
-    : null;
+  const currentTier: 1 | 2 | 3 | 4 | null = getMinRunningTier();
 
   return {
     state: schedulerState,
@@ -330,10 +328,16 @@ function scheduleNext(): void {
   while (priorityQueue.length > 0) {
     const institution = priorityQueue[0];
     const scraperType = getScraperType(institution);
+    const institutionTier = getScraperTier(institution);
     const liveCount = getActiveSyncs().length;
 
     if (scraperType === "playwright" && liveCount > 0) break;
     if (scraperType !== "playwright" && liveCount >= MAX_HTTP_CONCURRENT) break;
+
+    // Respect tier boundary: don't dispatch a higher-tier priority item while
+    // a lower-tier batch is still running.
+    const minRunning = getMinRunningTier();
+    if (minRunning !== null && institutionTier > minRunning) break;
 
     priorityQueue.shift();
     const syncStart = Date.now();
