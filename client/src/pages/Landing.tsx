@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
+import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { useAuth } from "@/hooks/use-auth";
 import {
   Building2,
@@ -730,6 +731,7 @@ export default function Landing() {
             <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
           </div>
           <nav className="flex items-center gap-4">
+            <EdenNXBadge />
             <button
               onClick={handleLogin}
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"

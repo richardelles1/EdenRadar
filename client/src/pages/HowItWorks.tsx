@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { Nav } from "@/components/Nav";
+import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
 import { Button } from "@/components/ui/button";
 import {
@@ -771,8 +772,11 @@ export default function HowItWorks() {
 
       </main>
 
-      <footer className="relative z-10 border-t border-border py-8 px-4 sm:px-6 text-center text-xs text-muted-foreground">
-        <p>2026 EdenRadar. All rights reserved.</p>
+      <footer className="relative z-10 border-t border-border py-8 px-4 sm:px-6 text-xs text-muted-foreground">
+        <div className="flex items-center justify-center gap-4">
+          <p>2026 EdenRadar. All rights reserved.</p>
+          <EdenNXBadge />
+        </div>
       </footer>
     </div>
   );
