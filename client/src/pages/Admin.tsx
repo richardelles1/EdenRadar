@@ -4665,6 +4665,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const [filterSearch, setFilterSearch] = useState("");
   const [instDropOpen, setInstDropOpen] = useState(false);
   const [modalDropOpen, setModalDropOpen] = useState(false);
+  const [instFilterSearch, setInstFilterSearch] = useState("");
   const [dragOverDigest, setDragOverDigest] = useState(false);
   const [dragDigestIdx, setDragDigestIdx] = useState<number | null>(null);
   const [previewAutoLoading, setPreviewAutoLoading] = useState(false);
@@ -4700,6 +4701,16 @@ function DispatchTab({ pw }: { pw: string }) {
       if (!r.ok) throw new Error("Failed to load discoveries");
       return r.json();
     },
+  });
+
+  const filterOptionsQuery = useQuery<{ institutions: string[]; modalities: string[] }>({
+    queryKey: ["/api/admin/dispatch/filter-options"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/dispatch/filter-options", { headers: { "x-admin-password": pw } });
+      if (!r.ok) throw new Error("Failed to load filter options");
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
   });
 
   const historyQuery = useQuery<{ history: DispatchLogEntry[] }>({
@@ -4757,8 +4768,11 @@ function DispatchTab({ pw }: { pw: string }) {
     return true;
   });
 
-  const institutionOptions = Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
-  const modalityOptions = Array.from(new Set(allAssets.map((a) => a.modality).filter((m) => m && m !== "unknown"))).sort();
+  const institutionOptions = filterOptionsQuery.data?.institutions ?? [];
+  const modalityOptions = filterOptionsQuery.data?.modalities ?? [];
+  const visibleInstOptions = instFilterSearch
+    ? institutionOptions.filter((n) => n.toLowerCase().includes(instFilterSearch.toLowerCase()))
+    : institutionOptions;
 
   useEffect(() => {
     if (digestAssets.length === 0) return;
@@ -4972,7 +4986,7 @@ function DispatchTab({ pw }: { pw: string }) {
               <p className="text-sm font-semibold text-foreground">New Discoveries</p>
               {discoveriesQuery.isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
               {!discoveriesQuery.isLoading && (
-                <span className="text-[11px] text-muted-foreground">{filteredAssets.length + digestIds.size} found</span>
+                <span className="text-[11px] text-muted-foreground">{allAssets.length} found</span>
               )}
             </div>
 
@@ -4987,36 +5001,72 @@ function DispatchTab({ pw }: { pw: string }) {
               </SelectContent>
             </Select>
 
-            <input
-              type="text"
-              placeholder="Search by name or indication..."
-              value={filterSearch}
-              onChange={(e) => setFilterSearch(e.target.value)}
-              className="w-full h-8 px-3 text-xs border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
-              data-testid="input-filter-search"
-            />
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search by name or indication..."
+                value={filterSearch}
+                onChange={(e) => setFilterSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setFilterSearch("")}
+                className="w-full h-8 px-3 pr-7 text-xs border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                data-testid="input-filter-search"
+              />
+              {filterSearch && (
+                <button
+                  onClick={() => setFilterSearch("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  data-testid="button-clear-search"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
 
             <div className="flex gap-2">
               {/* Institution multi-select */}
               <div className="relative flex-1">
                 <button
-                  onClick={() => { setInstDropOpen((o) => !o); setModalDropOpen(false); }}
+                  onClick={() => { setInstDropOpen((o) => !o); setModalDropOpen(false); if (!instDropOpen) setInstFilterSearch(""); }}
                   className={`w-full h-7 px-2.5 text-xs border rounded-md bg-background text-left flex items-center justify-between gap-1 ${filterInstitutions.length > 0 ? "border-primary/50 text-primary" : "border-border text-muted-foreground"}`}
                   data-testid="button-filter-institutions"
                 >
                   <span className="truncate">{filterInstitutions.length > 0 ? `Inst (${filterInstitutions.length})` : "Institution"}</span>
-                  <ChevronDown className="h-3 w-3 shrink-0" />
+                  {filterOptionsQuery.isLoading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                 </button>
-                {instDropOpen && institutionOptions.length > 0 && (
-                  <div className="absolute z-30 top-8 left-0 w-56 bg-popover border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
-                    <div className="p-1">
-                      <button onClick={() => setFilterInstitutions([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded" data-testid="button-clear-inst-filter">Clear all</button>
-                      {institutionOptions.map((inst) => (
-                        <label key={inst} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
-                          <input type="checkbox" checked={filterInstitutions.includes(inst)} onChange={() => setFilterInstitutions((prev) => prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst])} className="h-3 w-3 accent-primary" />
-                          <span className="text-xs text-foreground truncate">{inst}</span>
-                        </label>
-                      ))}
+                {instDropOpen && (
+                  <div className="absolute z-30 top-8 left-0 w-64 bg-popover border border-border rounded-lg shadow-lg flex flex-col max-h-64">
+                    <div className="p-1.5 border-b border-border shrink-0">
+                      <input
+                        type="text"
+                        placeholder="Search institutions..."
+                        value={instFilterSearch}
+                        onChange={(e) => setInstFilterSearch(e.target.value)}
+                        className="w-full h-6 px-2 text-xs bg-background border border-border rounded focus:outline-none"
+                        data-testid="input-inst-search"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="overflow-y-auto flex-1 p-1">
+                      {filterOptionsQuery.isLoading && (
+                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">Loading...</div>
+                      )}
+                      {!filterOptionsQuery.isLoading && visibleInstOptions.length === 0 && (
+                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">
+                          {instFilterSearch ? `No match for "${instFilterSearch}"` : "No institutions available"}
+                        </div>
+                      )}
+                      {!filterOptionsQuery.isLoading && visibleInstOptions.length > 0 && (
+                        <>
+                          <button onClick={() => setFilterInstitutions([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded" data-testid="button-clear-inst-filter">Clear all</button>
+                          {visibleInstOptions.map((inst) => (
+                            <label key={inst} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
+                              <input type="checkbox" checked={filterInstitutions.includes(inst)} onChange={() => setFilterInstitutions((prev) => prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst])} className="h-3 w-3 accent-primary" />
+                              <span className="text-xs text-foreground truncate">{inst}</span>
+                            </label>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -5029,25 +5079,35 @@ function DispatchTab({ pw }: { pw: string }) {
                   data-testid="button-filter-modalities"
                 >
                   <span className="truncate">{filterModalities.length > 0 ? `Mod (${filterModalities.length})` : "Modality"}</span>
-                  <ChevronDown className="h-3 w-3 shrink-0" />
+                  {filterOptionsQuery.isLoading ? <Loader2 className="h-3 w-3 shrink-0 animate-spin" /> : <ChevronDown className="h-3 w-3 shrink-0" />}
                 </button>
-                {modalDropOpen && modalityOptions.length > 0 && (
+                {modalDropOpen && (
                   <div className="absolute z-30 top-8 left-0 w-48 bg-popover border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
                     <div className="p-1">
-                      <button onClick={() => setFilterModalities([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded">Clear all</button>
-                      {modalityOptions.map((m) => (
-                        <label key={m} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
-                          <input type="checkbox" checked={filterModalities.includes(m)} onChange={() => setFilterModalities((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])} className="h-3 w-3 accent-primary" />
-                          <span className="text-xs text-foreground">{m.charAt(0).toUpperCase() + m.slice(1)}</span>
-                        </label>
-                      ))}
+                      {filterOptionsQuery.isLoading && (
+                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">Loading...</div>
+                      )}
+                      {!filterOptionsQuery.isLoading && modalityOptions.length === 0 && (
+                        <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">No modalities available</div>
+                      )}
+                      {!filterOptionsQuery.isLoading && modalityOptions.length > 0 && (
+                        <>
+                          <button onClick={() => setFilterModalities([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded">Clear all</button>
+                          {modalityOptions.map((m) => (
+                            <label key={m} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
+                              <input type="checkbox" checked={filterModalities.includes(m)} onChange={() => setFilterModalities((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])} className="h-3 w-3 accent-primary" />
+                              <span className="text-xs text-foreground">{m.charAt(0).toUpperCase() + m.slice(1)}</span>
+                            </label>
+                          ))}
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
               </div>
             </div>
             {(filterInstitutions.length > 0 || filterModalities.length > 0) && (
-              <div className="flex flex-wrap gap-1">
+              <div className="flex flex-wrap gap-1 items-center">
                 {filterInstitutions.map((inst) => (
                   <span key={inst} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
                     {inst.length > 18 ? inst.slice(0, 18) + "…" : inst}
@@ -5060,6 +5120,13 @@ function DispatchTab({ pw }: { pw: string }) {
                     <button onClick={() => setFilterModalities((p) => p.filter((x) => x !== m))} className="ml-0.5 text-violet-500 hover:text-violet-700"><X className="h-2.5 w-2.5" /></button>
                   </span>
                 ))}
+                <button
+                  onClick={() => { setFilterInstitutions([]); setFilterModalities([]); }}
+                  className="text-[10px] text-muted-foreground hover:text-foreground underline ml-1"
+                  data-testid="button-clear-filter-chips"
+                >
+                  Clear all
+                </button>
               </div>
             )}
           </div>
@@ -5073,8 +5140,23 @@ function DispatchTab({ pw }: { pw: string }) {
                 </div>
               )}
               {!discoveriesQuery.isLoading && filteredAssets.length === 0 && (
-                <div className="p-6 text-center text-sm text-muted-foreground">
-                  {allAssets.length === 0 ? "No new assets in this window." : "No assets match your filters."}
+                <div className="p-6 text-center space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {allAssets.length === 0
+                      ? "No new assets in this window."
+                      : filterSearch
+                        ? `No results for "${filterSearch}"`
+                        : "No assets match the selected filters."}
+                  </p>
+                  {(filterSearch || filterInstitutions.length > 0 || filterModalities.length > 0) && (
+                    <button
+                      onClick={() => { setFilterSearch(""); setFilterInstitutions([]); setFilterModalities([]); }}
+                      className="text-xs text-primary hover:underline"
+                      data-testid="button-clear-all-filters"
+                    >
+                      Clear all filters
+                    </button>
+                  )}
                 </div>
               )}
               {filteredAssets.map((asset) => (

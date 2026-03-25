@@ -4959,6 +4959,25 @@ If multiple assets appear, return each as a separate array item.`;
       .replace(/\{date\}/g, date);
   }
 
+  app.get("/api/admin/dispatch/filter-options", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const rows = await db
+        .select({ institution: ingestedAssets.institution, modality: ingestedAssets.modality })
+        .from(ingestedAssets)
+        .where(eq(ingestedAssets.relevant, true));
+      const institutions = Array.from(new Set(rows.map((r) => r.institution).filter(Boolean))).sort();
+      const modalities = Array.from(
+        new Set(rows.map((r) => r.modality).filter((m): m is string => !!m && m !== "unknown"))
+      ).sort();
+      return res.json({ institutions, modalities });
+    } catch (err: any) {
+      console.error("[dispatch/filter-options] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load filter options" });
+    }
+  });
+
   app.get("/api/admin/new-discoveries", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
