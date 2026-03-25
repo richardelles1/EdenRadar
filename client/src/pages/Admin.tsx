@@ -2506,6 +2506,7 @@ function ResearchQueue({ pw }: { pw: string }) {
 interface AdminUser {
   id: string;
   email: string;
+  contactEmail: string | null;
   role: PortalRole | null;
   subscribedToDigest: boolean;
   createdAt: string;
@@ -2559,6 +2560,32 @@ function AccountCenter({ pw }: { pw: string }) {
     },
     onError: (err: Error, _vars, context) => {
       if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const [editingEmailUserId, setEditingEmailUserId] = useState<string | null>(null);
+  const [editingEmailValue, setEditingEmailValue] = useState("");
+
+  const updateContactEmail = useMutation({
+    mutationFn: async ({ userId, contactEmail }: { userId: string; contactEmail: string }) => {
+      const res = await fetch(`/api/admin/users/${userId}/email`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ contactEmail }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to update email");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setEditingEmailUserId(null);
+      toast({ title: "Contact email updated" });
+    },
+    onError: (err: Error) => {
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
     },
   });
@@ -2760,7 +2787,8 @@ function AccountCenter({ pw }: { pw: string }) {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-border bg-muted/30">
-                <th className="text-left py-3 px-4 font-semibold text-foreground">Email</th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">Login Email</th>
+                <th className="text-left py-3 px-4 font-semibold text-foreground">Contact Email</th>
                 <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[160px]">Portal</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Digest</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
@@ -2772,8 +2800,53 @@ function AccountCenter({ pw }: { pw: string }) {
                 const portal = getPortalConfig(user.role);
                 return (
                   <tr key={user.id} className="border-b border-border/50 hover:bg-muted/20 transition-colors" data-testid={`row-user-${user.id}`}>
-                    <td className="py-2.5 px-4 text-foreground font-medium" data-testid={`text-email-${user.id}`}>
+                    <td className="py-2.5 px-4 text-foreground font-medium text-xs" data-testid={`text-email-${user.id}`}>
                       {user.email}
+                    </td>
+                    <td className="py-2 px-4" data-testid={`cell-contact-email-${user.id}`}>
+                      {editingEmailUserId === user.id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="email"
+                            value={editingEmailValue}
+                            onChange={(e) => setEditingEmailValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") updateContactEmail.mutate({ userId: user.id, contactEmail: editingEmailValue });
+                              if (e.key === "Escape") setEditingEmailUserId(null);
+                            }}
+                            autoFocus
+                            className="flex-1 h-7 px-2 text-xs border border-primary/40 rounded bg-background text-foreground focus:outline-none"
+                            placeholder="contact@example.com"
+                            data-testid={`input-contact-email-${user.id}`}
+                          />
+                          <button
+                            onClick={() => updateContactEmail.mutate({ userId: user.id, contactEmail: editingEmailValue })}
+                            className="text-emerald-600 hover:text-emerald-700"
+                            disabled={updateContactEmail.isPending}
+                            data-testid={`button-save-contact-email-${user.id}`}
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setEditingEmailUserId(null)}
+                            className="text-muted-foreground hover:text-foreground"
+                            data-testid={`button-cancel-contact-email-${user.id}`}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setEditingEmailUserId(user.id); setEditingEmailValue(user.contactEmail ?? ""); }}
+                          className="text-xs text-muted-foreground hover:text-foreground group flex items-center gap-1"
+                          data-testid={`button-edit-contact-email-${user.id}`}
+                        >
+                          <span className={user.contactEmail ? "text-foreground" : "italic opacity-50"}>
+                            {user.contactEmail || "Set contact email"}
+                          </span>
+                          <Pencil className="w-3 h-3 opacity-0 group-hover:opacity-50" />
+                        </button>
+                      )}
                     </td>
                     <td className="py-2.5 px-4">
                       <select
@@ -2825,7 +2898,7 @@ function AccountCenter({ pw }: { pw: string }) {
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-8 text-muted-foreground">No users found</td>
+                  <td colSpan={6} className="text-center py-8 text-muted-foreground">No users found</td>
                 </tr>
               )}
             </tbody>
@@ -4734,6 +4807,17 @@ function DispatchTab({ pw }: { pw: string }) {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [loadingSubscribers, setLoadingSubscribers] = useState(false);
 
+  const subscriberCountQuery = useQuery<{ subscribers: { id: string; username: string; effectiveEmail: string }[] }>({
+    queryKey: ["/api/admin/dispatch/subscribers"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/dispatch/subscribers", { headers: { "x-admin-password": pw } });
+      if (!res.ok) return { subscribers: [] };
+      return res.json();
+    },
+    staleTime: 60000,
+    enabled: !!pw,
+  });
+
   const windowOptions = [
     { label: "Last 24 hours", value: 24 },
     { label: "Last 48 hours", value: 48 },
@@ -5358,7 +5442,7 @@ function DispatchTab({ pw }: { pw: string }) {
                 ) : (
                   <Users className="h-3 w-3" />
                 )}
-                Load subscribers
+                Load {subscriberCountQuery.data?.subscribers.length ?? 0} subscriber{(subscriberCountQuery.data?.subscribers.length ?? 0) !== 1 ? "s" : ""}
               </Button>
             </div>
             <div className="flex gap-2">

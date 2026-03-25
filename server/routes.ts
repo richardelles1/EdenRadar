@@ -3902,6 +3902,7 @@ If a field cannot be determined, use "N/A".`
       const users = (data?.users ?? []).map((u) => ({
         id: u.id,
         email: u.email ?? "",
+        contactEmail: u.user_metadata?.contactEmail ?? null,
         role: u.user_metadata?.role ?? null,
         subscribedToDigest: u.user_metadata?.subscribedToDigest === true,
         createdAt: u.created_at,
@@ -3909,6 +3910,34 @@ If a field cannot be determined, use "N/A".`
       }));
       res.json({ users });
     } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/users/:id/email", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { id } = req.params;
+      const schema = z.object({ contactEmail: z.string().email().or(z.literal("")) });
+      const { contactEmail } = schema.parse(req.body);
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data: existing, error: fetchErr } = await adminSupabase.auth.admin.getUserById(id);
+      if (fetchErr || !existing?.user) return res.status(404).json({ error: "User not found" });
+      const { data, error } = await adminSupabase.auth.admin.updateUserById(id, {
+        user_metadata: { ...existing.user.user_metadata, contactEmail: contactEmail || null },
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      res.json({
+        id: data.user.id,
+        contactEmail: data.user.user_metadata?.contactEmail ?? null,
+      });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Invalid email" });
       res.status(500).json({ error: err.message });
     }
   });
@@ -5154,7 +5183,7 @@ If multiple assets appear, return each as a separate array item.`;
         .map((u) => ({
           id: u.id,
           username: u.email ?? "",
-          effectiveEmail: u.email ?? "",
+          effectiveEmail: u.user_metadata?.contactEmail || u.email || "",
         }));
       return res.json({ subscribers });
     } catch (err: any) {
