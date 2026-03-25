@@ -157,7 +157,14 @@ export const ingestedAssets = pgTable("ingested_assets", {
   embedding: vector1536("embedding"),
 });
 
-export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets).omit({
+export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {
+  // Override jsonb columns: drizzle-zod infers jsonb as z.unknown() which is incompatible
+  // with drizzle's insert type. Explicitly type these as string[] so TypeScript accepts
+  // them without casts.
+  categories: z.array(z.string()).nullable().optional(),
+  inventors: z.array(z.string()).nullable().optional(),
+  embedding: z.array(z.number()).nullable().optional(),
+}).omit({
   id: true,
   firstSeenAt: true,
   lastSeenAt: true,

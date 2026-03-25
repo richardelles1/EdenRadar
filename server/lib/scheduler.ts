@@ -10,8 +10,7 @@ import {
 import { storage } from "../storage";
 
 const MAX_HTTP_CONCURRENT = 5;
-// Skip re-syncing an institution if: (a) it was successfully synced within this window,
-// AND (b) the last sync found zero new assets (no new listings to pick up).
+/** Skip an institution only if it was synced within this window AND found 0 new assets. */
 const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
 
 export interface SchedulerStatus {
@@ -53,16 +52,13 @@ let syncDurations: number[] = [];
 let lastCycleCompletedAt: Date | null = null;
 let delayBetweenSyncsMs = 5_000;
 /** Tier-sorted queue for the current cycle. Re-built at every cycle start.
- * Tier 1 (API/RSS) → Tier 2 (platform factory) → Tier 3 (bespoke HTML) → Tier 4 (Playwright).
- * Within each tier the original ALL_SCRAPERS order is preserved. */
+ * Tier 1 (API/RSS) → Tier 2 (platform factory) → Tier 3 (bespoke HTML) → Tier 4 (Playwright). */
 let tieredQueue: string[] = [];
 /** Monotonically increasing. Incremented on every reset so in-flight batch
  * callbacks can detect they belong to a superseded cycle and no-op. */
 let runGeneration = 0;
 
-// Extended in-memory health cache that also tracks last-sync new-asset count.
-type HealthCache = ScraperHealthRow & { lastSuccessNewCount?: number };
-let scraperHealthCache: Map<string, HealthCache> = new Map();
+let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
 function buildTieredQueue(): string[] {
   const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
@@ -77,11 +73,6 @@ function getInstitutionQueue(): string[] {
   return tieredQueue.length > 0 ? tieredQueue : ALL_SCRAPERS.map((s) => s.institution);
 }
 
-// Playwright scraper audit (all 11 confirmed via chromium.launch grep across all scraper files):
-// cwru.ts, gatech.ts, Leeds, Fred Hutchinson, Moffitt, UniQuest (Queensland), NUS Enterprise,
-// TechLink (DoD), Ghent University (researchportal.be), UCL Business, Cancer Research Horizons.
-// Leeds has 2 internal chromium.launch calls (licensor + TechPublisher) but is one scraper object.
-// All above carry scraperType: "playwright" → 720s timeout; everything else defaults to "http" (90s) or "api" (3m).
 function getScraperType(institution: string): "playwright" | "http" | "api" {
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
   return scraper?.scraperType ?? "http";
@@ -93,24 +84,34 @@ function isInBackoff(institution: string): boolean {
   return health.backoffUntil > new Date();
 }
 
-/** Returns true if the institution should be skipped this cycle because:
- * - It was successfully synced within FRESH_THRESHOLD_MS, AND
- * - The last sync found 0 new assets (nothing to pick up).
- * Institutions that DO find new assets are re-checked even if recently synced. */
+/** Returns true if the institution should be skipped:
+ * - Successfully synced within FRESH_THRESHOLD_MS, AND
+ * - The last sync found 0 new assets.
+ * Persisted in DB so this survives restarts. */
 function isFresh(institution: string): boolean {
   const health = scraperHealthCache.get(institution);
   if (!health?.lastSuccessAt) return false;
   const withinWindow = (Date.now() - health.lastSuccessAt.getTime()) < FRESH_THRESHOLD_MS;
   if (!withinWindow) return false;
-  // If lastSuccessNewCount is unknown (undefined), don't skip — could have new assets.
-  if (health.lastSuccessNewCount === undefined) return false;
+  // lastSuccessNewCount === null means we don't know — don't skip (conservative)
+  if (health.lastSuccessNewCount === null) return false;
   return health.lastSuccessNewCount === 0;
 }
 
+/** Returns the lowest tier among all currently-running institutions (null if none running). */
+function getMinRunningTier(): 1 | 2 | 3 | 4 | null {
+  if (currentInstitutions.length === 0) return null;
+  return currentInstitutions.reduce<1 | 2 | 3 | 4>(
+    (min, inst) => {
+      const t = getScraperTier(inst);
+      return t < min ? t : min;
+    },
+    4
+  );
+}
+
 function persistState(): void {
-  // On crash/restart, don't skip institutions that were still in-flight when we
-  // last persisted. Roll back the checkpoint to the start of the current in-flight
-  // batch so those institutions will be retried in the next cycle.
+  // Save checkpoint rolled back by any in-flight institutions so they are retried on restart.
   const safeCheckpoint = Math.max(0, queueIndex - currentInstitutions.length);
   saveSchedulerState({
     queueIndex: safeCheckpoint,
@@ -130,7 +131,6 @@ export function getSchedulerStatus(): SchedulerStatus {
   const avgMs = syncDurations.length > 0
     ? Math.round(syncDurations.reduce((a, b) => a + b, 0) / syncDurations.length)
     : null;
-  // ETA accounts for concurrency: multiple HTTP institutions drain in parallel
   const slots = Math.min(MAX_HTTP_CONCURRENT, Math.max(1, activeSyncs.length || 1));
   const estimatedRemainingMs = avgMs && remaining > 0
     ? Math.ceil(remaining / slots) * avgMs
@@ -185,12 +185,8 @@ export function setDelay(ms: number): { ok: boolean; message: string } {
   return { ok: true, message: `Delay set to ${ms}ms` };
 }
 
-/** Restores scheduler state from DB. Returns true if the scheduler was running when the server last shut down (so the caller can decide to auto-resume). */
 export async function loadAndRestoreScheduler(): Promise<boolean> {
   try {
-    // Clean up any sessions left in "running" state by a previous server instance
-    // that was killed mid-sync. These would otherwise appear as "Stale" in the
-    // health dashboard indefinitely.
     const cleaned = await storage.markRunningSessionsFailed();
     if (cleaned > 0) {
       console.log(`[scheduler] Cleaned up ${cleaned} interrupted session(s) from previous server instance`);
@@ -246,7 +242,7 @@ export function startScheduler(): { ok: boolean; message: string } {
     freshSkippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
-    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3→T4 order, up to ${MAX_HTTP_CONCURRENT} concurrent)`);
+    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3→T4 order, up to ${MAX_HTTP_CONCURRENT} concurrent per tier)`);
   }
 
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
@@ -296,7 +292,6 @@ export function pauseScheduler(): { ok: boolean; message: string } {
   return { ok: true, message: "Scheduler paused" };
 }
 
-/** Immediately removes an institution's backoff from the in-memory cache so scheduling decisions take effect without waiting for a cycle rollover. */
 export function invalidateHealthCacheEntry(institution: string): void {
   const entry = scraperHealthCache.get(institution);
   if (entry) {
@@ -363,15 +358,16 @@ function scheduleNext(): void {
 
   const queue = getInstitutionQueue();
 
-  // ── Main queue: fill concurrent slots (tier 1→2→3→4 order) ───────────────
+  // ── Main queue: tier-bounded concurrent dispatch (T1→T2→T3→T4 strict order) ─
   while (queueIndex < queue.length) {
     const institution = queue[queueIndex];
     const scraperType = getScraperType(institution);
     const liveCount = getActiveSyncs().length;
+    const institutionTier = getScraperTier(institution);
 
+    // ── Playwright / Tier 4: exclusive — wait for all other syncs to finish ───
     if (scraperType === "playwright") {
-      // Playwright: only run when no other syncs active (tier 4 = exclusive)
-      if (liveCount > 0) break;
+      if (liveCount > 0) break;  // wait for all other tiers to drain
 
       queueIndex++;
       const syncStart = Date.now();
@@ -388,32 +384,41 @@ function scheduleNext(): void {
         scheduleNext();
       });
 
-      return;  // playwright exclusive
+      return;  // playwright runs exclusively; re-enter scheduleNext after it finishes
     }
 
-    // HTTP/API concurrent limit
+    // ── Tier boundary enforcement ─────────────────────────────────────────────
+    // Don't start a higher tier until ALL institutions of the current running tier
+    // have completed. The minimum running tier is the "active batch tier".
+    const minRunningTier = getMinRunningTier();
+    if (minRunningTier !== null && institutionTier > minRunningTier) {
+      // Running batch is a lower tier than what we want to dispatch next.
+      // Wait for it to drain before advancing to the next tier.
+      break;
+    }
+
+    // ── Concurrent limit for HTTP/API scrapers ────────────────────────────────
     if (liveCount >= MAX_HTTP_CONCURRENT) break;
 
-    // Staleness gate: skip if recently synced with 0 new assets
+    // ── Staleness gate ────────────────────────────────────────────────────────
     if (isFresh(institution)) {
       queueIndex++;
       freshSkippedThisCycle++;
       continue;
     }
 
-    // Backoff gate
+    // ── Backoff gate ──────────────────────────────────────────────────────────
     if (isInBackoff(institution)) {
       queueIndex++;
       skippedThisCycle++;
       continue;
     }
 
-    // Dispatch
+    // ── Dispatch ──────────────────────────────────────────────────────────────
     queueIndex++;
     const syncStart = Date.now();
     currentInstitutions = [...currentInstitutions, institution];
-    const tier = getScraperTier(institution);
-    console.log(`[scheduler] [T${tier}/${scraperType}] ${institution} (${queueIndex}/${queue.length})`);
+    console.log(`[scheduler] [T${institutionTier}/${scraperType}] ${institution} (${queueIndex}/${queue.length})`);
 
     runOne(institution, gen).finally(() => {
       if (runGeneration !== gen) return;
@@ -422,16 +427,16 @@ function scheduleNext(): void {
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       lastActivityAt = new Date();
       persistState();
-      scheduleNext();  // fill freed slot immediately
+      scheduleNext();  // fill freed slot immediately; tier boundary re-evaluated
     });
-    // Continue loop to fill remaining concurrent slots
+    // Continue loop to fill remaining concurrent slots within the same tier
   }
 
   // ── Cycle completion check ─────────────────────────────────────────────────
   if (queueIndex >= queue.length && getActiveSyncs().length === 0 && priorityQueue.length === 0) {
     console.log(
       `[scheduler] Cycle #${cycleCount} complete — ${completedThisCycle} ok, ` +
-      `${failedThisCycle} failed, ${freshSkippedThisCycle} fresh-skipped (T1-3 with 0 new assets in last 4h), ` +
+      `${failedThisCycle} failed, ${freshSkippedThisCycle} fresh-skipped (last 4h, 0 new assets), ` +
       `${skippedThisCycle} backoff-skipped.`
     );
     lastCycleCompletedAt = new Date();
@@ -446,7 +451,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
   const scraperType = getScraperType(institution);
   const acquired = tryAcquireSyncLock(institution, scraperType);
   if (!acquired) {
-    console.log(`[scheduler] Lock unavailable for ${institution} — requeueing for retry`);
+    console.log(`[scheduler] Lock unavailable for ${institution} — requeueing`);
     if (runGeneration === gen) {
       if (!priorityQueue.includes(institution)) priorityQueue.unshift(institution);
       skippedThisCycle++;
@@ -460,8 +465,8 @@ async function runOne(institution: string, gen: number): Promise<void> {
       completedThisCycle++;
       console.log(`[scheduler] ${institution} complete — ${result.newCount} new, ${result.relevantCount} relevant`);
     }
-    await updateScraperHealth(institution, true);
-    const existing = scraperHealthCache.get(institution);
+    // Persist success with newCount so the staleness gate works after restarts
+    await updateScraperHealth(institution, true, undefined, result.newCount);
     scraperHealthCache.set(institution, {
       institution,
       consecutiveFailures: 0,
@@ -469,10 +474,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastFailureAt: null,
       lastSuccessAt: new Date(),
       backoffUntil: null,
-      // Track whether this sync found new assets — used by the staleness gate
       lastSuccessNewCount: result.newCount,
-      // Carry forward any previous failure context if still needed (already cleared above)
-      ...(existing?.lastFailureAt ? {} : {}),
     });
   } catch (err: any) {
     if (runGeneration === gen) {
@@ -489,7 +491,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastFailureAt: new Date(),
       lastSuccessAt: current?.lastSuccessAt ?? null,
       backoffUntil: newFailures >= 5 ? new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) : (current?.backoffUntil ?? null),
-      lastSuccessNewCount: current?.lastSuccessNewCount,
+      lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
     });
   } finally {
     if (runGeneration === gen) {

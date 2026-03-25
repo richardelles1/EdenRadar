@@ -18,6 +18,9 @@ export interface ScraperHealthRow {
   lastFailureAt: Date | null;
   lastSuccessAt: Date | null;
   backoffUntil: Date | null;
+  /** Number of new assets found in the most recent successful sync.
+   * Used by the staleness gate: skip re-sync if lastSuccessAt < 4h AND lastSuccessNewCount === 0. */
+  lastSuccessNewCount: number | null;
 }
 
 const BACKOFF_FAILURE_THRESHOLD = 5;
@@ -75,6 +78,7 @@ export async function loadAllScraperHealth(): Promise<Map<string, ScraperHealthR
         lastFailureAt: row.last_failure_at ? new Date(row.last_failure_at) : null,
         lastSuccessAt: row.last_success_at ? new Date(row.last_success_at) : null,
         backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
+        lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
       });
     }
   } catch (err: any) {
@@ -83,18 +87,39 @@ export async function loadAllScraperHealth(): Promise<Map<string, ScraperHealthR
   return map;
 }
 
-export async function updateScraperHealth(institution: string, success: boolean, failureReason?: string): Promise<void> {
+/** Record a successful sync, persisting both the success timestamp and new-asset count. */
+export async function recordScraperSuccess(institution: string, newCount: number): Promise<void> {
+  try {
+    await db.execute(sql`
+      INSERT INTO scraper_health (institution, consecutive_failures, last_failure_reason, last_failure_at, last_success_at, backoff_until, last_success_new_count, updated_at)
+      VALUES (${institution}, 0, NULL, NULL, NOW(), NULL, ${newCount}, NOW())
+      ON CONFLICT (institution) DO UPDATE SET
+        consecutive_failures = 0,
+        last_failure_reason = NULL,
+        last_failure_at = NULL,
+        last_success_at = NOW(),
+        backoff_until = NULL,
+        last_success_new_count = ${newCount},
+        updated_at = NOW()
+    `);
+  } catch (err: any) {
+    console.warn(`[scraperState] recordScraperSuccess failed for ${institution}: ${err?.message}`);
+  }
+}
+
+export async function updateScraperHealth(institution: string, success: boolean, failureReason?: string, newCount?: number): Promise<void> {
   try {
     if (success) {
       await db.execute(sql`
-        INSERT INTO scraper_health (institution, consecutive_failures, last_failure_reason, last_failure_at, last_success_at, backoff_until, updated_at)
-        VALUES (${institution}, 0, NULL, NULL, NOW(), NULL, NOW())
+        INSERT INTO scraper_health (institution, consecutive_failures, last_failure_reason, last_failure_at, last_success_at, backoff_until, last_success_new_count, updated_at)
+        VALUES (${institution}, 0, NULL, NULL, NOW(), NULL, ${newCount ?? null}, NOW())
         ON CONFLICT (institution) DO UPDATE SET
           consecutive_failures = 0,
           last_failure_reason = NULL,
           last_failure_at = NULL,
           last_success_at = NOW(),
           backoff_until = NULL,
+          last_success_new_count = ${newCount ?? null},
           updated_at = NOW()
       `);
     } else {
@@ -150,6 +175,7 @@ export async function getAllScraperHealth(): Promise<ScraperHealthRow[]> {
       lastFailureAt: row.last_failure_at ? new Date(row.last_failure_at) : null,
       lastSuccessAt: row.last_success_at ? new Date(row.last_success_at) : null,
       backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
+      lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
     }));
   } catch (err: any) {
     console.warn(`[scraperState] getAllScraperHealth failed: ${err?.message}`);
