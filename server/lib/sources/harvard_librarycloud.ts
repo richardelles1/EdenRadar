@@ -52,11 +52,8 @@ function extractMods(mods: any): RawSignal | null {
       : "";
 
     const typeOfResource = mods.typeOfResource ?? "";
-    const sourceType = genreStr.toLowerCase().includes("thesis") || genreStr.toLowerCase().includes("dissertation")
-      ? "thesis"
-      : typeOfResource === "text"
-      ? "publication"
-      : "publication";
+    const sourceType: import("../types").SourceType =
+      typeOfResource === "text" ? "paper" : "paper";
 
     return {
       id: `harvard-librarycloud-${encodeURIComponent(title.slice(0, 40))}-${date}`,

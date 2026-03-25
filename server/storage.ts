@@ -356,7 +356,8 @@ export class DatabaseStorage implements IStorage {
 
     const [inserted] = await db
       .insert(ingestedAssets)
-      .values({ fingerprint, ...data })
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .values({ fingerprint, ...data } as any)
       .returning();
     return { asset: inserted, isNew: true };
   }
@@ -389,7 +390,8 @@ export class DatabaseStorage implements IStorage {
       const chunk = newListings.slice(i, i + CHUNK);
       const inserted = await db
         .insert(ingestedAssets)
-        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })) as any)
         .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName, fingerprint: ingestedAssets.fingerprint });
       for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName, fingerprint: row.fingerprint });
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);

@@ -4983,10 +4983,10 @@ If multiple assets appear, return each as a separate array item.`;
               categories: classification.categories,
               innovationClaim: classification.innovationClaim,
               mechanismOfAction: classification.mechanismOfAction,
-              summary: stored?.summary ?? null,
-              abstract: stored?.abstract ?? null,
-              inventors: stored?.inventors ?? null,
-              patentStatus: stored?.patentStatus ?? null,
+              summary: listing?.summary ?? null,
+              abstract: listing?.abstract ?? null,
+              inventors: listing?.inventors ?? null,
+              patentStatus: listing?.patentStatus ?? null,
             });
             await db
               .update(ingestedAssets)

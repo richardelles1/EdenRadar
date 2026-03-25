@@ -53,7 +53,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
     (k): k is MeaningfulDim =>
       k in breakdown &&
       scoredDims.includes(k) &&
-      (breakdown as Record<string, number>)[k] > 0
+      (breakdown as unknown as Record<string, number>)[k] > 0
   );
 
   if (dims.length === 0) return badge;
@@ -71,7 +71,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
         </p>
         <div className="space-y-1.5">
           {dims.map((k) => {
-            const val = (breakdown as Record<string, number>)[k];
+            const val = (breakdown as unknown as Record<string, number>)[k];
             const { text: t, bg: b } = scoreColor(val);
             return (
               <div key={k} className="flex items-center gap-2">
