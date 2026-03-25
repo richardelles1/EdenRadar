@@ -5152,8 +5152,8 @@ function DispatchTab({ pw }: { pw: string }) {
                 className="w-full h-9 px-3 pr-40 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
                 data-testid="input-subject"
               />
-              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 60 ? "text-orange-500 font-semibold" : "text-muted-foreground"}`}>
-                {subject.length}/200 {subject.length > 60 ? "(long)" : ""}
+              <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 60 ? "text-red-500 font-semibold" : subject.length > 55 ? "text-orange-500 font-medium" : "text-muted-foreground"}`}>
+                {subject.length}/200 {subject.length > 60 ? "(too long)" : subject.length > 55 ? "(long)" : ""}
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
