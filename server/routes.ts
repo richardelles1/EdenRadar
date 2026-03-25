@@ -4954,9 +4954,14 @@ If multiple assets appear, return each as a separate array item.`;
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const hours = Math.max(1, Math.min(8760, Number(req.query.hours ?? 72)));
-      const institution = typeof req.query.institution === "string" && req.query.institution ? req.query.institution : undefined;
-      const modality = typeof req.query.modality === "string" && req.query.modality ? req.query.modality : undefined;
-      const assets = await storage.getNewDiscoveries(hours, { institution, modality });
+      const parseList = (val: unknown): string[] => {
+        if (typeof val === "string" && val) return val.split(",").map((s) => s.trim()).filter(Boolean);
+        if (Array.isArray(val)) return (val as string[]).filter((s) => typeof s === "string" && s);
+        return [];
+      };
+      const institutions = parseList(req.query.institutions);
+      const modalities = parseList(req.query.modalities);
+      const assets = await storage.getNewDiscoveries(hours, { institutions, modalities });
       return res.json({ assets, windowHours: hours });
     } catch (err: any) {
       console.error("[new-discoveries] Error:", err);
@@ -4980,14 +4985,17 @@ If multiple assets appear, return each as a separate array item.`;
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
 
       const assets = await storage.getNewDiscoveries(windowHours);
-      const selectedAssets = assetIds.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as typeof assets;
+      type DiscoveryRow = (typeof assets)[number];
+      const selectedAssets: DiscoveryRow[] = assetIds
+        .map((id) => assets.find((a) => a.id === id))
+        .filter((a): a is DiscoveryRow => a != null);
 
       const windowOptions: Record<number, string> = {
         24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
         168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
-      const html = renderDispatchEmail({ subject, assets: selectedAssets as any, windowLabel, isTest });
+      const html = renderDispatchEmail({ subject, assets: selectedAssets, windowLabel, isTest });
       return res.json({ html });
     } catch (err: any) {
       console.error("[dispatch/preview] Error:", err);
@@ -5014,14 +5022,17 @@ If multiple assets appear, return each as a separate array item.`;
 
       const { renderDispatchEmail } = await import("./lib/emailTemplate");
       const assets = await storage.getNewDiscoveries(windowHours);
-      const selectedAssets = assetIds.map((id) => assets.find((a) => a.id === id)).filter(Boolean) as typeof assets;
+      type DiscoveryRowSend = (typeof assets)[number];
+      const selectedAssets: DiscoveryRowSend[] = assetIds
+        .map((id) => assets.find((a) => a.id === id))
+        .filter((a): a is DiscoveryRowSend => a != null);
 
       const windowOptions: Record<number, string> = {
         24: "Last 24 hours", 48: "Last 48 hours", 72: "Last 72 hours",
         168: "Last 7 days", 336: "Last 14 days", 720: "Last 30 days",
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
-      const htmlBody = renderDispatchEmail({ subject, assets: selectedAssets as any, windowLabel, isTest });
+      const htmlBody = renderDispatchEmail({ subject, assets: selectedAssets, windowLabel, isTest });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {
@@ -5052,7 +5063,8 @@ If multiple assets appear, return each as a separate array item.`;
           subject,
           recipients,
           assetIds,
-          assetCount: assetIds.length,
+          assetNames: selectedAssets.map((a) => a.assetName),
+          assetCount: selectedAssets.length,
           windowHours,
           isTest: false,
         });

@@ -215,7 +215,7 @@ export interface IStorage {
   getManualInstitutions(): Promise<ManualInstitution[]>;
   createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
 
-  getNewDiscoveries(windowHours: number, filters?: { institution?: string; modality?: string }): Promise<Array<{
+  getNewDiscoveries(windowHours: number, filters?: { institutions?: string[]; modalities?: string[] }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
     modality: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
@@ -1604,7 +1604,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getNewDiscoveries(windowHours: number, filters?: { institution?: string; modality?: string }): Promise<Array<{
+  async getNewDiscoveries(windowHours: number, filters?: { institutions?: string[]; modalities?: string[] }): Promise<Array<{
     id: number; assetName: string; institution: string; indication: string;
     modality: string; developmentStage: string; summary: string | null;
     sourceUrl: string | null; firstSeenAt: Date; previouslySent: boolean;
@@ -1614,11 +1614,12 @@ export class DatabaseStorage implements IStorage {
       eq(ingestedAssets.relevant, true) as any,
       gte(ingestedAssets.firstSeenAt, cutoff) as any,
     ];
-    if (filters?.institution) {
-      conditions.push(ilike(ingestedAssets.institution, `%${filters.institution}%`) as any);
+    if (filters?.institutions && filters.institutions.length > 0) {
+      const instConds = filters.institutions.map((inst) => ilike(ingestedAssets.institution, `%${inst}%`));
+      conditions.push(or(...instConds) as any);
     }
-    if (filters?.modality) {
-      conditions.push(eq(ingestedAssets.modality, filters.modality) as any);
+    if (filters?.modalities && filters.modalities.length > 0) {
+      conditions.push(inArray(ingestedAssets.modality, filters.modalities) as any);
     }
     const rows = await db
       .select({

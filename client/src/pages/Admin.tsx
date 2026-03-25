@@ -4628,6 +4628,7 @@ type DispatchLogEntry = {
   subject: string;
   recipients: string[];
   assetIds: number[];
+  assetNames: string[];
   assetCount: number;
   windowHours: number;
   isTest: boolean;
@@ -4657,9 +4658,15 @@ function assetAge(isoDate: string): string {
 function DispatchTab({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [windowHours, setWindowHours] = useState(72);
-  const [filterInstitution, setFilterInstitution] = useState("");
-  const [filterModality, setFilterModality] = useState("");
+  const [filterInstitutions, setFilterInstitutions] = useState<string[]>([]);
+  const [filterModalities, setFilterModalities] = useState<string[]>([]);
   const [filterSearch, setFilterSearch] = useState("");
+  const [instDropOpen, setInstDropOpen] = useState(false);
+  const [modalDropOpen, setModalDropOpen] = useState(false);
+  const [dragOverDigest, setDragOverDigest] = useState(false);
+  const [dragDigestIdx, setDragDigestIdx] = useState<number | null>(null);
+  const [previewAutoLoading, setPreviewAutoLoading] = useState(false);
+  const [historyExpandedId, setHistoryExpandedId] = useState<number | null>(null);
   const [digestAssets, setDigestAssets] = useState<DiscoveryAsset[]>([]);
   const [subject, setSubject] = useState(`EdenRadar TTO Digest - ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}`);
   const [recipients, setRecipients] = useState<string[]>([]);
@@ -4682,11 +4689,11 @@ function DispatchTab({ pw }: { pw: string }) {
   ];
 
   const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
-    queryKey: ["/api/admin/new-discoveries", windowHours, filterInstitution, filterModality],
+    queryKey: ["/api/admin/new-discoveries", windowHours, filterInstitutions, filterModalities],
     queryFn: async () => {
       const params = new URLSearchParams({ hours: String(windowHours) });
-      if (filterInstitution) params.set("institution", filterInstitution);
-      if (filterModality) params.set("modality", filterModality);
+      if (filterInstitutions.length > 0) params.set("institutions", filterInstitutions.join(","));
+      if (filterModalities.length > 0) params.set("modalities", filterModalities.join(","));
       const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { "x-admin-password": pw } });
       if (!r.ok) throw new Error("Failed to load discoveries");
       return r.json();
@@ -4750,6 +4757,75 @@ function DispatchTab({ pw }: { pw: string }) {
 
   const institutionOptions = Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
   const modalityOptions = Array.from(new Set(allAssets.map((a) => a.modality).filter((m) => m && m !== "unknown"))).sort();
+
+  useEffect(() => {
+    if (digestAssets.length === 0) return;
+    const timer = setTimeout(async () => {
+      setPreviewAutoLoading(true);
+      try {
+        const r = await fetch("/api/admin/dispatch/preview", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-admin-password": pw },
+          body: JSON.stringify({ subject, assetIds: digestAssets.map((a) => a.id), windowHours, isTest: false }),
+        });
+        if (!r.ok) return;
+        const { html } = await r.json();
+        setPreviewHtml(html);
+        setShowInlinePreview(true);
+      } catch {
+      } finally {
+        setPreviewAutoLoading(false);
+      }
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [digestAssets, subject, windowHours]);
+
+  function insertSubjectToken(token: string) {
+    const input = document.querySelector<HTMLInputElement>("[data-testid='input-subject']");
+    if (!input) { setSubject((s) => (s + token).slice(0, 200)); return; }
+    const start = input.selectionStart ?? subject.length;
+    const end = input.selectionEnd ?? subject.length;
+    const next = (subject.slice(0, start) + token + subject.slice(end)).slice(0, 200);
+    setSubject(next);
+    setTimeout(() => { input.focus(); input.setSelectionRange(start + token.length, start + token.length); }, 0);
+  }
+
+  function handleDiscoveryDragStart(e: React.DragEvent, asset: DiscoveryAsset) {
+    e.dataTransfer.setData("discovery-id", String(asset.id));
+    e.dataTransfer.effectAllowed = "copy";
+  }
+  function handleDigestDragStart(e: React.DragEvent, idx: number) {
+    e.dataTransfer.setData("digest-idx", String(idx));
+    e.dataTransfer.effectAllowed = "move";
+    setDragDigestIdx(idx);
+  }
+  function handleDigestDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOverDigest(false);
+    const discoveryId = e.dataTransfer.getData("discovery-id");
+    const fromIdxStr = e.dataTransfer.getData("digest-idx");
+    if (discoveryId) {
+      const id = Number(discoveryId);
+      const asset = allAssets.find((a) => a.id === id);
+      if (asset && !digestIds.has(id)) setDigestAssets((prev) => [...prev, asset]);
+    } else if (fromIdxStr !== "") {
+      const fromIdx = Number(fromIdxStr);
+      const toIdx = dragDigestIdx !== null ? dragDigestIdx : digestAssets.length - 1;
+      if (fromIdx !== toIdx) {
+        setDigestAssets((prev) => {
+          const arr = [...prev];
+          const [moved] = arr.splice(fromIdx, 1);
+          arr.splice(toIdx, 0, moved);
+          return arr;
+        });
+      }
+    }
+    setDragDigestIdx(null);
+  }
+  function handleDigestItemDragOver(e: React.DragEvent, idx: number) {
+    e.preventDefault();
+    setDragDigestIdx(idx);
+  }
 
   function addToDigest(asset: DiscoveryAsset) {
     setDigestAssets((prev) => [...prev, asset]);
@@ -4915,26 +4991,69 @@ function DispatchTab({ pw }: { pw: string }) {
             />
 
             <div className="flex gap-2">
-              <Select value={filterModality || "__all__"} onValueChange={(v) => setFilterModality(v === "__all__" ? "" : v)}>
-                <SelectTrigger className="h-7 text-xs flex-1" data-testid="select-filter-modality">
-                  <SelectValue placeholder="Modality" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">All modalities</SelectItem>
-                  {modalityOptions.map((m) => (
-                    <SelectItem key={m} value={m}>{m.charAt(0).toUpperCase() + m.slice(1)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {filterInstitution && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[11px] text-muted-foreground">Institution:</span>
-                <span className="text-[11px] bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">{filterInstitution}</span>
-                <button onClick={() => setFilterInstitution("")} className="text-muted-foreground hover:text-foreground" data-testid="button-clear-institution-filter">
-                  <X className="h-3 w-3" />
+              {/* Institution multi-select */}
+              <div className="relative flex-1">
+                <button
+                  onClick={() => { setInstDropOpen((o) => !o); setModalDropOpen(false); }}
+                  className={`w-full h-7 px-2.5 text-xs border rounded-md bg-background text-left flex items-center justify-between gap-1 ${filterInstitutions.length > 0 ? "border-primary/50 text-primary" : "border-border text-muted-foreground"}`}
+                  data-testid="button-filter-institutions"
+                >
+                  <span className="truncate">{filterInstitutions.length > 0 ? `Inst (${filterInstitutions.length})` : "Institution"}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0" />
                 </button>
+                {instDropOpen && institutionOptions.length > 0 && (
+                  <div className="absolute z-30 top-8 left-0 w-56 bg-popover border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="p-1">
+                      <button onClick={() => setFilterInstitutions([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded" data-testid="button-clear-inst-filter">Clear all</button>
+                      {institutionOptions.map((inst) => (
+                        <label key={inst} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
+                          <input type="checkbox" checked={filterInstitutions.includes(inst)} onChange={() => setFilterInstitutions((prev) => prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst])} className="h-3 w-3 accent-primary" />
+                          <span className="text-xs text-foreground truncate">{inst}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Modality multi-select */}
+              <div className="relative flex-1">
+                <button
+                  onClick={() => { setModalDropOpen((o) => !o); setInstDropOpen(false); }}
+                  className={`w-full h-7 px-2.5 text-xs border rounded-md bg-background text-left flex items-center justify-between gap-1 ${filterModalities.length > 0 ? "border-primary/50 text-primary" : "border-border text-muted-foreground"}`}
+                  data-testid="button-filter-modalities"
+                >
+                  <span className="truncate">{filterModalities.length > 0 ? `Mod (${filterModalities.length})` : "Modality"}</span>
+                  <ChevronDown className="h-3 w-3 shrink-0" />
+                </button>
+                {modalDropOpen && modalityOptions.length > 0 && (
+                  <div className="absolute z-30 top-8 left-0 w-48 bg-popover border border-border rounded-lg shadow-lg max-h-52 overflow-y-auto">
+                    <div className="p-1">
+                      <button onClick={() => setFilterModalities([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded">Clear all</button>
+                      {modalityOptions.map((m) => (
+                        <label key={m} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
+                          <input type="checkbox" checked={filterModalities.includes(m)} onChange={() => setFilterModalities((prev) => prev.includes(m) ? prev.filter((x) => x !== m) : [...prev, m])} className="h-3 w-3 accent-primary" />
+                          <span className="text-xs text-foreground">{m.charAt(0).toUpperCase() + m.slice(1)}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            {(filterInstitutions.length > 0 || filterModalities.length > 0) && (
+              <div className="flex flex-wrap gap-1">
+                {filterInstitutions.map((inst) => (
+                  <span key={inst} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[10px] font-medium">
+                    {inst.length > 18 ? inst.slice(0, 18) + "…" : inst}
+                    <button onClick={() => setFilterInstitutions((p) => p.filter((i) => i !== inst))} className="ml-0.5 text-primary/60 hover:text-primary"><X className="h-2.5 w-2.5" /></button>
+                  </span>
+                ))}
+                {filterModalities.map((m) => (
+                  <span key={m} className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-[10px] font-medium">
+                    {m}
+                    <button onClick={() => setFilterModalities((p) => p.filter((x) => x !== m))} className="ml-0.5 text-violet-500 hover:text-violet-700"><X className="h-2.5 w-2.5" /></button>
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -4953,13 +5072,19 @@ function DispatchTab({ pw }: { pw: string }) {
                 </div>
               )}
               {filteredAssets.map((asset) => (
-                <div key={asset.id} className="p-3 hover:bg-muted/40 transition-colors group" data-testid={`card-discovery-${asset.id}`}>
+                <div
+                  key={asset.id}
+                  draggable
+                  onDragStart={(e) => handleDiscoveryDragStart(e, asset)}
+                  className="p-3 hover:bg-muted/40 transition-colors group cursor-grab active:cursor-grabbing"
+                  data-testid={`card-discovery-${asset.id}`}
+                >
                   <div className="flex items-start gap-2">
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <button
-                          onClick={() => setFilterInstitution(asset.institution)}
+                          onClick={() => setFilterInstitutions((p) => p.includes(asset.institution) ? p : [...p, asset.institution])}
                           className="text-[10px] text-muted-foreground hover:text-primary truncate"
                         >
                           {asset.institution}
@@ -4979,7 +5104,7 @@ function DispatchTab({ pw }: { pw: string }) {
                       onClick={() => addToDigest(asset)}
                       className="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all"
                       data-testid={`button-add-asset-${asset.id}`}
-                      title="Add to digest"
+                      title="Add to digest (or drag)"
                     >
                       <Plus className="h-3.5 w-3.5" />
                     </button>
@@ -5002,12 +5127,30 @@ function DispatchTab({ pw }: { pw: string }) {
                 value={subject}
                 onChange={(e) => setSubject(e.target.value.slice(0, 200))}
                 maxLength={200}
-                className="w-full h-9 px-3 pr-16 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                className="w-full h-9 px-3 pr-40 text-sm border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
                 data-testid="input-subject"
               />
               <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 60 ? "text-orange-500 font-semibold" : "text-muted-foreground"}`}>
-                {subject.length}/200 {subject.length > 60 && subject.length <= 200 ? "(long for email)" : ""}
+                {subject.length}/200 {subject.length > 60 ? "(long)" : ""}
               </span>
+            </div>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-muted-foreground">Insert token:</span>
+              {[
+                { label: "{date}", value: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) },
+                { label: "{count}", value: String(digestAssets.length || 0) },
+                { label: "{institution}", value: digestAssets[0]?.institution ?? "Institution" },
+              ].map(({ label, value }) => (
+                <button
+                  key={label}
+                  onClick={() => insertSubjectToken(value)}
+                  className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors font-mono"
+                  data-testid={`button-token-${label.replace(/[{}]/g, "")}`}
+                  title={`Insert: ${value}`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -5070,54 +5213,68 @@ function DispatchTab({ pw }: { pw: string }) {
               )}
             </div>
 
-            {digestAssets.length === 0 ? (
-              <div className="p-8 text-center text-sm text-muted-foreground">
-                <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
-                <p>Click the + button on any discovery to add it here.</p>
-              </div>
-            ) : (
-              <div className="divide-y divide-border">
-                {digestAssets.map((asset, i) => (
-                  <div key={asset.id} className="flex items-start gap-3 px-4 py-3 hover:bg-muted/30 transition-colors" data-testid={`digest-item-${asset.id}`}>
-                    <div className="flex flex-col gap-0.5 pt-0.5">
-                      <button onClick={() => moveUp(i)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-up-${asset.id}`}>
-                        <ArrowUp className="h-3 w-3" />
-                      </button>
-                      <button onClick={() => moveDown(i)} disabled={i === digestAssets.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-down-${asset.id}`}>
-                        <ArrowDown className="h-3 w-3" />
-                      </button>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">{asset.assetName}</p>
-                      <p className="text-xs text-muted-foreground truncate">{asset.institution}</p>
-                      <div className="mt-1 flex gap-1.5 flex-wrap">
-                        <StagePill stage={asset.developmentStage} />
-                        {asset.modality && asset.modality !== "unknown" && (
-                          <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-2 py-0.5 rounded-full">
-                            {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
-                          </span>
-                        )}
-                        {asset.previouslySent && (
-                          <span className="text-[9px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-semibold">
-                            Previously sent
-                          </span>
+            <div
+              onDragOver={(e) => { e.preventDefault(); setDragOverDigest(true); }}
+              onDragLeave={() => setDragOverDigest(false)}
+              onDrop={handleDigestDrop}
+              className={`min-h-[80px] transition-colors ${dragOverDigest ? "bg-primary/5 ring-2 ring-primary/20 ring-inset" : ""}`}
+            >
+              {digestAssets.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted-foreground">
+                  <Send className="h-8 w-8 mx-auto mb-2 opacity-20" />
+                  <p>Drag discoveries here, or click the + button to add.</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {digestAssets.map((asset, i) => (
+                    <div
+                      key={asset.id}
+                      draggable
+                      onDragStart={(e) => handleDigestDragStart(e, i)}
+                      onDragOver={(e) => handleDigestItemDragOver(e, i)}
+                      className={`flex items-start gap-3 px-4 py-3 transition-colors cursor-grab active:cursor-grabbing ${dragDigestIdx === i ? "bg-primary/5" : "hover:bg-muted/30"}`}
+                      data-testid={`digest-item-${asset.id}`}
+                    >
+                      <div className="flex flex-col gap-0.5 pt-0.5 text-muted-foreground/40">
+                        <ArrowUp className="h-2.5 w-2.5" />
+                        <ArrowDown className="h-2.5 w-2.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{asset.assetName}</p>
+                        <p className="text-xs text-muted-foreground truncate">{asset.institution}</p>
+                        <div className="mt-1 flex gap-1.5 flex-wrap">
+                          <StagePill stage={asset.developmentStage} />
+                          {asset.modality && asset.modality !== "unknown" && (
+                            <span className="text-[10px] bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400 px-2 py-0.5 rounded-full">
+                              {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
+                            </span>
+                          )}
+                          {asset.previouslySent && (
+                            <span className="text-[9px] bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 px-1.5 py-0.5 rounded-full font-semibold">
+                              Previously sent
+                            </span>
+                          )}
+                        </div>
+                        {asset.summary && (
+                          <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{asset.summary}</p>
                         )}
                       </div>
-                      {asset.summary && (
-                        <p className="text-xs text-muted-foreground mt-1.5 line-clamp-2">{asset.summary}</p>
-                      )}
+                      <div className="flex items-center gap-1 shrink-0 mt-0.5">
+                        <button onClick={() => moveUp(i)} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-up-${asset.id}`} title="Move up">
+                          <ArrowUp className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => moveDown(i)} disabled={i === digestAssets.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-20" data-testid={`button-move-down-${asset.id}`} title="Move down">
+                          <ArrowDown className="h-3 w-3" />
+                        </button>
+                        <button onClick={() => removeFromDigest(asset.id)} className="text-muted-foreground hover:text-destructive transition-colors" data-testid={`button-remove-digest-${asset.id}`} title="Remove">
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      onClick={() => removeFromDigest(asset.id)}
-                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors mt-0.5"
-                      data-testid={`button-remove-digest-${asset.id}`}
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Action Bar */}
@@ -5130,8 +5287,8 @@ function DispatchTab({ pw }: { pw: string }) {
               className="gap-1.5"
               data-testid="button-generate-preview"
             >
-              {previewLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
-              Preview Email
+              {(previewLoading || previewAutoLoading) ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+              {showInlinePreview ? "Refresh Preview" : "Preview Email"}
             </Button>
             <Button
               variant="outline"
@@ -5253,23 +5410,53 @@ function DispatchTab({ pw }: { pw: string }) {
             {historyQuery.data?.history.length === 0 && (
               <div className="p-6 text-center text-sm text-muted-foreground">No dispatches sent yet.</div>
             )}
-            {(historyQuery.data?.history ?? []).map((log) => (
-              <div key={log.id} className="flex items-start justify-between gap-4 px-4 py-3 border-b border-border last:border-b-0 hover:bg-muted/30" data-testid={`history-row-${log.id}`}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-foreground truncate">{log.subject}</p>
-                    {log.isTest && (
-                      <span className="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-semibold">TEST</span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {log.assetCount} asset{log.assetCount !== 1 ? "s" : ""} &bull; {log.recipients.length} recipient{log.recipients.length !== 1 ? "s" : ""} &bull; {log.windowHours}h window
-                  </p>
-                  <p className="text-[11px] text-muted-foreground/70 mt-0.5 truncate">{log.recipients.join(", ")}</p>
+            {(historyQuery.data?.history ?? []).map((log) => {
+              const isExpanded = historyExpandedId === log.id;
+              return (
+                <div key={log.id} className="border-b border-border last:border-b-0" data-testid={`history-row-${log.id}`}>
+                  <button
+                    onClick={() => setHistoryExpandedId(isExpanded ? null : log.id)}
+                    className="w-full flex items-start justify-between gap-4 px-4 py-3 hover:bg-muted/30 text-left"
+                    data-testid={`button-expand-history-${log.id}`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-medium text-foreground truncate">{log.subject}</p>
+                        {log.isTest && (
+                          <span className="text-[10px] bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400 px-2 py-0.5 rounded-full font-semibold">TEST</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {log.assetCount} asset{log.assetCount !== 1 ? "s" : ""} &bull; {log.recipients.length} recipient{log.recipients.length !== 1 ? "s" : ""} &bull; {log.windowHours}h window
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-muted-foreground">{timeAgo(log.sentAt)}</span>
+                      {isExpanded ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-4 pb-3 pt-0 space-y-1.5 bg-muted/20">
+                      <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Recipients</p>
+                      <p className="text-xs text-muted-foreground">{log.recipients.join(", ")}</p>
+                      {(log.assetNames ?? []).length > 0 && (
+                        <>
+                          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide mt-2">Assets included</p>
+                          <ul className="space-y-0.5">
+                            {(log.assetNames ?? []).map((name, idx) => (
+                              <li key={idx} className="text-xs text-foreground flex items-center gap-1.5">
+                                <span className="h-1 w-1 rounded-full bg-primary/60 shrink-0" />
+                                {name}
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <span className="text-[11px] text-muted-foreground shrink-0">{timeAgo(log.sentAt)}</span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

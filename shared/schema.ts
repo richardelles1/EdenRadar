@@ -565,6 +565,7 @@ export const dispatchLogs = pgTable("dispatch_logs", {
   subject: text("subject").notNull(),
   recipients: text("recipients").array().notNull().default(sql`'{}'::text[]`),
   assetIds: integer("asset_ids").array().notNull().default(sql`'{}'::integer[]`),
+  assetNames: text("asset_names").array().notNull().default(sql`'{}'::text[]`),
   assetCount: integer("asset_count").notNull().default(0),
   windowHours: integer("window_hours").notNull().default(72),
   isTest: boolean("is_test").notNull().default(false),
