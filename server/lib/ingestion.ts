@@ -214,6 +214,10 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 // Playwright scrapers require full exclusivity (activeSyncs.size === 0).
 // HTTP/API scrapers allow up to MAX_HTTP_CONCURRENT concurrent instances.
 
+/** Maximum number of concurrent HTTP/API syncs. Used by both the lock here and
+ * the scheduler's dispatch loop — export ensures a single source of truth. */
+export const MAX_HTTP_CONCURRENT = 2;
+
 const activeSyncs: Map<string, "playwright" | "http" | "api"> = new Map();
 
 function hasPlaywrightSync(): boolean {
@@ -244,7 +248,7 @@ export function tryAcquireSyncLock(institution: string, scraperType: "playwright
     if (activeSyncs.size > 0) return false;
   } else {
     if (hasPlaywrightSync()) return false;
-    if (activeSyncs.size >= 2) return false;
+    if (activeSyncs.size >= MAX_HTTP_CONCURRENT) return false;
   }
 
   activeSyncs.set(institution, scraperType);
@@ -267,10 +271,15 @@ const TIMEOUT_BY_TYPE: Record<string, number> = {
 const SCRAPE_RETRY_DELAY_MS = 15_000;
 const SCRAPE_MAX_ATTEMPTS = 2;
 
+/** DB/infra error patterns that should never trigger a scrape retry.
+ * These originate from the pg pool or auth layer, not from the target site. */
+const DB_INFRA_PATTERNS = ["pool", "during authentication", "client checkout timed out", "pg:", "postgres"];
+
 /** Returns true if a scrape error is likely transient (network/timeout) and worth retrying.
- * Deterministic failures (auth/403/parsing/selector bugs) are NOT retried. */
+ * Deterministic failures (auth/403/parsing/selector bugs) and DB infra errors are NOT retried. */
 function isScrapeRetryable(msg: string): boolean {
   const m = msg.toLowerCase();
+  if (DB_INFRA_PATTERNS.some((p) => m.includes(p))) return false;
   return (
     m.includes("timeout") ||
     m.includes("timed out") ||

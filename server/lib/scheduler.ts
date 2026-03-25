@@ -1,5 +1,5 @@
 import { ALL_SCRAPERS, getScraperTier } from "./scrapers/index";
-import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs } from "./ingestion";
+import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs, MAX_HTTP_CONCURRENT } from "./ingestion";
 import {
   saveSchedulerState,
   loadSchedulerState,
@@ -9,7 +9,6 @@ import {
 } from "./scraperState";
 import { storage } from "../storage";
 
-const MAX_HTTP_CONCURRENT = 2;
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
 const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
 
