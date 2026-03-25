@@ -50,7 +50,6 @@ import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
 import Login from "@/pages/Login";
-import { EdenNXSplash } from "@/components/EdenNXSplash";
 import { useEffect } from "react";
 
 function ThemeInit() {
@@ -252,7 +251,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <EdenNXSplash />
           <ThemeInit />
           <Toaster />
           <SiteGate>

@@ -282,12 +282,8 @@ function PricingCards() {
                 className="w-full font-semibold h-10 text-sm"
                 onClick={() => navigate("/login")}
                 data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
-                style={
-                  tier.popular
-                    ? { background: tier.color, color: "white", border: "none" }
-                    : {}
-                }
-                variant={tier.popular ? "default" : "outline"}
+                style={{ background: tier.color, color: "white", border: "none" }}
+                variant="default"
               >
                 Get Started
                 <ChevronRight className="w-3.5 h-3.5 ml-1" />
