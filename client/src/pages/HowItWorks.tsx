@@ -64,6 +64,8 @@ const TIERS = [
     borderColor: "hsl(38 92% 50% / 0.3)",
     headerBg: "hsl(38 92% 50%)",
     price: "$19.99",
+    yearlyPrice: "$18.99",
+    yearlySavings: "$12",
     period: "/mo",
     tagline: "Ideal for early discovery and concept validation",
     popular: false,
@@ -84,6 +86,8 @@ const TIERS = [
     borderColor: "hsl(265 60% 60% / 0.3)",
     headerBg: "hsl(265 60% 60%)",
     price: "$29.99",
+    yearlyPrice: "$28.49",
+    yearlySavings: "$18",
     period: "/mo",
     tagline: "For research teams and active deal flow exploration",
     popular: true,
@@ -105,6 +109,8 @@ const TIERS = [
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
     price: "$299",
+    yearlyPrice: "$284.05",
+    yearlySavings: "$179",
     period: "/mo",
     tagline: "Full platform access for serious BD teams",
     popular: false,
@@ -125,98 +131,162 @@ const TIERS = [
 
 function PricingCards() {
   const [, navigate] = useLocation();
+  const [isYearly, setIsYearly] = useState(false);
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-5 mt-12">
-      {TIERS.map((tier) => (
-        <div
-          key={tier.name}
-          className="rounded-2xl flex flex-col overflow-hidden relative"
-          style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+    <div className="mt-12">
+      {/* Billing toggle */}
+      <div className="flex items-center justify-center gap-3 mb-8">
+        <span
+          className="text-sm font-medium"
+          style={{ color: isYearly ? "hsl(var(--muted-foreground))" : "hsl(var(--foreground))" }}
         >
-          {tier.popular && (
-            <div
-              className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
-              style={{ background: tier.color.replace(")", " / 0.15)"), color: tier.color }}
-            >
-              Most Popular
-            </div>
-          )}
-
-          {/* Colored header */}
-          <div
-            className="px-6 py-5"
-            style={{ background: tier.headerBg }}
+          Monthly
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isYearly}
+          data-testid="pricing-billing-toggle"
+          onClick={() => setIsYearly((v) => !v)}
+          className="relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none"
+          style={{ background: isYearly ? "hsl(142 65% 48%)" : "hsl(var(--muted))" }}
+        >
+          <span
+            className="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+            style={{ transform: isYearly ? "translateX(20px)" : "translateX(0px)" }}
+          />
+        </button>
+        <span
+          className="text-sm font-medium flex items-center gap-1.5"
+          style={{ color: isYearly ? "hsl(var(--foreground))" : "hsl(var(--muted-foreground))" }}
+        >
+          Yearly
+          <span
+            className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+            style={{ background: "hsl(142 65% 48% / 0.12)", color: "hsl(142 52% 36%)" }}
           >
-            <div className="flex items-center gap-3 mb-3">
+            Save 5%
+          </span>
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+        {TIERS.map((tier) => (
+          <div
+            key={tier.name}
+            className="rounded-2xl flex flex-col overflow-hidden relative"
+            style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+          >
+            {tier.popular && (
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center"
-                style={{ background: "rgba(255,255,255,0.2)" }}
+                className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+                style={{ background: tier.color.replace(")", " / 0.15)"), color: tier.color }}
               >
-                <tier.icon className="w-4 h-4 text-white" />
+                Most Popular
               </div>
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-                  {tier.tier}
-                </p>
-                <h3 className="text-base font-bold text-white leading-tight">{tier.name}</h3>
-              </div>
-            </div>
-            <div className="flex items-baseline gap-1 mb-1">
-              <span className="text-3xl font-black text-white">{tier.price}</span>
-              <span className="text-sm text-white/70">{tier.period}</span>
-            </div>
-            <p className="text-xs text-white/75 leading-snug">{tier.tagline}</p>
-          </div>
+            )}
 
-          {/* Per-tier feature checklist */}
-          <div className="flex-1 px-6 py-4 bg-card">
-            <ul className="space-y-2.5">
-              {tier.features.map((feature, fi) => {
-                const isEscalator = feature.startsWith("Everything in");
-                return (
-                  <li key={fi} className="flex items-start gap-2.5 text-xs">
-                    <span
-                      className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                      style={{
-                        background: isEscalator
-                          ? "hsl(var(--muted))"
-                          : tier.color.replace(")", " / 0.15)"),
-                      }}
-                    >
-                      {isEscalator ? (
-                        <ChevronRight className="w-2.5 h-2.5 text-muted-foreground" />
-                      ) : (
-                        <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
-                      )}
-                    </span>
-                    <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
-                      {feature}
-                    </span>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {/* CTA */}
-          <div className="px-6 py-5 bg-card border-t border-border">
-            <Button
-              className="w-full font-semibold h-10 text-sm"
-              onClick={() => navigate("/login")}
-              data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
-              style={
-                tier.popular
-                  ? { background: tier.color, color: "white", border: "none" }
-                  : {}
-              }
-              variant={tier.popular ? "default" : "outline"}
+            {/* Colored header */}
+            <div
+              className="px-6 py-5"
+              style={{ background: tier.headerBg }}
             >
-              Get Started
-              <ChevronRight className="w-3.5 h-3.5 ml-1" />
-            </Button>
+              <div className="flex items-center gap-3 mb-3">
+                <div
+                  className="w-9 h-9 rounded-lg flex items-center justify-center"
+                  style={{ background: "rgba(255,255,255,0.2)" }}
+                >
+                  <tier.icon className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
+                    {tier.tier}
+                  </p>
+                  <h3 className="text-base font-bold text-white leading-tight">{tier.name}</h3>
+                </div>
+              </div>
+
+              {/* Price block */}
+              <div className="mb-1">
+                {isYearly ? (
+                  <>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-3xl font-black text-white">{tier.yearlyPrice}</span>
+                      <span className="text-sm text-white/70">/mo</span>
+                      <span className="text-sm text-white/50 line-through">{tier.price}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      <span
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                        style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
+                      >
+                        Save {tier.yearlySavings}/yr
+                      </span>
+                      <span className="text-[10px] text-white/60">billed annually</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-white">{tier.price}</span>
+                    <span className="text-sm text-white/70">{tier.period}</span>
+                  </div>
+                )}
+              </div>
+
+              <p className="text-xs text-white/75 leading-snug mt-1">{tier.tagline}</p>
+            </div>
+
+            {/* Per-tier feature checklist */}
+            <div className="flex-1 px-6 py-4 bg-card">
+              <ul className="space-y-2.5">
+                {tier.features.map((feature, fi) => {
+                  const isEscalator = feature.startsWith("Everything in");
+                  return (
+                    <li key={fi} className="flex items-start gap-2.5 text-xs">
+                      <span
+                        className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
+                        style={{
+                          background: isEscalator
+                            ? "hsl(var(--muted))"
+                            : tier.color.replace(")", " / 0.15)"),
+                        }}
+                      >
+                        {isEscalator ? (
+                          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground" />
+                        ) : (
+                          <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
+                        )}
+                      </span>
+                      <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
+                        {feature}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {/* CTA */}
+            <div className="px-6 py-5 bg-card border-t border-border">
+              <Button
+                className="w-full font-semibold h-10 text-sm"
+                onClick={() => navigate("/login")}
+                data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
+                style={
+                  tier.popular
+                    ? { background: tier.color, color: "white", border: "none" }
+                    : {}
+                }
+                variant={tier.popular ? "default" : "outline"}
+              >
+                Get Started
+                <ChevronRight className="w-3.5 h-3.5 ml-1" />
+              </Button>
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 }

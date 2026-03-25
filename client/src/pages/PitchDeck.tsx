@@ -1253,12 +1253,12 @@ function ContactSlide({ colors }: { colors: Colors }) {
           <div className="rounded-xl p-4 sm:p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
             <p className="text-sm font-bold mb-0.5" style={{ color: colors.text }}>Wafick Mohamed</p>
             <p className="text-xs mb-1.5" style={{ color: colors.textMuted }}>Co-Founder & CEO</p>
-            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>w.mohamed@edenradar.com</p>
+            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>wmohamed@edennx.com</p>
           </div>
           <div className="rounded-xl p-4 sm:p-5" style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}>
             <p className="text-sm font-bold mb-0.5" style={{ color: colors.text }}>Richard Elles</p>
             <p className="text-xs mb-1.5" style={{ color: colors.textMuted }}>Co-Founder & COO</p>
-            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>r.elles@edenradar.com</p>
+            <p className="text-xs font-medium break-all" style={{ color: colors.accent }}>relles@edennx.com</p>
           </div>
         </div>
       </div>
