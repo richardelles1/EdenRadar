@@ -5153,7 +5153,7 @@ function DispatchTab({ pw }: { pw: string }) {
                 data-testid="input-subject"
               />
               <span className={`absolute right-3 top-1/2 -translate-y-1/2 text-[10px] ${subject.length > 60 ? "text-red-500 font-semibold" : subject.length > 55 ? "text-orange-500 font-medium" : "text-muted-foreground"}`}>
-                {subject.length}/200 {subject.length > 60 ? "(too long)" : subject.length > 55 ? "(long)" : ""}
+                {subject.length}/200 {subject.length > 60 ? "(clients may truncate)" : subject.length > 55 ? "(approaching 60-char limit)" : ""}
               </span>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
