@@ -128,6 +128,7 @@ interface SchedulerStatus {
   estimatedRemainingMs: number | null;
   lastCycleCompletedAt: string | null;
   concurrentSyncs: number;
+  currentTier: 1 | 2 | 3 | 4 | null;
 }
 
 interface ActiveSearchRow {
@@ -1078,6 +1079,16 @@ function DataHealth({ pw }: { pw: string }) {
               {schedPaused && (
                 <span className="text-[11px] text-amber-600/70 hidden sm:inline">{sched.queuePosition}/{sched.queueTotal}</span>
               )}
+              {schedRunning && sched.currentTier != null && (
+                <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                  sched.currentTier === 1 ? "text-sky-600 border-sky-500/30 bg-sky-500/8" :
+                  sched.currentTier === 2 ? "text-violet-600 border-violet-500/30 bg-violet-500/8" :
+                  sched.currentTier === 3 ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/8" :
+                  "text-orange-600 border-orange-500/30 bg-orange-500/8"
+                }`}>
+                  T{sched.currentTier}
+                </span>
+              )}
               {schedRunning && (sched.currentInstitutions ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1 min-w-0">
                   {(sched.currentInstitutions ?? [sched.currentInstitution]).filter(Boolean).map((inst) => (
@@ -1336,13 +1347,16 @@ function DataHealth({ pw }: { pw: string }) {
                             <div className="flex items-center gap-1.5">
                               <span className="truncate">{row.institution}</span>
                               {row.tier === 1 && (
-                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-sky-600 border-sky-500/30 bg-sky-500/5" title="Tier 1: API/RSS">T1</Badge>
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-sky-600 border-sky-500/30 bg-sky-500/5" title="Tier 1: API/RSS — fastest">T1</Badge>
                               )}
                               {row.tier === 2 && (
-                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-violet-600 border-violet-500/30 bg-violet-500/5" title="Tier 2: Platform factory">T2</Badge>
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-violet-600 border-violet-500/30 bg-violet-500/5" title="Tier 2: Platform factory (TechPublisher/Flintbox)">T2</Badge>
+                              )}
+                              {row.tier === 3 && (
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-emerald-600 border-emerald-500/30 bg-emerald-500/5" title="Tier 3: Custom bespoke HTML">T3</Badge>
                               )}
                               {row.tier === 4 && (
-                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-orange-600 border-orange-500/30 bg-orange-500/5" title="Tier 4: Playwright">T4</Badge>
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-orange-600 border-orange-500/30 bg-orange-500/5" title="Tier 4: Playwright (headless browser)">T4</Badge>
                               )}
                               {row.consecutiveFailures >= 3 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-red-500 border-red-500/30 bg-red-500/5" data-testid={`badge-needs-attention-${instSlug}`}>

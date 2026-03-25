@@ -1293,6 +1293,9 @@ export async function registerRoutes(
 
       const STALE_THRESHOLD_MS = 10 * 60 * 1000;
       const now = Date.now();
+      // Live active syncs — cross-reference against DB session health so the
+      // "syncing" status is always accurate regardless of DB session heartbeat lag.
+      const liveActiveSyncs = new Set(getActiveSyncs());
 
       const rows = allInstitutionNames.map((name) => {
         const dbRow = instMap.get(name);
@@ -1311,7 +1314,11 @@ export async function registerRoutes(
         }
 
         let health: "ok" | "degraded" | "failing" | "stale" | "syncing" | "never";
-        if (!session) {
+        // Live lock takes precedence: if ingestion is actively holding a lock for this
+        // institution, it's definitively "syncing" regardless of DB session state.
+        if (liveActiveSyncs.has(name)) {
+          health = "syncing";
+        } else if (!session) {
           health = "never";
         } else if (session.status === "running") {
           const heartbeat = session.lastRefreshedAt ?? session.createdAt;
