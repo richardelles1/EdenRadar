@@ -1085,6 +1085,9 @@ export class DatabaseStorage implements IStorage {
       licensingReadiness: data.licensingReadiness,
       completenessScore: data.completenessScore,
       enrichedAt: new Date(), // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+      // Clear stale dedupe embedding — target/indication changed so the vector must be refreshed
+      // on the next nearDuplicateDetection scan to avoid false-negative dedup comparisons.
+      dedupeEmbedding: null,
     }).where(eq(ingestedAssets.id, id));
   }
 
@@ -1115,6 +1118,8 @@ export class DatabaseStorage implements IStorage {
             licensingReadiness: data.licensingReadiness,
             completenessScore: data.completenessScore,
             enrichedAt: now, // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+            // Clear stale dedupe embedding — forces re-embedding on next scan after target/indication update
+            dedupeEmbedding: null,
           }).where(eq(ingestedAssets.id, data.id));
           written++;
         } catch (e) {
