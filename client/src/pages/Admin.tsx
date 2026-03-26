@@ -1991,7 +1991,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
     return new URLSearchParams({ ...p, ...extra }).toString();
   };
 
-  const { data, isLoading } = useQuery<{ total: number; page: number; limit: number; assets: BrowsedAsset[] }>({
+  const { data, isLoading } = useQuery<{ total: number; globalTotal: number; page: number; limit: number; assets: BrowsedAsset[] }>({
     queryKey: ["/api/admin/assets", pw, institution, modality, stage, indication, tier, missing, q, page, sort, dir],
     queryFn: async () => {
       const params = buildParams({ page: String(page), limit: "50", sort, dir });
@@ -2026,6 +2026,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
 
   const activeFilters = [institution, modality, stage, indication, tier, missing, q].filter(Boolean).length;
   const total = data?.total ?? 0;
+  const globalTotal = data?.globalTotal ?? 0;
   const totalPages = Math.ceil(total / 50);
 
   const clearFilters = () => {
@@ -2148,7 +2149,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
 
       <div className="px-5 py-2 border-b border-border text-xs text-muted-foreground flex items-center justify-between">
         <span>
-          {isLoading ? "Loading..." : `Showing ${Math.min(50, total).toLocaleString()} of ${total.toLocaleString()} relevant assets`}
+          {isLoading ? "Loading..." : `Showing ${total.toLocaleString()} of ${(globalTotal || total).toLocaleString()} relevant assets`}
         </span>
         <div className="flex items-center gap-1">
           <Select value={sort} onValueChange={v => { setSort(v as "score" | "name" | "date"); setPage(1); }}>

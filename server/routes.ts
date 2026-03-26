@@ -1889,7 +1889,7 @@ export async function registerRoutes(
         WHERE relevant = true
         GROUP BY institution
         ORDER BY COUNT(*) DESC
-        LIMIT 200
+        LIMIT 500
       `);
 
       res.json({
@@ -2141,8 +2141,9 @@ export async function registerRoutes(
 
       const where = buildAssetWhere(req.query as Record<string, any>);
 
-      const [countRes, rowsRes] = await Promise.all([
+      const [countRes, globalRes, rowsRes] = await Promise.all([
         db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE ${where}`),
+        db.execute(sql`SELECT COUNT(*)::int AS global_total FROM ingested_assets WHERE relevant = true`),
         db.execute(sql`
           SELECT id, asset_name, institution, target, indication, modality, development_stage,
                  ip_type, licensing_readiness, completeness_score, mechanism_of_action,
@@ -2157,6 +2158,7 @@ export async function registerRoutes(
 
       res.json({
         total: (countRes.rows[0] as any).total,
+        globalTotal: (globalRes.rows[0] as any).global_total,
         page,
         limit,
         assets: rowsRes.rows,
@@ -2217,48 +2219,52 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
 
       const existingRes = await db.execute(sql`
-        SELECT categories, inventors, patent_status FROM ingested_assets WHERE id = ${id}
+        SELECT target, indication, modality, development_stage, ip_type, licensing_readiness,
+               mechanism_of_action, innovation_claim, unmet_need, comparable_drugs, summary, abstract,
+               categories, inventors, patent_status
+        FROM ingested_assets WHERE id = ${id}
       `);
       if (existingRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
       const existing = existingRes.rows[0] as Record<string, any>;
 
       const body = req.body ?? {};
-      const fields: Record<string, any> = {};
-      const textFields = ["target", "indication", "modality", "development_stage", "ip_type",
+      const editableFields = ["target", "indication", "modality", "development_stage", "ip_type",
         "licensing_readiness", "mechanism_of_action", "innovation_claim", "unmet_need",
         "comparable_drugs", "summary", "abstract"];
-      for (const f of textFields) {
-        if (f in body) fields[f] = body[f] ?? null;
+
+      const merged: Record<string, any> = {};
+      for (const f of editableFields) {
+        merged[f] = (f in body) ? (body[f] ?? null) : (existing[f] ?? null);
       }
 
       const score = computeCompletenessScore({
-        target: fields.target ?? null,
-        modality: fields.modality ?? null,
-        indication: fields.indication ?? null,
-        developmentStage: fields.development_stage ?? null,
-        summary: fields.summary ?? null,
-        abstract: fields.abstract ?? null,
+        target: merged.target,
+        modality: merged.modality,
+        indication: merged.indication,
+        developmentStage: merged.development_stage,
+        summary: merged.summary,
+        abstract: merged.abstract,
         categories: existing.categories ?? null,
-        innovationClaim: fields.innovation_claim ?? null,
-        mechanismOfAction: fields.mechanism_of_action ?? null,
+        innovationClaim: merged.innovation_claim,
+        mechanismOfAction: merged.mechanism_of_action,
         inventors: existing.inventors ?? null,
         patentStatus: existing.patent_status ?? null,
       });
 
       await db.execute(sql`
         UPDATE ingested_assets SET
-          target = COALESCE(${fields.target ?? null}, target),
-          indication = COALESCE(${fields.indication ?? null}, indication),
-          modality = COALESCE(${fields.modality ?? null}, modality),
-          development_stage = COALESCE(${fields.development_stage ?? null}, development_stage),
-          ip_type = COALESCE(${fields.ip_type ?? null}, ip_type),
-          licensing_readiness = COALESCE(${fields.licensing_readiness ?? null}, licensing_readiness),
-          mechanism_of_action = COALESCE(${fields.mechanism_of_action ?? null}, mechanism_of_action),
-          innovation_claim = COALESCE(${fields.innovation_claim ?? null}, innovation_claim),
-          unmet_need = COALESCE(${fields.unmet_need ?? null}, unmet_need),
-          comparable_drugs = COALESCE(${fields.comparable_drugs ?? null}, comparable_drugs),
-          summary = COALESCE(${fields.summary ?? null}, summary),
-          abstract = COALESCE(${fields.abstract ?? null}, abstract),
+          target = ${merged.target},
+          indication = ${merged.indication},
+          modality = ${merged.modality},
+          development_stage = ${merged.development_stage},
+          ip_type = ${merged.ip_type},
+          licensing_readiness = ${merged.licensing_readiness},
+          mechanism_of_action = ${merged.mechanism_of_action},
+          innovation_claim = ${merged.innovation_claim},
+          unmet_need = ${merged.unmet_need},
+          comparable_drugs = ${merged.comparable_drugs},
+          summary = ${merged.summary},
+          abstract = ${merged.abstract},
           completeness_score = ${score},
           enriched_at = NOW()
         WHERE id = ${id}
