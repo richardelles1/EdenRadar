@@ -1849,6 +1849,151 @@ export async function registerRoutes(
     }
   });
 
+  // --- Dataset Quality Analytics (relevant=true only) ---
+
+  app.get("/api/admin/dataset-quality", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const globalResult = await db.execute(sql`
+        SELECT
+          COUNT(*)::int AS total_relevant,
+          COUNT(completeness_score)::int AS scored_count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_score,
+          COUNT(CASE WHEN completeness_score >= 80 THEN 1 END)::int AS tier_excellent,
+          COUNT(CASE WHEN completeness_score >= 60 AND completeness_score < 80 THEN 1 END)::int AS tier_good,
+          COUNT(CASE WHEN completeness_score >= 40 AND completeness_score < 60 THEN 1 END)::int AS tier_partial,
+          COUNT(CASE WHEN completeness_score >= 1 AND completeness_score < 40 THEN 1 END)::int AS tier_poor,
+          COUNT(CASE WHEN completeness_score IS NULL OR completeness_score = 0 THEN 1 END)::int AS tier_unscored,
+          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication,
+          ROUND(100.0 * COUNT(CASE WHEN modality IS NOT NULL AND modality NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_modality,
+          ROUND(100.0 * COUNT(CASE WHEN development_stage IS NOT NULL AND development_stage NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_stage,
+          ROUND(100.0 * COUNT(CASE WHEN licensing_readiness IS NOT NULL AND licensing_readiness NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_licensing,
+          ROUND(100.0 * COUNT(CASE WHEN ip_type IS NOT NULL AND ip_type NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_patent,
+          COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int AS added_7d,
+          COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS added_30d
+        FROM ingested_assets
+        WHERE relevant = true
+      `);
+
+      const institutionResult = await db.execute(sql`
+        SELECT
+          COALESCE(source_name, 'Unknown') AS institution,
+          COUNT(*)::int AS relevant_count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
+          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+        FROM ingested_assets
+        WHERE relevant = true
+        GROUP BY source_name
+        ORDER BY COUNT(*) DESC
+        LIMIT 60
+      `);
+
+      res.json({
+        global: globalResult.rows[0],
+        institutions: institutionResult.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch dataset quality" });
+    }
+  });
+
+  app.get("/api/admin/dataset-quality/institution/:name", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const institutionName = req.params.name;
+      const rows = await db.execute(sql`
+        SELECT id, asset_name, target, indication, modality, development_stage, completeness_score
+        FROM ingested_assets
+        WHERE relevant = true
+          AND COALESCE(source_name, 'Unknown') = ${institutionName}
+        ORDER BY completeness_score ASC NULLS FIRST
+        LIMIT 5
+      `);
+
+      res.json({ assets: rows.rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch institution assets" });
+    }
+  });
+
+  // --- CSV Exports (relevant=true only) ---
+
+  app.get("/api/admin/export/unenriched-csv", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const rows = await db.execute(sql`
+        SELECT id, asset_name, abstract, summary, source_name
+        FROM ingested_assets
+        WHERE relevant = true AND completeness_score IS NULL
+        ORDER BY id
+      `);
+
+      const escape = (v: unknown) => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return s.includes(",") || s.includes("\n") || s.includes('"') ? `"${s}"` : s;
+      };
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=\"unenriched-relevant-assets.csv\"");
+
+      res.write("id,asset_name,abstract,summary,source_name\n");
+      for (const row of rows.rows as Record<string, unknown>[]) {
+        res.write(`${escape(row.id)},${escape(row.asset_name)},${escape(row.abstract)},${escape(row.summary)},${escape(row.source_name)}\n`);
+      }
+      res.end();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
+  app.get("/api/admin/export/full-relevant-csv", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const rows = await db.execute(sql`
+        SELECT id, asset_name, source_name, target, indication, modality, development_stage,
+               licensing_readiness, ip_type, completeness_score,
+               abstract, summary, source_url, first_seen_at
+        FROM ingested_assets
+        WHERE relevant = true
+        ORDER BY completeness_score DESC NULLS LAST
+      `);
+
+      const escape = (v: unknown) => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return s.includes(",") || s.includes("\n") || s.includes('"') ? `"${s}"` : s;
+      };
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=\"all-relevant-assets.csv\"");
+
+      res.write("id,asset_name,source_name,target,indication,modality,development_stage,licensing_readiness,ip_type,completeness_score,abstract,summary,source_url,first_seen_at\n");
+      for (const row of rows.rows as Record<string, unknown>[]) {
+        res.write([
+          escape(row.id), escape(row.asset_name), escape(row.source_name),
+          escape(row.target), escape(row.indication), escape(row.modality),
+          escape(row.development_stage), escape(row.licensing_readiness), escape(row.ip_type),
+          escape(row.completeness_score), escape(row.abstract), escape(row.summary),
+          escape(row.source_url), escape(row.first_seen_at),
+        ].join(",") + "\n");
+      }
+      res.end();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
   app.get("/api/admin/enrichment/status", async (req, res) => {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });

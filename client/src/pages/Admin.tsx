@@ -1619,27 +1619,113 @@ interface EnrichmentStatus {
   error?: string;
 }
 
+interface DatasetQualityGlobal {
+  total_relevant: number;
+  scored_count: number;
+  avg_score: number | null;
+  tier_excellent: number;
+  tier_good: number;
+  tier_partial: number;
+  tier_poor: number;
+  tier_unscored: number;
+  fill_target: number | null;
+  fill_indication: number | null;
+  fill_modality: number | null;
+  fill_stage: number | null;
+  fill_licensing: number | null;
+  fill_patent: number | null;
+  added_7d: number;
+  added_30d: number;
+}
+
+interface InstitutionRow {
+  institution: string;
+  relevant_count: number;
+  avg_completeness: number | null;
+  fill_target: number | null;
+  fill_indication: number | null;
+}
+
+interface DatasetQualityResponse {
+  global: DatasetQualityGlobal;
+  institutions: InstitutionRow[];
+}
+
+interface DrilldownAsset {
+  id: number;
+  asset_name: string;
+  target: string | null;
+  indication: string | null;
+  modality: string | null;
+  development_stage: string | null;
+  completeness_score: number | null;
+}
+
+function FieldBadge({ value }: { value: string | null }) {
+  const isKnown = value && value !== "unknown" && value !== "";
+  return (
+    <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded ${isKnown ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+      {isKnown ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
+      {isKnown ? (value!.length > 28 ? value!.slice(0, 28) + "…" : value!) : "unknown"}
+    </span>
+  );
+}
+
+function FillBar({ pct, color }: { pct: number | null; color: string }) {
+  const p = pct ?? 0;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${p}%` }} />
+      </div>
+      <span className="text-xs tabular-nums text-muted-foreground w-10 text-right">{pct !== null ? `${p}%` : "—"}</span>
+    </div>
+  );
+}
+
 function Enrichment({ pw }: { pw: string }) {
   const [polling, setPolling] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const [institutionFilter, setInstitutionFilter] = useState("");
+  const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
+  const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
+  const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const { toast } = useToast();
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stats", {
-        headers: { "x-admin-password": pw },
-      });
+      const res = await fetch("/api/admin/enrichment/stats", { headers: { "x-admin-password": pw } });
       if (!res.ok) throw new Error("Failed to load enrichment stats");
       return res.json();
     },
   });
 
+  const { data: quality, isLoading: qualityLoading } = useQuery<DatasetQualityResponse>({
+    queryKey: ["/api/admin/dataset-quality", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/dataset-quality", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load dataset quality");
+      return res.json();
+    },
+  });
+
+  const { data: drilldown, isLoading: drilldownLoading } = useQuery<{ assets: DrilldownAsset[] }>({
+    queryKey: ["/api/admin/dataset-quality/institution", expandedInstitution, pw],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/dataset-quality/institution/${encodeURIComponent(expandedInstitution!)}`, {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load institution assets");
+      return res.json();
+    },
+    enabled: expandedInstitution !== null,
+  });
+
   const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
     queryKey: ["/api/admin/enrichment/status", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/status", {
-        headers: { "x-admin-password": pw },
-      });
+      const res = await fetch("/api/admin/enrichment/status", { headers: { "x-admin-password": pw } });
       if (!res.ok) throw new Error("Failed to load enrichment status");
       return res.json();
     },
@@ -1650,9 +1736,7 @@ function Enrichment({ pw }: { pw: string }) {
   useEffect(() => {
     const prev = prevStatusRef.current;
     prevStatusRef.current = status?.status;
-    if (status?.status === "running" && !polling) {
-      setPolling(true);
-    }
+    if (status?.status === "running" && !polling) setPolling(true);
     if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
       setPolling(false);
       refetchStats();
@@ -1666,55 +1750,31 @@ function Enrichment({ pw }: { pw: string }) {
 
   const runEnrichment = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/run", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to start");
-      }
+      const res = await fetch("/api/admin/enrichment/run", { method: "POST", headers: { "x-admin-password": pw } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
-    onSuccess: () => {
-      setPolling(true);
-      refetchStatus();
-      toast({ title: "Enrichment started", description: "Running GPT-4o-mini pass on incomplete assets..." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
-    },
+    onSuccess: () => { setPolling(true); refetchStatus(); toast({ title: "Enrichment started", description: "Running GPT-4o-mini pass on incomplete assets..." }); },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
   });
 
   const stopEnrichment = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stop", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
+      const res = await fetch("/api/admin/enrichment/stop", { method: "POST", headers: { "x-admin-password": pw } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to stop"); }
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Stop signal sent", description: "Field enrichment will halt after current batch" });
-      refetchStatus();
-    },
+    onSuccess: () => { toast({ title: "Stop signal sent", description: "Field enrichment will halt after current batch" }); refetchStatus(); },
     onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
   });
 
   const dismissError = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/reset", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
+      const res = await fetch("/api/admin/enrichment/reset", { method: "POST", headers: { "x-admin-password": pw } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to dismiss"); }
       return res.json();
     },
-    onSuccess: () => {
-      refetchStatus();
-      toast({ title: "Error dismissed", description: "Enrichment status cleared" });
-    },
+    onSuccess: () => { refetchStatus(); toast({ title: "Error dismissed", description: "Enrichment status cleared" }); },
     onError: (err: Error) => toast({ title: "Failed to dismiss", description: err.message, variant: "destructive" }),
   });
 
@@ -1722,12 +1782,62 @@ function Enrichment({ pw }: { pw: string }) {
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
   const totalAssets = stats?.total ?? 0;
-
   const costEstimate = unknownCount * 0.0003;
-
   const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
 
-  if (statsLoading) {
+  const g = quality?.global;
+  const totalRelevant = g?.total_relevant ?? 0;
+  const scoredPct = totalRelevant > 0 && g ? Math.round((g.scored_count / totalRelevant) * 100) : 0;
+  const tierTotal = totalRelevant || 1;
+
+  const tiers = [
+    { label: "Excellent", key: "tier_excellent" as const, color: "bg-emerald-500", textColor: "text-emerald-700 dark:text-emerald-400", bgColor: "bg-emerald-50 dark:bg-emerald-950/30" },
+    { label: "Good", key: "tier_good" as const, color: "bg-teal-400", textColor: "text-teal-700 dark:text-teal-400", bgColor: "bg-teal-50 dark:bg-teal-950/30" },
+    { label: "Partial", key: "tier_partial" as const, color: "bg-amber-400", textColor: "text-amber-700 dark:text-amber-400", bgColor: "bg-amber-50 dark:bg-amber-950/30" },
+    { label: "Poor", key: "tier_poor" as const, color: "bg-orange-400", textColor: "text-orange-700 dark:text-orange-400", bgColor: "bg-orange-50 dark:bg-orange-950/30" },
+    { label: "Unscored", key: "tier_unscored" as const, color: "bg-muted-foreground/30", textColor: "text-muted-foreground", bgColor: "bg-muted/30" },
+  ];
+
+  const fieldRows = [
+    { label: "Target", key: "fill_target" as const, color: "bg-violet-500" },
+    { label: "Indication", key: "fill_indication" as const, color: "bg-blue-500" },
+    { label: "Modality", key: "fill_modality" as const, color: "bg-indigo-500" },
+    { label: "Dev Stage", key: "fill_stage" as const, color: "bg-teal-500" },
+    { label: "Licensing", key: "fill_licensing" as const, color: "bg-amber-500" },
+    { label: "Patent / IP", key: "fill_patent" as const, color: "bg-orange-500" },
+  ];
+
+  const filteredInstitutions = (quality?.institutions ?? [])
+    .filter(r => r.institution.toLowerCase().includes(institutionFilter.toLowerCase()))
+    .sort((a, b) => {
+      const aVal = (a[institutionSortKey] ?? 0) as number;
+      const bVal = (b[institutionSortKey] ?? 0) as number;
+      return institutionSortDir === "desc" ? bVal - aVal : aVal - bVal;
+    });
+
+  const handleSort = (key: typeof institutionSortKey) => {
+    if (institutionSortKey === key) {
+      setInstitutionSortDir(d => d === "desc" ? "asc" : "desc");
+    } else {
+      setInstitutionSortKey(key);
+      setInstitutionSortDir("desc");
+    }
+  };
+
+  const SortIcon = ({ k }: { k: typeof institutionSortKey }) => {
+    if (institutionSortKey !== k) return <ArrowDown className="h-3 w-3 opacity-30" />;
+    return institutionSortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />;
+  };
+
+  const downloadCsv = (path: string) => {
+    const a = document.createElement("a");
+    a.href = `${path}?pw=${encodeURIComponent(pw)}`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  if (statsLoading || qualityLoading) {
     return (
       <div className="flex items-center justify-center py-20" data-testid="enrichment-loading">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1737,164 +1847,367 @@ function Enrichment({ pw }: { pw: string }) {
 
   return (
     <div className="space-y-6" data-testid="enrichment-tab">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground mt-1">Total Assets</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <div className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground mt-1">With Unknown Fields</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
-          <div className="text-xs text-muted-foreground mt-1">Fully Enriched</div>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-4 text-center">
-          <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
-            {totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">Completion Rate</div>
-        </div>
-      </div>
 
-      {stats && unknownCount > 0 && (
+      {/* ── Headline Stats ── */}
+      {g && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-relevant-total">{totalRelevant.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground mt-1">Relevant Assets</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-bold tabular-nums text-primary" data-testid="stat-scored-pct">{scoredPct}%</div>
+            <div className="text-xs text-muted-foreground mt-1">Have Completeness Score</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-avg-score">{g.avg_score !== null ? g.avg_score : "—"}</div>
+            <div className="text-xs text-muted-foreground mt-1">Avg Completeness</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 text-center">
+            <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-added-30d">{g.added_30d.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Added (30d) <span className="text-muted-foreground/60">/ {g.added_7d.toLocaleString()} (7d)</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Completeness Tier Distribution ── */}
+      {g && (
         <div className="border border-border rounded-xl bg-card overflow-hidden">
           <div className="px-5 py-3 border-b border-border bg-muted/20">
-            <h3 className="text-sm font-semibold text-foreground">Per-Field Breakdown</h3>
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <BarChart3 className="h-4 w-4" />
+              Completeness Tiers
+            </h3>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border">
-            <div className="bg-card p-3 text-center">
-              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-target">{stats.byField.target.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">Target</div>
+          <div className="px-5 py-4 space-y-3">
+            <div className="flex h-4 rounded-full overflow-hidden w-full gap-px">
+              {tiers.map(t => {
+                const count = g[t.key];
+                const w = Math.round((count / tierTotal) * 100);
+                return w > 0 ? (
+                  <div
+                    key={t.key}
+                    className={`${t.color} transition-all`}
+                    style={{ width: `${w}%` }}
+                    title={`${t.label}: ${count.toLocaleString()} (${w}%)`}
+                  />
+                ) : null;
+              })}
             </div>
-            <div className="bg-card p-3 text-center">
-              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-modality">{stats.byField.modality.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">Modality</div>
-            </div>
-            <div className="bg-card p-3 text-center">
-              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-indication">{stats.byField.indication.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">Indication</div>
-            </div>
-            <div className="bg-card p-3 text-center">
-              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="stat-unknown-stage">{stats.byField.developmentStage.toLocaleString()}</div>
-              <div className="text-xs text-muted-foreground">Dev Stage</div>
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              {tiers.map(t => {
+                const count = g[t.key];
+                const pct = Math.round((count / tierTotal) * 100);
+                return (
+                  <div key={t.key} className={`rounded-lg p-2 text-center ${t.bgColor}`}>
+                    <div className={`text-base font-bold tabular-nums ${t.textColor}`} data-testid={`tier-${t.key}`}>{count.toLocaleString()}</div>
+                    <div className={`text-xs ${t.textColor} opacity-80`}>{t.label}</div>
+                    <div className="text-xs text-muted-foreground">{pct}%</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
 
-      <div className="border border-border rounded-xl bg-card overflow-hidden">
-        <div className="px-5 py-3 border-b border-border bg-muted/20">
-          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-            <DollarSign className="h-4 w-4" />
-            Estimated Cost
-          </h3>
-        </div>
-        <div className="px-5 py-4">
-          <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
-            <div>
-              <div className="text-sm font-medium text-foreground">GPT-4o-mini Enrichment</div>
-              <div className="text-xs text-muted-foreground">{unknownCount.toLocaleString()} assets &times; ~$0.0003/asset</div>
-            </div>
-            <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-estimate">
-              ~${costEstimate.toFixed(2)}
-            </div>
+      {/* ── Field Fill Rates ── */}
+      {g && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border bg-muted/20">
+            <h3 className="text-sm font-semibold text-foreground">Field Fill Rates (relevant assets only)</h3>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-px bg-border">
+            {fieldRows.map(f => (
+              <div key={f.key} className="bg-card px-4 py-3 space-y-1.5">
+                <div className="text-xs font-medium text-foreground">{f.label}</div>
+                <FillBar pct={g[f.key] !== undefined && g[f.key] !== null ? Number(g[f.key]) : null} color={f.color} />
+              </div>
+            ))}
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex items-center gap-3">
-        <Button
-          onClick={() => runEnrichment.mutate()}
-          disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
-          className="flex-1"
-          data-testid="button-run-enrichment"
-        >
-          {isRunning ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
-          )}
-          Run Enrichment (mini)
-        </Button>
-      </div>
-
-      {isRunning && status && (
-        <div className="border border-border rounded-xl bg-card p-5 space-y-3" data-testid="enrichment-progress">
-          <div className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            <span className="text-sm font-medium text-foreground">
-              Field Enrichment (GPT-4o-mini){isResumed ? " — resuming from checkpoint" : ""}
-            </span>
-            <span className="text-sm tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
-              {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => stopEnrichment.mutate()}
-              disabled={stopEnrichment.isPending}
-              className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-              data-testid="button-enrichment-stop"
-            >
-              {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
-            </Button>
-          </div>
-          <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-            <div
-              className="bg-primary h-2.5 rounded-full transition-all duration-500"
-              style={{ width: `${progressPct}%` }}
-              data-testid="enrichment-progress-bar"
+      {/* ── Institution Quality Table ── */}
+      {quality && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3 flex-wrap">
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Institution Quality ({filteredInstitutions.length})
+            </h3>
+            <Input
+              placeholder="Filter by name..."
+              value={institutionFilter}
+              onChange={e => setInstitutionFilter(e.target.value)}
+              className="h-7 text-xs w-44"
+              data-testid="input-institution-filter"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {status.improved.toLocaleString()} assets improved so far
-          </p>
-        </div>
-      )}
-
-      {status?.status === "done" && (
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="enrichment-done">
-          <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              Enrichment complete
-            </p>
-            <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">
-              {status.improved} out of {status.total} assets improved
-            </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/10">
+                  <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Institution</th>
+                  {([
+                    { key: "relevant_count" as const, label: "Assets" },
+                    { key: "avg_completeness" as const, label: "Avg Score" },
+                    { key: "fill_target" as const, label: "Target %" },
+                    { key: "fill_indication" as const, label: "Indication %" },
+                  ]).map(col => (
+                    <th
+                      key={col.key}
+                      className="px-4 py-2 text-right text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
+                      onClick={() => handleSort(col.key)}
+                    >
+                      <span className="inline-flex items-center gap-1 justify-end">
+                        {col.label} <SortIcon k={col.key} />
+                      </span>
+                    </th>
+                  ))}
+                  <th className="px-4 py-2 w-8" />
+                </tr>
+              </thead>
+              <tbody>
+                {filteredInstitutions.map(row => {
+                  const isExpanded = expandedInstitution === row.institution;
+                  return (
+                    <React.Fragment key={row.institution}>
+                      <tr
+                        className={`border-b border-border cursor-pointer transition-colors ${isExpanded ? "bg-primary/5" : "hover:bg-muted/30"}`}
+                        onClick={() => setExpandedInstitution(isExpanded ? null : row.institution)}
+                        data-testid={`row-institution-${row.institution}`}
+                      >
+                        <td className="px-4 py-2.5 text-xs font-medium text-foreground max-w-xs truncate">{row.institution}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.relevant_count.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.avg_completeness !== null ? row.avg_completeness : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_target !== null ? `${row.fill_target}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_indication !== null ? `${row.fill_indication}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                        </td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-border bg-muted/5">
+                          <td colSpan={6} className="px-4 py-3">
+                            {drilldownLoading ? (
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" /> Loading...
+                              </div>
+                            ) : drilldown?.assets && drilldown.assets.length > 0 ? (
+                              <div className="space-y-2">
+                                <p className="text-xs text-muted-foreground mb-2">5 lowest-completeness relevant assets:</p>
+                                {drilldown.assets.map(asset => (
+                                  <div key={asset.id} className="rounded-lg border border-border bg-card p-3 space-y-1.5">
+                                    <div className="text-xs font-medium text-foreground truncate">{asset.asset_name}</div>
+                                    <div className="flex flex-wrap gap-1.5">
+                                      <FieldBadge value={asset.target} />
+                                      <FieldBadge value={asset.indication} />
+                                      <FieldBadge value={asset.modality} />
+                                      <FieldBadge value={asset.development_stage} />
+                                      {asset.completeness_score !== null && (
+                                        <span className="inline-flex items-center text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                                          Score: {asset.completeness_score}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">No assets found.</p>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
 
-      {status?.status === "error" && (
-        <div className="flex items-start gap-3 p-4 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
-          <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-red-700 dark:text-red-400">Last enrichment job failed</p>
-            <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "The job ended with an error. Dismiss to return to idle."}</p>
-          </div>
+      {/* ── CSV Exports ── */}
+      {quality && (
+        <div className="flex flex-wrap items-center gap-3">
           <Button
+            variant="outline"
             size="sm"
-            variant="ghost"
-            className="h-7 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 shrink-0"
-            onClick={() => dismissError.mutate()}
-            disabled={dismissError.isPending}
-            data-testid="button-dismiss-enrichment-error"
+            onClick={() => downloadCsv("/api/admin/export/unenriched-csv")}
+            className="gap-2"
+            data-testid="button-export-unenriched"
           >
-            {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+            <Download className="h-4 w-4" />
+            Export Unenriched (relevant only)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => downloadCsv("/api/admin/export/full-relevant-csv")}
+            className="gap-2"
+            data-testid="button-export-full"
+          >
+            <Download className="h-4 w-4" />
+            Export All Relevant Assets
           </Button>
         </div>
       )}
 
-      {unknownCount === 0 && totalAssets > 0 && (
-        <div className="text-center py-10 text-muted-foreground" data-testid="enrichment-all-complete">
-          <CheckCircle2 className="h-10 w-10 mx-auto mb-3 opacity-40" />
-          <p className="text-base font-medium">All assets fully enriched</p>
-          <p className="text-sm mt-1">No unknown fields remaining in the database.</p>
-        </div>
-      )}
+      {/* ── Enrichment Controls (collapsible) ── */}
+      <div className="border border-border rounded-xl bg-card overflow-hidden">
+        <button
+          className="w-full px-5 py-3 flex items-center justify-between bg-muted/20 hover:bg-muted/40 transition-colors text-left"
+          onClick={() => setControlsOpen(o => !o)}
+          data-testid="button-toggle-controls"
+        >
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Enrichment Controls
+            {isRunning && <span className="text-xs font-normal text-primary ml-1">(running...)</span>}
+          </h3>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${controlsOpen ? "rotate-180" : ""}`} />
+        </button>
+        {controlsOpen && (
+          <div className="px-5 py-4 space-y-4 border-t border-border">
+            <p className="text-xs text-muted-foreground">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="rounded-xl border border-border bg-background p-4 text-center">
+                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-1">Relevant Assets</div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-4 text-center">
+                <div className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-1">With Unknown Fields</div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-4 text-center">
+                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-1">Fully Enriched</div>
+              </div>
+              <div className="rounded-xl border border-border bg-background p-4 text-center">
+                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
+                  {totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">Completion Rate</div>
+              </div>
+            </div>
+
+            {stats && unknownCount > 0 && (
+              <div className="border border-border rounded-xl bg-background overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border bg-muted/20">
+                  <h4 className="text-xs font-semibold text-foreground">Per-Field Unknown Counts</h4>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border">
+                  {[
+                    { label: "Target", val: stats.byField.target, testId: "stat-unknown-target" },
+                    { label: "Modality", val: stats.byField.modality, testId: "stat-unknown-modality" },
+                    { label: "Indication", val: stats.byField.indication, testId: "stat-unknown-indication" },
+                    { label: "Dev Stage", val: stats.byField.developmentStage, testId: "stat-unknown-stage" },
+                  ].map(f => (
+                    <div key={f.label} className="bg-background p-3 text-center">
+                      <div className="text-lg font-bold tabular-nums text-foreground" data-testid={f.testId}>{f.val.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">{f.label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
+              <div>
+                <div className="text-sm font-medium text-foreground">GPT-4o-mini Enrichment</div>
+                <div className="text-xs text-muted-foreground">{unknownCount.toLocaleString()} assets &times; ~$0.0003/asset</div>
+              </div>
+              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-estimate">~${costEstimate.toFixed(2)}</div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => runEnrichment.mutate()}
+                disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
+                className="flex-1"
+                data-testid="button-run-enrichment"
+              >
+                {isRunning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
+                Run Enrichment (mini)
+              </Button>
+            </div>
+
+            {isRunning && status && (
+              <div className="border border-border rounded-xl bg-background p-5 space-y-3" data-testid="enrichment-progress">
+                <div className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span className="text-sm font-medium text-foreground">
+                    Field Enrichment (GPT-4o-mini){isResumed ? " — resuming from checkpoint" : ""}
+                  </span>
+                  <span className="text-sm tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
+                    {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => stopEnrichment.mutate()}
+                    disabled={stopEnrichment.isPending}
+                    className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                    data-testid="button-enrichment-stop"
+                  >
+                    {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                  </Button>
+                </div>
+                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
+                  <div
+                    className="bg-primary h-2.5 rounded-full transition-all duration-500"
+                    style={{ width: `${progressPct}%` }}
+                    data-testid="enrichment-progress-bar"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
+              </div>
+            )}
+
+            {status?.status === "done" && (
+              <div className="flex items-start gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="enrichment-done">
+                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Enrichment complete</p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">{status.improved} out of {status.total} assets improved</p>
+                </div>
+              </div>
+            )}
+
+            {status?.status === "error" && (
+              <div className="flex items-start gap-3 p-4 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
+                <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-red-700 dark:text-red-400">Last enrichment job failed</p>
+                  <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "The job ended with an error. Dismiss to return to idle."}</p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 shrink-0"
+                  onClick={() => dismissError.mutate()}
+                  disabled={dismissError.isPending}
+                  data-testid="button-dismiss-enrichment-error"
+                >
+                  {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                </Button>
+              </div>
+            )}
+
+            {unknownCount === 0 && totalAssets > 0 && (
+              <div className="text-center py-6 text-muted-foreground" data-testid="enrichment-all-complete">
+                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                <p className="text-sm font-medium">All assets fully enriched</p>
+                <p className="text-xs mt-1">No unknown fields remaining.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -6077,8 +6390,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               }`}
               data-testid="nav-enrichment"
             >
-              <Sparkles className="h-4 w-4" />
-              Enrichment
+              <BarChart3 className="h-4 w-4" />
+              Data Quality
             </button>
             <button
               onClick={() => setActiveTab("manual-import")}
@@ -6240,8 +6553,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
           {activeTab === "enrichment" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Enrichment</h2>
-                <p className="text-sm text-muted-foreground mt-1">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Quality</h2>
+                <p className="text-sm text-muted-foreground mt-1">Dataset completeness and field coverage for relevant biotech assets. Enrichment controls at the bottom.</p>
               </div>
               <Enrichment pw={pw} />
             </>
