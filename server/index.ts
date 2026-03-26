@@ -146,21 +146,32 @@ app.use((req, res, next) => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          // Check for duplicate source_urls before attempting index creation.
-          // We do NOT mutate data here — the ingestion URL-dedup upsert path naturally
-          // resolves duplicates on the next scrape cycle. Once all duplicates are gone,
-          // the unique index is created automatically.
-          const dupCheck = await db.execute(sql`
-            SELECT COUNT(*) AS cnt FROM (
-              SELECT source_url FROM ingested_assets
-              WHERE source_url IS NOT NULL
-              GROUP BY source_url HAVING COUNT(*) > 1
+          // Reconcile duplicate source_urls before creating the unique index.
+          // Strategy: for each URL group with duplicates, select the canonical row
+          // (highest completeness_score; tie-break by lowest id = oldest/first ingested)
+          // and set source_url=NULL on all non-canonical rows. The canonical row retains
+          // the URL and will be updated-in-place by future URL-dedup upserts. Non-canonical
+          // rows keep all their other fields and remain searchable by fingerprint.
+          const reconcileResult = await db.execute(sql`
+            UPDATE ingested_assets a
+            SET source_url = NULL
+            FROM (
+              SELECT id FROM (
+                SELECT id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY source_url
+                    ORDER BY COALESCE(completeness_score, 0) DESC, id ASC
+                  ) AS rn
+                FROM ingested_assets
+                WHERE source_url IS NOT NULL
+              ) ranked
+              WHERE rn > 1
             ) dups
+            WHERE a.id = dups.id
           `);
-          const dupCount = parseInt(String((dupCheck.rows[0] as { cnt: string })?.cnt ?? "0"), 10);
-          if (dupCount > 0) {
-            console.log(`[startup] source_url unique index deferred — ${dupCount} duplicate URL group(s) still present. Will resolve via URL-dedup upsert on next scrape cycle.`);
-            break;
+          const reconciled = (reconcileResult as { rowCount?: number }).rowCount ?? 0;
+          if (reconciled > 0) {
+            console.log(`[startup] source_url reconciliation: cleared URL on ${reconciled} non-canonical duplicate row(s) before unique index creation`);
           }
           await db.execute(sql`
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique
