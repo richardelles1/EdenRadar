@@ -262,14 +262,6 @@ export interface IStorage {
     enrichmentJobsProcessed: number;
   }>;
 
-  exportEnrichmentCsv(): Promise<Array<{
-    id: number; assetName: string; institution: string; summary: string; abstract: string | null;
-    target: string; modality: string; indication: string; developmentStage: string;
-    categories: string[] | null; mechanismOfAction: string | null; innovationClaim: string | null;
-    unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string | null;
-    ipType: string | null; completenessScore: number | null;
-  }>>;
-
   bulkUpdateAssetsFromCsv(rows: Array<{
     id: number; assetName?: string; institution?: string; summary?: string; abstract?: string;
     target?: string; modality?: string; indication?: string; developmentStage?: string;
@@ -2019,38 +2011,6 @@ export class DatabaseStorage implements IStorage {
       savedAssets: Number(row?.saved_assets ?? 0),
       enrichmentJobsProcessed: Number(row?.enrichment_processed ?? 0),
     };
-  }
-
-  async exportEnrichmentCsv(): Promise<Array<{
-    id: number; assetName: string; institution: string; summary: string; abstract: string | null;
-    target: string; modality: string; indication: string; developmentStage: string;
-    categories: string[] | null; mechanismOfAction: string | null; innovationClaim: string | null;
-    unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string | null;
-    ipType: string | null; completenessScore: number | null;
-  }>> {
-    const rows = await db
-      .select({
-        id: ingestedAssets.id,
-        assetName: ingestedAssets.assetName,
-        institution: ingestedAssets.institution,
-        summary: ingestedAssets.summary,
-        abstract: ingestedAssets.abstract,
-        target: ingestedAssets.target,
-        modality: ingestedAssets.modality,
-        indication: ingestedAssets.indication,
-        developmentStage: ingestedAssets.developmentStage,
-        categories: ingestedAssets.categories,
-        mechanismOfAction: ingestedAssets.mechanismOfAction,
-        innovationClaim: ingestedAssets.innovationClaim,
-        unmetNeed: ingestedAssets.unmetNeed,
-        comparableDrugs: ingestedAssets.comparableDrugs,
-        licensingReadiness: ingestedAssets.licensingReadiness,
-        ipType: ingestedAssets.ipType,
-        completenessScore: ingestedAssets.completenessScore,
-      })
-      .from(ingestedAssets)
-      .orderBy(ingestedAssets.id);
-    return rows;
   }
 
   async bulkUpdateAssetsFromCsv(rows: Array<{

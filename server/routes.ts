@@ -5795,8 +5795,12 @@ If multiple assets appear, return each as a separate array item.`;
 
       function csvEscape(val: unknown): string {
         if (val === null || val === undefined) return "";
-        const s = Array.isArray(val) ? JSON.stringify(val) : String(val);
-        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+        let s = Array.isArray(val) ? JSON.stringify(val) : String(val);
+        // Neutralize CSV formula injection: prefix dangerous leading chars with a tab
+        if (s.length > 0 && (s[0] === "=" || s[0] === "+" || s[0] === "-" || s[0] === "@" || s[0] === "|" || s[0] === "%")) {
+          s = "\t" + s;
+        }
+        if (s.includes(",") || s.includes('"') || s.includes("\n") || s.includes("\t")) {
           return '"' + s.replace(/"/g, '""') + '"';
         }
         return s;
