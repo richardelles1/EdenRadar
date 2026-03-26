@@ -133,10 +133,15 @@ export async function deepEnrichBatch(
 
       // Quality gate: combined text must be >= MIN_CONTENT_CHARS.
       // Skip (leave enrichedAt=null) so the asset is retried once it gains more content.
+      // Deduplicate before summing — when no description was scraped, summary falls back
+      // to the title, so counting both would incorrectly inflate the length.
+      const assetName = asset.assetName || "";
+      const summary = asset.summary || "";
+      const abstract = asset.abstract || "";
       const combinedLength =
-        (asset.assetName || "").length +
-        (asset.summary || "").length +
-        (asset.abstract || "").length;
+        assetName.length +
+        (summary !== assetName ? summary.length : 0) +
+        (abstract && abstract !== assetName && abstract !== summary ? abstract.length : 0);
       if (combinedLength < MIN_CONTENT_CHARS) {
         console.log(
           `[deepEnrich] Skipping asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry next cycle.`,

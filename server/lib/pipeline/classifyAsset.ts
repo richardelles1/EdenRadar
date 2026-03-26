@@ -152,7 +152,15 @@ export async function classifyBatch(
       // Quality gate: skip the AI call for thin-content assets, but still
       // call onEach with a low-confidence default so the asset is written to the
       // review queue (not silently stranded) and retried when content improves.
-      const combinedLength = (item.title || "").length + (item.description || "").length + (item.abstract || "").length;
+      // Deduplicate before summing — ingestion sets description = summary || title,
+      // so description === title for title-only pages (would double-count).
+      const title = item.title || "";
+      const description = item.description || "";
+      const abstract = item.abstract || "";
+      const combinedLength =
+        title.length +
+        (description !== title ? description.length : 0) +
+        (abstract && abstract !== title && abstract !== description ? abstract.length : 0);
       if (combinedLength < MIN_CONTENT_CHARS) {
         console.log(`[classifyBatch] Asset ${item.id} has thin content (${combinedLength} chars < ${MIN_CONTENT_CHARS}) — sending to review queue for retry when content improves`);
         const defaultResult: AssetClassification = {
