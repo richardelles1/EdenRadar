@@ -15,7 +15,7 @@ import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -411,12 +411,12 @@ export async function registerRoutes(
           patent_status: "unknown",
         };
 
-        const freshnessResult  = scoreFreshness(partialAsset);
+        const freshnessResult  = { score: 0, hasData: false, basis: "No signal date available" };
         const noveltyResult    = scoreNovelty(partialAsset);
         const readinessResult  = scoreReadiness(partialAsset);
         const licensabilityResult = scoreLicensability(partialAsset);
         const competitionResult = scoreCompetition(partialAsset);
-        const fitResult = { score: 50, hasData: false, basis: "No buyer profile configured" };
+        const fitResult = { score: 0, hasData: false, basis: "No buyer profile configured" };
 
         const dimResults = {
           freshness:    freshnessResult,
