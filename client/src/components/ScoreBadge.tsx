@@ -58,7 +58,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
 
   if (dims.length === 0) return badge;
 
-  const coverage = breakdown.signal_coverage ?? 100;
+  const coverage = breakdown.signal_coverage ?? 0;
   const scoredCount = (breakdown.scored_dimensions ?? Object.keys(breakdown).filter((k) => k !== "total" && k !== "signal_coverage" && k !== "scored_dimensions" && k !== "dimension_basis")).length;
 
   return (
