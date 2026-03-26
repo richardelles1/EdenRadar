@@ -146,26 +146,21 @@ app.use((req, res, next) => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          // Nullify duplicate source_urls (keep earliest row) before creating unique index.
-          // Ops note: this is intentionally data-destructive for duplicate rows — the
-          // source_url is cleared on the later-inserted duplicate so the unique index can
-          // be created. The canonical (earliest ID) record retains the URL.
-          const nullifyResult = await db.execute(sql`
-            UPDATE ingested_assets a
-            SET source_url = NULL
-            FROM (
-              SELECT id FROM (
-                SELECT id, ROW_NUMBER() OVER (PARTITION BY source_url ORDER BY id) AS rn
-                FROM ingested_assets
-                WHERE source_url IS NOT NULL
-              ) ranked
-              WHERE rn > 1
+          // Check for duplicate source_urls before attempting index creation.
+          // We do NOT mutate data here — the ingestion URL-dedup upsert path naturally
+          // resolves duplicates on the next scrape cycle. Once all duplicates are gone,
+          // the unique index is created automatically.
+          const dupCheck = await db.execute(sql`
+            SELECT COUNT(*) AS cnt FROM (
+              SELECT source_url FROM ingested_assets
+              WHERE source_url IS NOT NULL
+              GROUP BY source_url HAVING COUNT(*) > 1
             ) dups
-            WHERE a.id = dups.id
           `);
-          const nullifiedCount = (nullifyResult as { rowCount?: number }).rowCount ?? 0;
-          if (nullifiedCount > 0) {
-            console.log(`[startup] source_url dedup: nullified ${nullifiedCount} duplicate URL(s) before index creation`);
+          const dupCount = parseInt(String((dupCheck.rows[0] as { cnt: string })?.cnt ?? "0"), 10);
+          if (dupCount > 0) {
+            console.log(`[startup] source_url unique index deferred — ${dupCount} duplicate URL group(s) still present. Will resolve via URL-dedup upsert on next scrape cycle.`);
+            break;
           }
           await db.execute(sql`
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique

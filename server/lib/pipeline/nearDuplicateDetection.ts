@@ -42,6 +42,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
   type DedupeRow = {
     id: number;
     assetName: string;
+    institution: string;
     indication: string | null;
     target: string | null;
     dedupeEmbedding: number[] | null;
@@ -56,6 +57,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
       .select({
         id: ingestedAssets.id,
         assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
         indication: ingestedAssets.indication,
         target: ingestedAssets.target,
         dedupeEmbedding: ingestedAssets.dedupeEmbedding,
@@ -122,11 +124,15 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
 
   onProgress?.(`Embedded ${embeddedCount} assets. Running similarity comparison...`);
 
-  // Group by indication to limit comparison scope
+  // Group by institution + indication to ensure cross-institution comparisons are never made.
+  // Two assets from different institutions with similar names are legitimately distinct
+  // technologies, even if indication and target overlap.
   const indicationGroups = new Map<string, number[]>();
   for (const row of rows) {
     if (!embeddingMap.has(row.id)) continue;
-    const key = (row.indication ?? "unknown").toLowerCase().trim();
+    const inst = row.institution.toLowerCase().trim();
+    const ind = (row.indication ?? "unknown").toLowerCase().trim();
+    const key = `${inst}||${ind}`;
     if (!indicationGroups.has(key)) indicationGroups.set(key, []);
     indicationGroups.get(key)!.push(row.id);
   }

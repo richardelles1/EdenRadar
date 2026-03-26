@@ -149,27 +149,11 @@ export async function classifyBatch(
       const item = items[i++];
       if (!item) continue;
 
-      // Quality gate: skip thin-content assets entirely — do NOT call onEach and
-      // do NOT write a classification. This intentionally leaves biotechRelevant
-      // unset so the asset remains eligible for re-classification when the scraper
-      // fetches richer content later (content-change detection resets enrichedAt to
-      // null, which re-queues classification). Calling onEach with biotechRelevant=false
-      // was removed because it permanently marks the asset non-relevant, blocking
-      // re-enrichment even after content improves (false-negative lock-in).
-      // Deduplicate before summing — ingestion sets description = summary || title,
-      // so description === title for title-only pages (would double-count).
-      const title = item.title || "";
-      const description = item.description || "";
-      const abstract = item.abstract || "";
-      const combinedLength =
-        title.length +
-        (description !== title ? description.length : 0) +
-        (abstract && abstract !== title && abstract !== description ? abstract.length : 0);
-      if (combinedLength < MIN_CONTENT_CHARS) {
-        console.log(`[classifyBatch] Asset ${item.id} skipped — thin content (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry when content improves.`);
-        continue;
-      }
-
+      // No thin-content gate here — classification runs on all assets regardless of
+      // content length. The AI can legitimately judge a short asset as non-relevant.
+      // The 120-char quality gate is applied only in deepEnrichBatch, where rich text
+      // is needed for meaningful field extraction. Gating classification would permanently
+      // block assets from being selected for enrichment if biotechRelevant stays false.
       const classification = await classifyAsset(item.title, item.description, item.abstract, "gpt-4o-mini", false, item.ctx);
       results.set(item.id, classification);
       if (onEach) {
