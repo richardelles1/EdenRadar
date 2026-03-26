@@ -43,6 +43,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
       dedupeEmbedding: ingestedAssets.dedupeEmbedding,
       duplicateFlag: ingestedAssets.duplicateFlag,
       completenessScore: ingestedAssets.completenessScore,
+      duplicateOfId: ingestedAssets.duplicateOfId,
     })
     .from(ingestedAssets)
     .where(eq(ingestedAssets.duplicateFlag, false))
@@ -55,13 +56,18 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
   // Track embeddings in a dedicated map — never mutate Drizzle row objects
   const embeddingMap = new Map<number, number[]>();
 
-  // Seed embedding map and score map from existing rows
+  // Seed embedding map, score map, and suppressed pairs from existing rows.
+  // Dismissed pairs have duplicateFlag=false but duplicateOfId still set — skip re-flagging them.
   const scoreMap = new Map<number, number>();
+  const suppressedPairs = new Set<string>(); // "dupeId:canonId" strings
   for (const row of rows) {
     if (row.dedupeEmbedding && row.dedupeEmbedding.length > 0) {
       embeddingMap.set(row.id, row.dedupeEmbedding);
     }
     scoreMap.set(row.id, row.completenessScore ?? 0);
+    if (row.duplicateOfId != null) {
+      suppressedPairs.add(`${row.id}:${row.duplicateOfId}`);
+    }
   }
 
   // Embed in parallel batches and persist to DB
@@ -122,7 +128,9 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
           const scoreB = scoreMap.get(idB) ?? 0;
           const canonId = scoreA >= scoreB ? idA : idB;
           const dupeId = scoreA >= scoreB ? idB : idA;
-          if (!flaggedIds.has(dupeId)) {
+          // Skip re-flagging if admin previously dismissed this pair (suppression marker retained)
+          const pairKey = `${dupeId}:${canonId}`;
+          if (!flaggedIds.has(dupeId) && !suppressedPairs.has(pairKey)) {
             flaggedIds.add(dupeId);
             await db
               .update(ingestedAssets)

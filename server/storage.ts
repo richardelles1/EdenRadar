@@ -1405,9 +1405,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async dismissDuplicateCandidate(id: number): Promise<void> {
+    // Set duplicateFlag=false to remove from the admin panel, but intentionally
+    // keep duplicateOfId set as a suppression marker. The near-duplicate scan
+    // detects this and skips re-flagging the same pair, preventing admin churn.
     await db
       .update(ingestedAssets)
-      .set({ duplicateFlag: false, duplicateOfId: null })
+      .set({ duplicateFlag: false })
       .where(eq(ingestedAssets.id, id));
   }
 
