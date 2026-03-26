@@ -132,7 +132,6 @@ function isTrivialSummary(summary: string, assetName: string): boolean {
   const n = assetName.trim().toLowerCase();
   if (s === n) return true;
   if (s.startsWith(n) && summary.trim().length <= assetName.trim().length + 20) return true;
-  if (summary.trim().length < 40) return true;
   return false;
 }
 

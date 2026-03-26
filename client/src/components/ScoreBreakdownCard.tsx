@@ -43,10 +43,13 @@ function coverageLabel(pct: number): { label: string; color: string } {
 export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdownCardProps) {
   const hasCoverage = breakdown.signal_coverage != null && breakdown.signal_coverage > 0;
   const coverage = breakdown.signal_coverage ?? 0;
-  const scoredDims = breakdown.scored_dimensions ?? [];
+  const scoredDimsRaw = breakdown.scored_dimensions;
+  const scoredDims = scoredDimsRaw ?? [];
+  const isLegacyPayload = scoredDimsRaw === undefined;
   const basis = breakdown.dimension_basis ?? {};
   const coverageInfo = hasCoverage ? coverageLabel(coverage) : null;
   const hasScore = breakdown.total > 0 || scoredDims.length > 0;
+  const showFullGrid = isLegacyPayload || scoredDims.length >= 3;
 
   return (
     <div className={`rounded-lg border border-card-border bg-card/50 p-4 ${className}`} data-testid="score-breakdown-card">
@@ -82,7 +85,7 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         </div>
       )}
 
-      {hasScore && scoredDims.length < 3 && (
+      {hasScore && !showFullGrid && (
         <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
           <AlertCircle className="w-3.5 h-3.5 shrink-0 opacity-50" />
           <span>
@@ -92,7 +95,7 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         </div>
       )}
 
-      {hasScore && scoredDims.length >= 3 && (
+      {hasScore && showFullGrid && (
         <div className="space-y-3">
           {DIMS.map(({ key, label, icon: Icon, weight, fallback }) => {
             const scored = scoredDims.includes(key);
