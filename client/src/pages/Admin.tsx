@@ -3105,6 +3105,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
   const [fileName, setFileName] = useState<string | null>(null);
   const [result, setResult] = useState<{ updated: number; skipped: number; validationSkipped: number; skippedDetails: Array<{ index: number; id?: number; reason: string }> } | null>(null);
   const [importing, setImporting] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const CSV_FIELDS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"] as const;
 
@@ -3207,7 +3208,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
         Export relevant assets to CSV, enrich fields externally (e.g. with GPT-4o), then re-import. Only non-empty fields are written; id must match an existing asset.
       </p>
 
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-3">
         <a
           href={`/api/admin/assets/export-csv?pw=${pw}`}
           download
@@ -3217,25 +3218,39 @@ function BulkCsvImport({ pw }: { pw: string }) {
           <Download className="h-3.5 w-3.5" />
           Export Enrichment CSV
         </a>
-        <Button
-          variant="outline"
-          size="sm"
-          className="text-xs"
-          onClick={() => fileRef.current?.click()}
-          data-testid="button-upload-csv"
-        >
-          <Upload className="h-3.5 w-3.5 mr-1.5" />
-          {fileName ? `Re-upload (${fileName})` : "Upload Enriched CSV"}
-        </Button>
-        <input
-          ref={fileRef}
-          type="file"
-          accept=".csv,text/csv"
-          className="hidden"
-          data-testid="input-csv-file"
-          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
-        />
       </div>
+
+      {/* Drag-and-drop dropzone */}
+      <div
+        className={`mb-4 rounded-lg border-2 border-dashed transition-colors cursor-pointer ${isDragging ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 hover:bg-muted/20"}`}
+        data-testid="dropzone-csv"
+        onClick={() => fileRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+        onDragLeave={() => setIsDragging(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setIsDragging(false);
+          const f = e.dataTransfer.files?.[0];
+          if (f) handleFile(f);
+        }}
+      >
+        <div className="flex flex-col items-center justify-center gap-2 py-6 text-center">
+          <Upload className={`h-6 w-6 ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
+          <p className="text-xs font-medium text-foreground">
+            {fileName ? `Re-upload CSV (current: ${fileName})` : "Drop enriched CSV here or click to browse"}
+          </p>
+          <p className="text-xs text-muted-foreground">Accepts .csv files up to 50,000 rows</p>
+        </div>
+      </div>
+      <input
+        ref={fileRef}
+        type="file"
+        accept=".csv,text/csv"
+        className="hidden"
+        data-testid="input-csv-file"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+      />
 
       {result && (
         <div className="mb-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 text-xs text-green-800 dark:text-green-300 overflow-hidden" data-testid="text-import-result">
