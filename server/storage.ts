@@ -2063,30 +2063,43 @@ export class DatabaseStorage implements IStorage {
     let updated = 0;
     let skipped = 0;
     const notFoundIds: number[] = [];
+
+    // Build (setObj, id) pairs first — skip rows with no effective writes
+    const t = (s?: string) => s?.trim() || undefined;
+    const workItems: Array<{ id: number; setObj: Partial<typeof ingestedAssets.$inferInsert> }> = [];
     for (const row of rows) {
       const { id, ...fields } = row;
       const setObj: Partial<typeof ingestedAssets.$inferInsert> = {};
-      const t = (s?: string) => s?.trim();
-      if (t(fields.assetName)) setObj.assetName = t(fields.assetName)!;
-      if (t(fields.institution)) setObj.institution = t(fields.institution)!;
-      if (t(fields.summary)) setObj.summary = t(fields.summary)!;
-      if (t(fields.abstract)) setObj.abstract = t(fields.abstract)!;
-      if (t(fields.target)) setObj.target = t(fields.target)!;
-      if (t(fields.modality)) setObj.modality = t(fields.modality)!;
-      if (t(fields.indication)) setObj.indication = t(fields.indication)!;
-      if (t(fields.developmentStage)) setObj.developmentStage = t(fields.developmentStage)!;
+      if (t(fields.assetName)) setObj.assetName = t(fields.assetName);
+      if (t(fields.institution)) setObj.institution = t(fields.institution);
+      if (t(fields.summary)) setObj.summary = t(fields.summary);
+      if (t(fields.abstract)) setObj.abstract = t(fields.abstract);
+      if (t(fields.target)) setObj.target = t(fields.target);
+      if (t(fields.modality)) setObj.modality = t(fields.modality);
+      if (t(fields.indication)) setObj.indication = t(fields.indication);
+      if (t(fields.developmentStage)) setObj.developmentStage = t(fields.developmentStage);
       if (fields.categories?.length) setObj.categories = fields.categories;
-      if (t(fields.mechanismOfAction)) setObj.mechanismOfAction = t(fields.mechanismOfAction)!;
-      if (t(fields.innovationClaim)) setObj.innovationClaim = t(fields.innovationClaim)!;
-      if (t(fields.unmetNeed)) setObj.unmetNeed = t(fields.unmetNeed)!;
-      if (t(fields.comparableDrugs)) setObj.comparableDrugs = t(fields.comparableDrugs)!;
-      if (t(fields.licensingReadiness)) setObj.licensingReadiness = t(fields.licensingReadiness)!;
-      if (t(fields.ipType)) setObj.ipType = t(fields.ipType)!;
+      if (t(fields.mechanismOfAction)) setObj.mechanismOfAction = t(fields.mechanismOfAction);
+      if (t(fields.innovationClaim)) setObj.innovationClaim = t(fields.innovationClaim);
+      if (t(fields.unmetNeed)) setObj.unmetNeed = t(fields.unmetNeed);
+      if (t(fields.comparableDrugs)) setObj.comparableDrugs = t(fields.comparableDrugs);
+      if (t(fields.licensingReadiness)) setObj.licensingReadiness = t(fields.licensingReadiness);
+      if (t(fields.ipType)) setObj.ipType = t(fields.ipType);
       if (fields.completenessScore !== undefined) setObj.completenessScore = fields.completenessScore;
       if (Object.keys(setObj).length === 0) { skipped++; continue; }
-      const result = await db.update(ingestedAssets).set(setObj).where(eq(ingestedAssets.id, id)).returning({ id: ingestedAssets.id });
-      if (result.length > 0) { updated++; } else { skipped++; notFoundIds.push(id); }
+      workItems.push({ id, setObj });
     }
+
+    // Execute all updates in a single transaction to reduce round-trip overhead
+    if (workItems.length > 0) {
+      await db.transaction(async (tx) => {
+        for (const { id, setObj } of workItems) {
+          const result = await tx.update(ingestedAssets).set(setObj).where(eq(ingestedAssets.id, id)).returning({ id: ingestedAssets.id });
+          if (result.length > 0) { updated++; } else { skipped++; notFoundIds.push(id); }
+        }
+      });
+    }
+
     return { updated, skipped, notFoundIds };
   }
 }
