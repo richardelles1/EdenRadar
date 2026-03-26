@@ -129,20 +129,44 @@ app.use((req, res, next) => {
 
   // ── Startup migrations: near-duplicate detection columns ─────────────────
   try {
+    // Column additions are fast — always done synchronously
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_of_id INTEGER`);
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_embedding JSONB`);
-    await db.execute(sql`
-      CREATE INDEX IF NOT EXISTS idx_ingested_assets_source_url
-      ON ingested_assets (source_url)
-      WHERE source_url IS NOT NULL
-    `);
+    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_similarity REAL`);
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS idx_ingested_assets_duplicate_flag
       ON ingested_assets (duplicate_flag)
       WHERE duplicate_flag = true
     `);
     log("[startup] near-duplicate detection columns ready", "startup");
+    // Dedup + unique index creation is deferred to background — may be slow on large datasets
+    setImmediate(async () => {
+      try {
+        // Use window function approach — much faster than NOT IN subquery
+        await db.execute(sql`
+          UPDATE ingested_assets a
+          SET source_url = NULL
+          FROM (
+            SELECT id FROM (
+              SELECT id, ROW_NUMBER() OVER (PARTITION BY source_url ORDER BY id) AS rn
+              FROM ingested_assets
+              WHERE source_url IS NOT NULL
+            ) ranked
+            WHERE rn > 1
+          ) dups
+          WHERE a.id = dups.id
+        `);
+        await db.execute(sql`
+          CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique
+          ON ingested_assets (source_url)
+          WHERE source_url IS NOT NULL
+        `);
+        log("[startup] source_url unique index ready", "startup");
+      } catch (err: any) {
+        log(`[startup] source_url unique index (background): ${err?.message}`, "startup");
+      }
+    });
   } catch (err: any) {
     log(`[startup] near-duplicate detection migration failed: ${err?.message}`, "startup");
   }

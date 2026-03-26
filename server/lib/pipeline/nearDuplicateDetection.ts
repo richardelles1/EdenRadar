@@ -130,7 +130,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
             flaggedIds.add(dupeId);
             await db
               .update(ingestedAssets)
-              .set({ duplicateFlag: true, duplicateOfId: canonId })
+              .set({ duplicateFlag: true, duplicateOfId: canonId, dedupeSimilarity: sim })
               .where(eq(ingestedAssets.id, dupeId));
           }
         }

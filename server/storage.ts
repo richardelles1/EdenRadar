@@ -140,7 +140,11 @@ export interface IStorage {
     withComparableDrugs: number;
     avgCompletenessScore: number | null;
   }>;
-  getAssetsNeedingDeepEnrich(): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null }>>;
+  getAssetsNeedingDeepEnrich(): Promise<Array<{
+    id: number; assetName: string; summary: string; abstract: string | null;
+    categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
+    inventors: string[] | null; sourceUrl: string | null;
+  }>>;
   getAssetsNeedingDeepEnrichCount(): Promise<number>;
   updateIngestedAssetDeepEnrichment(id: number, data: {
     target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
@@ -191,7 +195,7 @@ export interface IStorage {
   getDuplicateCandidates(): Promise<Array<{
     id: number; assetName: string; institution: string | null; indication: string | null;
     target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
-    canonicalName: string | null;
+    canonicalName: string | null; dedupeSimilarity: number | null;
   }>>;
   dismissDuplicateCandidate(id: number): Promise<void>;
   runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }>;
@@ -365,7 +369,7 @@ export class DatabaseStorage implements IStorage {
 
     const [inserted] = await db
       .insert(ingestedAssets)
-      .values({ fingerprint, ...data } as any)
+      .values({ fingerprint, ...data })
       .returning();
     return { asset: inserted, isNew: true };
   }
@@ -439,7 +443,7 @@ export class DatabaseStorage implements IStorage {
       const chunk = newListings.slice(i, i + CHUNK);
       const inserted = await db
         .insert(ingestedAssets)
-        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })) as any)
+        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
         .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName, fingerprint: ingestedAssets.fingerprint });
       for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName, fingerprint: row.fingerprint });
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
@@ -970,13 +974,22 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
-  async getAssetsNeedingDeepEnrich(): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null }>> {
+  async getAssetsNeedingDeepEnrich(): Promise<Array<{
+    id: number; assetName: string; summary: string; abstract: string | null;
+    categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;
+    inventors: string[] | null; sourceUrl: string | null;
+  }>> {
     return db
       .select({
         id: ingestedAssets.id,
         assetName: ingestedAssets.assetName,
         summary: ingestedAssets.summary,
         abstract: ingestedAssets.abstract,
+        categories: ingestedAssets.categories,
+        patentStatus: ingestedAssets.patentStatus,
+        licensingStatus: ingestedAssets.licensingStatus,
+        inventors: ingestedAssets.inventors,
+        sourceUrl: ingestedAssets.sourceUrl,
       })
       .from(ingestedAssets)
       .where(
@@ -1319,7 +1332,7 @@ export class DatabaseStorage implements IStorage {
   async getDuplicateCandidates(): Promise<Array<{
     id: number; assetName: string; institution: string | null; indication: string | null;
     target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
-    canonicalName: string | null;
+    canonicalName: string | null; dedupeSimilarity: number | null;
   }>> {
     const result = await db.execute(sql`
       SELECT
@@ -1330,11 +1343,12 @@ export class DatabaseStorage implements IStorage {
         a.target,
         a.source_url AS "sourceUrl",
         a.duplicate_of_id AS "duplicateOfId",
+        a.dedupe_similarity AS "dedupeSimilarity",
         b.asset_name AS "canonicalName"
       FROM ingested_assets a
       LEFT JOIN ingested_assets b ON b.id = a.duplicate_of_id
       WHERE a.duplicate_flag = true
-      ORDER BY a.id DESC
+      ORDER BY a.dedupe_similarity DESC NULLS LAST, a.id DESC
       LIMIT 500
     `);
     return (result.rows as any[]).map((r) => ({
@@ -1346,6 +1360,7 @@ export class DatabaseStorage implements IStorage {
       sourceUrl: r.sourceUrl,
       duplicateOfId: r.duplicateOfId ? Number(r.duplicateOfId) : null,
       canonicalName: r.canonicalName,
+      dedupeSimilarity: r.dedupeSimilarity ? Number(r.dedupeSimilarity) : null,
     }));
   }
 

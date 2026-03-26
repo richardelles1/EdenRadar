@@ -3122,8 +3122,18 @@ function PotentialDuplicates({ pw }: { pw: string }) {
               className="flex items-start justify-between gap-3 p-3 bg-muted/40 rounded-lg border border-border text-sm"
             >
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-foreground truncate" data-testid={`text-dup-name-${c.id}`}>
-                  {c.assetName}
+                <div className="flex items-center gap-2">
+                  <div className="font-medium text-foreground truncate" data-testid={`text-dup-name-${c.id}`}>
+                    {c.assetName}
+                  </div>
+                  {c.dedupeSimilarity != null && (
+                    <span
+                      data-testid={`text-dup-similarity-${c.id}`}
+                      className="shrink-0 text-xs font-mono px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                    >
+                      {Math.round(c.dedupeSimilarity * 100)}% match
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-muted-foreground mt-0.5 truncate">
                   {c.institution ?? "Unknown institution"} {c.indication ? `· ${c.indication}` : ""}

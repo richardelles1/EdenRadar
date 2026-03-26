@@ -1,4 +1,4 @@
-import { classifyAsset } from "./classifyAsset";
+import { classifyAsset, type AssetContext } from "./classifyAsset";
 
 export interface DeepEnrichResult {
   id: number;
@@ -47,6 +47,7 @@ export interface DeepEnrichAssetInput {
   assetName: string;
   summary: string;
   abstract: string | null;
+  ctx?: AssetContext;
 }
 
 export interface DeepEnrichBatchResult {
@@ -133,7 +134,7 @@ export async function deepEnrichBatch(
       let succeeded = false;
       try {
         const classification = await withRetry(
-          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o", true),
+          () => classifyAsset(asset!.assetName, asset!.summary, asset!.abstract ?? undefined, "gpt-4o", true, asset!.ctx),
           asset.id,
         );
 

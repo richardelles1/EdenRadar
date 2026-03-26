@@ -160,6 +160,8 @@ export const ingestedAssets = pgTable("ingested_assets", {
   duplicateOfId: integer("duplicate_of_id"),
   // Compact embedding for near-duplicate comparison (JSONB number array, not vector type)
   dedupeEmbedding: jsonb("dedupe_embedding").$type<number[]>(),
+  // Similarity score stored when near-duplicate is flagged (0.0–1.0)
+  dedupeSimilarity: real("dedupe_similarity"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {
@@ -169,6 +171,7 @@ export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {
   categories: z.array(z.string()).nullable().optional(),
   inventors: z.array(z.string()).nullable().optional(),
   embedding: z.array(z.number()).nullable().optional(),
+  dedupeEmbedding: z.array(z.number()).nullable().optional(),
 }).omit({
   id: true,
   firstSeenAt: true,
