@@ -1701,7 +1701,7 @@ function Enrichment({ pw }: { pw: string }) {
     },
   });
 
-  const { data: quality, isLoading: qualityLoading } = useQuery<DatasetQualityResponse>({
+  const { data: quality, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<DatasetQualityResponse>({
     queryKey: ["/api/admin/dataset-quality", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/dataset-quality", { headers: { "x-admin-password": pw } });
@@ -1740,6 +1740,7 @@ function Enrichment({ pw }: { pw: string }) {
     if (prev === "running" && (status?.status === "done" || status?.status === "error")) {
       setPolling(false);
       refetchStats();
+      refetchQuality();
       if (status.status === "done") {
         toast({ title: "Enrichment complete", description: `${status.improved} assets improved out of ${status.total} processed` });
       } else {
@@ -2077,7 +2078,7 @@ function Enrichment({ pw }: { pw: string }) {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div className="rounded-xl border border-border bg-background p-4 text-center">
                 <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Relevant Assets</div>
+                <div className="text-xs text-muted-foreground mt-1">Total Assets (DB)</div>
               </div>
               <div className="rounded-xl border border-border bg-background p-4 text-center">
                 <div className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
