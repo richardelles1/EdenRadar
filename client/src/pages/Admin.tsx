@@ -3134,7 +3134,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
       const obj: Record<string, unknown> = { id };
       for (const f of CSV_FIELDS) {
         if (f === "id") continue;
-        const v = r[f];
+        const v = r[f]?.trim();
         if (!v) continue;
         if (f === "categories") {
           try { obj[f] = JSON.parse(v); } catch { obj[f] = v.split(";").map((s) => s.trim()).filter(Boolean); }
@@ -3247,7 +3247,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
             <div className="border-t border-green-200 dark:border-green-800 px-3 py-2 space-y-0.5" data-testid="text-skipped-details">
               <p className="font-semibold mb-1">Skipped rows (first {result.skippedDetails.length}):</p>
               {result.skippedDetails.map((d, i) => (
-                <p key={i} className="font-mono">Row {d.index + 1}{d.id !== undefined ? ` (id=${d.id})` : ""}: {d.reason}</p>
+                <p key={i} className="font-mono">{d.index >= 0 ? `Row ${d.index + 1}` : "—"}{d.id !== undefined ? ` (id=${d.id})` : ""}: {d.reason}</p>
               ))}
             </div>
           )}

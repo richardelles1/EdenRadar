@@ -2066,21 +2066,22 @@ export class DatabaseStorage implements IStorage {
     for (const row of rows) {
       const { id, ...fields } = row;
       const setObj: Partial<typeof ingestedAssets.$inferInsert> = {};
-      if (fields.assetName) setObj.assetName = fields.assetName;
-      if (fields.institution) setObj.institution = fields.institution;
-      if (fields.summary) setObj.summary = fields.summary;
-      if (fields.abstract !== undefined && fields.abstract !== "") setObj.abstract = fields.abstract;
-      if (fields.target) setObj.target = fields.target;
-      if (fields.modality) setObj.modality = fields.modality;
-      if (fields.indication) setObj.indication = fields.indication;
-      if (fields.developmentStage) setObj.developmentStage = fields.developmentStage;
+      const t = (s?: string) => s?.trim();
+      if (t(fields.assetName)) setObj.assetName = t(fields.assetName)!;
+      if (t(fields.institution)) setObj.institution = t(fields.institution)!;
+      if (t(fields.summary)) setObj.summary = t(fields.summary)!;
+      if (t(fields.abstract)) setObj.abstract = t(fields.abstract)!;
+      if (t(fields.target)) setObj.target = t(fields.target)!;
+      if (t(fields.modality)) setObj.modality = t(fields.modality)!;
+      if (t(fields.indication)) setObj.indication = t(fields.indication)!;
+      if (t(fields.developmentStage)) setObj.developmentStage = t(fields.developmentStage)!;
       if (fields.categories?.length) setObj.categories = fields.categories;
-      if (fields.mechanismOfAction) setObj.mechanismOfAction = fields.mechanismOfAction;
-      if (fields.innovationClaim) setObj.innovationClaim = fields.innovationClaim;
-      if (fields.unmetNeed) setObj.unmetNeed = fields.unmetNeed;
-      if (fields.comparableDrugs) setObj.comparableDrugs = fields.comparableDrugs;
-      if (fields.licensingReadiness) setObj.licensingReadiness = fields.licensingReadiness;
-      if (fields.ipType) setObj.ipType = fields.ipType;
+      if (t(fields.mechanismOfAction)) setObj.mechanismOfAction = t(fields.mechanismOfAction)!;
+      if (t(fields.innovationClaim)) setObj.innovationClaim = t(fields.innovationClaim)!;
+      if (t(fields.unmetNeed)) setObj.unmetNeed = t(fields.unmetNeed)!;
+      if (t(fields.comparableDrugs)) setObj.comparableDrugs = t(fields.comparableDrugs)!;
+      if (t(fields.licensingReadiness)) setObj.licensingReadiness = t(fields.licensingReadiness)!;
+      if (t(fields.ipType)) setObj.ipType = t(fields.ipType)!;
       if (fields.completenessScore !== undefined) setObj.completenessScore = fields.completenessScore;
       if (Object.keys(setObj).length === 0) { skipped++; continue; }
       const result = await db.update(ingestedAssets).set(setObj).where(eq(ingestedAssets.id, id)).returning({ id: ingestedAssets.id });
