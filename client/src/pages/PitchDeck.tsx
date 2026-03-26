@@ -1249,7 +1249,7 @@ function ContactSlide({ colors }: { colors: Colors }) {
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
         {showGlobe ? (
           <div className="mb-5 sm:mb-6" style={{ lineHeight: 0 }}>
-            <WorldMap width={Math.round(globeSize * 1.75)} height={globeSize} isDark={isDarkMode} />
+            <WorldMap width={Math.round(globeSize * 1.6)} height={globeSize} isDark={isDarkMode} />
           </div>
         ) : (
           <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ background: colors.greenDim, border: `2px solid ${colors.green}44` }}>
