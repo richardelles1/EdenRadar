@@ -33,7 +33,10 @@ const MEANINGFUL_DIMS = ["fit", "novelty", "readiness", "licensability"] as cons
 type MeaningfulDim = typeof MEANINGFUL_DIMS[number];
 
 export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
-  const { bg, text, ring } = scoreColor(score);
+  const isUnscored = score === 0 && (breakdown?.signal_coverage ?? 0) === 0 && (breakdown?.scored_dimensions?.length ?? 0) === 0;
+  const { bg, text, ring } = isUnscored
+    ? { bg: "bg-muted", text: "text-muted-foreground", ring: "ring-border" }
+    : scoreColor(score);
   const sizeClass = size === "sm" ? "text-[10px] px-1.5 py-0.5" : size === "lg" ? "text-sm px-3 py-1.5" : "text-xs px-2 py-1";
 
   const badge = (
@@ -41,8 +44,14 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
       className={`inline-flex items-center gap-1 rounded-md font-bold ring-1 ${bg} ${text} ${ring} ${sizeClass} cursor-default`}
       data-testid="score-badge"
     >
-      <span className="font-mono">{Math.round(score)}</span>
-      <span className="opacity-60 font-normal text-[0.7em]">/ 100</span>
+      {isUnscored ? (
+        <span className="font-mono opacity-60">–</span>
+      ) : (
+        <>
+          <span className="font-mono">{Math.round(score)}</span>
+          <span className="opacity-60 font-normal text-[0.7em]">/ 100</span>
+        </>
+      )}
     </div>
   );
 

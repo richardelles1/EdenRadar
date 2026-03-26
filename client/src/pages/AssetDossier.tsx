@@ -13,7 +13,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key, Shield,
   Activity, Sparkles, BookOpen, Printer, Swords, GraduationCap,
-  Beaker, Tag, Gauge, FlaskConical, Lightbulb,
+  Beaker, Tag, FlaskConical, Lightbulb,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
 
@@ -116,7 +116,7 @@ function CompletenessBar({ score }: { score: number }) {
   return (
     <div className="space-y-1">
       <div className="flex items-center justify-between text-[10px]">
-        <span className="text-muted-foreground font-semibold uppercase tracking-wide">Completeness</span>
+        <span className="text-muted-foreground font-semibold uppercase tracking-wide">Data Completeness</span>
         <span className="font-semibold text-foreground">{pct}%</span>
       </div>
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
@@ -124,6 +124,16 @@ function CompletenessBar({ score }: { score: number }) {
       </div>
     </div>
   );
+}
+
+function isTrivialSummary(summary: string, assetName: string): boolean {
+  if (!summary || summary.trim().length === 0) return true;
+  const s = summary.trim().toLowerCase();
+  const n = assetName.trim().toLowerCase();
+  if (s === n) return true;
+  if (s.startsWith(n) && summary.trim().length <= assetName.trim().length + 20) return true;
+  if (summary.trim().length < 40) return true;
+  return false;
 }
 
 export default function AssetDossier() {
@@ -237,6 +247,13 @@ export default function AssetDossier() {
   const stageClass = STAGE_COLORS[asset.development_stage?.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
   const licensingAvailable = (enriched?.licensingStatus ?? asset.licensing_status ?? "").toLowerCase().includes("available");
 
+  const KEY_FIELDS = ["target", "modality", "indication", "development_stage", "patent_status", "licensing_status"] as const;
+  const unknownCount = KEY_FIELDS.filter((f) => {
+    const v = asset[f as keyof typeof asset] as string | undefined;
+    return !v || v === "unknown";
+  }).length;
+  const adjustedCompleteness = (raw: number) => unknownCount >= 4 ? Math.min(raw, 50) : raw;
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Nav />
@@ -318,25 +335,17 @@ export default function AssetDossier() {
                 {asset.source_types.map((st) => (
                   <SourceBadge key={st} sourceType={st} />
                 ))}
-                <span className="text-[11px] text-muted-foreground ml-1">
-                  {asset.evidence_count} signal{asset.evidence_count !== 1 ? "s" : ""}
-                </span>
+                {asset.evidence_count > 0 && (
+                  <span className="text-[11px] text-muted-foreground ml-1">
+                    {asset.evidence_count} signal{asset.evidence_count !== 1 ? "s" : ""}
+                  </span>
+                )}
               </div>
             )}
           </div>
 
           <div className="grid sm:grid-cols-3 gap-6">
             <div className="sm:col-span-2 space-y-6">
-              {enriched?.innovationClaim && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <h2 className="text-sm font-semibold text-foreground">Innovation Claim</h2>
-                  </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{enriched.innovationClaim}</p>
-                </div>
-              )}
-
               {asset.why_it_matters && (
                 <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
                   <div className="flex items-center gap-2 mb-3">
@@ -347,7 +356,7 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              {(enriched?.abstract || asset.summary) && (
+              {(enriched?.abstract || (!isTrivialSummary(asset.summary, asset.asset_name) && asset.summary)) && (
                 <div className="rounded-xl border border-card-border bg-card p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <BookOpen className="w-4 h-4 text-muted-foreground" />
@@ -361,7 +370,17 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              {enriched?.unmetNeed && (
+              {enriched?.innovationClaim && enriched.innovationClaim.length > 30 && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    <h2 className="text-sm font-semibold text-foreground">Innovation Claim</h2>
+                  </div>
+                  <p className="text-sm text-foreground/80 leading-relaxed">{enriched.innovationClaim}</p>
+                </div>
+              )}
+
+              {enriched?.unmetNeed && enriched.unmetNeed.length > 30 && (
                 <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-5">
                   <div className="flex items-center gap-2 mb-3">
                     <FlaskConical className="w-4 h-4 text-rose-600 dark:text-rose-400" />
@@ -573,11 +592,38 @@ export default function AssetDossier() {
             </div>
 
             <div className="space-y-4">
+              {enriched?.contactEmail && (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4" data-testid="contact-card">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                    <Key className="w-3 h-3" />
+                    Licensing Contact
+                  </h3>
+                  <a
+                    href={`mailto:${enriched.contactEmail}`}
+                    className="text-xs text-primary hover:underline break-all"
+                    data-testid="contact-email-link"
+                  >
+                    {enriched.contactEmail}
+                  </a>
+                </div>
+              )}
+
+              {(enriched?.inventors?.length ?? 0) > 0 && (
+                <div className="rounded-xl border border-card-border bg-card p-4" data-testid="inventors-card">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Inventors</h3>
+                  <div className="space-y-1">
+                    {enriched!.inventors!.map((inv, i) => (
+                      <p key={i} className="text-xs text-foreground">{inv}</p>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <ScoreBreakdownCard breakdown={asset.score_breakdown} />
 
               {enriched?.completenessScore != null && (
                 <div className="rounded-xl border border-card-border bg-card p-4" data-testid="completeness-card">
-                  <CompletenessBar score={enriched.completenessScore} />
+                  <CompletenessBar score={adjustedCompleteness(enriched.completenessScore)} />
                 </div>
               )}
 
@@ -616,42 +662,19 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              <div className="rounded-xl border border-card-border bg-card p-4">
-                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Confidence</h3>
-                <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                  asset.confidence === "high" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
-                  asset.confidence === "medium" ? "bg-amber-500/15 text-amber-700 dark:text-amber-400" :
-                  "bg-muted text-muted-foreground"
-                }`}>
-                  <Shield className="w-3 h-3" />
-                  {asset.confidence} confidence
-                </div>
-                <p className="text-[10px] text-muted-foreground mt-2">
-                  Based on completeness of extracted fields and number of corroborating signals.
-                </p>
-              </div>
-
-              {enriched?.contactEmail && (
-                <div className="rounded-xl border border-card-border bg-card p-4" data-testid="contact-card">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Contact</h3>
-                  <a
-                    href={`mailto:${enriched.contactEmail}`}
-                    className="text-xs text-primary hover:underline break-all"
-                    data-testid="contact-email-link"
-                  >
-                    {enriched.contactEmail}
-                  </a>
-                </div>
-              )}
-
-              {(enriched?.inventors?.length ?? 0) > 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-4" data-testid="inventors-card">
-                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Inventors</h3>
-                  <div className="space-y-1">
-                    {enriched!.inventors!.map((inv, i) => (
-                      <p key={i} className="text-xs text-foreground">{inv}</p>
-                    ))}
+              {asset.confidence !== "low" && (
+                <div className="rounded-xl border border-card-border bg-card p-4">
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Confidence</h3>
+                  <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    asset.confidence === "high" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" :
+                    "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                  }`}>
+                    <Shield className="w-3 h-3" />
+                    {asset.confidence} confidence
                   </div>
+                  <p className="text-[10px] text-muted-foreground mt-2">
+                    Based on completeness of extracted fields and number of corroborating signals.
+                  </p>
                 </div>
               )}
             </div>
