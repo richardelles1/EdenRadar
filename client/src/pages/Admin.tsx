@@ -2220,16 +2220,26 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
                       </td>
                       <td className="px-4 py-2 text-center">
                         {asset.source_url ? (
-                          <a
-                            href={asset.source_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={e => e.stopPropagation()}
-                            className="text-muted-foreground hover:text-primary transition-colors inline-flex"
-                            data-testid={`link-source-${asset.id}`}
-                          >
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </a>
+                          <span className="inline-flex items-center gap-1">
+                            <a
+                              href={asset.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={e => e.stopPropagation()}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                              data-testid={`link-source-${asset.id}`}
+                            >
+                              <ExternalLink className="h-3.5 w-3.5" />
+                            </a>
+                            <button
+                              onClick={e => { e.stopPropagation(); navigator.clipboard.writeText(asset.source_url!); }}
+                              className="text-muted-foreground hover:text-primary transition-colors"
+                              title="Copy URL"
+                              data-testid={`button-copy-url-inline-${asset.id}`}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </button>
+                          </span>
                         ) : <span className="opacity-30">—</span>}
                       </td>
                       <td className="px-4 py-2 text-right">
