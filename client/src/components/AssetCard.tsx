@@ -142,12 +142,16 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         </div>
 
         <div className="flex flex-wrap gap-1.5">
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${stageClass}`}>
-            {asset.development_stage !== "unknown" ? asset.development_stage : "Stage Unknown"}
-          </span>
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${modalityClass}`}>
-            {asset.modality !== "unknown" ? asset.modality : "Modality Unknown"}
-          </span>
+          {asset.development_stage && asset.development_stage !== "unknown" && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${stageClass}`}>
+              {asset.development_stage}
+            </span>
+          )}
+          {asset.modality && asset.modality !== "unknown" && (
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${modalityClass}`}>
+              {asset.modality}
+            </span>
+          )}
           {asset.source_types?.map((st) => (
             <SourceBadge key={st} sourceType={st} />
           ))}
@@ -304,12 +308,16 @@ export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelet
         </Button>
       </div>
       <div className="flex flex-wrap gap-1">
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${stageClass}`}>
-          {asset.developmentStage}
-        </span>
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${modalityClass}`}>
-          {asset.modality}
-        </span>
+        {asset.developmentStage && asset.developmentStage !== "unknown" && (
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${stageClass}`}>
+            {asset.developmentStage}
+          </span>
+        )}
+        {asset.modality && asset.modality !== "unknown" && (
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${modalityClass}`}>
+            {asset.modality}
+          </span>
+        )}
       </div>
       <div className="text-xs space-y-1">
         <div className="flex gap-1.5">

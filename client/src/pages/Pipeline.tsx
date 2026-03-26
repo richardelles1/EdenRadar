@@ -86,9 +86,11 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
       </div>
 
       <div className="flex flex-wrap gap-1">
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
-          {asset.modality !== "unknown" ? asset.modality : "Unknown modality"}
-        </span>
+        {asset.modality && asset.modality !== "unknown" && (
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
+            {asset.modality}
+          </span>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">

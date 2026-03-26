@@ -93,9 +93,11 @@ function AssetCard({ asset, onDelete, onMove, pipelines }: {
       </div>
 
       <div className="flex flex-wrap gap-1">
-        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${getBadgeClass(asset.modality)}`}>
-          {asset.modality !== "unknown" ? asset.modality : "Unknown modality"}
-        </span>
+        {asset.modality && asset.modality !== "unknown" && (
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${getBadgeClass(asset.modality)}`}>
+            {asset.modality}
+          </span>
+        )}
         {asset.developmentStage && asset.developmentStage !== "unknown" && (
           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-muted text-muted-foreground border-border capitalize">
             {asset.developmentStage}
