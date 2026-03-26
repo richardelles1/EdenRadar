@@ -17,7 +17,7 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -342,7 +342,7 @@ export default function Scout() {
       const res = await apiRequest("POST", "/api/scout/search", {
         query,
         minSimilarity: 0.40,
-        limit: 50,
+        limit: 100,
         ...(profileModality ? { modality: profileModality } : {}),
         ...(profileStage ? { stage: profileStage } : {}),
         ...(profileIndication ? { indication: profileIndication } : {}),
@@ -518,7 +518,7 @@ export default function Scout() {
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
-  const isAnyPending = searchMutation.isPending || researchMutation.isPending || reportMutation.isPending;
+  const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
   const activeFilterCount = [
     stageFilter !== "all",
@@ -615,15 +615,35 @@ export default function Scout() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
           </div>
 
-          {/* Unified loading — wait for both TTO and research when sources are active */}
-          {(searchMutation.isPending || (researchSources.length > 0 && researchMutation.isPending)) && (
+          {/* TTO loading overlay — only blocks on the fast TTO query */}
+          {searchMutation.isPending && (
             <div className="px-4 sm:px-6">
               <RadarOverlay stats={radarStats} />
             </div>
           )}
 
-          {/* Dual-tab toggle — only shown when both are done and research sources are checked */}
-          {hasSearched && !searchMutation.isPending && !(researchSources.length > 0 && researchMutation.isPending) && researchSources.length > 0 && (
+          {/* Research signals compiling banner — shows alongside TTO results while research is still pending */}
+          {hasSearched && !searchMutation.isPending && researchMutation.isPending && researchSources.length > 0 && (
+            <div className="px-4 sm:px-6 pb-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/15 text-xs text-muted-foreground" data-testid="research-compiling-banner">
+                <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
+                <span>Compiling research signals from PubMed, clinical trials, patents...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Research signals failed banner */}
+          {hasSearched && !searchMutation.isPending && researchMutation.isError && researchSources.length > 0 && (
+            <div className="px-4 sm:px-6 pb-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-card-border text-xs text-muted-foreground" data-testid="research-error-banner">
+                <Radio className="w-3 h-3 shrink-0 opacity-40" />
+                <span>Research signals unavailable — showing TTO results only.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Dual-tab toggle — shown as soon as TTO is done and research sources are checked */}
+          {hasSearched && !searchMutation.isPending && researchSources.length > 0 && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex justify-center">
                 <div className="inline-flex items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
@@ -654,13 +674,20 @@ export default function Scout() {
                     }`}
                     data-testid="result-tab-research"
                   >
-                    <FlaskConical className="w-4 h-4 shrink-0" />
+                    {researchMutation.isPending
+                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                      : <FlaskConical className="w-4 h-4 shrink-0" />
+                    }
                     Research Signals
-                    <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
-                      resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
-                    }`}>
-                      {researchResults.length}
-                    </span>
+                    {researchMutation.isPending ? (
+                      <span className={`ml-1 text-[10px] italic font-normal opacity-70`}>Compiling...</span>
+                    ) : (
+                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                        resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
+                      }`}>
+                        {researchResults.length}
+                      </span>
+                    )}
                   </button>
                 </div>
               </div>
@@ -691,8 +718,8 @@ export default function Scout() {
           )}
 
           <div className="flex-1 px-4 sm:px-6 pb-10 space-y-6">
-            {/* Assets tab — TTO results (always shown when no research sources active; else only when assets tab selected) */}
-            {(researchSources.length === 0 || !hasSearched || resultTab === "assets") && !searchMutation.isPending && !(researchSources.length > 0 && researchMutation.isPending) && (
+            {/* Assets tab — TTO results shown immediately once TTO query resolves; not blocked by research loading */}
+            {(researchSources.length === 0 || !hasSearched || resultTab === "assets") && !searchMutation.isPending && (
               <>
                 {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
                 {hasSearched && (
@@ -771,7 +798,18 @@ export default function Scout() {
               </>
             )}
 
-            {/* Research Signals tab */}
+            {/* Research Signals tab — loading state while compiling */}
+            {hasSearched && resultTab === "research" && researchSources.length > 0 && !searchMutation.isPending && researchMutation.isPending && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="research-loading-state">
+                <Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" />
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-1">Compiling research signals...</p>
+                  <p className="text-xs text-muted-foreground">Searching PubMed, clinical trials, patents, and {researchSources.length - 3 > 0 ? `${researchSources.length - 3} more sources` : "more sources"}.</p>
+                </div>
+              </div>
+            )}
+
+            {/* Research Signals tab — results */}
             {hasSearched && resultTab === "research" && researchSources.length > 0 && !searchMutation.isPending && !researchMutation.isPending && (
               <>
                 {researchResults.length === 0 ? (
