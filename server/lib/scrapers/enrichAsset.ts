@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { MIN_CONTENT_CHARS } from "../pipeline/classifyAsset";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -14,6 +15,14 @@ export interface AssetEnrichment {
   biotechRelevant: boolean;
 }
 
+export interface EnrichAssetContext {
+  categories?: string[] | null;
+  patentStatus?: string | null;
+  licensingStatus?: string | null;
+  inventors?: string[] | null;
+  sourceUrl?: string | null;
+}
+
 const STAGE_VALUES = new Set(["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved", "unknown"]);
 const MODALITY_VALUES = new Set([
   "small molecule", "antibody", "bispecific antibody", "car-t", "gene therapy", "gene editing",
@@ -26,11 +35,31 @@ function sanitize(val: string, allowed: Set<string>, fallback: string): string {
   return allowed.has(v) ? v : fallback;
 }
 
-export async function enrichAssetTitle(assetName: string, summary?: string): Promise<AssetEnrichment> {
+function buildContextLines(ctx?: EnrichAssetContext): string[] {
+  if (!ctx) return [];
+  const lines: string[] = [];
+  if (ctx.categories?.length) lines.push(`Tags/Categories: ${ctx.categories.join(", ")}`);
+  if (ctx.patentStatus && ctx.patentStatus !== "unknown") lines.push(`Patent Status: ${ctx.patentStatus}`);
+  if (ctx.licensingStatus && ctx.licensingStatus !== "unknown") lines.push(`Licensing Status: ${ctx.licensingStatus}`);
+  if (ctx.inventors?.length) lines.push(`Inventors: ${ctx.inventors.join(", ")}`);
+  if (ctx.sourceUrl) lines.push(`Source URL: ${ctx.sourceUrl}`);
+  return lines;
+}
+
+export async function enrichAssetTitle(
+  assetName: string,
+  summary?: string,
+  ctx?: EnrichAssetContext,
+): Promise<AssetEnrichment> {
   try {
-    const inputText = summary && summary !== assetName && summary.length > 30
-      ? `Title: ${assetName}\nDescription: ${summary.slice(0, 2000)}`
-      : assetName;
+    const contextLines = buildContextLines(ctx);
+    const inputParts = [
+      summary && summary !== assetName && summary.length > 30
+        ? `Title: ${assetName}\nDescription: ${summary.slice(0, 2000)}`
+        : `Title: ${assetName}`,
+      ...contextLines,
+    ];
+    const inputText = inputParts.join("\n");
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -68,6 +97,7 @@ export async function reEnrichAsset(
   assetName: string,
   summary: string,
   currentFields: { target: string; modality: string; indication: string; developmentStage: string },
+  ctx?: EnrichAssetContext,
 ): Promise<AssetEnrichment> {
   const unknownFields: string[] = [];
   if (currentFields.target === "unknown") unknownFields.push("target");
@@ -86,6 +116,13 @@ export async function reEnrichAsset(
   }
 
   try {
+    const contextLines = buildContextLines(ctx);
+    const userContent = [
+      `Title: ${assetName}`,
+      `Summary: ${(summary || "").slice(0, 1500)}`,
+      ...contextLines,
+    ].join("\n");
+
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
@@ -108,7 +145,7 @@ Current known fields: ${JSON.stringify(Object.fromEntries(Object.entries(current
         },
         {
           role: "user",
-          content: `Title: ${assetName}\nSummary: ${(summary || "").slice(0, 1500)}`,
+          content: userContent,
         },
       ],
     });
@@ -143,7 +180,7 @@ Current known fields: ${JSON.stringify(Object.fromEntries(Object.entries(current
 }
 
 export async function enrichBatch(
-  items: { id: number; assetName: string }[],
+  items: { id: number; assetName: string; summary?: string; ctx?: EnrichAssetContext }[],
   concurrency = 50,
   onEach?: (id: number, result: AssetEnrichment) => Promise<void>
 ): Promise<Map<number, AssetEnrichment>> {
@@ -154,7 +191,12 @@ export async function enrichBatch(
     while (i < items.length) {
       const item = items[i++];
       if (!item) continue;
-      const enrichment = await enrichAssetTitle(item.assetName);
+      const combinedLength = (item.assetName || "").length + (item.summary || "").length;
+      if (combinedLength < MIN_CONTENT_CHARS) {
+        console.log(`[enrichBatch] Skipping asset ${item.id} — combined text too short (${combinedLength} chars)`);
+        continue;
+      }
+      const enrichment = await enrichAssetTitle(item.assetName, item.summary, item.ctx);
       results.set(item.id, enrichment);
       if (onEach) {
         try { await onEach(item.id, enrichment); } catch {}
@@ -162,7 +204,7 @@ export async function enrichBatch(
     }
   }
 
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
+  const workers = Array.from({ length: Math.min(concurrency, items.length || 1) }, worker);
   await Promise.all(workers);
   return results;
 }

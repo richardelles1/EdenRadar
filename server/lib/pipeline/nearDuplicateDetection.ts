@@ -6,7 +6,6 @@ import OpenAI from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 const SIMILARITY_THRESHOLD = 0.92;
-const BATCH_SIZE = 500;
 const EMBED_CONCURRENCY = 20;
 
 function cosineSimilarity(a: number[], b: number[]): number {
@@ -25,19 +24,7 @@ async function embedTexts(texts: string[]): Promise<number[][]> {
     model: "text-embedding-3-small",
     input: texts,
   });
-  return response.data.map((d: { embedding: number[] }) => d.embedding);
-}
-
-export interface DuplicateCandidate {
-  id: number;
-  assetName: string;
-  institution: string | null;
-  indication: string | null;
-  target: string | null;
-  sourceUrl: string | null;
-  duplicateOfId: number | null;
-  duplicateFlag: boolean;
-  similarity?: number;
+  return response.data.map((d) => d.embedding);
 }
 
 export async function runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{
@@ -47,7 +34,6 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
 }> {
   onProgress?.("Loading assets for dedup embedding...");
 
-  // Load all non-duplicate assets that need embedding OR haven't been embedded yet
   const rows = await db
     .select({
       id: ingestedAssets.id,
@@ -61,10 +47,21 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
     .where(eq(ingestedAssets.duplicateFlag, false))
     .limit(5000);
 
-  const toEmbed = rows.filter((r) => !r.dedupeEmbedding);
+  // Separate assets that need embedding from already-embedded ones
+  const toEmbed = rows.filter((r) => !r.dedupeEmbedding || r.dedupeEmbedding.length === 0);
   onProgress?.(`Embedding ${toEmbed.length} assets (${rows.length - toEmbed.length} already embedded)...`);
 
-  // Embed in parallel batches
+  // Track embeddings in a dedicated map — never mutate Drizzle row objects
+  const embeddingMap = new Map<number, number[]>();
+
+  // Seed map from already-embedded rows
+  for (const row of rows) {
+    if (row.dedupeEmbedding && row.dedupeEmbedding.length > 0) {
+      embeddingMap.set(row.id, row.dedupeEmbedding);
+    }
+  }
+
+  // Embed in parallel batches and persist to DB
   let embeddedCount = 0;
   for (let i = 0; i < toEmbed.length; i += EMBED_CONCURRENCY) {
     const chunk = toEmbed.slice(i, i + EMBED_CONCURRENCY);
@@ -76,28 +73,21 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
       for (let j = 0; j < chunk.length; j++) {
         const item = chunk[j];
         const emb = embeddings[j];
-        if (!emb) continue;
+        if (!item || !emb) continue;
         await db
           .update(ingestedAssets)
-          .set({ dedupeEmbedding: emb as any })
+          .set({ dedupeEmbedding: emb })
           .where(eq(ingestedAssets.id, item.id));
-        (item as any).dedupeEmbedding = emb;
+        embeddingMap.set(item.id, emb);
         embeddedCount++;
       }
-    } catch (err: any) {
-      console.error(`[nearDuplicateDetection] Embedding chunk failed: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[nearDuplicateDetection] Embedding chunk failed: ${msg}`);
     }
   }
 
   onProgress?.(`Embedded ${embeddedCount} assets. Running similarity comparison...`);
-
-  // Build full embedding index
-  const allWithEmbeddings = rows.filter((r) => r.dedupeEmbedding || (toEmbed.find((t) => t.id === r.id) as any)?.dedupeEmbedding);
-  const embeddingMap = new Map<number, number[]>();
-  for (const row of rows) {
-    const emb = (row as any).dedupeEmbedding as number[] | null;
-    if (emb && Array.isArray(emb) && emb.length > 0) embeddingMap.set(row.id, emb);
-  }
 
   // Group by indication to limit comparison scope
   const indicationGroups = new Map<string, number[]>();
@@ -117,6 +107,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
       for (let j = i + 1; j < groupIds.length; j++) {
         const idA = groupIds[i];
         const idB = groupIds[j];
+        if (idA === undefined || idB === undefined) continue;
         const embA = embeddingMap.get(idA);
         const embB = embeddingMap.get(idB);
         if (!embA || !embB) continue;

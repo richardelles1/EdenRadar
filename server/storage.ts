@@ -402,15 +402,15 @@ export class DatabaseStorage implements IStorage {
     //     check if that URL already exists under a different fingerprint.
     //     If so, update the existing row rather than inserting a duplicate.
     const urlCandidates = fingerprintNewListings.filter((l) => l.sourceUrl);
-    const urlDeduped = new Map<string, { id: number; fingerprint: string }>();
+    const urlDeduped = new Map<string, { id: number; fingerprint: string; contentHash: string | null }>();
     for (let i = 0; i < urlCandidates.length; i += CHUNK) {
       const chunkUrls = urlCandidates.slice(i, i + CHUNK).map((l) => l.sourceUrl!);
       const rows = await db
-        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl })
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl, contentHash: ingestedAssets.contentHash })
         .from(ingestedAssets)
         .where(inArray(ingestedAssets.sourceUrl, chunkUrls));
       for (const row of rows) {
-        if (row.sourceUrl) urlDeduped.set(row.sourceUrl, { id: row.id, fingerprint: row.fingerprint });
+        if (row.sourceUrl) urlDeduped.set(row.sourceUrl, { id: row.id, fingerprint: row.fingerprint, contentHash: row.contentHash });
       }
     }
 
@@ -420,18 +420,20 @@ export class DatabaseStorage implements IStorage {
     // Update URL-matched duplicates (refresh content + lastSeenAt instead of inserting)
     if (urlDuplicates.length > 0) {
       console.log(`[storage] URL dedup: ${urlDuplicates.length} listings matched existing rows by source_url — updating instead of inserting`);
-      const now2 = new Date();
       for (const listing of urlDuplicates) {
         const existing = urlDeduped.get(listing.sourceUrl!);
         if (!existing) continue;
+        const contentChanged = listing.contentHash && existing.contentHash !== listing.contentHash;
         await db
           .update(ingestedAssets)
           .set({
-            lastSeenAt: now2,
+            lastSeenAt: now,
             runId,
             contentHash: listing.contentHash,
             summary: listing.summary || undefined,
-            abstract: (listing as any).abstract || undefined,
+            abstract: listing.abstract || undefined,
+            // Reset enrichedAt when content changes so re-enrichment is triggered
+            ...(contentChanged ? { enrichedAt: null } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
       }
@@ -481,7 +483,7 @@ export class DatabaseStorage implements IStorage {
             contentHash: listing.contentHash,
             lastContentChangeAt: now,
             summary: listing.summary || undefined,
-            abstract: (listing as any).abstract || undefined,
+            abstract: listing.abstract || undefined,
             // Reset enrichedAt so the asset gets re-enriched with improved content
             enrichedAt: null,
           })
@@ -995,6 +997,8 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(ingestedAssets.relevant, true),
+          // Quality gate: require at least 120 combined chars across title+summary+abstract
+          sql`(COALESCE(LENGTH(${ingestedAssets.assetName}), 0) + COALESCE(LENGTH(${ingestedAssets.summary}), 0) + COALESCE(LENGTH(${ingestedAssets.abstract}), 0)) >= 120`,
           or(
             isNull(ingestedAssets.completenessScore),
             sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
