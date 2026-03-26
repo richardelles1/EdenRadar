@@ -1880,16 +1880,16 @@ export async function registerRoutes(
 
       const institutionResult = await db.execute(sql`
         SELECT
-          COALESCE(source_name, 'Unknown') AS institution,
+          COALESCE(institution, 'Unknown') AS institution,
           COUNT(*)::int AS relevant_count,
           ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
           ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
         FROM ingested_assets
         WHERE relevant = true
-        GROUP BY source_name
+        GROUP BY institution
         ORDER BY COUNT(*) DESC
-        LIMIT 60
+        LIMIT 200
       `);
 
       res.json({
@@ -1898,6 +1898,83 @@ export async function registerRoutes(
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch dataset quality" });
+    }
+  });
+
+  // --- Dimensional Analytics ---
+
+  const DIM_COL: Record<string, string> = {
+    modality: "modality",
+    stage: "development_stage",
+    indication: "indication",
+  };
+
+  app.get("/api/admin/dataset-quality/dimensions", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const dim = String(req.query.dim ?? "modality");
+      const col = DIM_COL[dim];
+      if (!col) return res.status(400).json({ error: "Invalid dim — use modality, stage, or indication" });
+
+      const rows = await db.execute(sql`
+        SELECT
+          COALESCE(${sql.raw(col)}, 'unknown') AS value,
+          COUNT(*)::int AS count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
+          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+        FROM ingested_assets
+        WHERE relevant = true
+        GROUP BY ${sql.raw(col)}
+        ORDER BY COUNT(*) DESC
+        LIMIT 15
+      `);
+
+      res.json({ dim, rows: rows.rows });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch dimensions" });
+    }
+  });
+
+  app.get("/api/admin/dataset-quality/dimensions/export", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const dim = String(req.query.dim ?? "modality");
+      const col = DIM_COL[dim];
+      if (!col) return res.status(400).json({ error: "Invalid dim" });
+
+      const rows = await db.execute(sql`
+        SELECT
+          COALESCE(${sql.raw(col)}, 'unknown') AS value,
+          COUNT(*)::int AS count,
+          ROUND(AVG(completeness_score)::numeric, 1) AS avg_completeness,
+          ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
+          ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
+        FROM ingested_assets
+        WHERE relevant = true
+        GROUP BY ${sql.raw(col)}
+        ORDER BY COUNT(*) DESC
+      `);
+
+      const escape = (v: unknown) => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return s.includes(",") || s.includes("\n") || s.includes('"') ? `"${s}"` : s;
+      };
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename="dimension-${dim}.csv"`);
+      res.write("value,count,avg_completeness,fill_target,fill_indication\n");
+      for (const row of rows.rows as Record<string, unknown>[]) {
+        res.write([escape(row.value), escape(row.count), escape(row.avg_completeness), escape(row.fill_target), escape(row.fill_indication)].join(",") + "\n");
+      }
+      res.end();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Export failed" });
     }
   });
 
@@ -1911,7 +1988,7 @@ export async function registerRoutes(
         SELECT id, asset_name, target, indication, modality, development_stage, completeness_score
         FROM ingested_assets
         WHERE relevant = true
-          AND COALESCE(source_name, 'Unknown') = ${institutionName}
+          AND COALESCE(institution, 'Unknown') = ${institutionName}
         ORDER BY completeness_score ASC NULLS FIRST
         LIMIT 5
       `);
@@ -1991,6 +2068,213 @@ export async function registerRoutes(
       res.end();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
+  // --- Asset Browser ---
+
+  app.get("/api/admin/assets/filter-values", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const [modRows, stageRows] = await Promise.all([
+        db.execute(sql`
+          SELECT DISTINCT modality AS value FROM ingested_assets
+          WHERE relevant = true AND modality IS NOT NULL AND modality NOT IN ('unknown','')
+          ORDER BY modality ASC LIMIT 80
+        `),
+        db.execute(sql`
+          SELECT DISTINCT development_stage AS value FROM ingested_assets
+          WHERE relevant = true AND development_stage IS NOT NULL AND development_stage NOT IN ('unknown','')
+          ORDER BY development_stage ASC LIMIT 40
+        `),
+      ]);
+
+      res.json({
+        modalities: (modRows.rows as { value: string }[]).map(r => r.value),
+        stages: (stageRows.rows as { value: string }[]).map(r => r.value),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  function buildAssetWhere(q: Record<string, any>) {
+    const parts: ReturnType<typeof sql>[] = [sql`relevant = true`];
+    if (q.institution) parts.push(sql`institution ILIKE ${'%' + q.institution + '%'}`);
+    if (q.modality) parts.push(sql`modality = ${q.modality}`);
+    if (q.stage) parts.push(sql`development_stage = ${q.stage}`);
+    if (q.indication) parts.push(sql`indication ILIKE ${'%' + q.indication + '%'}`);
+    if (q.q) parts.push(sql`asset_name ILIKE ${'%' + q.q + '%'}`);
+    if (q.tier) {
+      const t = q.tier;
+      if (t === "excellent") parts.push(sql`completeness_score >= 80`);
+      else if (t === "good") parts.push(sql`completeness_score >= 60 AND completeness_score < 80`);
+      else if (t === "partial") parts.push(sql`completeness_score >= 40 AND completeness_score < 60`);
+      else if (t === "poor") parts.push(sql`completeness_score >= 1 AND completeness_score < 40`);
+      else if (t === "unscored") parts.push(sql`(completeness_score IS NULL OR completeness_score = 0)`);
+    }
+    if (q.missing) {
+      const m = q.missing;
+      if (m === "target") parts.push(sql`(target IS NULL OR target IN ('unknown',''))`);
+      else if (m === "indication") parts.push(sql`(indication IS NULL OR indication IN ('unknown',''))`);
+      else if (m === "modality") parts.push(sql`(modality IS NULL OR modality IN ('unknown',''))`);
+      else if (m === "stage") parts.push(sql`(development_stage IS NULL OR development_stage IN ('unknown',''))`);
+    }
+    return parts.reduce((a, b) => sql`${a} AND ${b}`);
+  }
+
+  app.get("/api/admin/assets", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
+      const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10)));
+      const offset = (page - 1) * limit;
+
+      const sortParam = String(req.query.sort ?? "score");
+      const dirParam = String(req.query.dir ?? "desc").toLowerCase() === "asc" ? "ASC" : "DESC";
+      const sortCol = sortParam === "name" ? "asset_name" : sortParam === "date" ? "first_seen_at" : "completeness_score";
+      const nullsClause = sortCol === "completeness_score" ? "NULLS LAST" : "";
+
+      const where = buildAssetWhere(req.query as Record<string, any>);
+
+      const [countRes, rowsRes] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS total FROM ingested_assets WHERE ${where}`),
+        db.execute(sql`
+          SELECT id, asset_name, institution, target, indication, modality, development_stage,
+                 ip_type, licensing_readiness, completeness_score, mechanism_of_action,
+                 innovation_claim, unmet_need, comparable_drugs, source_url, abstract, summary,
+                 first_seen_at, enriched_at, patent_status, categories, inventors
+          FROM ingested_assets
+          WHERE ${where}
+          ORDER BY ${sql.raw(sortCol)} ${sql.raw(dirParam)} ${sql.raw(nullsClause)}
+          LIMIT ${limit} OFFSET ${offset}
+        `),
+      ]);
+
+      res.json({
+        total: (countRes.rows[0] as any).total,
+        page,
+        limit,
+        assets: rowsRes.rows,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch assets" });
+    }
+  });
+
+  app.get("/api/admin/assets/export", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const where = buildAssetWhere(req.query as Record<string, any>);
+
+      const rows = await db.execute(sql`
+        SELECT id, asset_name, institution, target, indication, modality, development_stage,
+               ip_type, licensing_readiness, completeness_score, mechanism_of_action,
+               innovation_claim, unmet_need, comparable_drugs, source_url, abstract, summary,
+               first_seen_at
+        FROM ingested_assets
+        WHERE ${where}
+        ORDER BY completeness_score DESC NULLS LAST
+      `);
+
+      const escape = (v: unknown) => {
+        if (v == null) return "";
+        const s = String(v).replace(/"/g, '""');
+        return s.includes(",") || s.includes("\n") || s.includes('"') ? `"${s}"` : s;
+      };
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=\"assets-export.csv\"");
+      res.write("id,asset_name,institution,target,indication,modality,development_stage,ip_type,licensing_readiness,completeness_score,mechanism_of_action,innovation_claim,unmet_need,comparable_drugs,source_url,abstract,summary,first_seen_at\n");
+      for (const row of rows.rows as Record<string, unknown>[]) {
+        res.write([
+          escape(row.id), escape(row.asset_name), escape(row.institution),
+          escape(row.target), escape(row.indication), escape(row.modality),
+          escape(row.development_stage), escape(row.ip_type), escape(row.licensing_readiness),
+          escape(row.completeness_score), escape(row.mechanism_of_action), escape(row.innovation_claim),
+          escape(row.unmet_need), escape(row.comparable_drugs), escape(row.source_url),
+          escape(row.abstract), escape(row.summary), escape(row.first_seen_at),
+        ].join(",") + "\n");
+      }
+      res.end();
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
+  app.patch("/api/admin/assets/:id", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+
+      const existingRes = await db.execute(sql`
+        SELECT categories, inventors, patent_status FROM ingested_assets WHERE id = ${id}
+      `);
+      if (existingRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
+      const existing = existingRes.rows[0] as Record<string, any>;
+
+      const body = req.body ?? {};
+      const fields: Record<string, any> = {};
+      const textFields = ["target", "indication", "modality", "development_stage", "ip_type",
+        "licensing_readiness", "mechanism_of_action", "innovation_claim", "unmet_need",
+        "comparable_drugs", "summary", "abstract"];
+      for (const f of textFields) {
+        if (f in body) fields[f] = body[f] ?? null;
+      }
+
+      const score = computeCompletenessScore({
+        target: fields.target ?? null,
+        modality: fields.modality ?? null,
+        indication: fields.indication ?? null,
+        developmentStage: fields.development_stage ?? null,
+        summary: fields.summary ?? null,
+        abstract: fields.abstract ?? null,
+        categories: existing.categories ?? null,
+        innovationClaim: fields.innovation_claim ?? null,
+        mechanismOfAction: fields.mechanism_of_action ?? null,
+        inventors: existing.inventors ?? null,
+        patentStatus: existing.patent_status ?? null,
+      });
+
+      await db.execute(sql`
+        UPDATE ingested_assets SET
+          target = COALESCE(${fields.target ?? null}, target),
+          indication = COALESCE(${fields.indication ?? null}, indication),
+          modality = COALESCE(${fields.modality ?? null}, modality),
+          development_stage = COALESCE(${fields.development_stage ?? null}, development_stage),
+          ip_type = COALESCE(${fields.ip_type ?? null}, ip_type),
+          licensing_readiness = COALESCE(${fields.licensing_readiness ?? null}, licensing_readiness),
+          mechanism_of_action = COALESCE(${fields.mechanism_of_action ?? null}, mechanism_of_action),
+          innovation_claim = COALESCE(${fields.innovation_claim ?? null}, innovation_claim),
+          unmet_need = COALESCE(${fields.unmet_need ?? null}, unmet_need),
+          comparable_drugs = COALESCE(${fields.comparable_drugs ?? null}, comparable_drugs),
+          summary = COALESCE(${fields.summary ?? null}, summary),
+          abstract = COALESCE(${fields.abstract ?? null}, abstract),
+          completeness_score = ${score},
+          enriched_at = NOW()
+        WHERE id = ${id}
+      `);
+
+      const updatedRes = await db.execute(sql`
+        SELECT id, asset_name, institution, target, indication, modality, development_stage,
+               ip_type, licensing_readiness, completeness_score, mechanism_of_action,
+               innovation_claim, unmet_need, comparable_drugs, source_url, abstract, summary,
+               first_seen_at, enriched_at, patent_status, categories, inventors
+        FROM ingested_assets WHERE id = ${id}
+      `);
+
+      res.json({ asset: updatedRes.rows[0] });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Patch failed" });
     }
   });
 

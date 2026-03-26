@@ -1661,6 +1661,619 @@ interface DrilldownAsset {
   completeness_score: number | null;
 }
 
+interface DimRow {
+  value: string;
+  count: number;
+  avg_completeness: number | null;
+  fill_target: number | null;
+  fill_indication: number | null;
+}
+
+interface BrowsedAsset {
+  id: number;
+  asset_name: string;
+  institution: string | null;
+  target: string | null;
+  indication: string | null;
+  modality: string | null;
+  development_stage: string | null;
+  ip_type: string | null;
+  licensing_readiness: string | null;
+  completeness_score: number | null;
+  mechanism_of_action: string | null;
+  innovation_claim: string | null;
+  unmet_need: string | null;
+  comparable_drugs: string | null;
+  source_url: string | null;
+  abstract: string | null;
+  summary: string | null;
+  first_seen_at: string | null;
+  enriched_at: string | null;
+  patent_status: string | null;
+  categories: string[] | null;
+  inventors: string[] | null;
+}
+
+type AssetBrowserInit = { dim: "modality" | "stage" | "indication"; value: string } | null;
+
+function computeLocalScore(
+  fields: { target?: string; modality?: string; indication?: string; development_stage?: string; summary?: string; abstract?: string; innovation_claim?: string; mechanism_of_action?: string },
+  nonEditablePts: number
+): number {
+  const pts = (v?: string, w = 0) => (v && v !== "unknown" && v.length >= 3 ? w : 0);
+  return nonEditablePts +
+    pts(fields.target, 15) + pts(fields.modality, 15) + pts(fields.indication, 15) +
+    pts(fields.development_stage, 10) + pts(fields.summary, 10) + pts(fields.abstract, 10) +
+    pts(fields.innovation_claim, 5) + pts(fields.mechanism_of_action, 5);
+}
+
+function getNonEditablePts(asset: BrowsedAsset): number {
+  let pts = 0;
+  if (asset.categories && asset.categories.length > 0) pts += 5;
+  if (asset.inventors && asset.inventors.length > 0) pts += 5;
+  if (asset.patent_status && asset.patent_status !== "unknown" && asset.patent_status.length >= 3) pts += 5;
+  return pts;
+}
+
+function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect: (dim: "modality" | "stage" | "indication", value: string) => void }) {
+  const [activeTab, setActiveTab] = useState<"modality" | "stage" | "indication">("modality");
+  const [sortKey, setSortKey] = useState<"count" | "avg_completeness" | "fill_target" | "fill_indication">("count");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+
+  const { data, isLoading } = useQuery<{ dim: string; rows: DimRow[] }>({
+    queryKey: ["/api/admin/dataset-quality/dimensions", pw, activeTab],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/dataset-quality/dimensions?dim=${activeTab}`, { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const sorted = (data?.rows ?? []).slice().sort((a, b) => {
+    const av = (a[sortKey] ?? 0) as number;
+    const bv = (b[sortKey] ?? 0) as number;
+    return sortDir === "desc" ? bv - av : av - bv;
+  });
+
+  const handleSort = (k: typeof sortKey) => {
+    if (sortKey === k) setSortDir(d => d === "desc" ? "asc" : "desc");
+    else { setSortKey(k); setSortDir("desc"); }
+  };
+
+  const DS = ({ k }: { k: typeof sortKey }) => {
+    if (sortKey !== k) return <ArrowDown className="h-3 w-3 opacity-30" />;
+    return sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />;
+  };
+
+  const exportCsv = () => {
+    const a = document.createElement("a");
+    a.href = `/api/admin/dataset-quality/dimensions/export?dim=${activeTab}&pw=${encodeURIComponent(pw)}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const tabs = [
+    { key: "modality" as const, label: "Modality" },
+    { key: "stage" as const, label: "Dev Stage" },
+    { key: "indication" as const, label: "Indication" },
+  ];
+
+  return (
+    <div className="border border-border rounded-xl bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <BarChart3 className="h-4 w-4" />
+          Breakdown by Dimension
+        </h3>
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg overflow-hidden border border-border">
+            {tabs.map(t => (
+              <button
+                key={t.key}
+                onClick={() => setActiveTab(t.key)}
+                className={`px-3 py-1.5 text-xs font-medium transition-colors ${activeTab === t.key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted/50"}`}
+                data-testid={`tab-dim-${t.key}`}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-1.5 h-7 text-xs" data-testid="button-dim-export">
+            <Download className="h-3 w-3" /> Export
+          </Button>
+        </div>
+      </div>
+      {isLoading ? (
+        <div className="flex items-center gap-2 px-5 py-6 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 animate-spin" /> Loading...
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/10">
+                <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground capitalize">
+                  {tabs.find(t => t.key === activeTab)?.label}
+                </th>
+                {([
+                  { key: "count" as const, label: "Assets" },
+                  { key: "avg_completeness" as const, label: "Avg Score" },
+                  { key: "fill_target" as const, label: "Target %" },
+                  { key: "fill_indication" as const, label: "Indication %" },
+                ]).map(col => (
+                  <th
+                    key={col.key}
+                    className="px-4 py-2 text-right text-xs font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground"
+                    onClick={() => handleSort(col.key)}
+                  >
+                    <span className="inline-flex items-center gap-1 justify-end">{col.label} <DS k={col.key} /></span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((row, i) => (
+                <tr
+                  key={i}
+                  className="border-b border-border cursor-pointer hover:bg-primary/5 transition-colors"
+                  onClick={() => onFilterSelect(activeTab, row.value)}
+                  title={`Filter Asset Browser by ${activeTab}: ${row.value}`}
+                  data-testid={`row-dim-${i}`}
+                >
+                  <td className="px-4 py-2 text-xs font-medium text-foreground max-w-xs truncate">{row.value || "unknown"}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.count.toLocaleString()}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.avg_completeness ?? "—"}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.fill_target != null ? `${row.fill_target}%` : "—"}</td>
+                  <td className="px-4 py-2 text-xs tabular-nums text-right text-foreground">{row.fill_indication != null ? `${row.fill_indication}%` : "—"}</td>
+                </tr>
+              ))}
+              {sorted.length === 0 && (
+                <tr><td colSpan={5} className="px-4 py-6 text-center text-xs text-muted-foreground">No data</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <p className="px-5 py-2 text-xs text-muted-foreground border-t border-border">Click any row to pre-filter the Asset Browser below.</p>
+    </div>
+  );
+}
+
+function AssetEditorPanel({
+  asset, editFields, setEditFields, liveScore, isPending, onSave, onCancel,
+}: {
+  asset: BrowsedAsset;
+  editFields: Record<string, string>;
+  setEditFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  liveScore: number;
+  isPending: boolean;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copyUrl = () => {
+    if (!asset.source_url) return;
+    navigator.clipboard.writeText(asset.source_url).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1500);
+    });
+  };
+
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
+    setEditFields(prev => ({ ...prev, [k]: e.target.value }));
+
+  const scoreColor = liveScore >= 80 ? "text-emerald-600 dark:text-emerald-400"
+    : liveScore >= 60 ? "text-teal-600 dark:text-teal-400"
+    : liveScore >= 40 ? "text-amber-600 dark:text-amber-400"
+    : "text-orange-600 dark:text-orange-400";
+
+  return (
+    <div className="space-y-4">
+      {asset.source_url && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border">
+          <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+          <a href={asset.source_url} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex-1 break-all">{asset.source_url}</a>
+          <Button variant="outline" size="sm" onClick={copyUrl} className="gap-1.5 h-7 text-xs shrink-0" data-testid={`button-copy-url-${asset.id}`}>
+            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+            {copied ? "Copied" : "Copy"}
+          </Button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-muted-foreground">Live completeness score:</span>
+        <span className={`font-bold tabular-nums text-base ${scoreColor}`}>{liveScore}</span>
+        <span className="text-muted-foreground">/ 100</span>
+        {asset.completeness_score != null && liveScore !== asset.completeness_score && (
+          <span className="text-muted-foreground/60">(was {asset.completeness_score})</span>
+        )}
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {([
+          { key: "target", label: "Target" },
+          { key: "indication", label: "Indication" },
+          { key: "modality", label: "Modality" },
+          { key: "development_stage", label: "Dev Stage" },
+          { key: "ip_type", label: "IP Type" },
+          { key: "licensing_readiness", label: "Licensing Readiness" },
+          { key: "comparable_drugs", label: "Comparable Drugs" },
+          { key: "unmet_need", label: "Unmet Need" },
+        ] as { key: string; label: string }[]).map(f => (
+          <div key={f.key} className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
+            <Input
+              value={editFields[f.key] ?? ""}
+              onChange={set(f.key)}
+              className="h-7 text-xs"
+              data-testid={`input-edit-${f.key}-${asset.id}`}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {([
+          { key: "mechanism_of_action", label: "Mechanism of Action", rows: 2 },
+          { key: "innovation_claim", label: "Innovation Claim", rows: 2 },
+          { key: "summary", label: "Summary", rows: 3 },
+          { key: "abstract", label: "Abstract", rows: 4 },
+        ] as { key: string; label: string; rows: number }[]).map(f => (
+          <div key={f.key} className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
+            <Textarea
+              value={editFields[f.key] ?? ""}
+              onChange={set(f.key)}
+              rows={f.rows}
+              className="text-xs resize-none"
+              data-testid={`textarea-edit-${f.key}-${asset.id}`}
+            />
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center gap-2 pt-1">
+        <Button onClick={onSave} disabled={isPending} size="sm" className="gap-1.5" data-testid={`button-save-asset-${asset.id}`}>
+          {isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+          Save Changes
+        </Button>
+        <Button variant="ghost" size="sm" onClick={onCancel} className="gap-1.5" data-testid={`button-cancel-edit-${asset.id}`}>
+          <X className="h-3 w-3" /> Cancel
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetBrowserInit }) {
+  const [institution, setInstitution] = useState("");
+  const [modality, setModality] = useState("");
+  const [stage, setStage] = useState("");
+  const [indication, setIndication] = useState("");
+  const [tier, setTier] = useState("");
+  const [missing, setMissing] = useState("");
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<"score" | "name" | "date">("score");
+  const [dir, setDir] = useState<"asc" | "desc">("desc");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [editFields, setEditFields] = useState<Record<string, string>>({});
+  const [savedId, setSavedId] = useState<number | null>(null);
+  const [localAssets, setLocalAssets] = useState<BrowsedAsset[]>([]);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    if (!initialFilter) return;
+    if (initialFilter.dim === "modality") { setModality(initialFilter.value); setStage(""); setIndication(""); }
+    else if (initialFilter.dim === "stage") { setStage(initialFilter.value); setModality(""); setIndication(""); }
+    else if (initialFilter.dim === "indication") { setIndication(initialFilter.value); setModality(""); setStage(""); }
+    setPage(1);
+    setExpandedId(null);
+  }, [initialFilter]);
+
+  const filterValues = useQuery<{ modalities: string[]; stages: string[] }>({
+    queryKey: ["/api/admin/assets/filter-values", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/assets/filter-values", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const buildParams = (extra: Record<string, string> = {}) => {
+    const p: Record<string, string> = {};
+    if (institution) p.institution = institution;
+    if (modality) p.modality = modality;
+    if (stage) p.stage = stage;
+    if (indication) p.indication = indication;
+    if (tier) p.tier = tier;
+    if (missing) p.missing = missing;
+    if (q) p.q = q;
+    return new URLSearchParams({ ...p, ...extra }).toString();
+  };
+
+  const { data, isLoading } = useQuery<{ total: number; page: number; limit: number; assets: BrowsedAsset[] }>({
+    queryKey: ["/api/admin/assets", pw, institution, modality, stage, indication, tier, missing, q, page, sort, dir],
+    queryFn: async () => {
+      const params = buildParams({ page: String(page), limit: "50", sort, dir });
+      const res = await fetch(`/api/admin/assets?${params}`, { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  useEffect(() => {
+    if (data?.assets) setLocalAssets(data.assets);
+  }, [data?.assets]);
+
+  const patchAsset = useMutation({
+    mutationFn: async ({ id, fields }: { id: number; fields: Record<string, string> }) => {
+      const res = await fetch(`/api/admin/assets/${id}?pw=${encodeURIComponent(pw)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(fields),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Patch failed"); }
+      return res.json() as Promise<{ asset: BrowsedAsset }>;
+    },
+    onSuccess: ({ asset }) => {
+      setLocalAssets(prev => prev.map(a => a.id === asset.id ? asset : a));
+      setSavedId(asset.id);
+      setExpandedId(null);
+      setTimeout(() => setSavedId(null), 2500);
+    },
+    onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
+  });
+
+  const activeFilters = [institution, modality, stage, indication, tier, missing, q].filter(Boolean).length;
+  const total = data?.total ?? 0;
+  const totalPages = Math.ceil(total / 50);
+
+  const clearFilters = () => {
+    setInstitution(""); setModality(""); setStage(""); setIndication("");
+    setTier(""); setMissing(""); setQ(""); setPage(1);
+  };
+
+  const exportCsv = () => {
+    const a = document.createElement("a");
+    a.href = `/api/admin/assets/export?${buildParams({ pw })}`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  };
+
+  const openEditor = (asset: BrowsedAsset) => {
+    setExpandedId(asset.id);
+    setEditFields({
+      target: asset.target ?? "",
+      indication: asset.indication ?? "",
+      modality: asset.modality ?? "",
+      development_stage: asset.development_stage ?? "",
+      ip_type: asset.ip_type ?? "",
+      licensing_readiness: asset.licensing_readiness ?? "",
+      mechanism_of_action: asset.mechanism_of_action ?? "",
+      innovation_claim: asset.innovation_claim ?? "",
+      unmet_need: asset.unmet_need ?? "",
+      comparable_drugs: asset.comparable_drugs ?? "",
+      summary: asset.summary ?? "",
+      abstract: asset.abstract ?? "",
+    });
+  };
+
+  return (
+    <div className="border border-border rounded-xl bg-card overflow-hidden">
+      <div className="px-5 py-3 border-b border-border bg-muted/20 flex items-center justify-between gap-3 flex-wrap">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <Layers className="h-4 w-4" />
+          Asset Browser
+          {activeFilters > 0 && (
+            <Badge variant="secondary" className="text-xs ml-1">{activeFilters} filter{activeFilters > 1 ? "s" : ""}</Badge>
+          )}
+        </h3>
+        <div className="flex items-center gap-2">
+          {activeFilters > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="gap-1.5 h-7 text-xs" data-testid="button-clear-filters">
+              <X className="h-3 w-3" /> Clear
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={exportCsv} className="gap-1.5 h-7 text-xs" data-testid="button-export-filtered">
+            <Download className="h-3 w-3" /> Export filtered
+          </Button>
+        </div>
+      </div>
+
+      <div className="px-5 py-3 border-b border-border bg-muted/10 flex flex-wrap gap-2 items-center">
+        <Input
+          placeholder="Asset name..."
+          value={q}
+          onChange={e => { setQ(e.target.value); setPage(1); }}
+          className="h-7 text-xs w-36"
+          data-testid="input-browser-q"
+        />
+        <Input
+          placeholder="Institution..."
+          value={institution}
+          onChange={e => { setInstitution(e.target.value); setPage(1); }}
+          className="h-7 text-xs w-40"
+          data-testid="input-browser-institution"
+        />
+        <Input
+          placeholder="Indication..."
+          value={indication}
+          onChange={e => { setIndication(e.target.value); setPage(1); }}
+          className="h-7 text-xs w-36"
+          data-testid="input-browser-indication"
+        />
+        <Select value={modality || "__all__"} onValueChange={v => { setModality(v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="h-7 text-xs w-40" data-testid="select-browser-modality">
+            <SelectValue placeholder="Modality..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All modalities</SelectItem>
+            {(filterValues.data?.modalities ?? []).map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={stage || "__all__"} onValueChange={v => { setStage(v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="h-7 text-xs w-40" data-testid="select-browser-stage">
+            <SelectValue placeholder="Dev Stage..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All stages</SelectItem>
+            {(filterValues.data?.stages ?? []).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={tier || "__all__"} onValueChange={v => { setTier(v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="h-7 text-xs w-36" data-testid="select-browser-tier">
+            <SelectValue placeholder="Tier..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All tiers</SelectItem>
+            <SelectItem value="excellent">Excellent (80+)</SelectItem>
+            <SelectItem value="good">Good (60-79)</SelectItem>
+            <SelectItem value="partial">Partial (40-59)</SelectItem>
+            <SelectItem value="poor">Poor (1-39)</SelectItem>
+            <SelectItem value="unscored">Unscored</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={missing || "__all__"} onValueChange={v => { setMissing(v === "__all__" ? "" : v); setPage(1); }}>
+          <SelectTrigger className="h-7 text-xs w-40" data-testid="select-browser-missing">
+            <SelectValue placeholder="Missing field..." />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">Any field state</SelectItem>
+            <SelectItem value="target">Missing: Target</SelectItem>
+            <SelectItem value="indication">Missing: Indication</SelectItem>
+            <SelectItem value="modality">Missing: Modality</SelectItem>
+            <SelectItem value="stage">Missing: Dev Stage</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="px-5 py-2 border-b border-border text-xs text-muted-foreground flex items-center justify-between">
+        <span>
+          {isLoading ? "Loading..." : `Showing ${Math.min(50, total).toLocaleString()} of ${total.toLocaleString()} relevant assets`}
+        </span>
+        <div className="flex items-center gap-1">
+          <Select value={sort} onValueChange={v => { setSort(v as "score" | "name" | "date"); setPage(1); }}>
+            <SelectTrigger className="h-6 text-xs w-28"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="score">By score</SelectItem>
+              <SelectItem value="name">By name</SelectItem>
+              <SelectItem value="date">By date</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="ghost" size="sm" onClick={() => setDir(d => d === "desc" ? "asc" : "desc")} className="h-6 w-6 p-0">
+            {dir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />}
+          </Button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 px-5 py-8 text-xs text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" /> Loading assets...
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border bg-muted/10">
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Asset Name</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Institution</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Target</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Indication</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Modality</th>
+                <th className="px-4 py-2 text-left font-medium text-muted-foreground">Stage</th>
+                <th className="px-4 py-2 text-right font-medium text-muted-foreground">Score</th>
+                <th className="px-4 py-2 text-center font-medium text-muted-foreground">URL</th>
+                <th className="px-4 py-2 w-8" />
+              </tr>
+            </thead>
+            <tbody>
+              {localAssets.map(asset => {
+                const isExpanded = expandedId === asset.id;
+                const isSaved = savedId === asset.id;
+                const nePts = getNonEditablePts(asset);
+                const liveScore = isExpanded ? computeLocalScore(editFields, nePts) : 0;
+                const score = asset.completeness_score;
+                const scoreClass = score === null || score === 0 ? "text-muted-foreground"
+                  : score >= 80 ? "text-emerald-600 dark:text-emerald-400"
+                  : score >= 60 ? "text-teal-600 dark:text-teal-400"
+                  : score >= 40 ? "text-amber-600 dark:text-amber-400"
+                  : "text-orange-600 dark:text-orange-400";
+
+                return (
+                  <React.Fragment key={asset.id}>
+                    <tr
+                      className={`border-b border-border cursor-pointer transition-colors ${isSaved ? "bg-emerald-50 dark:bg-emerald-950/20" : isExpanded ? "bg-primary/5" : "hover:bg-muted/30"}`}
+                      onClick={() => { if (isExpanded) { setExpandedId(null); } else { openEditor(asset); } }}
+                      data-testid={`row-asset-${asset.id}`}
+                    >
+                      <td className="px-4 py-2 font-medium text-foreground max-w-[220px]">
+                        <span className="block truncate">{asset.asset_name}</span>
+                        {isSaved && <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mt-0.5"><Check className="h-3 w-3" /> Saved</span>}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[130px] truncate">{asset.institution ?? "—"}</td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[90px] truncate">{(!asset.target || asset.target === "unknown") ? <span className="opacity-40">—</span> : asset.target}</td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[90px] truncate">{(!asset.indication || asset.indication === "unknown") ? <span className="opacity-40">—</span> : asset.indication}</td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[90px] truncate">{(!asset.modality || asset.modality === "unknown") ? <span className="opacity-40">—</span> : asset.modality}</td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[90px] truncate">{(!asset.development_stage || asset.development_stage === "unknown") ? <span className="opacity-40">—</span> : asset.development_stage}</td>
+                      <td className="px-4 py-2 text-right tabular-nums">
+                        <span className={`font-semibold ${scoreClass}`}>{score ?? "—"}</span>
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        {asset.source_url ? (
+                          <a
+                            href={asset.source_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={e => e.stopPropagation()}
+                            className="text-muted-foreground hover:text-primary transition-colors inline-flex"
+                            data-testid={`link-source-${asset.id}`}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                          </a>
+                        ) : <span className="opacity-30">—</span>}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${isExpanded ? "rotate-180" : ""}`} />
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr className="border-b border-border bg-muted/5">
+                        <td colSpan={9} className="px-5 py-4">
+                          <AssetEditorPanel
+                            asset={asset}
+                            editFields={editFields}
+                            setEditFields={setEditFields}
+                            liveScore={liveScore}
+                            isPending={patchAsset.isPending}
+                            onSave={() => patchAsset.mutate({ id: asset.id, fields: editFields })}
+                            onCancel={() => setExpandedId(null)}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+              {localAssets.length === 0 && (
+                <tr><td colSpan={9} className="px-4 py-10 text-center text-xs text-muted-foreground">No assets match these filters.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {total > 50 && (
+        <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-muted-foreground">Page {page} of {totalPages.toLocaleString()}</span>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="h-7 px-3 text-xs">Prev</Button>
+            <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="h-7 px-3 text-xs">Next</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FieldBadge({ value }: { value: string | null }) {
   const isKnown = value && value !== "unknown" && value !== "";
   return (
@@ -1690,7 +2303,14 @@ function Enrichment({ pw }: { pw: string }) {
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
+  const [browserPreFilter, setBrowserPreFilter] = useState<AssetBrowserInit>(null);
+  const browserRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
+
+  const handleFilterSelect = (dim: "modality" | "stage" | "indication", value: string) => {
+    setBrowserPreFilter({ dim, value });
+    setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+  };
 
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
@@ -1931,6 +2551,9 @@ function Enrichment({ pw }: { pw: string }) {
         </div>
       )}
 
+      {/* ── Breakdown by Dimension ── */}
+      <DimensionBreakdown pw={pw} onFilterSelect={handleFilterSelect} />
+
       {/* ── Institution Quality Table ── */}
       {quality && (
         <div className="border border-border rounded-xl bg-card overflow-hidden">
@@ -2031,6 +2654,11 @@ function Enrichment({ pw }: { pw: string }) {
           </div>
         </div>
       )}
+
+      {/* ── Asset Browser ── */}
+      <div ref={browserRef}>
+        <AssetBrowser pw={pw} initialFilter={browserPreFilter} />
+      </div>
 
       {/* ── CSV Exports ── */}
       {quality && (
