@@ -453,8 +453,14 @@ export class DatabaseStorage implements IStorage {
             lastSeenAt: now,
             runId,
             contentHash: listing.contentHash,
+            // Refresh all mutable display metadata so the canonical row stays current
+            ...(listing.assetName ? { assetName: listing.assetName } : {}),
             summary: listing.summary || undefined,
             abstract: listing.abstract || undefined,
+            ...(listing.categories?.length ? { categories: listing.categories } : {}),
+            ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
+            ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
+            ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
             // Reset enrichedAt when content changes so re-enrichment is triggered
             ...(contentChanged ? { enrichedAt: null } : {}),
           })
