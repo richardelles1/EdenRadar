@@ -395,7 +395,7 @@ export async function registerRoutes(
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
       let results: import("./storage").RetrievedAsset[] = [];
-      let usedKeywordFallback = false;
+      let fallback = false;
       try {
         const embedding = await embedQuery(query);
         results = await storage.scoutVectorSearch(embedding, {
@@ -407,7 +407,7 @@ export async function registerRoutes(
       }
 
       if (results.length === 0) {
-        usedKeywordFallback = true;
+        fallback = true;
         results = await storage.keywordSearchIngestedAssets(query, limit);
       }
 
@@ -482,10 +482,10 @@ export async function registerRoutes(
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length }).catch(() => {});
 
-      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], usedKeywordFallback });
+      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], fallback });
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
-      return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], error: err.message ?? "Search failed" });
+      return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: err.message ?? "Search failed" });
     }
   });
 

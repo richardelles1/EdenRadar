@@ -191,7 +191,7 @@ function ScoutSidebar({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <Database className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">Research Sources</span>
+            <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">External Paper Sources</span>
           </div>
           {researchSources.length > 0 && (
             <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded bg-primary text-primary-foreground text-[8px] font-bold px-1">
@@ -200,7 +200,7 @@ function ScoutSidebar({
           )}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-          Enable sources to search alongside TTO assets.
+          Opt in to search external academic paper databases alongside TTO assets.
         </p>
       </div>
 
@@ -691,7 +691,7 @@ export default function Scout() {
                       ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
                       : <FlaskConical className="w-4 h-4 shrink-0" />
                     }
-                    Research Signals
+                    External Research Papers
                     {researchMutation.isPending ? (
                       <span className={`ml-1 text-[10px] italic font-normal opacity-70`}>Compiling...</span>
                     ) : (
