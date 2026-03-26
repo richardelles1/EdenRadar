@@ -3189,6 +3189,13 @@ function BulkCsvImport({ pw }: { pw: string }) {
 
   const previewRows = parsedRows?.slice(0, 10) ?? [];
   const previewCols = ["id", "assetName", "institution", "target", "modality", "developmentStage", "completenessScore"];
+  const willUpdateCount = parsedRows
+    ? parsedRows.filter((r) => {
+        const id = parseInt(r.id, 10);
+        if (isNaN(id)) return false;
+        return CSV_FIELDS.some((f) => f !== "id" && r[f] && r[f].trim() !== "");
+      }).length
+    : 0;
 
   return (
     <div className="rounded-xl border border-border bg-card p-6 mb-6" data-testid="bulk-csv-import-panel">
@@ -3250,18 +3257,19 @@ function BulkCsvImport({ pw }: { pw: string }) {
       {parsedRows && parsedRows.length > 0 && (
         <div data-testid="csv-preview-section">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-medium text-foreground">
-              Preview — {parsedRows.length.toLocaleString()} rows, {Object.keys(parsedRows[0] ?? {}).length} columns from <span className="font-semibold">{fileName}</span>
-            </span>
+            <div className="text-xs text-foreground space-y-0.5">
+              <p className="font-medium">{parsedRows.length.toLocaleString()} rows, {Object.keys(parsedRows[0] ?? {}).length} columns from <span className="font-semibold">{fileName}</span></p>
+              <p className="text-muted-foreground"><span className="font-semibold text-foreground" data-testid="text-will-update-count">{willUpdateCount.toLocaleString()}</span> rows will be updated (valid id + at least one non-empty field)</p>
+            </div>
             <Button
               size="sm"
               className="text-xs h-7"
               onClick={handleImport}
-              disabled={importing}
+              disabled={importing || willUpdateCount === 0}
               data-testid="button-confirm-import"
             >
               {importing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <ArrowUpCircle className="h-3.5 w-3.5 mr-1.5" />}
-              {importing ? "Importing…" : `Import ${parsedRows.length.toLocaleString()} rows`}
+              {importing ? "Importing…" : `Import ${willUpdateCount.toLocaleString()} rows`}
             </Button>
           </div>
 
