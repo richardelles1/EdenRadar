@@ -200,7 +200,7 @@ function ScoutSidebar({
           )}
         </div>
         <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-          Checked sources are searched alongside TTO assets.
+          Enable sources to search alongside TTO assets.
         </p>
       </div>
 
@@ -266,7 +266,7 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [resultTab, setResultTab] = useState<"assets" | "research">(() => ssGet("scout-result-tab", "assets"));
-  const DEFAULT_RESEARCH_SOURCES = ["pubmed", "biorxiv", "clinicaltrials", "patents", "nih_reporter", "harvard"];
+  const DEFAULT_RESEARCH_SOURCES: string[] = [];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");

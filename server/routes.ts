@@ -293,7 +293,7 @@ export async function registerRoutes(
       if (signals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
         const emptySearchResponse = { assets: [], query, sources: effectiveSources, signalsFound: 0 };
-        cacheSet(searchCacheKey, emptySearchResponse, 45 * 60 * 1000);
+        cacheSet(searchCacheKey, emptySearchResponse, 5 * 60 * 1000);
         return res.json(emptySearchResponse);
       }
 
@@ -394,10 +394,22 @@ export async function registerRoutes(
       const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
-      const embedding = await embedQuery(query);
-      const results = await storage.scoutVectorSearch(embedding, {
-        modality, stage, indication, institution, limit, minSimilarity, since: sinceDate, before: beforeDate,
-      });
+      let results: import("./storage").RetrievedAsset[] = [];
+      let usedKeywordFallback = false;
+      try {
+        const embedding = await embedQuery(query);
+        results = await storage.scoutVectorSearch(embedding, {
+          modality, stage, indication, institution, limit, minSimilarity, since: sinceDate, before: beforeDate,
+        });
+      } catch (embedErr: any) {
+        console.warn("[scout/search] Embedding failed, trying keyword fallback:", embedErr?.message);
+        results = [];
+      }
+
+      if (results.length === 0) {
+        usedKeywordFallback = true;
+        results = await storage.keywordSearchIngestedAssets(query, limit);
+      }
 
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
@@ -468,12 +480,12 @@ export async function registerRoutes(
         };
       });
 
-      await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length });
+      await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length }).catch(() => {});
 
-      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"] });
+      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], usedKeywordFallback });
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
-      return res.status(500).json({ error: err.message ?? "Search failed" });
+      return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], error: err.message ?? "Search failed" });
     }
   });
 
