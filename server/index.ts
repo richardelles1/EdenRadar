@@ -146,8 +146,11 @@ app.use((req, res, next) => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          // Nullify duplicate source_urls (keep earliest row) before creating unique index
-          await db.execute(sql`
+          // Nullify duplicate source_urls (keep earliest row) before creating unique index.
+          // Ops note: this is intentionally data-destructive for duplicate rows — the
+          // source_url is cleared on the later-inserted duplicate so the unique index can
+          // be created. The canonical (earliest ID) record retains the URL.
+          const nullifyResult = await db.execute(sql`
             UPDATE ingested_assets a
             SET source_url = NULL
             FROM (
@@ -160,6 +163,10 @@ app.use((req, res, next) => {
             ) dups
             WHERE a.id = dups.id
           `);
+          const nullifiedCount = (nullifyResult as { rowCount?: number }).rowCount ?? 0;
+          if (nullifiedCount > 0) {
+            console.log(`[startup] source_url dedup: nullified ${nullifiedCount} duplicate URL(s) before index creation`);
+          }
           await db.execute(sql`
             CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique
             ON ingested_assets (source_url)

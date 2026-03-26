@@ -149,9 +149,13 @@ export async function classifyBatch(
       const item = items[i++];
       if (!item) continue;
 
-      // Quality gate: skip the AI call for thin-content assets, but still
-      // call onEach with a low-confidence default so the asset is written to the
-      // review queue (not silently stranded) and retried when content improves.
+      // Quality gate: skip thin-content assets entirely — do NOT call onEach and
+      // do NOT write a classification. This intentionally leaves biotechRelevant
+      // unset so the asset remains eligible for re-classification when the scraper
+      // fetches richer content later (content-change detection resets enrichedAt to
+      // null, which re-queues classification). Calling onEach with biotechRelevant=false
+      // was removed because it permanently marks the asset non-relevant, blocking
+      // re-enrichment even after content improves (false-negative lock-in).
       // Deduplicate before summing — ingestion sets description = summary || title,
       // so description === title for title-only pages (would double-count).
       const title = item.title || "";
@@ -162,15 +166,7 @@ export async function classifyBatch(
         (description !== title ? description.length : 0) +
         (abstract && abstract !== title && abstract !== description ? abstract.length : 0);
       if (combinedLength < MIN_CONTENT_CHARS) {
-        console.log(`[classifyBatch] Asset ${item.id} has thin content (${combinedLength} chars < ${MIN_CONTENT_CHARS}) — sending to review queue for retry when content improves`);
-        const defaultResult: AssetClassification = {
-          biotechRelevant: false, categoryConfidence: 0.3, // Below delete threshold (0.7) → queued for review
-          target: "unknown", modality: "unknown", indication: "unknown", developmentStage: "unknown",
-          categories: [], mechanismOfAction: "", innovationClaim: "", unmetNeed: "", comparableDrugs: "",
-          ipType: "unknown", licensingReadiness: "unknown",
-        };
-        if (onEach) { try { await onEach(item.id, defaultResult); } catch {} }
-        results.set(item.id, defaultResult);
+        console.log(`[classifyBatch] Asset ${item.id} skipped — thin content (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry when content improves.`);
         continue;
       }
 
