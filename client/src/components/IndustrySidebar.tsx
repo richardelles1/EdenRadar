@@ -33,7 +33,7 @@ type AlertsBadgeData = {
 
 const NAV_ITEMS = [
   { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/scout", label: "Scout", icon: Search, exact: true },
+  { href: "/scout", label: "EdenScout", icon: Search, exact: true },
   { href: "/industry/eden", label: "Eden", icon: Sparkles },
   { href: "/institutions", label: "Institutions", icon: Building2 },
   { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },

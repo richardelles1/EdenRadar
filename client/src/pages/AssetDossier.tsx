@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Nav } from "@/components/Nav";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -217,27 +216,21 @@ export default function AssetDossier() {
 
   if (!asset && intelLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Nav />
-        <div className="max-w-4xl mx-auto px-4 py-16 space-y-4">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-48 w-full rounded-xl" />
-          <Skeleton className="h-32 w-full rounded-xl" />
-        </div>
+      <div className="max-w-4xl mx-auto px-4 py-16 space-y-4">
+        <Skeleton className="h-8 w-48" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
       </div>
     );
   }
 
   if (!asset) {
     return (
-      <div className="min-h-screen bg-background flex flex-col">
-        <Nav />
-        <div className="max-w-4xl mx-auto px-4 py-16 text-center">
-          <p className="text-muted-foreground mb-4">Asset not found. Please return to Discover and try again.</p>
-          <Button variant="outline" onClick={() => setLocation("/discover")}>
-            <ArrowLeft className="w-4 h-4 mr-2" /> Back to Discover
-          </Button>
-        </div>
+      <div className="max-w-4xl mx-auto px-4 py-16 text-center">
+        <p className="text-muted-foreground mb-4">Asset not found. Please return to Discover and try again.</p>
+        <Button variant="outline" onClick={() => setLocation("/discover")}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Back to Discover
+        </Button>
       </div>
     );
   }
@@ -262,9 +255,7 @@ export default function AssetDossier() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <Nav />
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full" data-testid="print-target">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full" data-testid="print-target">
         <div className="flex items-center gap-3 mb-6 no-print">
           <Button
             variant="ghost"
@@ -688,6 +679,5 @@ export default function AssetDossier() {
           </div>
         </div>
       </div>
-    </div>
   );
 }

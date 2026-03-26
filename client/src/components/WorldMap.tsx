@@ -131,7 +131,7 @@ export function WorldMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const inView = useInView(containerRef, { once: false, amount: 0.3 });
 
-  const landStroke = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.08)";
+  const landStroke = isDark ? "rgba(255,255,255,0.22)" : "rgba(0,0,0,0.20)";
   const dotColor = isDark ? "hsl(142 65% 60%)" : "hsl(142 52% 36%)";
   const arcColor = isDark ? "hsl(142 65% 55%)" : "hsl(142 52% 36%)";
   const arcOpacity = isDark ? 0.60 : 0.50;
@@ -202,7 +202,7 @@ export function WorldMap({
               d={d}
               fill="none"
               stroke={landStroke}
-              strokeWidth={1.0}
+              strokeWidth={1.5}
               strokeLinejoin="round"
             />
           ))}
