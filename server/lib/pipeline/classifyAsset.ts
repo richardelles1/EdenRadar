@@ -149,6 +149,23 @@ export async function classifyBatch(
       const item = items[i++];
       if (!item) continue;
 
+      // Quality gate: skip the AI call for thin-content assets, but still
+      // call onEach with a low-confidence default so the asset is written to the
+      // review queue (not silently stranded) and retried when content improves.
+      const combinedLength = (item.title || "").length + (item.description || "").length + (item.abstract || "").length;
+      if (combinedLength < MIN_CONTENT_CHARS) {
+        console.log(`[classifyBatch] Asset ${item.id} has thin content (${combinedLength} chars < ${MIN_CONTENT_CHARS}) — sending to review queue for retry when content improves`);
+        const defaultResult: AssetClassification = {
+          biotechRelevant: false, categoryConfidence: 0.3, // Below delete threshold (0.7) → queued for review
+          target: "unknown", modality: "unknown", indication: "unknown", developmentStage: "unknown",
+          categories: [], mechanismOfAction: "", innovationClaim: "", unmetNeed: "", comparableDrugs: "",
+          ipType: "unknown", licensingReadiness: "unknown",
+        };
+        if (onEach) { try { await onEach(item.id, defaultResult); } catch {} }
+        results.set(item.id, defaultResult);
+        continue;
+      }
+
       const classification = await classifyAsset(item.title, item.description, item.abstract, "gpt-4o-mini", false, item.ctx);
       results.set(item.id, classification);
       if (onEach) {

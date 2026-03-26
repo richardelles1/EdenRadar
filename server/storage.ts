@@ -1024,6 +1024,7 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ingestedAssets.relevant, true),
           or(
+            isNull(ingestedAssets.enrichedAt), // Aligns with getAssetsNeedingDeepEnrich enqueue criteria
             isNull(ingestedAssets.completenessScore),
             sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
             sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
@@ -1057,6 +1058,7 @@ export class DatabaseStorage implements IStorage {
       comparableDrugs: data.comparableDrugs || null,
       licensingReadiness: data.licensingReadiness,
       completenessScore: data.completenessScore,
+      enrichedAt: new Date(), // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
     }).where(eq(ingestedAssets.id, id));
   }
 
@@ -1067,6 +1069,7 @@ export class DatabaseStorage implements IStorage {
   }>): Promise<number> {
     if (batch.length === 0) return 0;
     let written = 0;
+    const now = new Date();
     await db.transaction(async (tx) => {
       for (const data of batch) {
         try {
@@ -1085,6 +1088,7 @@ export class DatabaseStorage implements IStorage {
             comparableDrugs: data.comparableDrugs || null,
             licensingReadiness: data.licensingReadiness,
             completenessScore: data.completenessScore,
+            enrichedAt: now, // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
           }).where(eq(ingestedAssets.id, data.id));
           written++;
         } catch (e) {
