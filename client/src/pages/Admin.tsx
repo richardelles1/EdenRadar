@@ -3103,7 +3103,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [parsedRows, setParsedRows] = useState<Record<string, string>[] | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
-  const [result, setResult] = useState<{ updated: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ updated: number; skipped: number; validationSkipped: number; skippedDetails: Array<{ index: number; id?: number; reason: string }> } | null>(null);
   const [importing, setImporting] = useState(false);
 
   const CSV_FIELDS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"] as const;
@@ -3128,41 +3128,58 @@ function BulkCsvImport({ pw }: { pw: string }) {
     reader.readAsText(file);
   }
 
+  function buildRows(rawRows: Record<string, string>[]) {
+    return rawRows.map((r) => {
+      const id = parseInt(r.id, 10);
+      const obj: Record<string, unknown> = { id };
+      for (const f of CSV_FIELDS) {
+        if (f === "id") continue;
+        const v = r[f];
+        if (!v) continue;
+        if (f === "categories") {
+          try { obj[f] = JSON.parse(v); } catch { obj[f] = v.split(";").map((s) => s.trim()).filter(Boolean); }
+        } else if (f === "completenessScore") {
+          const n = parseFloat(v);
+          if (!isNaN(n)) obj[f] = n;
+        } else {
+          obj[f] = v;
+        }
+      }
+      return obj;
+    });
+  }
+
+  function fieldCoverage(rawRows: Record<string, string>[]): Record<string, number> {
+    const counts: Record<string, number> = {};
+    for (const f of CSV_FIELDS) {
+      if (f === "id") continue;
+      counts[f] = rawRows.filter((r) => r[f] && r[f].trim() !== "").length;
+    }
+    return counts;
+  }
+
   async function handleImport() {
     if (!parsedRows) return;
     setImporting(true);
+    setResult(null);
     try {
-      const rows = parsedRows.map((r) => {
-        const id = parseInt(r.id, 10);
-        if (isNaN(id)) throw new Error(`Invalid id: "${r.id}"`);
-        const obj: Record<string, unknown> = { id };
-        for (const f of CSV_FIELDS) {
-          if (f === "id") continue;
-          const v = r[f];
-          if (!v) continue;
-          if (f === "categories") {
-            try { obj[f] = JSON.parse(v); } catch { obj[f] = v.split(";").map((s) => s.trim()).filter(Boolean); }
-          } else if (f === "completenessScore") {
-            const n = parseFloat(v);
-            if (!isNaN(n)) obj[f] = n;
-          } else {
-            obj[f] = v;
-          }
-        }
-        return obj;
-      });
-
+      const rows = buildRows(parsedRows);
       const res = await fetch(`/api/admin/assets/bulk-update?pw=${pw}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
+        body: JSON.stringify(rows),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Import failed");
-      setResult({ updated: data.updated, skipped: data.skipped });
+      setResult({
+        updated: data.updated,
+        skipped: data.skipped,
+        validationSkipped: data.validationSkipped ?? 0,
+        skippedDetails: data.skippedDetails ?? [],
+      });
       setParsedRows(null);
       setFileName(null);
-      toast({ title: "Import complete", description: `${data.updated} assets updated, ${data.skipped} skipped.` });
+      toast({ title: "Import complete", description: `${data.updated} assets updated.` });
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });
     } finally {
@@ -3214,9 +3231,19 @@ function BulkCsvImport({ pw }: { pw: string }) {
       </div>
 
       {result && (
-        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-xs text-green-800 dark:text-green-300" data-testid="text-import-result">
-          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
-          Last import: <span className="font-semibold">{result.updated}</span> assets updated, <span className="font-semibold">{result.skipped}</span> skipped.
+        <div className="mb-4 rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-950/20 text-xs text-green-800 dark:text-green-300 overflow-hidden" data-testid="text-import-result">
+          <div className="flex items-center gap-2 px-3 py-2">
+            <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+            <span>Last import: <span className="font-semibold">{result.updated}</span> assets updated, <span className="font-semibold">{result.skipped}</span> skipped{result.validationSkipped > 0 ? ` (${result.validationSkipped} failed validation)` : ""}.</span>
+          </div>
+          {result.skippedDetails.length > 0 && (
+            <div className="border-t border-green-200 dark:border-green-800 px-3 py-2 space-y-0.5" data-testid="text-skipped-details">
+              <p className="font-semibold mb-1">Skipped rows (first {result.skippedDetails.length}):</p>
+              {result.skippedDetails.map((d, i) => (
+                <p key={i} className="font-mono">Row {d.index + 1}{d.id !== undefined ? ` (id=${d.id})` : ""}: {d.reason}</p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -3237,6 +3264,19 @@ function BulkCsvImport({ pw }: { pw: string }) {
               {importing ? "Importing…" : `Import ${parsedRows.length.toLocaleString()} rows`}
             </Button>
           </div>
+
+          {/* Field coverage summary */}
+          <div className="mb-3 p-3 rounded-lg bg-muted/30 border border-border text-xs" data-testid="field-coverage-summary">
+            <p className="font-semibold text-foreground mb-1.5">Fields to be written (non-empty counts):</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
+              {Object.entries(fieldCoverage(parsedRows)).map(([field, count]) => count > 0 && (
+                <span key={field}>
+                  <span className="text-foreground font-medium">{field}</span>: {count.toLocaleString()}
+                </span>
+              ))}
+            </div>
+          </div>
+
           <div className="overflow-x-auto rounded-lg border border-border text-xs">
             <table className="w-full border-collapse">
               <thead>

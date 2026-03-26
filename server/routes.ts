@@ -5849,13 +5849,40 @@ If multiple assets appear, return each as a separate array item.`;
         ipType: z.string().optional(),
         completenessScore: z.number().optional(),
       });
-      const bodySchema = z.object({ rows: z.array(rowSchema).min(1).max(50000) });
-      const { rows } = bodySchema.parse(req.body);
 
-      const result = await storage.bulkUpdateAssetsFromCsv(rows);
-      res.json({ ok: true, ...result });
+      // Accept a raw JSON array of rows
+      const body = req.body;
+      if (!Array.isArray(body)) {
+        return res.status(400).json({ error: "Request body must be a JSON array of row objects" });
+      }
+      if (body.length === 0 || body.length > 50000) {
+        return res.status(400).json({ error: `Array must have 1-50000 rows (got ${body.length})` });
+      }
+
+      // Per-row validation — invalid rows are skipped, not batch-fatal
+      const validRows: z.infer<typeof rowSchema>[] = [];
+      const skippedDetails: Array<{ index: number; id?: number; reason: string }> = [];
+      for (let idx = 0; idx < body.length; idx++) {
+        const parsed = rowSchema.safeParse(body[idx]);
+        if (!parsed.success) {
+          skippedDetails.push({ index: idx, id: body[idx]?.id, reason: parsed.error.issues.map((i: z.ZodIssue) => i.message).join("; ") });
+        } else {
+          validRows.push(parsed.data);
+        }
+      }
+
+      const result = validRows.length > 0
+        ? await storage.bulkUpdateAssetsFromCsv(validRows)
+        : { updated: 0, skipped: 0 };
+
+      res.json({
+        ok: true,
+        updated: result.updated,
+        skipped: result.skipped + skippedDetails.length,
+        validationSkipped: skippedDetails.length,
+        skippedDetails: skippedDetails.slice(0, 100), // cap detail payload
+      });
     } catch (err: any) {
-      if (err instanceof z.ZodError) return res.status(400).json({ error: "Invalid request body", issues: err.issues });
       console.error("[bulk-update] Error:", err);
       res.status(500).json({ error: err.message ?? "Bulk update failed" });
     }

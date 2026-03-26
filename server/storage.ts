@@ -2049,7 +2049,6 @@ export class DatabaseStorage implements IStorage {
         completenessScore: ingestedAssets.completenessScore,
       })
       .from(ingestedAssets)
-      .where(eq(ingestedAssets.relevant, true))
       .orderBy(ingestedAssets.id);
     return rows;
   }
