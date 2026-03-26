@@ -80,13 +80,24 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   return (
     <Card
-      className={`group border bg-card transition-all duration-300 flex flex-col overflow-hidden ${
+      className={`group relative border bg-card transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-px hover:shadow-md ${
         isResearcherPublished
           ? "border-amber-500/40 hover:border-amber-500/60 ring-1 ring-amber-500/10"
           : "border-card-border hover:border-primary/40"
       }`}
       data-testid={`asset-card-${asset.id}`}
     >
+      {/* Glow bloom from icon top-left */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-[inherit] overflow-hidden">
+        <div style={{
+          position: "absolute",
+          top: -20, left: -20,
+          width: 180, height: 180,
+          background: isResearcherPublished
+            ? "radial-gradient(circle at center, rgba(245,158,11,0.09) 0%, rgba(245,158,11,0.04) 45%, transparent 70%)"
+            : "radial-gradient(circle at center, rgba(34,197,94,0.10) 0%, rgba(34,197,94,0.04) 45%, transparent 70%)",
+        }} />
+      </div>
       {isResearcherPublished && (
         <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20">
           <Microscope className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
@@ -98,8 +109,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
       <div className="p-5 flex flex-col gap-3 flex-1">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center ${
-              isResearcherPublished ? "bg-amber-500/10" : "bg-primary/10"
+            <div className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors duration-300 ${
+              isResearcherPublished
+                ? "bg-amber-500/10 group-hover:bg-amber-500/20"
+                : "bg-primary/10 group-hover:bg-primary/20"
             }`}>
               {isResearcherPublished ? (
                 <Microscope className="w-4 h-4 text-amber-500" />
@@ -262,9 +275,18 @@ export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelet
 
   return (
     <div
-      className="group p-4 rounded-lg border border-card-border bg-card hover:border-primary/40 transition-all duration-300 flex flex-col gap-3"
+      className="group relative p-4 rounded-lg border border-card-border bg-card hover:border-primary/40 hover:-translate-y-px hover:shadow-md transition-all duration-300 flex flex-col gap-3 overflow-hidden"
       data-testid={`saved-card-${asset.id}`}
     >
+      {/* Glow bloom */}
+      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-[inherit] overflow-hidden">
+        <div style={{
+          position: "absolute",
+          top: -20, left: -20,
+          width: 160, height: 160,
+          background: "radial-gradient(circle at center, rgba(34,197,94,0.09) 0%, rgba(34,197,94,0.04) 45%, transparent 70%)",
+        }} />
+      </div>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <FlaskConical className="w-4 h-4 text-primary shrink-0" />
