@@ -188,6 +188,14 @@ export interface IStorage {
   pushNewArrivals(institution?: string): Promise<{ updated: number }>;
   rejectStagingItem(id: number): Promise<boolean>;
 
+  getDuplicateCandidates(): Promise<Array<{
+    id: number; assetName: string; institution: string | null; indication: string | null;
+    target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
+    canonicalName: string | null;
+  }>>;
+  dismissDuplicateCandidate(id: number): Promise<void>;
+  runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }>;
+
   getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }>;
   getAssetsNeedingEmbedding(): Promise<Array<{
     id: number; assetName: string; target: string; modality: string; indication: string;
@@ -357,7 +365,7 @@ export class DatabaseStorage implements IStorage {
 
     const [inserted] = await db
       .insert(ingestedAssets)
-      .values({ fingerprint, ...data })
+      .values({ fingerprint, ...data } as any)
       .returning();
     return { asset: inserted, isNew: true };
   }
@@ -381,24 +389,63 @@ export class DatabaseStorage implements IStorage {
       for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash });
     }
 
-    const newListings = listings.filter((l) => !existingSet.has(l.fingerprint));
+    const fingerprintNewListings = listings.filter((l) => !existingSet.has(l.fingerprint));
     const existingListings = listings.filter((l) => existingSet.has(l.fingerprint));
+    const runId = listings[0]?.runId;
+    const now = new Date();
 
-    // 2. Bulk INSERT new listings (chunked)
+    // 1b. URL-based dedup: for fingerprint-new listings that have a sourceUrl,
+    //     check if that URL already exists under a different fingerprint.
+    //     If so, update the existing row rather than inserting a duplicate.
+    const urlCandidates = fingerprintNewListings.filter((l) => l.sourceUrl);
+    const urlDeduped = new Map<string, { id: number; fingerprint: string }>();
+    for (let i = 0; i < urlCandidates.length; i += CHUNK) {
+      const chunkUrls = urlCandidates.slice(i, i + CHUNK).map((l) => l.sourceUrl!);
+      const rows = await db
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl })
+        .from(ingestedAssets)
+        .where(inArray(ingestedAssets.sourceUrl, chunkUrls));
+      for (const row of rows) {
+        if (row.sourceUrl) urlDeduped.set(row.sourceUrl, { id: row.id, fingerprint: row.fingerprint });
+      }
+    }
+
+    const urlDuplicates = fingerprintNewListings.filter((l) => l.sourceUrl && urlDeduped.has(l.sourceUrl));
+    const newListings = fingerprintNewListings.filter((l) => !l.sourceUrl || !urlDeduped.has(l.sourceUrl));
+
+    // Update URL-matched duplicates (refresh content + lastSeenAt instead of inserting)
+    if (urlDuplicates.length > 0) {
+      console.log(`[storage] URL dedup: ${urlDuplicates.length} listings matched existing rows by source_url — updating instead of inserting`);
+      const now2 = new Date();
+      for (const listing of urlDuplicates) {
+        const existing = urlDeduped.get(listing.sourceUrl!);
+        if (!existing) continue;
+        await db
+          .update(ingestedAssets)
+          .set({
+            lastSeenAt: now2,
+            runId,
+            contentHash: listing.contentHash,
+            summary: listing.summary || undefined,
+            abstract: (listing as any).abstract || undefined,
+          })
+          .where(eq(ingestedAssets.id, existing.id));
+      }
+    }
+
+    // 2. Bulk INSERT truly new listings (chunked)
     const newAssets: Array<{ id: number; assetName: string; fingerprint: string }> = [];
     for (let i = 0; i < newListings.length; i += CHUNK) {
       const chunk = newListings.slice(i, i + CHUNK);
       const inserted = await db
         .insert(ingestedAssets)
-        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
+        .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })) as any)
         .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName, fingerprint: ingestedAssets.fingerprint });
       for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName, fingerprint: row.fingerprint });
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
     }
 
     // 3. Bulk UPDATE existing listings — update lastSeenAt + runId, detect content changes
-    const runId = listings[0]?.runId;
-    const now = new Date();
     const changedFps: string[] = [];
     const unchangedFps: string[] = [];
     for (const listing of existingListings) {
@@ -431,8 +478,13 @@ export class DatabaseStorage implements IStorage {
             lastContentChangeAt: now,
             summary: listing.summary || undefined,
             abstract: (listing as any).abstract || undefined,
+            // Reset enrichedAt so the asset gets re-enriched with improved content
+            enrichedAt: null,
           })
           .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
+      }
+      if (changedFps.length > 0) {
+        console.log(`[storage] Content change detected on ${changedFps.length} assets — enrichedAt reset for re-enrichment`);
       }
     }
 
@@ -1262,6 +1314,52 @@ export class DatabaseStorage implements IStorage {
   async rejectStagingItem(id: number): Promise<boolean> {
     const rows = await db.update(syncStaging).set({ status: "skipped" }).where(eq(syncStaging.id, id)).returning({ id: syncStaging.id });
     return rows.length > 0;
+  }
+
+  async getDuplicateCandidates(): Promise<Array<{
+    id: number; assetName: string; institution: string | null; indication: string | null;
+    target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
+    canonicalName: string | null;
+  }>> {
+    const result = await db.execute(sql`
+      SELECT
+        a.id,
+        a.asset_name AS "assetName",
+        a.institution,
+        a.indication,
+        a.target,
+        a.source_url AS "sourceUrl",
+        a.duplicate_of_id AS "duplicateOfId",
+        b.asset_name AS "canonicalName"
+      FROM ingested_assets a
+      LEFT JOIN ingested_assets b ON b.id = a.duplicate_of_id
+      WHERE a.duplicate_flag = true
+      ORDER BY a.id DESC
+      LIMIT 500
+    `);
+    return (result.rows as any[]).map((r) => ({
+      id: r.id,
+      assetName: r.assetName,
+      institution: r.institution,
+      indication: r.indication,
+      target: r.target,
+      sourceUrl: r.sourceUrl,
+      duplicateOfId: r.duplicateOfId ? Number(r.duplicateOfId) : null,
+      canonicalName: r.canonicalName,
+    }));
+  }
+
+  async dismissDuplicateCandidate(id: number): Promise<void> {
+    await db
+      .update(ingestedAssets)
+      .set({ duplicateFlag: false, duplicateOfId: null })
+      .where(eq(ingestedAssets.id, id));
+  }
+
+  async runNearDuplicateDetection(onProgress?: (msg: string) => void): Promise<{ embedded: number; flagged: number; pairs: number }> {
+    const { runNearDuplicateDetection: detect } = await import("./lib/pipeline/nearDuplicateDetection");
+    const result = await detect(onProgress);
+    return { embedded: result.embedded, flagged: result.flagged, pairs: result.pairs.length };
   }
 
   async getEmbeddingCoverage(): Promise<{ totalRelevant: number; totalEmbedded: number }> {

@@ -8,8 +8,16 @@ import { syncStaging, type SyncStagingRow } from "@shared/schema";
 import { db } from "../db";
 import { eq, and } from "drizzle-orm";
 
+export function normalizeTitle(title: string): string {
+  let t = title.toLowerCase().trim();
+  t = t.replace(/^(a|an|the)\s+/i, "");
+  t = t.replace(/[^\w\s]/g, " ");
+  t = t.replace(/\s+/g, " ").trim();
+  return t;
+}
+
 export function makeFingerprint(title: string, institution: string): string {
-  return `${title.toLowerCase().trim()}|${institution.toLowerCase().trim()}`;
+  return `${normalizeTitle(title)}|${institution.toLowerCase().trim()}`;
 }
 
 export interface IngestionResult {
@@ -139,7 +147,19 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
       classifyBatch(
         newAssets.map((a) => {
           const orig = upsertLookup.get(a.fingerprint);
-          return { id: a.id, title: a.assetName, description: orig?.summary || a.assetName, abstract: orig?.abstract || undefined };
+          return {
+            id: a.id,
+            title: a.assetName,
+            description: orig?.summary || a.assetName,
+            abstract: orig?.abstract || undefined,
+            ctx: {
+              categories: orig?.categories ?? null,
+              patentStatus: orig?.patentStatus ?? null,
+              licensingStatus: orig?.licensingStatus ?? null,
+              inventors: orig?.inventors ?? null,
+              sourceUrl: orig?.sourceUrl ?? null,
+            },
+          };
         }),
         30,
         async (id, classification) => {

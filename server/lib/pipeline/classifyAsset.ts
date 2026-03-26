@@ -36,17 +36,34 @@ function sanitize(val: string, allowed: Set<string>, fallback: string): string {
   return allowed.has(v) ? v : fallback;
 }
 
+export interface AssetContext {
+  categories?: string[] | null;
+  patentStatus?: string | null;
+  licensingStatus?: string | null;
+  inventors?: string[] | null;
+  sourceUrl?: string | null;
+}
+
 export async function classifyAsset(
   title: string,
   description: string,
   abstract?: string,
   model: "gpt-4o-mini" | "gpt-4o" = "gpt-4o-mini",
   throwOnError = false,
+  ctx?: AssetContext,
 ): Promise<AssetClassification> {
+  const contextLines: string[] = [];
+  if (ctx?.categories?.length) contextLines.push(`Tags/Categories: ${ctx.categories.join(", ")}`);
+  if (ctx?.patentStatus && ctx.patentStatus !== "unknown") contextLines.push(`Patent Status: ${ctx.patentStatus}`);
+  if (ctx?.licensingStatus && ctx.licensingStatus !== "unknown") contextLines.push(`Licensing Status: ${ctx.licensingStatus}`);
+  if (ctx?.inventors?.length) contextLines.push(`Inventors: ${ctx.inventors.join(", ")}`);
+  if (ctx?.sourceUrl) contextLines.push(`Source URL: ${ctx.sourceUrl}`);
+
   const inputText = [
     `Title: ${title}`,
     description && description !== title ? `Description: ${description.slice(0, 2000)}` : "",
     abstract ? `Abstract: ${abstract.slice(0, 2000)}` : "",
+    ...contextLines,
   ].filter(Boolean).join("\n");
 
   try {
@@ -117,8 +134,10 @@ Fields:
   }
 }
 
+export const MIN_CONTENT_CHARS = 120;
+
 export async function classifyBatch(
-  items: { id: number; title: string; description: string; abstract?: string }[],
+  items: { id: number; title: string; description: string; abstract?: string; ctx?: AssetContext }[],
   concurrency = 30,
   onEach?: (id: number, result: AssetClassification) => Promise<void>
 ): Promise<Map<number, AssetClassification>> {
@@ -129,7 +148,14 @@ export async function classifyBatch(
     while (i < items.length) {
       const item = items[i++];
       if (!item) continue;
-      const classification = await classifyAsset(item.title, item.description, item.abstract);
+
+      const combinedLength = (item.title || "").length + (item.description || "").length + (item.abstract || "").length;
+      if (combinedLength < MIN_CONTENT_CHARS) {
+        console.log(`[classifyBatch] Skipping asset ${item.id} — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS})`);
+        continue;
+      }
+
+      const classification = await classifyAsset(item.title, item.description, item.abstract, "gpt-4o-mini", false, item.ctx);
       results.set(item.id, classification);
       if (onEach) {
         try { await onEach(item.id, classification); } catch {}
@@ -137,7 +163,7 @@ export async function classifyBatch(
     }
   }
 
-  const workers = Array.from({ length: Math.min(concurrency, items.length) }, worker);
+  const workers = Array.from({ length: Math.min(concurrency, items.length || 1) }, worker);
   await Promise.all(workers);
   return results;
 }

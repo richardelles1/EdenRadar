@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
@@ -3045,6 +3045,116 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
             <span className="text-xs font-semibold text-muted-foreground">Rejected ({rejected.length})</span>
           </div>
           {rejected.map((p) => <ProjectRow key={p.id} project={p} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PotentialDuplicates({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading } = useQuery<{ candidates: any[]; total: number }>({
+    queryKey: ["/api/admin/duplicate-candidates", pw],
+    queryFn: () => fetch(`/api/admin/duplicate-candidates?pw=${pw}`).then((r) => r.json()),
+  });
+
+  const runDetectionMutation = useMutation({
+    mutationFn: () =>
+      fetch(`/api/admin/duplicate-detection/run?pw=${pw}`, { method: "POST" }).then((r) => r.json()),
+    onSuccess: (result) => {
+      toast({
+        title: "Dedup scan complete",
+        description: `${result.flagged} duplicate(s) flagged across ${result.pairs} pair(s). ${result.embedded} embeddings generated.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/duplicate-candidates", pw] });
+    },
+    onError: () => toast({ title: "Scan failed", variant: "destructive" }),
+  });
+
+  const dismissMutation = useMutation({
+    mutationFn: (id: number) =>
+      fetch(`/api/admin/duplicate-candidates/${id}/dismiss?pw=${pw}`, { method: "POST" }).then((r) => r.json()),
+    onSuccess: () => {
+      toast({ title: "Dismissed" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/duplicate-candidates", pw] });
+    },
+    onError: () => toast({ title: "Failed to dismiss", variant: "destructive" }),
+  });
+
+  const candidates = data?.candidates ?? [];
+
+  return (
+    <div className="bg-card border border-border rounded-xl p-6 mt-6">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">Potential Duplicates</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Semantic near-duplicates detected via embedding similarity (threshold: 92%). Run scan to update.
+          </p>
+        </div>
+        <button
+          data-testid="button-run-dedup-scan"
+          onClick={() => runDetectionMutation.mutate()}
+          disabled={runDetectionMutation.isPending}
+          className="px-3 py-1.5 text-xs bg-violet-600 hover:bg-violet-700 text-white rounded-lg font-medium disabled:opacity-50 transition-colors"
+        >
+          {runDetectionMutation.isPending ? "Scanning..." : "Run Scan"}
+        </button>
+      </div>
+
+      {isLoading ? (
+        <div className="text-sm text-muted-foreground py-4 text-center">Loading...</div>
+      ) : candidates.length === 0 ? (
+        <div className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-lg">
+          No duplicate candidates flagged. Run a scan to detect near-duplicates.
+        </div>
+      ) : (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          <div className="text-xs text-muted-foreground mb-3">
+            {candidates.length} flagged asset(s). Dismiss to keep both records.
+          </div>
+          {candidates.map((c) => (
+            <div
+              key={c.id}
+              data-testid={`card-duplicate-${c.id}`}
+              className="flex items-start justify-between gap-3 p-3 bg-muted/40 rounded-lg border border-border text-sm"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-foreground truncate" data-testid={`text-dup-name-${c.id}`}>
+                  {c.assetName}
+                </div>
+                <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {c.institution ?? "Unknown institution"} {c.indication ? `· ${c.indication}` : ""}
+                </div>
+                {c.canonicalName && (
+                  <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Duplicate of: {c.canonicalName} (ID {c.duplicateOfId})
+                  </div>
+                )}
+                {c.sourceUrl && (
+                  <a
+                    href={c.sourceUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-blue-500 hover:underline mt-0.5 block truncate"
+                    data-testid={`link-dup-source-${c.id}`}
+                  >
+                    {c.sourceUrl}
+                  </a>
+                )}
+              </div>
+              <button
+                data-testid={`button-dismiss-dup-${c.id}`}
+                onClick={() => dismissMutation.mutate(c.id)}
+                disabled={dismissMutation.isPending}
+                className="px-2.5 py-1 text-xs bg-background border border-border rounded-lg hover:bg-muted transition-colors whitespace-nowrap disabled:opacity-50"
+              >
+                Dismiss
+              </button>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -7194,9 +7304,10 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Quality</h2>
-                <p className="text-sm text-muted-foreground mt-1">Dataset completeness and field coverage for relevant biotech assets. Enrichment controls at the bottom.</p>
+                <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets. Enrichment controls at the bottom.</p>
               </div>
               <Enrichment pw={pw} />
+              <PotentialDuplicates pw={pw} />
             </>
           )}
 

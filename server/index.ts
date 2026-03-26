@@ -127,6 +127,26 @@ app.use((req, res, next) => {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Startup migrations: near-duplicate detection columns ─────────────────
+  try {
+    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
+    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_of_id INTEGER`);
+    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_embedding JSONB`);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_ingested_assets_source_url
+      ON ingested_assets (source_url)
+      WHERE source_url IS NOT NULL
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS idx_ingested_assets_duplicate_flag
+      ON ingested_assets (duplicate_flag)
+      WHERE duplicate_flag = true
+    `);
+    log("[startup] near-duplicate detection columns ready", "startup");
+  } catch (err: any) {
+    log(`[startup] near-duplicate detection migration failed: ${err?.message}`, "startup");
+  }
+
   // ── Ensure eden_sessions table exists ────────────────────────────────────
   try {
     await db.execute(sql`

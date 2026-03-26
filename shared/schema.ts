@@ -155,6 +155,11 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // NOTE: embedding column is managed via startup migration (CREATE EXTENSION vector + ADD COLUMN IF NOT EXISTS)
   // This declaration provides TypeScript type safety; actual column creation is handled at server startup.
   embedding: vector1536("embedding"),
+  // Near-duplicate detection columns (managed via startup migration)
+  duplicateFlag: boolean("duplicate_flag").default(false),
+  duplicateOfId: integer("duplicate_of_id"),
+  // Compact embedding for near-duplicate comparison (JSONB number array, not vector type)
+  dedupeEmbedding: jsonb("dedupe_embedding").$type<number[]>(),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

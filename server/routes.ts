@@ -5714,5 +5714,43 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.get("/api/admin/duplicate-candidates", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const candidates = await storage.getDuplicateCandidates();
+      res.json({ candidates, total: candidates.length });
+    } catch (err: any) {
+      console.error("[duplicate-candidates] Error:", err);
+      res.status(500).json({ error: err.message ?? "Failed to load duplicate candidates" });
+    }
+  });
+
+  app.post("/api/admin/duplicate-candidates/:id/dismiss", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      await storage.dismissDuplicateCandidate(id);
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[duplicate-candidates/dismiss] Error:", err);
+      res.status(500).json({ error: err.message ?? "Failed to dismiss duplicate" });
+    }
+  });
+
+  app.post("/api/admin/duplicate-detection/run", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const result = await storage.runNearDuplicateDetection((msg) => console.log(`[dedup] ${msg}`));
+      res.json(result);
+    } catch (err: any) {
+      console.error("[duplicate-detection/run] Error:", err);
+      res.status(500).json({ error: err.message ?? "Failed to run duplicate detection" });
+    }
+  });
+
   return httpServer;
 }
