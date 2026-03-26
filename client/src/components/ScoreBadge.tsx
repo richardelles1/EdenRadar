@@ -33,7 +33,7 @@ const MEANINGFUL_DIMS = ["fit", "novelty", "readiness", "licensability"] as cons
 type MeaningfulDim = typeof MEANINGFUL_DIMS[number];
 
 export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
-  const isUnscored = score === 0 && (breakdown?.signal_coverage ?? 0) === 0 && (breakdown?.scored_dimensions?.length ?? 0) === 0;
+  const isUnscored = (breakdown?.signal_coverage ?? 0) === 0;
   const { bg, text, ring } = isUnscored
     ? { bg: "bg-muted", text: "text-muted-foreground", ring: "ring-border" }
     : scoreColor(score);

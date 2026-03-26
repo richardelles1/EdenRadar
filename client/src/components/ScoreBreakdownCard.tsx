@@ -82,7 +82,17 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         </div>
       )}
 
-      {hasScore && (
+      {hasScore && scoredDims.length < 3 && (
+        <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 opacity-50" />
+          <span>
+            Signal Profile requires more data — only {scoredDims.length} of 6 dimension{scoredDims.length === 1 ? "" : "s"} scored.
+            Search for this asset to generate a full profile.
+          </span>
+        </div>
+      )}
+
+      {hasScore && scoredDims.length >= 3 && (
         <div className="space-y-3">
           {DIMS.map(({ key, label, icon: Icon, weight, fallback }) => {
             const scored = scoredDims.includes(key);

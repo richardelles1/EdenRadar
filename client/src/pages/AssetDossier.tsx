@@ -248,11 +248,19 @@ export default function AssetDossier() {
   const licensingAvailable = (enriched?.licensingStatus ?? asset.licensing_status ?? "").toLowerCase().includes("available");
 
   const KEY_FIELDS = ["target", "modality", "indication", "development_stage", "patent_status", "licensing_status"] as const;
+  const UNKNOWN_LIKE = /^(unknown|n\/a|none|not available|tbd|tba|-)$/i;
   const unknownCount = KEY_FIELDS.filter((f) => {
-    const v = asset[f as keyof typeof asset] as string | undefined;
-    return !v || v === "unknown";
+    const v = (asset[f as keyof typeof asset] as string | undefined)?.trim() ?? "";
+    return !v || UNKNOWN_LIKE.test(v);
   }).length;
-  const adjustedCompleteness = (raw: number) => unknownCount >= 4 ? Math.min(raw, 50) : raw;
+  const trivialSummary = isTrivialSummary(asset.summary, asset.asset_name);
+  const qualityPenaltyCount = unknownCount + (trivialSummary ? 1 : 0);
+  const adjustedCompleteness = (raw: number) => {
+    if (qualityPenaltyCount >= 5) return Math.min(raw, 40);
+    if (qualityPenaltyCount >= 4) return Math.min(raw, 50);
+    if (qualityPenaltyCount >= 2 && trivialSummary) return Math.min(raw, 70);
+    return raw;
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
