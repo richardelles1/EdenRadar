@@ -456,7 +456,9 @@ export class DatabaseStorage implements IStorage {
     const unchangedFps: string[] = [];
     for (const listing of existingListings) {
       const existing = existingSet.get(listing.fingerprint);
-      if (existing && listing.contentHash && existing.contentHash && listing.contentHash !== existing.contentHash) {
+      // Treat as changed when: incoming hash exists AND differs from stored hash
+      // (includes null stored hash = first-time hash population on a legacy row)
+      if (existing && listing.contentHash && listing.contentHash !== existing.contentHash) {
         changedFps.push(listing.fingerprint);
       } else {
         unchangedFps.push(listing.fingerprint);
