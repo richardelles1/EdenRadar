@@ -99,10 +99,8 @@ export default function Login() {
       <AuroraLayer opacity={1} intensity={1} isDark={isDark} />
       <RadarRings isDark={isDark} />
 
-      <div className="relative z-10 min-h-screen grid md:grid-cols-2">
-        <div className="hidden md:block" aria-hidden />
-
-        <div className="flex items-center justify-center px-4 py-12">
+      <div className="relative z-10 min-h-screen flex items-center justify-center">
+        <div className="flex items-center justify-center px-4 py-12 w-full">
           <div className="w-full max-w-sm space-y-5">
             <div className="rounded-2xl border px-7 py-7 space-y-5" style={cardStyle}>
 
