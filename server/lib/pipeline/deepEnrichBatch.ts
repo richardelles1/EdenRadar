@@ -1,4 +1,4 @@
-import { classifyAsset, type AssetContext } from "./classifyAsset";
+import { classifyAsset, MIN_CONTENT_CHARS, type AssetContext } from "./classifyAsset";
 
 export interface DeepEnrichResult {
   id: number;
@@ -130,6 +130,21 @@ export async function deepEnrichBatch(
       if (idx >= assets.length) break;
       asset = assets[idx++];
       if (!asset) continue;
+
+      // Quality gate: combined text must be >= MIN_CONTENT_CHARS.
+      // Skip (leave enrichedAt=null) so the asset is retried once it gains more content.
+      const combinedLength =
+        (asset.assetName || "").length +
+        (asset.summary || "").length +
+        (asset.abstract || "").length;
+      if (combinedLength < MIN_CONTENT_CHARS) {
+        console.log(
+          `[deepEnrich] Skipping asset ${asset.id} ("${asset.assetName?.slice(0, 60)}") — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS}). Will retry next cycle.`,
+        );
+        processed++;
+        onProgress?.(processed, total, totalSucceeded, totalFailed);
+        continue;
+      }
 
       let succeeded = false;
       try {

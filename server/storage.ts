@@ -997,9 +997,9 @@ export class DatabaseStorage implements IStorage {
       .where(
         and(
           eq(ingestedAssets.relevant, true),
-          // Quality gate: require at least 120 combined chars across title+summary+abstract
-          sql`(COALESCE(LENGTH(${ingestedAssets.assetName}), 0) + COALESCE(LENGTH(${ingestedAssets.summary}), 0) + COALESCE(LENGTH(${ingestedAssets.abstract}), 0)) >= 120`,
           or(
+            // Content changed and enrichedAt was reset → re-enrich even if deep fields are populated
+            isNull(ingestedAssets.enrichedAt),
             isNull(ingestedAssets.completenessScore),
             sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
             sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
