@@ -39,7 +39,6 @@ import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jp
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
-import edenNxLogo from "@assets/EdenNX_Logo_T_1774512284562.png";
 
 const SLIDE_COUNT = 9;
 
@@ -1230,12 +1229,21 @@ function ContactSlide({ colors }: { colors: Colors }) {
       <PitchCenterRadar color={colors.green} opacity={0.08} />
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
-        <div className="mb-5 sm:mb-6">
-          <img
-            src={edenNxLogo}
-            alt="EdenNX"
-            style={{ width: 120, height: 120, objectFit: "contain" }}
-          />
+        <div className="flex flex-col items-start gap-3 mb-6">
+          {[
+            { label: "Discovery", color: colors.amber, dim: colors.amberDim, Icon: Lightbulb },
+            { label: "Lab",       color: colors.violet, dim: colors.violetDim, Icon: FlaskConical },
+            { label: "Scout",     color: colors.green,  dim: colors.greenDim,  Icon: Search },
+          ].map(({ label, color, dim, Icon }) => (
+            <div key={label} className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color }}>
+                <Icon className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-base font-semibold" style={{ color: colors.text }}>
+                Eden<span style={{ color }}>{label}</span>
+              </span>
+            </div>
+          ))}
         </div>
         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
           Let's build the future of <span style={{ color: colors.green }}>biotech intelligence</span>.
