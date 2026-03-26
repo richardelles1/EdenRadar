@@ -562,8 +562,8 @@ export default function Scout() {
               <div className="max-w-3xl mx-auto">
                 <OrientationHint
                   hintId="scout-cross-source"
-                  title="Cross-source discovery."
-                  body="Each search pulls simultaneously from 300+ TTO disclosures, PubMed, ClinicalTrials.gov, and patents — scored against your buyer thesis."
+                  title="TTO asset discovery."
+                  body="Search across 300+ TTO disclosures — scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) from the right panel."
                   accent="emerald"
                 />
               </div>

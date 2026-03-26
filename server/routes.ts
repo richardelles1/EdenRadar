@@ -408,7 +408,9 @@ export async function registerRoutes(
 
       if (results.length === 0) {
         fallback = true;
-        results = await storage.keywordSearchIngestedAssets(query, limit);
+        results = await storage.keywordSearchIngestedAssets(query, limit, {
+          modality, stage, indication, institution, since: sinceDate, before: beforeDate,
+        });
       }
 
       const assets: ScoredAsset[] = results.map((r) => {
