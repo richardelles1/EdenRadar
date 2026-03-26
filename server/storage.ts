@@ -141,6 +141,10 @@ export interface IStorage {
     withComparableDrugs: number;
     avgCompletenessScore: number | null;
   }>;
+  // Re-enrichment contract: `enrichedAt IS NULL` is the single signal used to
+  // select assets for deep enrichment. It replaces any separate `needs_enrichment` flag.
+  // It is reset to null whenever source content changes (contentHash differs) so that
+  // content-improved assets are automatically re-enriched the next cycle.
   getAssetsNeedingDeepEnrich(): Promise<Array<{
     id: number; assetName: string; summary: string; abstract: string | null;
     categories: string[] | null; patentStatus: string | null; licensingStatus: string | null;

@@ -3130,8 +3130,9 @@ function PotentialDuplicates({ pw }: { pw: string }) {
                     <span
                       data-testid={`text-dup-similarity-${c.id}`}
                       className="shrink-0 text-xs font-mono px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300"
+                      title={`Raw similarity score: ${c.dedupeSimilarity.toFixed(4)}`}
                     >
-                      {Math.round(c.dedupeSimilarity * 100)}% match
+                      {Math.round(c.dedupeSimilarity * 100)}% ({c.dedupeSimilarity.toFixed(3)})
                     </span>
                   )}
                 </div>
