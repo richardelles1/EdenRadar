@@ -3187,7 +3187,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
     }
   }
 
-  const previewRows = parsedRows?.slice(0, 8) ?? [];
+  const previewRows = parsedRows?.slice(0, 10) ?? [];
   const previewCols = ["id", "assetName", "institution", "target", "modality", "developmentStage", "completenessScore"];
 
   return (
@@ -3251,7 +3251,7 @@ function BulkCsvImport({ pw }: { pw: string }) {
         <div data-testid="csv-preview-section">
           <div className="flex items-center justify-between mb-2">
             <span className="text-xs font-medium text-foreground">
-              Preview — {parsedRows.length.toLocaleString()} rows from <span className="font-semibold">{fileName}</span>
+              Preview — {parsedRows.length.toLocaleString()} rows, {Object.keys(parsedRows[0] ?? {}).length} columns from <span className="font-semibold">{fileName}</span>
             </span>
             <Button
               size="sm"
@@ -3296,10 +3296,10 @@ function BulkCsvImport({ pw }: { pw: string }) {
                     ))}
                   </tr>
                 ))}
-                {parsedRows.length > 8 && (
+                {parsedRows.length > 10 && (
                   <tr>
                     <td colSpan={previewCols.length} className="px-3 py-1.5 text-center text-muted-foreground italic">
-                      …and {(parsedRows.length - 8).toLocaleString()} more rows
+                      …and {(parsedRows.length - 10).toLocaleString()} more rows
                     </td>
                   </tr>
                 )}

@@ -276,7 +276,7 @@ export interface IStorage {
     categories?: string[]; mechanismOfAction?: string; innovationClaim?: string;
     unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string;
     ipType?: string; completenessScore?: number;
-  }>): Promise<{ updated: number; skipped: number }>;
+  }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2059,9 +2059,10 @@ export class DatabaseStorage implements IStorage {
     categories?: string[]; mechanismOfAction?: string; innovationClaim?: string;
     unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string;
     ipType?: string; completenessScore?: number;
-  }>): Promise<{ updated: number; skipped: number }> {
+  }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }> {
     let updated = 0;
     let skipped = 0;
+    const notFoundIds: number[] = [];
     for (const row of rows) {
       const { id, ...fields } = row;
       const setObj: Partial<typeof ingestedAssets.$inferInsert> = {};
@@ -2083,9 +2084,9 @@ export class DatabaseStorage implements IStorage {
       if (fields.completenessScore !== undefined) setObj.completenessScore = fields.completenessScore;
       if (Object.keys(setObj).length === 0) { skipped++; continue; }
       const result = await db.update(ingestedAssets).set(setObj).where(eq(ingestedAssets.id, id)).returning({ id: ingestedAssets.id });
-      if (result.length > 0) updated++; else skipped++;
+      if (result.length > 0) { updated++; } else { skipped++; notFoundIds.push(id); }
     }
-    return { updated, skipped };
+    return { updated, skipped, notFoundIds };
   }
 }
 

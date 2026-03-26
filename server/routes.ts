@@ -5873,14 +5873,23 @@ If multiple assets appear, return each as a separate array item.`;
 
       const result = validRows.length > 0
         ? await storage.bulkUpdateAssetsFromCsv(validRows)
-        : { updated: 0, skipped: 0 };
+        : { updated: 0, skipped: 0, notFoundIds: [] as number[] };
+
+      // Merge unknown-ID skips into skippedDetails
+      const notFoundDetails = result.notFoundIds.map((id) => ({
+        index: -1 as number,
+        id,
+        reason: "ID not found in database",
+      }));
+      const allSkipped = [...skippedDetails, ...notFoundDetails];
 
       res.json({
         ok: true,
         updated: result.updated,
         skipped: result.skipped + skippedDetails.length,
         validationSkipped: skippedDetails.length,
-        skippedDetails: skippedDetails.slice(0, 100), // cap detail payload
+        notFoundCount: result.notFoundIds.length,
+        skippedDetails: allSkipped.slice(0, 100),
       });
     } catch (err: any) {
       console.error("[bulk-update] Error:", err);
