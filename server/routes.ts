@@ -5793,8 +5793,6 @@ If multiple assets appear, return each as a separate array item.`;
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const rows = await storage.exportEnrichmentCsv();
-
       function csvEscape(val: unknown): string {
         if (val === null || val === undefined) return "";
         const s = Array.isArray(val) ? JSON.stringify(val) : String(val);
@@ -5805,23 +5803,59 @@ If multiple assets appear, return each as a separate array item.`;
       }
 
       const HEADERS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"];
-      const lines: string[] = [HEADERS.join(",")];
-      for (const r of rows) {
-        lines.push([
-          r.id, csvEscape(r.assetName), csvEscape(r.institution), csvEscape(r.summary),
-          csvEscape(r.abstract), csvEscape(r.target), csvEscape(r.modality), csvEscape(r.indication),
-          csvEscape(r.developmentStage), csvEscape(r.categories), csvEscape(r.mechanismOfAction),
-          csvEscape(r.innovationClaim), csvEscape(r.unmetNeed), csvEscape(r.comparableDrugs),
-          csvEscape(r.licensingReadiness), csvEscape(r.ipType), csvEscape(r.completenessScore),
-        ].join(","));
-      }
 
       res.setHeader("Content-Type", "text/csv");
       res.setHeader("Content-Disposition", `attachment; filename="enrichment-${new Date().toISOString().slice(0,10)}.csv"`);
-      res.send(lines.join("\n"));
+      res.write(HEADERS.join(",") + "\n");
+
+      // Stream rows in batches of 1000 to avoid loading full dataset into memory
+      const BATCH = 1000;
+      let offset = 0;
+      while (true) {
+        const batch = await db
+          .select({
+            id: ingestedAssets.id,
+            assetName: ingestedAssets.assetName,
+            institution: ingestedAssets.institution,
+            summary: ingestedAssets.summary,
+            abstract: ingestedAssets.abstract,
+            target: ingestedAssets.target,
+            modality: ingestedAssets.modality,
+            indication: ingestedAssets.indication,
+            developmentStage: ingestedAssets.developmentStage,
+            categories: ingestedAssets.categories,
+            mechanismOfAction: ingestedAssets.mechanismOfAction,
+            innovationClaim: ingestedAssets.innovationClaim,
+            unmetNeed: ingestedAssets.unmetNeed,
+            comparableDrugs: ingestedAssets.comparableDrugs,
+            licensingReadiness: ingestedAssets.licensingReadiness,
+            ipType: ingestedAssets.ipType,
+            completenessScore: ingestedAssets.completenessScore,
+          })
+          .from(ingestedAssets)
+          .orderBy(ingestedAssets.id)
+          .limit(BATCH)
+          .offset(offset);
+
+        for (const r of batch) {
+          res.write([
+            r.id, csvEscape(r.assetName), csvEscape(r.institution), csvEscape(r.summary),
+            csvEscape(r.abstract), csvEscape(r.target), csvEscape(r.modality), csvEscape(r.indication),
+            csvEscape(r.developmentStage), csvEscape(r.categories), csvEscape(r.mechanismOfAction),
+            csvEscape(r.innovationClaim), csvEscape(r.unmetNeed), csvEscape(r.comparableDrugs),
+            csvEscape(r.licensingReadiness), csvEscape(r.ipType), csvEscape(r.completenessScore),
+          ].join(",") + "\n");
+        }
+
+        offset += batch.length;
+        if (batch.length < BATCH) break;
+      }
+
+      res.end();
     } catch (err: any) {
       console.error("[export-csv] Error:", err);
-      res.status(500).json({ error: err.message ?? "Export failed" });
+      if (!res.headersSent) res.status(500).json({ error: err.message ?? "Export failed" });
+      else res.end();
     }
   });
 
