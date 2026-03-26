@@ -651,7 +651,6 @@ function DataHealth({ pw }: { pw: string }) {
   const [errorTypeFilter, setErrorTypeFilter] = useState<ErrorType>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
-  const [schedulerOpen, setSchedulerOpen] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("health");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [liveOpen, setLiveOpen] = useState(true);
@@ -797,48 +796,6 @@ function DataHealth({ pw }: { pw: string }) {
 
   const [resetConfirm, setResetConfirm] = useState(false);
   const resetConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const [tierConfirm, setTierConfirm] = useState<1 | 2 | 3 | 4 | null>(null);
-  const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const schedulerRunTierMutation = useMutation({
-    mutationFn: async (tier: 1 | 2 | 3 | 4) => {
-      const res = await fetch("/api/ingest/scheduler/run-tier", {
-        method: "POST",
-        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
-        body: JSON.stringify({ tier }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({ error: "Request failed" }));
-        throw new Error(d.error || `HTTP ${res.status}`);
-      }
-      return res.json();
-    },
-    onSuccess: (d: { ok: boolean; message?: string }) => {
-      setTierConfirm(null);
-      if (d.ok) {
-        toast({ title: "Tier scan started", description: d.message });
-      } else {
-        toast({ title: "Cannot run tier", description: d.message, variant: "destructive" });
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
-    },
-    onError: (err: Error) => {
-      setTierConfirm(null);
-      toast({ title: "Tier scan failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
-    if (tierConfirm === tier) {
-      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
-      schedulerRunTierMutation.mutate(tier);
-    } else {
-      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
-      setTierConfirm(tier);
-      tierConfirmTimer.current = setTimeout(() => setTierConfirm(null), 4000);
-    }
-  };
 
   const schedulerResetMutation = useMutation({
     mutationFn: async () => {
@@ -1090,12 +1047,11 @@ function DataHealth({ pw }: { pw: string }) {
         <div className="px-4 py-3 border-b border-border bg-muted/20" data-testid="scheduler-strip">
           <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3 min-w-0">
-              <button onClick={() => setSchedulerOpen((v) => !v)} className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity flex-shrink-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
                 <Activity className="w-4 h-4 text-primary" />
                 <span className="font-semibold text-foreground text-sm">Scheduler</span>
-              </button>
+              </div>
 
-              {/* Always-visible status pill */}
               {schedRunning ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-scheduler-running">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1113,26 +1069,6 @@ function DataHealth({ pw }: { pw: string }) {
                 </span>
               )}
 
-              {/* Activity detail */}
-              {(sched.state === "idle" || schedPaused) && sched.lastCycleCompletedAt && (
-                <span className="text-[11px] text-muted-foreground/60 hidden sm:inline">Last full cycle: {relativeTime(sched.lastCycleCompletedAt)}</span>
-              )}
-              {(sched.state === "idle" || schedPaused) && !sched.lastCycleCompletedAt && (
-                <span className="text-[11px] text-muted-foreground/60 hidden sm:inline">No cycles completed yet</span>
-              )}
-              {schedPaused && (
-                <span className="text-[11px] text-amber-600/70 hidden sm:inline">{sched.queuePosition}/{sched.queueTotal}</span>
-              )}
-              {schedRunning && sched.currentTier != null && (
-                <span className={`inline-flex items-center text-[10px] font-semibold px-2 py-0.5 rounded border ${
-                  sched.currentTier === 1 ? "text-sky-600 border-sky-500/30 bg-sky-500/8" :
-                  sched.currentTier === 2 ? "text-violet-600 border-violet-500/30 bg-violet-500/8" :
-                  sched.currentTier === 3 ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/8" :
-                  "text-orange-600 border-orange-500/30 bg-orange-500/8"
-                }`}>
-                  T{sched.currentTier}
-                </span>
-              )}
               {schedRunning && (sched.currentInstitutions ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1 min-w-0">
                   {(sched.currentInstitutions ?? [sched.currentInstitution]).filter(Boolean).map((inst) => (
@@ -1192,99 +1128,8 @@ function DataHealth({ pw }: { pw: string }) {
                 }
                 {resetConfirm ? "Confirm Reset & Restart?" : "Reset & Restart"}
               </Button>
-              <div className="flex items-center gap-1 border-l border-border/50 pl-2">
-                {([1, 2, 3, 4] as const).map((tier) => {
-                  const colors: Record<number, string> = {
-                    1: "text-sky-600 border-sky-500/40 hover:bg-sky-50 dark:hover:bg-sky-950/40",
-                    2: "text-violet-600 border-violet-500/40 hover:bg-violet-50 dark:hover:bg-violet-950/40",
-                    3: "text-emerald-600 border-emerald-500/40 hover:bg-emerald-50 dark:hover:bg-emerald-950/40",
-                    4: "text-orange-600 border-orange-500/40 hover:bg-orange-50 dark:hover:bg-orange-950/40",
-                  };
-                  const confirmColors: Record<number, string> = {
-                    1: "border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300",
-                    2: "border-violet-500 bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300",
-                    3: "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
-                    4: "border-orange-500 bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300",
-                  };
-                  const isConfirming = tierConfirm === tier;
-                  const isPending = schedulerRunTierMutation.isPending;
-                  return (
-                    <Button
-                      key={tier}
-                      size="sm"
-                      variant="outline"
-                      className={`h-8 text-[11px] font-semibold px-2 transition-colors ${isConfirming ? confirmColors[tier] : colors[tier]}`}
-                      onClick={() => !schedRunning && handleTierClick(tier)}
-                      disabled={isPending || schedRunning}
-                      title={schedRunning ? "Pause scheduler first to run a single tier" : `Run Tier ${tier} institutions only`}
-                      data-testid={`button-run-tier-${tier}`}
-                    >
-                      {isPending && tierConfirm === tier ? <Loader2 className="w-3 h-3 animate-spin" /> : isConfirming ? `T${tier}?` : `T${tier}`}
-                    </Button>
-                  );
-                })}
-              </div>
             </div>
           </div>
-
-          {schedulerOpen && sched && (
-            <div className="mt-2 space-y-2" data-testid="scheduler-status">
-              {sched.state === "idle" ? (
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <div className="flex items-center gap-3">
-                    <span className="tabular-nums">{sched.cycleCount > 0 ? `${sched.cycleCount} cycle${sched.cycleCount !== 1 ? "s" : ""} completed` : "No cycles run yet"}</span>
-                    {sched.completedThisCycle > 0 && <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok last cycle</span>}
-                    {sched.failedThisCycle > 0 && <span className="text-red-500 font-medium">{sched.failedThisCycle} failed last cycle</span>}
-                  </div>
-                  <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s between syncs</span>
-                </div>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <div className="flex items-center gap-3">
-                      <span className="tabular-nums">{sched.queuePosition}/{sched.queueTotal} done{sched.cycleCount > 1 && ` (cycle #${sched.cycleCount})`}</span>
-                      <span className="text-emerald-600 font-medium">{sched.completedThisCycle} ok</span>
-                      {sched.failedThisCycle > 0 && (
-                        <span className="text-red-500 font-medium">{sched.failedThisCycle} failed</span>
-                      )}
-                      {(sched.freshSkippedThisCycle ?? 0) > 0 && (
-                        <span className="text-sky-500 font-medium">{sched.freshSkippedThisCycle} fresh-skipped</span>
-                      )}
-                      {(sched.concurrentSyncs ?? 0) > 1 && (
-                        <span className="text-violet-500 font-medium">{sched.concurrentSyncs} concurrent</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {sched.estimatedRemainingMs != null && (
-                        <span>ETA: <span className="font-medium text-foreground/70">{Math.ceil(sched.estimatedRemainingMs / 60000)}m</span></span>
-                      )}
-                      {sched.priorityQueue.length > 0 && (
-                        <span className="text-blue-500">{sched.priorityQueue.length} priority queued</span>
-                      )}
-                      <span className="text-muted-foreground/50">Delay: {(sched.delayMs / 1000).toFixed(0)}s</span>
-                    </div>
-                  </div>
-                  <Progress
-                    value={sched.queueTotal > 0 ? (sched.queuePosition / sched.queueTotal) * 100 : 0}
-                    className="h-1.5 bg-blue-500/10"
-                    data-testid="scheduler-cycle-progress"
-                  />
-                </>
-              )}
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground/70">
-                {sched.cycleStartedAt && (
-                  <span>Cycle started {relativeTime(sched.cycleStartedAt)}</span>
-                )}
-                {sched.lastActivityAt && <span>Last activity {relativeTime(sched.lastActivityAt)}</span>}
-                {sched.nextInstitution && (
-                  <span>Next: <span className="font-medium text-foreground/70">{sched.nextInstitution}</span></span>
-                )}
-                {sched.lastCycleCompletedAt && (
-                  <span>Last cycle completed {relativeTime(sched.lastCycleCompletedAt)}</span>
-                )}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* ── Live Connections section ───────────────────────── */}

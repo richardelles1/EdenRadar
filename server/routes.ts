@@ -1330,7 +1330,8 @@ export async function registerRoutes(
         } else if (session.status === "failed") {
           health = consecutiveFailures >= 4 ? "failing" :
                    consecutiveFailures >= 2 ? "degraded" :
-                   consecutiveFailures >= 1 ? "warning" : "ok";
+                   consecutiveFailures >= 1 ? "warning" :
+                   session.errorMessage ? "warning" : "ok";
         } else {
           health = "degraded";
         }
