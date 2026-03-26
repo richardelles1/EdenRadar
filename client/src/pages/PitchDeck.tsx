@@ -438,8 +438,6 @@ function CoverSlide({ colors }: { colors: Colors }) {
           <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-xs" style={{ color: colors.textMuted }}>
             <span>Founded 2026</span>
             <span className="w-1 h-1 rounded-full" style={{ background: colors.green }} />
-            <span>Pre-Seed</span>
-            <span className="w-1 h-1 rounded-full" style={{ background: colors.green }} />
             <span>edenradar.com</span>
           </div>
         </div>
@@ -495,7 +493,7 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
             className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-5"
             style={{ background: colors.greenDim, color: colors.green, border: `1px solid ${colors.green}44` }}
           >
-            Founded 2026 · Pre-Seed
+            Founded 2026
           </div>
           <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-5 leading-tight" style={{ color: colors.text }}>
             The team building the{" "}
