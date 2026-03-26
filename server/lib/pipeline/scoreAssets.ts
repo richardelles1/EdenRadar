@@ -16,13 +16,13 @@ const WEIGHTS: Record<string, number> = {
   competition: 0.10,
 };
 
-type DimensionResult = {
+export type DimensionResult = {
   score: number;
   hasData: boolean;
   basis: string;
 };
 
-function clamp(v: number): number {
+export function clamp(v: number): number {
   return Math.max(0, Math.min(100, Math.round(v)));
 }
 
@@ -40,7 +40,7 @@ function daysSince(dateStr: string): number {
   return Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
 }
 
-function scoreFreshness(asset: Partial<ScoredAsset>): DimensionResult {
+export function scoreFreshness(asset: Partial<ScoredAsset>): DimensionResult {
   const days = daysSince(asset.latest_signal_date ?? "");
   if (days >= 999) {
     return { score: 50, hasData: false, basis: "No date recorded" };
@@ -73,7 +73,7 @@ function scoreFreshness(asset: Partial<ScoredAsset>): DimensionResult {
   return { score, hasData: true, basis };
 }
 
-function scoreNovelty(asset: Partial<ScoredAsset>): DimensionResult {
+export function scoreNovelty(asset: Partial<ScoredAsset>): DimensionResult {
   const types = asset.source_types ?? [];
   const ownerKnown = asset.owner_type && asset.owner_type !== "unknown";
   const hasData = types.length > 0 || !!ownerKnown;
@@ -106,7 +106,7 @@ function scoreNovelty(asset: Partial<ScoredAsset>): DimensionResult {
   return { score: clamp(score), hasData: true, basis };
 }
 
-function scoreReadiness(asset: Partial<ScoredAsset>): DimensionResult {
+export function scoreReadiness(asset: Partial<ScoredAsset>): DimensionResult {
   const stage = (asset.development_stage ?? "").toLowerCase().trim();
   if (!stage || stage === "unknown") {
     return { score: 50, hasData: false, basis: "Stage not reported" };
@@ -141,7 +141,7 @@ function scoreReadiness(asset: Partial<ScoredAsset>): DimensionResult {
   return { score: clamp(score), hasData: true, basis };
 }
 
-function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult {
+export function scoreLicensability(asset: Partial<ScoredAsset>): DimensionResult {
   const ownerKnown = asset.owner_type && asset.owner_type !== "unknown";
   const types = asset.source_types ?? [];
   const ls = (asset.licensing_status ?? "").toLowerCase();
@@ -255,7 +255,7 @@ function scoreFit(asset: Partial<ScoredAsset>, buyerProfile?: BuyerProfile): Dim
   return { score: total, hasData: true, basis };
 }
 
-function scoreCompetition(asset: Partial<ScoredAsset>): DimensionResult {
+export function scoreCompetition(asset: Partial<ScoredAsset>): DimensionResult {
   const ownerName = (asset.owner_name ?? "").toLowerCase();
   const stage = (asset.development_stage ?? "").toLowerCase();
   const types = asset.source_types ?? [];
@@ -287,7 +287,7 @@ function scoreCompetition(asset: Partial<ScoredAsset>): DimensionResult {
   return { score: clamp(score), hasData: true, basis };
 }
 
-function computeTotal(
+export function computeTotal(
   results: Record<string, DimensionResult>
 ): { total: number; signal_coverage: number; scored_dimensions: string[]; dimension_basis: Record<string, string> } {
   const available = Object.entries(results).filter(([, r]) => r.hasData);

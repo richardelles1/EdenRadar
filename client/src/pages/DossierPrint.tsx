@@ -128,7 +128,7 @@ export default function DossierPrint() {
       source_urls: rec.sourceUrl ? [rec.sourceUrl] : [],
       latest_signal_date: "",
       score: 0,
-      score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+      score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0, signal_coverage: 0, scored_dimensions: [], dimension_basis: {} },
       matching_tags: [],
       confidence: "low",
       signals: [],

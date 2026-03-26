@@ -15,7 +15,7 @@ import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
-import { scoreAssets } from "./lib/pipeline/scoreAssets";
+import { scoreAssets, scoreFreshness, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
 import { generateReport } from "./lib/pipeline/generateReport";
 import { generateDossier } from "./lib/pipeline/generateDossier";
 import { isFatalOpenAIError } from "./lib/llm";
@@ -386,7 +386,7 @@ export async function registerRoutes(
         stage: z.string().optional(),
         indication: z.string().optional(),
         institution: z.string().optional(),
-        limit: z.number().int().min(1).max(100).default(50),
+        limit: z.number().int().min(1).max(200).default(100),
         since: z.string().optional(),
         before: z.string().optional(),
       });
@@ -399,22 +399,38 @@ export async function registerRoutes(
         modality, stage, indication, institution, limit, minSimilarity, since: sinceDate, before: beforeDate,
       });
 
-      const TIER1_UNIVERSITIES = ["MIT", "Stanford", "Harvard", "UCSF", "Johns Hopkins", "Columbia", "Yale", "Penn", "Duke", "Cornell"];
-      const EARLY_STAGES = ["preclinical", "phase 1", "phase-1", "phase i", "phase 2", "phase-2", "phase ii"];
-
       const assets: ScoredAsset[] = results.map((r) => {
-        const sim = r.similarity ?? 0;
-        // Floor-lifted: sim 0.40 → score 40, sim 1.00 → score 100; quality bonuses max +10
-        const baseScore = Math.round(40 + ((sim - 0.40) / 0.60) * 60);
-        const stageLower = (r.developmentStage ?? "").toLowerCase();
-        const instLower  = (r.institution ?? "").toLowerCase();
-        const bonuses =
-          (TIER1_UNIVERSITIES.some((u) => instLower.includes(u.toLowerCase())) ? 3 : 0) +
-          (r.developmentStage && r.developmentStage !== "unknown" ? 2 : 0) +
-          (EARLY_STAGES.some((s) => stageLower.includes(s)) ? 2 : 0) +
-          (r.licensingReadiness && r.licensingReadiness !== "unknown" ? 2 : 0) +
-          (r.modality && r.modality !== "unknown" ? 1 : 0);
-        const score = Math.max(0, Math.min(100, baseScore + bonuses));
+        const partialAsset: Partial<ScoredAsset> = {
+          development_stage: r.developmentStage,
+          licensing_status: r.licensingReadiness ?? "unknown",
+          owner_name: r.institution,
+          owner_type: "university",
+          source_types: ["tech_transfer"],
+          latest_signal_date: "",
+          evidence_count: 1,
+          patent_status: "unknown",
+        };
+
+        const freshnessResult  = scoreFreshness(partialAsset);
+        const noveltyResult    = scoreNovelty(partialAsset);
+        const readinessResult  = scoreReadiness(partialAsset);
+        const licensabilityResult = scoreLicensability(partialAsset);
+        const competitionResult = scoreCompetition(partialAsset);
+        const fitResult = { score: 50, hasData: false, basis: "No buyer profile configured" };
+
+        const dimResults = {
+          freshness:    freshnessResult,
+          novelty:      noveltyResult,
+          readiness:    readinessResult,
+          licensability: licensabilityResult,
+          fit:          fitResult,
+          competition:  competitionResult,
+        };
+
+        const { total, signal_coverage, scored_dimensions, dimension_basis } = computeTotal(dimResults);
+        const confidence: "high" | "medium" | "low" =
+          signal_coverage >= 75 ? "high" : signal_coverage >= 50 ? "medium" : "low";
+
         return {
           id: String(r.id),
           asset_name: r.assetName,
@@ -427,12 +443,23 @@ export async function registerRoutes(
           why_it_matters: r.innovationClaim ?? "",
           source_urls: r.sourceUrl ? [r.sourceUrl] : [],
           source_types: ["tech_transfer"],
-          score,
-          score_breakdown: { freshness: 0, novelty: bonuses, readiness: 0, licensability: 0, fit: baseScore, competition: 0, total: score },
+          score: total,
+          score_breakdown: {
+            freshness:    freshnessResult.score,
+            novelty:      noveltyResult.score,
+            readiness:    readinessResult.score,
+            licensability: licensabilityResult.score,
+            fit:          fitResult.score,
+            competition:  competitionResult.score,
+            total,
+            signal_coverage,
+            scored_dimensions,
+            dimension_basis,
+          },
           latest_signal_date: "",
           matching_tags: [],
           evidence_count: 1,
-          confidence: score >= 75 ? "high" : score >= 55 ? "medium" : "low",
+          confidence,
           signals: [],
           owner_name: r.institution,
           owner_type: "university" as const,

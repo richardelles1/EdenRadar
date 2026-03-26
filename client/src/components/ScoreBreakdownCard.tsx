@@ -41,10 +41,11 @@ function coverageLabel(pct: number): { label: string; color: string } {
 }
 
 export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdownCardProps) {
-  const coverage = breakdown.signal_coverage ?? 100;
-  const scoredDims = breakdown.scored_dimensions ?? DIMS.map((d) => d.key);
+  const hasCoverage = breakdown.signal_coverage != null && breakdown.signal_coverage > 0;
+  const coverage = breakdown.signal_coverage ?? 0;
+  const scoredDims = breakdown.scored_dimensions ?? [];
   const basis = breakdown.dimension_basis ?? {};
-  const { label: covLabel, color: covColor } = coverageLabel(coverage);
+  const coverageInfo = hasCoverage ? coverageLabel(coverage) : null;
 
   return (
     <div className={`rounded-lg border border-card-border bg-card/50 p-4 ${className}`} data-testid="score-breakdown-card">
@@ -55,17 +56,19 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 mb-4">
-        <div className="flex-1 h-1 rounded-full bg-card-border overflow-hidden">
-          <div
-            className="h-full rounded-full bg-primary/40 transition-all duration-700"
-            style={{ width: `${coverage}%` }}
-          />
+      {coverageInfo && (
+        <div className="flex items-center gap-1.5 mb-4">
+          <div className="flex-1 h-1 rounded-full bg-card-border overflow-hidden">
+            <div
+              className="h-full rounded-full bg-primary/40 transition-all duration-700"
+              style={{ width: `${coverage}%` }}
+            />
+          </div>
+          <span className={`text-[10px] font-medium ${coverageInfo.color}`}>
+            {coverageInfo.label} ({Math.round(coverage)}%)
+          </span>
         </div>
-        <span className={`text-[10px] font-medium ${covColor}`}>
-          {covLabel} ({Math.round(coverage)}%)
-        </span>
-      </div>
+      )}
 
       <div className="space-y-3">
         {DIMS.map(({ key, label, icon: Icon, weight, fallback }) => {
