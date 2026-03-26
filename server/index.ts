@@ -141,30 +141,51 @@ app.use((req, res, next) => {
     `);
     log("[startup] near-duplicate detection columns ready", "startup");
     // Dedup + unique index creation is deferred to background — may be slow on large datasets
+    // Retried up to 3 times with exponential backoff to guarantee DB-level enforcement
     setImmediate(async () => {
-      try {
-        // Use window function approach — much faster than NOT IN subquery
-        await db.execute(sql`
-          UPDATE ingested_assets a
-          SET source_url = NULL
-          FROM (
-            SELECT id FROM (
-              SELECT id, ROW_NUMBER() OVER (PARTITION BY source_url ORDER BY id) AS rn
-              FROM ingested_assets
-              WHERE source_url IS NOT NULL
-            ) ranked
-            WHERE rn > 1
-          ) dups
-          WHERE a.id = dups.id
-        `);
-        await db.execute(sql`
-          CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique
-          ON ingested_assets (source_url)
-          WHERE source_url IS NOT NULL
-        `);
-        log("[startup] source_url unique index ready", "startup");
-      } catch (err: any) {
-        log(`[startup] source_url unique index (background): ${err?.message}`, "startup");
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          // Nullify duplicate source_urls (keep earliest row) before creating unique index
+          await db.execute(sql`
+            UPDATE ingested_assets a
+            SET source_url = NULL
+            FROM (
+              SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (PARTITION BY source_url ORDER BY id) AS rn
+                FROM ingested_assets
+                WHERE source_url IS NOT NULL
+              ) ranked
+              WHERE rn > 1
+            ) dups
+            WHERE a.id = dups.id
+          `);
+          await db.execute(sql`
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_ingested_assets_source_url_unique
+            ON ingested_assets (source_url)
+            WHERE source_url IS NOT NULL
+          `);
+          // Verify the index exists
+          const verify = await db.execute(sql`
+            SELECT 1 FROM pg_indexes
+            WHERE tablename = 'ingested_assets'
+              AND indexname = 'idx_ingested_assets_source_url_unique'
+          `);
+          if (verify.rows.length > 0) {
+            log("[startup] source_url unique index ready", "startup");
+            break;
+          } else {
+            throw new Error("index not found after creation");
+          }
+        } catch (err: any) {
+          if (attempt < MAX_ATTEMPTS) {
+            const waitMs = 1000 * Math.pow(2, attempt - 1);
+            log(`[startup] source_url unique index attempt ${attempt} failed (${err?.message}) — retrying in ${waitMs}ms`, "startup");
+            await new Promise((r) => setTimeout(r, waitMs));
+          } else {
+            log(`[startup] source_url unique index failed after ${MAX_ATTEMPTS} attempts: ${err?.message}`, "startup");
+          }
+        }
       }
     });
   } catch (err: any) {
