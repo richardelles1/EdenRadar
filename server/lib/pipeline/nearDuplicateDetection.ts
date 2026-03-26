@@ -42,6 +42,7 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
       target: ingestedAssets.target,
       dedupeEmbedding: ingestedAssets.dedupeEmbedding,
       duplicateFlag: ingestedAssets.duplicateFlag,
+      completenessScore: ingestedAssets.completenessScore,
     })
     .from(ingestedAssets)
     .where(eq(ingestedAssets.duplicateFlag, false))
@@ -54,11 +55,13 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
   // Track embeddings in a dedicated map — never mutate Drizzle row objects
   const embeddingMap = new Map<number, number[]>();
 
-  // Seed map from already-embedded rows
+  // Seed embedding map and score map from existing rows
+  const scoreMap = new Map<number, number>();
   for (const row of rows) {
     if (row.dedupeEmbedding && row.dedupeEmbedding.length > 0) {
       embeddingMap.set(row.id, row.dedupeEmbedding);
     }
+    scoreMap.set(row.id, row.completenessScore ?? 0);
   }
 
   // Embed in parallel batches and persist to DB
@@ -114,9 +117,11 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
         const sim = cosineSimilarity(embA, embB);
         if (sim >= SIMILARITY_THRESHOLD) {
           flaggedPairs.push({ idA, idB, similarity: sim });
-          // Flag the higher ID (newer) as duplicate of the lower ID (older)
-          const dupeId = Math.max(idA, idB);
-          const canonId = Math.min(idA, idB);
+          // Canonical = higher completeness score; tie-break by lower ID (older = canonical)
+          const scoreA = scoreMap.get(idA) ?? 0;
+          const scoreB = scoreMap.get(idB) ?? 0;
+          const canonId = scoreA >= scoreB ? idA : idB;
+          const dupeId = scoreA >= scoreB ? idB : idA;
           if (!flaggedIds.has(dupeId)) {
             flaggedIds.add(dupeId);
             await db

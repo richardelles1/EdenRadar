@@ -23,6 +23,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 export type RetrievedAsset = {
   id: number;
@@ -1348,33 +1349,35 @@ export class DatabaseStorage implements IStorage {
     target: string | null; sourceUrl: string | null; duplicateOfId: number | null;
     canonicalName: string | null; dedupeSimilarity: number | null;
   }>> {
-    const result = await db.execute(sql`
-      SELECT
-        a.id,
-        a.asset_name AS "assetName",
-        a.institution,
-        a.indication,
-        a.target,
-        a.source_url AS "sourceUrl",
-        a.duplicate_of_id AS "duplicateOfId",
-        a.dedupe_similarity AS "dedupeSimilarity",
-        b.asset_name AS "canonicalName"
-      FROM ingested_assets a
-      LEFT JOIN ingested_assets b ON b.id = a.duplicate_of_id
-      WHERE a.duplicate_flag = true
-      ORDER BY a.dedupe_similarity DESC NULLS LAST, a.id DESC
-      LIMIT 500
-    `);
-    return (result.rows as any[]).map((r) => ({
+    // Use a typed Drizzle self-join to avoid unsafe row casts
+    const canonical = alias(ingestedAssets, "canonical");
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        indication: ingestedAssets.indication,
+        target: ingestedAssets.target,
+        sourceUrl: ingestedAssets.sourceUrl,
+        duplicateOfId: ingestedAssets.duplicateOfId,
+        dedupeSimilarity: ingestedAssets.dedupeSimilarity,
+        canonicalName: canonical.assetName,
+      })
+      .from(ingestedAssets)
+      .leftJoin(canonical, eq(canonical.id, ingestedAssets.duplicateOfId))
+      .where(eq(ingestedAssets.duplicateFlag, true))
+      .orderBy(desc(ingestedAssets.dedupeSimilarity), desc(ingestedAssets.id))
+      .limit(500);
+    return rows.map((r) => ({
       id: r.id,
       assetName: r.assetName,
       institution: r.institution,
       indication: r.indication,
       target: r.target,
       sourceUrl: r.sourceUrl,
-      duplicateOfId: r.duplicateOfId ? Number(r.duplicateOfId) : null,
+      duplicateOfId: r.duplicateOfId,
       canonicalName: r.canonicalName,
-      dedupeSimilarity: r.dedupeSimilarity ? Number(r.dedupeSimilarity) : null,
+      dedupeSimilarity: r.dedupeSimilarity,
     }));
   }
 
