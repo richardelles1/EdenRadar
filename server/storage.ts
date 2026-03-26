@@ -994,6 +994,10 @@ export class DatabaseStorage implements IStorage {
         sourceUrl: ingestedAssets.sourceUrl,
       })
       .from(ingestedAssets)
+      // Re-enrichment contract: enrichedAt IS NULL is the single signal that drives re-enrichment.
+      // It is reset to null by: (1) URL-dedup update path when contentHash changes,
+      // (2) changedFps update block when contentHash changes, (3) fresh inserts (default null).
+      // No separate needs_enrichment flag is used — enrichedAt IS NULL covers all cases.
       .where(
         and(
           eq(ingestedAssets.relevant, true),

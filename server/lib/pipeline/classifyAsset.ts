@@ -149,12 +149,6 @@ export async function classifyBatch(
       const item = items[i++];
       if (!item) continue;
 
-      const combinedLength = (item.title || "").length + (item.description || "").length + (item.abstract || "").length;
-      if (combinedLength < MIN_CONTENT_CHARS) {
-        console.log(`[classifyBatch] Skipping asset ${item.id} — combined text too short (${combinedLength} chars < ${MIN_CONTENT_CHARS})`);
-        continue;
-      }
-
       const classification = await classifyAsset(item.title, item.description, item.abstract, "gpt-4o-mini", false, item.ctx);
       results.set(item.id, classification);
       if (onEach) {

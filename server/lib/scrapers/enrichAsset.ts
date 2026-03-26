@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { MIN_CONTENT_CHARS } from "../pipeline/classifyAsset";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -191,11 +190,6 @@ export async function enrichBatch(
     while (i < items.length) {
       const item = items[i++];
       if (!item) continue;
-      const combinedLength = (item.assetName || "").length + (item.summary || "").length;
-      if (combinedLength < MIN_CONTENT_CHARS) {
-        console.log(`[enrichBatch] Skipping asset ${item.id} — combined text too short (${combinedLength} chars)`);
-        continue;
-      }
       const enrichment = await enrichAssetTitle(item.assetName, item.summary, item.ctx);
       results.set(item.id, enrichment);
       if (onEach) {
