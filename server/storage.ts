@@ -399,10 +399,28 @@ export class DatabaseStorage implements IStorage {
     const runId = listings[0]?.runId;
     const now = new Date();
 
-    // 1b. URL-based dedup: for fingerprint-new listings that have a sourceUrl,
-    //     check if that URL already exists under a different fingerprint.
-    //     If so, update the existing row rather than inserting a duplicate.
-    const urlCandidates = fingerprintNewListings.filter((l) => l.sourceUrl);
+    // 1b. URL-based dedup: for fingerprint-new listings with a sourceUrl,
+    //     check both within-batch duplicates AND existing DB rows.
+    //     Priority: first occurrence in batch wins; rest merge to that row.
+
+    // Step 1: Collapse intra-batch duplicates by sourceUrl (keep first per URL)
+    const batchUrlSeen = new Set<string>();
+    const batchUrlDiscarded: typeof fingerprintNewListings = [];
+    const fingerprintNewDeduped = fingerprintNewListings.filter((l) => {
+      if (!l.sourceUrl) return true; // No URL — no dedup needed
+      if (batchUrlSeen.has(l.sourceUrl)) {
+        batchUrlDiscarded.push(l);
+        return false;
+      }
+      batchUrlSeen.add(l.sourceUrl);
+      return true;
+    });
+    if (batchUrlDiscarded.length > 0) {
+      console.log(`[storage] Intra-batch URL dedup: ${batchUrlDiscarded.length} listings discarded (same source_url as another listing in this batch)`);
+    }
+
+    // Step 2: Query DB for remaining URL candidates already present under a different fingerprint
+    const urlCandidates = fingerprintNewDeduped.filter((l) => l.sourceUrl);
     const urlDeduped = new Map<string, { id: number; fingerprint: string; contentHash: string | null }>();
     for (let i = 0; i < urlCandidates.length; i += CHUNK) {
       const chunkUrls = urlCandidates.slice(i, i + CHUNK).map((l) => l.sourceUrl!);
@@ -415,8 +433,8 @@ export class DatabaseStorage implements IStorage {
       }
     }
 
-    const urlDuplicates = fingerprintNewListings.filter((l) => l.sourceUrl && urlDeduped.has(l.sourceUrl));
-    const newListings = fingerprintNewListings.filter((l) => !l.sourceUrl || !urlDeduped.has(l.sourceUrl));
+    const urlDuplicates = fingerprintNewDeduped.filter((l) => l.sourceUrl && urlDeduped.has(l.sourceUrl));
+    const newListings = fingerprintNewDeduped.filter((l) => !l.sourceUrl || !urlDeduped.has(l.sourceUrl));
 
     // Update URL-matched duplicates (refresh content + lastSeenAt instead of inserting)
     if (urlDuplicates.length > 0) {
@@ -447,6 +465,7 @@ export class DatabaseStorage implements IStorage {
       const inserted = await db
         .insert(ingestedAssets)
         .values(chunk.map(({ fingerprint, ...data }) => ({ fingerprint, ...data })))
+        .onConflictDoNothing() // Safe guard: ignore if source_url unique index or fingerprint conflicts
         .returning({ id: ingestedAssets.id, assetName: ingestedAssets.assetName, fingerprint: ingestedAssets.fingerprint });
       for (const row of inserted) newAssets.push({ id: row.id, assetName: row.assetName, fingerprint: row.fingerprint });
       onProgress?.(Math.min(i + CHUNK, newListings.length) + existingListings.length, total);
