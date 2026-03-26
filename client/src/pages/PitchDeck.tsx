@@ -39,7 +39,7 @@ import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jp
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
-import { WorldMap } from "@/components/WorldMap";
+import edenNxLogo from "@assets/EdenNX_Logo_T_1774512284562.png";
 
 const SLIDE_COUNT = 9;
 
@@ -1225,37 +1225,18 @@ function TractionSlide({ colors }: { colors: Colors }) {
 
 /* ═══════════════════════ SLIDE 10 — CONTACT ═══════════════════════ */
 function ContactSlide({ colors }: { colors: Colors }) {
-  const isDarkMode = colors.bg === DARK.bg;
-  const [globeSize, setGlobeSize] = useState(() =>
-    typeof window !== "undefined" && window.innerWidth < 540 ? 180 : 240
-  );
-  const [showGlobe, setShowGlobe] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth >= 380 : true
-  );
-
-  useEffect(() => {
-    const update = () => {
-      setGlobeSize(window.innerWidth < 540 ? 180 : 240);
-      setShowGlobe(window.innerWidth >= 380);
-    };
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
-
   return (
     <Slide index={9} section="Contact" accent={colors.green} colors={colors}>
       <PitchCenterRadar color={colors.green} opacity={0.08} />
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
-        {showGlobe ? (
-          <div className="mb-5 sm:mb-6" style={{ lineHeight: 0 }}>
-            <WorldMap width={Math.round(globeSize * 1.6)} height={globeSize} isDark={isDarkMode} />
-          </div>
-        ) : (
-          <div className="w-12 h-12 rounded-2xl flex items-center justify-center mb-5" style={{ background: colors.greenDim, border: `2px solid ${colors.green}44` }}>
-            <Sprout className="w-6 h-6" style={{ color: colors.green }} />
-          </div>
-        )}
+        <div className="mb-5 sm:mb-6">
+          <img
+            src={edenNxLogo}
+            alt="EdenNX"
+            style={{ width: 120, height: 120, objectFit: "contain" }}
+          />
+        </div>
         <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
           Let's build the future of <span style={{ color: colors.green }}>biotech intelligence</span>.
         </h2>
