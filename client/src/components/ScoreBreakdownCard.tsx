@@ -46,17 +46,29 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
   const scoredDims = breakdown.scored_dimensions ?? [];
   const basis = breakdown.dimension_basis ?? {};
   const coverageInfo = hasCoverage ? coverageLabel(coverage) : null;
+  const hasScore = breakdown.total > 0 || scoredDims.length > 0;
 
   return (
     <div className={`rounded-lg border border-card-border bg-card/50 p-4 ${className}`} data-testid="score-breakdown-card">
       <div className="flex items-center justify-between mb-1">
         <h3 className="text-sm font-semibold text-foreground">Signal Profile</h3>
-        <div className="text-xs text-muted-foreground">
-          Score: <span className="font-bold text-foreground">{Math.round(breakdown.total)}</span>/100
-        </div>
+        {hasScore ? (
+          <div className="text-xs text-muted-foreground">
+            Score: <span className="font-bold text-foreground">{Math.round(breakdown.total)}</span>/100
+          </div>
+        ) : (
+          <span className="text-[10px] text-muted-foreground italic">not scored</span>
+        )}
       </div>
 
-      {coverageInfo && (
+      {!hasScore && (
+        <div className="flex items-center gap-2 py-3 text-[11px] text-muted-foreground">
+          <AlertCircle className="w-3.5 h-3.5 shrink-0 opacity-50" />
+          <span>Score not available — run a search to generate the Signal Profile for this asset.</span>
+        </div>
+      )}
+
+      {hasScore && coverageInfo && (
         <div className="flex items-center gap-1.5 mb-4">
           <div className="flex-1 h-1 rounded-full bg-card-border overflow-hidden">
             <div
@@ -70,51 +82,53 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         </div>
       )}
 
-      <div className="space-y-3">
-        {DIMS.map(({ key, label, icon: Icon, weight, fallback }) => {
-          const scored = scoredDims.includes(key);
-          const val = breakdown[key];
-          const { bar, text } = scoreColor(val);
-          const basisText = basis[key] ?? fallback;
+      {hasScore && (
+        <div className="space-y-3">
+          {DIMS.map(({ key, label, icon: Icon, weight, fallback }) => {
+            const scored = scoredDims.includes(key);
+            const val = breakdown[key];
+            const { bar, text } = scoreColor(val);
+            const basisText = basis[key] ?? fallback;
 
-          if (!scored) {
+            if (!scored) {
+              return (
+                <div key={key} className="space-y-1 opacity-45">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <AlertCircle className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                      <span className="text-[10px] text-muted-foreground/60">({weight})</span>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground italic">not scored</span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-card-border" />
+                  <p className="text-[10px] text-muted-foreground/60">{basisText}</p>
+                </div>
+              );
+            }
+
             return (
-              <div key={key} className="space-y-1 opacity-45">
+              <div key={key} className="space-y-1">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
-                    <AlertCircle className="w-3 h-3 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">{label}</span>
-                    <span className="text-[10px] text-muted-foreground/60">({weight})</span>
+                    <Icon className={`w-3 h-3 ${text}`} />
+                    <span className="text-xs font-medium text-foreground">{label}</span>
+                    <span className="text-[10px] text-muted-foreground">({weight})</span>
                   </div>
-                  <span className="text-[10px] text-muted-foreground italic">not scored</span>
+                  <span className={`text-xs font-mono font-bold ${text}`}>{Math.round(val)}</span>
                 </div>
-                <div className="h-1.5 rounded-full bg-card-border" />
-                <p className="text-[10px] text-muted-foreground/60">{basisText}</p>
+                <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${bar} opacity-75`}
+                    style={{ width: `${val}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground/70">{basisText}</p>
               </div>
             );
-          }
-
-          return (
-            <div key={key} className="space-y-1">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Icon className={`w-3 h-3 ${text}`} />
-                  <span className="text-xs font-medium text-foreground">{label}</span>
-                  <span className="text-[10px] text-muted-foreground">({weight})</span>
-                </div>
-                <span className={`text-xs font-mono font-bold ${text}`}>{Math.round(val)}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-card-border overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all duration-500 ${bar} opacity-75`}
-                  style={{ width: `${val}%` }}
-                />
-              </div>
-              <p className="text-[10px] text-muted-foreground/70">{basisText}</p>
-            </div>
-          );
-        })}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 }

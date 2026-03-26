@@ -397,7 +397,7 @@ export default function AssetDossier() {
                   <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
                   <h3 className="text-sm font-semibold text-foreground mb-1">Full Commercial Dossier</h3>
                   <p className="text-xs text-muted-foreground mb-4">
-                    AI-generated investor-grade brief: exec summary, commercial rationale, licensing outlook, risks, and recommended next step.
+                    Investor-grade brief: exec summary, commercial rationale, licensing outlook, risks, and recommended next step.
                   </p>
                   <Button
                     onClick={() => asset && dossierMutation.mutate(asset)}
@@ -481,13 +481,6 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              {!intelLoading && !intelError && intelligence && (intelligence.competingAssets?.length ?? 0) === 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-5 text-center" data-testid="competing-assets-empty">
-                  <Swords className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
-                  <p className="text-xs text-muted-foreground">No competing assets identified yet.</p>
-                </div>
-              )}
-
               {intelLoading && (
                 <div className="space-y-3" data-testid="intelligence-loading">
                   <Skeleton className="h-32 w-full rounded-xl" />
@@ -542,13 +535,6 @@ export default function AssetDossier() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {!intelLoading && !intelError && intelligence && (intelligence.literature?.length ?? 0) === 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-5 text-center" data-testid="literature-empty">
-                  <GraduationCap className="w-6 h-6 text-muted-foreground mx-auto mb-2 opacity-40" />
-                  <p className="text-xs text-muted-foreground">No supporting literature found yet.</p>
                 </div>
               )}
 
