@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { ingestedAssets } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, gt, and } from "drizzle-orm";
 import OpenAI from "openai";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -34,24 +34,48 @@ export async function runNearDuplicateDetection(onProgress?: (msg: string) => vo
 }> {
   onProgress?.("Loading assets for dedup embedding...");
 
-  const rows = await db
-    .select({
-      id: ingestedAssets.id,
-      assetName: ingestedAssets.assetName,
-      indication: ingestedAssets.indication,
-      target: ingestedAssets.target,
-      dedupeEmbedding: ingestedAssets.dedupeEmbedding,
-      duplicateFlag: ingestedAssets.duplicateFlag,
-      completenessScore: ingestedAssets.completenessScore,
-      duplicateOfId: ingestedAssets.duplicateOfId,
-    })
-    .from(ingestedAssets)
-    .where(eq(ingestedAssets.duplicateFlag, false))
-    .limit(5000);
+  // Paginate through the full eligible corpus in stable ID order (no row cap).
+  // Using a cursor (gt(id, lastId)) ensures deterministic, complete traversal
+  // regardless of corpus size.
+  const PAGE_SIZE = 1000;
+  // Let Drizzle infer the row type from the select shape to avoid manual type drift.
+  type DedupeRow = {
+    id: number;
+    assetName: string;
+    indication: string | null;
+    target: string | null;
+    dedupeEmbedding: number[] | null;
+    duplicateFlag: boolean | null;
+    completenessScore: number | null;
+    duplicateOfId: number | null;
+  };
+  const rows: DedupeRow[] = [];
+  let lastId = 0;
+  while (true) {
+    const page = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        indication: ingestedAssets.indication,
+        target: ingestedAssets.target,
+        dedupeEmbedding: ingestedAssets.dedupeEmbedding,
+        duplicateFlag: ingestedAssets.duplicateFlag,
+        completenessScore: ingestedAssets.completenessScore,
+        duplicateOfId: ingestedAssets.duplicateOfId,
+      })
+      .from(ingestedAssets)
+      .where(and(eq(ingestedAssets.duplicateFlag, false), gt(ingestedAssets.id, lastId)))
+      .orderBy(ingestedAssets.id)
+      .limit(PAGE_SIZE);
+    if (page.length === 0) break;
+    rows.push(...page);
+    lastId = page[page.length - 1]!.id;
+    if (page.length < PAGE_SIZE) break;
+  }
 
   // Separate assets that need embedding from already-embedded ones
   const toEmbed = rows.filter((r) => !r.dedupeEmbedding || r.dedupeEmbedding.length === 0);
-  onProgress?.(`Embedding ${toEmbed.length} assets (${rows.length - toEmbed.length} already embedded)...`);
+  onProgress?.(`Loaded ${rows.length} assets. Embedding ${toEmbed.length} (${rows.length - toEmbed.length} already embedded)...`);
 
   // Track embeddings in a dedicated map — never mutate Drizzle row objects
   const embeddingMap = new Map<number, number[]>();
