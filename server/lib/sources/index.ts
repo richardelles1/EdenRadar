@@ -398,6 +398,23 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+async function withRetryOnTimeout<T>(
+  fn: () => Promise<T>,
+  ms: number,
+  label: string
+): Promise<T> {
+  try {
+    return await withTimeout(fn(), ms, label);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("timed out")) {
+      console.warn(`[search] ${label} timed out, retrying once...`);
+      return await withTimeout(fn(), ms, label);
+    }
+    throw err;
+  }
+}
+
 const CONCURRENCY_LIMIT = 8;
 
 export async function collectAllSignals(
@@ -415,7 +432,7 @@ export async function collectAllSignals(
     const batch = selectedSources.slice(i, i + CONCURRENCY_LIMIT);
     const results = await Promise.allSettled(
       batch.map((s) =>
-        withTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
+        withRetryOnTimeout(() => s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id)
       )
     );
 
@@ -425,7 +442,7 @@ export async function collectAllSignals(
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         if (msg.includes("timed out")) {
-          console.warn(`[search] ${msg}`);
+          console.warn(`[search] ${batch[j].id} timed out after retry, skipping.`);
         } else {
           console.error(`[search] Source ${batch[j].id} failed:`, r.reason);
         }

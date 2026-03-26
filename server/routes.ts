@@ -304,7 +304,7 @@ export async function registerRoutes(
         console.error("normalizeSignals failed, falling back to raw signals:", normErr);
         normalized = signals.map((s) => ({
           id: crypto.randomUUID().slice(0, 8),
-          asset_name: s.title?.slice(0, 80) || "unknown",
+          asset_name: s.title || "unknown",
           target: "unknown",
           modality: "unknown",
           indication: "unknown",

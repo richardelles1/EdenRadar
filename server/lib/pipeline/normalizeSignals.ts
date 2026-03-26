@@ -78,7 +78,7 @@ function applyStructuredOverrides(
 function buildFallback(signal: RawSignal): Partial<ScoredAsset> {
   return applyStructuredOverrides({
     id: crypto.randomUUID().slice(0, 8),
-    asset_name: signal.title.slice(0, 80) || "unknown",
+    asset_name: signal.title || "unknown",
     indication: "unknown",
     modality: "unknown",
     target: "unknown",

@@ -266,7 +266,7 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [resultTab, setResultTab] = useState<"assets" | "research">(() => ssGet("scout-result-tab", "assets"));
-  const DEFAULT_RESEARCH_SOURCES: string[] = [];
+  const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");
