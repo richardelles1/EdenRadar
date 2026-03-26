@@ -283,6 +283,7 @@ export default function Scout() {
       setInputQuery(q);
       setCurrentQuery(q);
       setResearchResults([]);
+      setResultTab("assets");
       searchMutation.mutate({ query: q });
       if (researchSources.length > 0) {
         researchMutation.mutate({ query: q, sources: researchSources });
@@ -374,17 +375,28 @@ export default function Scout() {
   const researchMutation = useMutation({
     mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
       const backendSources = sources.map((k) => k === "harvard" ? "harvard_librarycloud" : k);
-      const res = await apiRequest("POST", "/api/search", {
-        query,
-        sources: backendSources,
-        maxPerSource: 50,
-        buyerProfile,
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error ?? "Research search failed");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 50, buyerProfile }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Research search failed");
+        }
+        return res.json() as Promise<SearchResponse>;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          throw new Error("Research signals timed out after 90 seconds.");
+        }
+        throw err;
       }
-      return res.json() as Promise<SearchResponse>;
     },
     onSuccess: (data) => {
       setResearchResults(data.assets ?? []);
@@ -448,6 +460,7 @@ export default function Scout() {
     setCurrentQuery(query);
     setInputQuery(query);
     setResearchResults([]);
+    setResultTab("assets");
     searchMutation.mutate({ query });
     if (researchSources.length > 0) {
       researchMutation.mutate({ query, sources: researchSources });
