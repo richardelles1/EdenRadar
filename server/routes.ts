@@ -5788,5 +5788,78 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.get("/api/admin/assets/export-csv", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const rows = await storage.exportEnrichmentCsv();
+
+      function csvEscape(val: unknown): string {
+        if (val === null || val === undefined) return "";
+        const s = Array.isArray(val) ? JSON.stringify(val) : String(val);
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+          return '"' + s.replace(/"/g, '""') + '"';
+        }
+        return s;
+      }
+
+      const HEADERS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"];
+      const lines: string[] = [HEADERS.join(",")];
+      for (const r of rows) {
+        lines.push([
+          r.id, csvEscape(r.assetName), csvEscape(r.institution), csvEscape(r.summary),
+          csvEscape(r.abstract), csvEscape(r.target), csvEscape(r.modality), csvEscape(r.indication),
+          csvEscape(r.developmentStage), csvEscape(r.categories), csvEscape(r.mechanismOfAction),
+          csvEscape(r.innovationClaim), csvEscape(r.unmetNeed), csvEscape(r.comparableDrugs),
+          csvEscape(r.licensingReadiness), csvEscape(r.ipType), csvEscape(r.completenessScore),
+        ].join(","));
+      }
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="enrichment-${new Date().toISOString().slice(0,10)}.csv"`);
+      res.send(lines.join("\n"));
+    } catch (err: any) {
+      console.error("[export-csv] Error:", err);
+      res.status(500).json({ error: err.message ?? "Export failed" });
+    }
+  });
+
+  app.post("/api/admin/assets/bulk-update", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      const rowSchema = z.object({
+        id: z.number().int(),
+        assetName: z.string().optional(),
+        institution: z.string().optional(),
+        summary: z.string().optional(),
+        abstract: z.string().optional(),
+        target: z.string().optional(),
+        modality: z.string().optional(),
+        indication: z.string().optional(),
+        developmentStage: z.string().optional(),
+        categories: z.array(z.string()).optional(),
+        mechanismOfAction: z.string().optional(),
+        innovationClaim: z.string().optional(),
+        unmetNeed: z.string().optional(),
+        comparableDrugs: z.string().optional(),
+        licensingReadiness: z.string().optional(),
+        ipType: z.string().optional(),
+        completenessScore: z.number().optional(),
+      });
+      const bodySchema = z.object({ rows: z.array(rowSchema).min(1).max(50000) });
+      const { rows } = bodySchema.parse(req.body);
+
+      const result = await storage.bulkUpdateAssetsFromCsv(rows);
+      res.json({ ok: true, ...result });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) return res.status(400).json({ error: "Invalid request body", issues: err.issues });
+      console.error("[bulk-update] Error:", err);
+      res.status(500).json({ error: err.message ?? "Bulk update failed" });
+    }
+  });
+
   return httpServer;
 }

@@ -3051,6 +3051,227 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
   );
 }
 
+function parseCsv(text: string): Record<string, string>[] {
+  const rows: Record<string, string>[] = [];
+  let i = 0;
+  const len = text.length;
+
+  function parseField(): string {
+    if (i < len && text[i] === '"') {
+      i++;
+      let val = "";
+      while (i < len) {
+        if (text[i] === '"') {
+          i++;
+          if (i < len && text[i] === '"') { val += '"'; i++; }
+          else break;
+        } else {
+          val += text[i++];
+        }
+      }
+      return val;
+    }
+    let val = "";
+    while (i < len && text[i] !== "," && text[i] !== "\n" && text[i] !== "\r") val += text[i++];
+    return val;
+  }
+
+  function parseLine(): string[] {
+    const fields: string[] = [];
+    while (i < len && text[i] !== "\n" && text[i] !== "\r") {
+      fields.push(parseField());
+      if (i < len && text[i] === ",") i++;
+    }
+    if (i < len && text[i] === "\r") i++;
+    if (i < len && text[i] === "\n") i++;
+    return fields;
+  }
+
+  const headers = parseLine();
+  while (i < len) {
+    const line = parseLine();
+    if (line.every((f) => f === "")) continue;
+    const obj: Record<string, string> = {};
+    headers.forEach((h, idx) => { obj[h] = line[idx] ?? ""; });
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function BulkCsvImport({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [parsedRows, setParsedRows] = useState<Record<string, string>[] | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [result, setResult] = useState<{ updated: number; skipped: number } | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  const CSV_FIELDS = ["id","assetName","institution","summary","abstract","target","modality","indication","developmentStage","categories","mechanismOfAction","innovationClaim","unmetNeed","comparableDrugs","licensingReadiness","ipType","completenessScore"] as const;
+
+  function handleFile(file: File) {
+    setResult(null);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target?.result as string;
+      try {
+        const rows = parseCsv(text);
+        if (!rows.length || !("id" in rows[0])) {
+          toast({ title: "Invalid CSV", description: "File must have an 'id' column header.", variant: "destructive" });
+          return;
+        }
+        setParsedRows(rows);
+        setFileName(file.name);
+      } catch {
+        toast({ title: "Parse error", description: "Could not parse CSV file.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function handleImport() {
+    if (!parsedRows) return;
+    setImporting(true);
+    try {
+      const rows = parsedRows.map((r) => {
+        const id = parseInt(r.id, 10);
+        if (isNaN(id)) throw new Error(`Invalid id: "${r.id}"`);
+        const obj: Record<string, unknown> = { id };
+        for (const f of CSV_FIELDS) {
+          if (f === "id") continue;
+          const v = r[f];
+          if (!v) continue;
+          if (f === "categories") {
+            try { obj[f] = JSON.parse(v); } catch { obj[f] = v.split(";").map((s) => s.trim()).filter(Boolean); }
+          } else if (f === "completenessScore") {
+            const n = parseFloat(v);
+            if (!isNaN(n)) obj[f] = n;
+          } else {
+            obj[f] = v;
+          }
+        }
+        return obj;
+      });
+
+      const res = await fetch(`/api/admin/assets/bulk-update?pw=${pw}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Import failed");
+      setResult({ updated: data.updated, skipped: data.skipped });
+      setParsedRows(null);
+      setFileName(null);
+      toast({ title: "Import complete", description: `${data.updated} assets updated, ${data.skipped} skipped.` });
+    } catch (err: any) {
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const previewRows = parsedRows?.slice(0, 8) ?? [];
+  const previewCols = ["id", "assetName", "institution", "target", "modality", "developmentStage", "completenessScore"];
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-6 mb-6" data-testid="bulk-csv-import-panel">
+      <div className="flex items-center gap-2 mb-1">
+        <FileText className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-base font-semibold text-foreground">CSV Bulk Import</h3>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        Export relevant assets to CSV, enrich fields externally (e.g. with GPT-4o), then re-import. Only non-empty fields are written; id must match an existing asset.
+      </p>
+
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <a
+          href={`/api/admin/assets/export-csv?pw=${pw}`}
+          download
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-muted hover:bg-muted/80 border border-border text-foreground transition-colors"
+          data-testid="link-export-enrichment-csv"
+        >
+          <Download className="h-3.5 w-3.5" />
+          Export Enrichment CSV
+        </a>
+        <Button
+          variant="outline"
+          size="sm"
+          className="text-xs"
+          onClick={() => fileRef.current?.click()}
+          data-testid="button-upload-csv"
+        >
+          <Upload className="h-3.5 w-3.5 mr-1.5" />
+          {fileName ? `Re-upload (${fileName})` : "Upload Enriched CSV"}
+        </Button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          data-testid="input-csv-file"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); e.target.value = ""; }}
+        />
+      </div>
+
+      {result && (
+        <div className="flex items-center gap-2 mb-4 px-3 py-2 rounded-lg bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 text-xs text-green-800 dark:text-green-300" data-testid="text-import-result">
+          <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+          Last import: <span className="font-semibold">{result.updated}</span> assets updated, <span className="font-semibold">{result.skipped}</span> skipped.
+        </div>
+      )}
+
+      {parsedRows && parsedRows.length > 0 && (
+        <div data-testid="csv-preview-section">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-foreground">
+              Preview — {parsedRows.length.toLocaleString()} rows from <span className="font-semibold">{fileName}</span>
+            </span>
+            <Button
+              size="sm"
+              className="text-xs h-7"
+              onClick={handleImport}
+              disabled={importing}
+              data-testid="button-confirm-import"
+            >
+              {importing ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <ArrowUpCircle className="h-3.5 w-3.5 mr-1.5" />}
+              {importing ? "Importing…" : `Import ${parsedRows.length.toLocaleString()} rows`}
+            </Button>
+          </div>
+          <div className="overflow-x-auto rounded-lg border border-border text-xs">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-muted/40 border-b border-border">
+                  {previewCols.map((col) => (
+                    <th key={col} className="px-3 py-2 text-left font-semibold text-foreground whitespace-nowrap">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {previewRows.map((row, idx) => (
+                  <tr key={idx} className="border-b border-border last:border-0 hover:bg-muted/20" data-testid={`row-csv-preview-${idx}`}>
+                    {previewCols.map((col) => (
+                      <td key={col} className="px-3 py-1.5 text-muted-foreground max-w-[200px] truncate" title={row[col]}>
+                        {row[col] || <span className="text-border italic">empty</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {parsedRows.length > 8 && (
+                  <tr>
+                    <td colSpan={previewCols.length} className="px-3 py-1.5 text-center text-muted-foreground italic">
+                      …and {(parsedRows.length - 8).toLocaleString()} more rows
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PotentialDuplicates({ pw }: { pw: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -7318,6 +7539,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets. Enrichment controls at the bottom.</p>
               </div>
               <Enrichment pw={pw} />
+              <BulkCsvImport pw={pw} />
               <PotentialDuplicates pw={pw} />
             </>
           )}
