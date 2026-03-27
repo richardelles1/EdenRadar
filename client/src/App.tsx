@@ -41,18 +41,19 @@ import HowItWorks from "@/pages/HowItWorks";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
-import IndustrySettings from "@/pages/IndustrySettings";
+import IndustrySettings, { SimplifiedSettings } from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
-import { AuthProvider } from "@/hooks/use-auth";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
 import Login from "@/pages/Login";
 import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
+import { useLocation } from "wouter";
 
 function ThemeInit() {
   useEffect(() => {
@@ -64,6 +65,34 @@ function ThemeInit() {
     }
   }, []);
   return null;
+}
+
+function SettingsRoute() {
+  const { session, role, loading } = useAuth();
+  const [, navigate] = useLocation();
+
+  useEffect(() => {
+    if (!loading && !session) navigate("/login", { replace: true });
+  }, [loading, session, navigate]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (!session) return null;
+
+  if (role === "industry") {
+    return (
+      <DashboardLayout>
+        <IndustrySettings />
+      </DashboardLayout>
+    );
+  }
+
+  return <SimplifiedSettings />;
 }
 
 function Router() {
@@ -148,16 +177,8 @@ function Router() {
           <IndustryProfile />
         </DashboardLayout>
       </Route>
-      <Route path="/industry/settings">
-        <DashboardLayout>
-          <IndustrySettings />
-        </DashboardLayout>
-      </Route>
-      <Route path="/settings">
-        <DashboardLayout>
-          <IndustrySettings />
-        </DashboardLayout>
-      </Route>
+      <Route path="/industry/settings" component={SettingsRoute} />
+      <Route path="/settings" component={SettingsRoute} />
       <Route path="/industry/eden">
         <DashboardLayout>
           <IndustryEden />
