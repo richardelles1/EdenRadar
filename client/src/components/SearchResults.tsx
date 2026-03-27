@@ -25,16 +25,19 @@ function LoadingSkeleton() {
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
         >
           <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400/50 dark:bg-emerald-500/30" />
-          <div className="relative flex flex-col h-full pl-4 pr-3 pt-3 pb-3 gap-3">
-            <div className="flex items-start gap-2">
-              <div className="border border-emerald-400/40 dark:border-emerald-500/30 rounded-lg px-2 py-1 flex flex-col gap-1">
-                <Skeleton className="h-2 w-8 bg-muted/70 dark:bg-zinc-700" />
-                <Skeleton className="h-5 w-5 bg-muted/70 dark:bg-zinc-700" />
-              </div>
-              <div className="flex-1" />
-              <Skeleton className="w-7 h-7 rounded-lg bg-muted/60 dark:bg-zinc-700 mr-8" />
-            </div>
-            <div className="flex-1 flex flex-col gap-2 justify-start pt-1">
+          {/* Flush score badge skeleton */}
+          <div
+            className="absolute top-0 left-0 z-10 flex flex-col items-center justify-center px-3 py-2 border-b border-r border-emerald-400/30 dark:border-emerald-500/20"
+            style={{ borderRadius: "17px 0 10px 0", background: "rgba(255,255,255,0.4)", minWidth: "54px" }}
+          >
+            <Skeleton className="h-2 w-7 bg-muted/60 dark:bg-zinc-700 mb-1" />
+            <Skeleton className="h-6 w-5 bg-muted/60 dark:bg-zinc-700" />
+          </div>
+          {/* Bookmark skeleton */}
+          <Skeleton className="absolute top-2.5 right-2.5 w-7 h-7 rounded-lg bg-muted/50 dark:bg-zinc-700" />
+          {/* Content below badge */}
+          <div className="relative flex flex-col h-full pl-4 pr-3 pt-[62px] pb-3">
+            <div className="flex flex-col gap-2">
               <Skeleton className="h-3.5 w-full bg-muted/50 dark:bg-zinc-700" />
               <Skeleton className="h-3.5 w-4/5 bg-muted/50 dark:bg-zinc-700" />
               <Skeleton className="h-3.5 w-3/5 bg-muted/50 dark:bg-zinc-700" />
