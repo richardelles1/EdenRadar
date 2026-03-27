@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 export type IndustryProfile = {
@@ -74,24 +74,47 @@ export function useIndustryHeaders(): Record<string, string> {
   return headers;
 }
 
-export function useIndustrySyncOnMount() {
+function isProfileMeaningful(p: IndustryProfile): boolean {
+  return (
+    !!p.companyName ||
+    p.therapeuticAreas.length > 0 ||
+    p.modalities.length > 0 ||
+    p.dealStages.length > 0 ||
+    p.onboardingDone
+  );
+}
+
+function isServerProfileEmpty(p: { companyName?: string; therapeuticAreas?: string[]; onboardingDone?: boolean }): boolean {
+  return !p.companyName && (!p.therapeuticAreas || p.therapeuticAreas.length === 0) && !p.onboardingDone;
+}
+
+export function useIndustrySyncOnMount(): { hydrated: boolean } {
   const { session, role } = useAuth();
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setCurrentAccessToken(session?.access_token ?? null);
 
-    if (!session?.access_token || role !== "industry") return;
+    if (!session?.access_token || role !== "industry") {
+      setHydrated(true);
+      return;
+    }
 
     async function hydrate() {
       try {
         const res = await fetch("/api/industry/profile", {
           headers: { Authorization: `Bearer ${session!.access_token}` },
         });
-        if (!res.ok) return;
+        if (!res.ok) {
+          setHydrated(true);
+          return;
+        }
         const { profile: serverProfile } = await res.json();
         const local = getIndustryProfile();
-        const localHasData = local.onboardingDone || !!local.companyName;
-        if (!localHasData) {
+
+        if (isServerProfileEmpty(serverProfile) && isProfileMeaningful(local)) {
+          await syncIndustryProfileToServer(local, session!.access_token);
+        } else if (!isServerProfileEmpty(serverProfile) && !isProfileMeaningful(local)) {
           saveIndustryProfile({
             userName: serverProfile.userName ?? "",
             companyName: serverProfile.companyName ?? "",
@@ -101,14 +124,16 @@ export function useIndustrySyncOnMount() {
             modalities: serverProfile.modalities ?? [],
             onboardingDone: serverProfile.onboardingDone ?? false,
           });
-        } else if (!serverProfile.onboardingDone && local.onboardingDone) {
-          await syncIndustryProfileToServer(local, session!.access_token);
         }
       } catch (err) {
         console.warn("[use-industry] Hydration failed:", err);
+      } finally {
+        setHydrated(true);
       }
     }
 
     hydrate();
   }, [session?.access_token, role]);
+
+  return { hydrated };
 }

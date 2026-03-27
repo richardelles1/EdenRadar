@@ -15,7 +15,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
-  useIndustrySyncOnMount();
+  const { hydrated } = useIndustrySyncOnMount();
 
   useEffect(() => {
     if (loading) return;
@@ -27,13 +27,13 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       navigate("/discovery", { replace: true });
     } else if (role !== "industry") {
       navigate("/login", { replace: true });
-    } else {
+    } else if (hydrated) {
       const profile = getIndustryProfile();
       if (!profile.onboardingDone) {
         setOnboardingOpen(true);
       }
     }
-  }, [session, role, loading, navigate]);
+  }, [session, role, loading, hydrated, navigate]);
 
   const [location] = useLocation();
   const isEden = location === "/industry/eden";

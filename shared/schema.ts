@@ -25,6 +25,9 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// user_id is a Supabase Auth UUID (from supabase.auth.getUser).
+// Industry users authenticate via Supabase, not our local `users` table,
+// so no FK to users.id is possible or correct here.
 export const industryProfiles = pgTable("industry_profiles", {
   userId: text("user_id").primaryKey(),
   userName: text("user_name").notNull().default(""),
