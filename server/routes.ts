@@ -6032,7 +6032,7 @@ If multiple assets appear, return each as a separate array item.`;
         dealStages: z.array(z.string()).default([]),
         modalities: z.array(z.string()).default([]),
         onboardingDone: z.boolean().default(false),
-        notificationPrefs: z.object({ frequency: z.string() }).nullable().default(null),
+        notificationPrefs: z.object({ frequency: z.enum(["realtime", "daily", "weekly"]) }).nullable().default(null),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
