@@ -383,7 +383,7 @@ export function SavedAssetCard({
     <div style={{ perspective: "1000px" }}>
       <div
         ref={cardRef}
-        className="relative rounded-[14px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className="relative rounded-[14px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
         style={{
           willChange: "transform",
           transformStyle: "preserve-3d",
@@ -398,8 +398,8 @@ export function SavedAssetCard({
             ? "transform 0.08s ease-out"
             : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
           boxShadow: hovered
-            ? "0 12px 36px rgba(0,0,0,0.15)"
-            : "0 4px 16px rgba(0,0,0,0.09)",
+            ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)"
+            : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
         }}
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setHovered(true)}
@@ -408,37 +408,36 @@ export function SavedAssetCard({
         onMouseUp={() => setPressed(false)}
         data-testid={`saved-card-${asset.id}`}
       >
-        {/* Subtle tint bloom */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "40px",
-            height: "40px",
+            width: "56px",
+            height: "56px",
             borderRadius: "50%",
             background: "rgba(38, 122, 70, 0.55)",
-            top: "-20px",
-            left: "-20px",
-            transform: hovered ? "scale(24)" : "scale(1)",
-            opacity: hovered ? 0.12 : 0,
+            top: "-28px",
+            left: "-28px",
+            transform: hovered ? "scale(26)" : "scale(1)",
+            opacity: hovered ? 0.13 : 0,
             transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
             zIndex: 1,
           }}
         />
 
-        {/* Left emerald strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
-        {/* Flush top-left stage badge — NO backdrop-filter */}
         <div
           className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
-          style={{ borderRadius: "14px 0 10px 0", minWidth: "36px" }}
+          style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }}
           data-testid={`saved-stage-badge-${asset.id}`}
         >
-          <span className="text-[8px] font-bold tracking-[0.12em] uppercase leading-none text-muted-foreground">Stage</span>
-          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{abbrev}</span>
+          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
+          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
+            {abbrev !== "—" ? abbrev : <span className="opacity-40">—</span>}
+          </span>
         </div>
 
-        {/* Remove button flush top-right */}
+        {/* Remove button */}
         <button
           className="absolute top-2 right-2 z-[5] w-6 h-6 rounded-md flex items-center justify-center bg-transparent text-emerald-600 dark:text-emerald-400 hover:text-red-500 hover:bg-red-500/10 transition-all duration-150 active:scale-90"
           onClick={() => onDelete(asset.id)}

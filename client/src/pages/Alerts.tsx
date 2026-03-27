@@ -116,8 +116,8 @@ function useBloomCard(rotateMax = 8) {
       ? "transform 0.08s ease-out"
       : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
     boxShadow: hovered
-      ? "0 12px 32px rgba(0,0,0,0.15), 0 3px 10px rgba(0,0,0,0.08)"
-      : "0 3px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)",
+      ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)"
+      : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
   };
 
   const bloomHandlers = {
@@ -187,42 +187,38 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
     <div style={{ perspective: "1000px" }} data-testid={`alert-card-${alert.id}`}>
       <div
         ref={cardRef}
-        className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
         style={cardStyle}
         {...bloomHandlers}
       >
-        {/* Amber bloom from top-left */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "40px",
-            height: "40px",
+            width: "56px",
+            height: "56px",
             borderRadius: "50%",
             background: "rgba(217, 119, 6, 0.55)",
-            top: "-20px",
-            left: "-20px",
-            transform: hovered ? "scale(22)" : "scale(1)",
-            opacity: hovered ? 0.11 : 0,
+            top: "-28px",
+            left: "-28px",
+            transform: hovered ? "scale(26)" : "scale(1)",
+            opacity: hovered ? 0.13 : 0,
             transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
             zIndex: 1,
           }}
         />
-        {/* Left amber strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
 
-        {/* Flush top-left filter-count badge — NO backdrop-filter */}
         <div
           className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
-          style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+          style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
           data-testid={`alert-badge-${alert.id}`}
         >
-          <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Filters</span>
+          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Filters</span>
           <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-amber-600 dark:text-amber-400">
             {(alert.modalities?.length ?? 0) + (alert.stages?.length ?? 0) + (alert.institutions?.length ?? 0) + (alert.query ? 1 : 0)}
           </span>
         </div>
 
-        {/* Delete button flush top-right */}
         <button
           onClick={() => onDelete(alert.id)}
           className="absolute top-2 right-2 z-[5] text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
@@ -372,35 +368,33 @@ function MiniAssetBloomCard({ asset, index }: { asset: { id: number; name: strin
       <Link href={`/asset/${asset.id}`}>
         <div
           ref={cardRef}
-          className="relative rounded-[11px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          className="relative rounded-[11px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
           style={cardStyle}
           {...bloomHandlers}
           data-testid={`alert-asset-mini-${index}`}
         >
-          {/* Green bloom */}
           <div
             className="absolute pointer-events-none"
             style={{
-              width: "32px",
-              height: "32px",
+              width: "40px",
+              height: "40px",
               borderRadius: "50%",
               background: "rgba(38, 122, 70, 0.55)",
-              top: "-16px",
-              left: "-16px",
-              transform: hovered ? "scale(20)" : "scale(1)",
-              opacity: hovered ? 0.11 : 0,
+              top: "-20px",
+              left: "-20px",
+              transform: hovered ? "scale(22)" : "scale(1)",
+              opacity: hovered ? 0.13 : 0,
               transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
               zIndex: 1,
             }}
           />
-          {/* Left strip */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
-          {/* New badge top-left */}
           <div
-            className="absolute top-0 left-0 z-[5] flex items-center justify-center px-1.5 py-0.5 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "11px 0 8px 0", minWidth: "28px" }}
+            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-1.5 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "17px 0 10px 0", minWidth: "30px" }}
           >
-            <span className="text-[8px] font-bold tracking-widest uppercase text-emerald-600 dark:text-emerald-400">New</span>
+            <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">New</span>
+            <span className="font-mono text-[9px] font-bold leading-tight mt-0.5 text-emerald-600 dark:text-emerald-400">TTO</span>
           </div>
           <div className="relative z-[4] pl-4 pr-3 pt-5 pb-2 flex items-center justify-between gap-2">
             <span className="text-[11px] font-medium text-foreground truncate">{asset.name}</span>
@@ -420,27 +414,25 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
     <div style={{ perspective: "1000px" }} data-testid={`delta-card-${index}`}>
       <div
         ref={cardRef}
-        className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
         style={cardStyle}
         {...bloomHandlers}
       >
-        {/* Green bloom */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "40px",
-            height: "40px",
+            width: "56px",
+            height: "56px",
             borderRadius: "50%",
             background: "rgba(38, 122, 70, 0.55)",
-            top: "-20px",
-            left: "-20px",
-            transform: hovered ? "scale(22)" : "scale(1)",
-            opacity: hovered ? 0.11 : 0,
+            top: "-28px",
+            left: "-28px",
+            transform: hovered ? "scale(26)" : "scale(1)",
+            opacity: hovered ? 0.13 : 0,
             transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
             zIndex: 1,
           }}
         />
-        {/* Left green strip */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
         <div className="relative z-[4]">
@@ -490,35 +482,32 @@ function ConceptAlertCard({ concept }: { concept: ConceptItem }) {
       <Link href={`/discovery/concept/${concept.id}`}>
         <div
           ref={cardRef}
-          className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
           style={cardStyle}
           {...bloomHandlers}
         >
-          {/* Amber bloom */}
           <div
             className="absolute pointer-events-none"
             style={{
-              width: "40px",
-              height: "40px",
+              width: "56px",
+              height: "56px",
               borderRadius: "50%",
               background: "rgba(217, 119, 6, 0.55)",
-              top: "-20px",
-              left: "-20px",
-              transform: hovered ? "scale(22)" : "scale(1)",
-              opacity: hovered ? 0.11 : 0,
+              top: "-28px",
+              left: "-28px",
+              transform: hovered ? "scale(26)" : "scale(1)",
+              opacity: hovered ? 0.13 : 0,
               transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
               zIndex: 1,
             }}
           />
-          {/* Left amber strip — z-[3], behind badge */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
 
-          {/* Flush top-left concept badge — NO backdrop-filter */}
           <div
             className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+            style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
           >
-            <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Idea</span>
+            <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Idea</span>
             <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-amber-600 dark:text-amber-400">
               {concept.therapeuticArea ? concept.therapeuticArea.slice(0, 2).toUpperCase() : "—"}
             </span>
@@ -551,35 +540,32 @@ function ProjectAlertCard({ proj }: { proj: ProjectItem }) {
       <Link href="/industry/projects">
         <div
           ref={cardRef}
-          className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
           style={cardStyle}
           {...bloomHandlers}
         >
-          {/* Violet bloom */}
           <div
             className="absolute pointer-events-none"
             style={{
-              width: "40px",
-              height: "40px",
+              width: "56px",
+              height: "56px",
               borderRadius: "50%",
               background: "rgba(124, 58, 237, 0.55)",
-              top: "-20px",
-              left: "-20px",
-              transform: hovered ? "scale(22)" : "scale(1)",
-              opacity: hovered ? 0.11 : 0,
+              top: "-28px",
+              left: "-28px",
+              transform: hovered ? "scale(26)" : "scale(1)",
+              opacity: hovered ? 0.13 : 0,
               transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
               zIndex: 1,
             }}
           />
-          {/* Left violet strip — z-[3], behind badge */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#7c3aed" }} />
 
-          {/* Flush top-left lab badge — NO backdrop-filter */}
           <div
             className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-violet-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+            style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
           >
-            <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Lab</span>
+            <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Lab</span>
             <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-violet-600 dark:text-violet-400">
               {proj.researchArea ? proj.researchArea.slice(0, 2).toUpperCase() : "—"}
             </span>

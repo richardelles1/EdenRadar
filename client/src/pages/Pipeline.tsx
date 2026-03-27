@@ -96,7 +96,7 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
     <div style={{ perspective: "1000px" }} data-testid={`pipeline-card-${asset.id}`}>
       <div
         ref={cardRef}
-        className="relative rounded-[14px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        className="relative rounded-[14px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
         style={{
           willChange: "transform",
           transformStyle: "preserve-3d",
@@ -111,8 +111,8 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
             ? "transform 0.08s ease-out"
             : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
           boxShadow: hovered
-            ? "0 14px 40px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.10)"
-            : "0 4px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
+            ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)"
+            : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
         }}
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setHovered(true)}
@@ -120,37 +120,35 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
         onMouseDown={() => setPressed(true)}
         onMouseUp={() => setPressed(false)}
       >
-        {/* Green bloom from top-left */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "48px",
-            height: "48px",
+            width: "56px",
+            height: "56px",
             borderRadius: "50%",
             background: "rgba(38, 122, 70, 0.55)",
-            top: "-24px",
-            left: "-24px",
+            top: "-28px",
+            left: "-28px",
             transform: hovered ? "scale(26)" : "scale(1)",
-            opacity: hovered ? 0.12 : 0,
+            opacity: hovered ? 0.13 : 0,
             transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
             zIndex: 1,
           }}
         />
 
-        {/* Left accent strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
-        {/* Flush top-left stage badge — NO backdrop-filter */}
         <div
           className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
-          style={{ borderRadius: "14px 0 10px 0", minWidth: "36px" }}
+          style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }}
           data-testid={`pipeline-stage-badge-${asset.id}`}
         >
-          <span className="text-[8px] font-bold tracking-[0.12em] uppercase leading-none text-muted-foreground">Stage</span>
-          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{stageAbbr}</span>
+          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
+          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
+            {stageAbbr !== "—" ? stageAbbr : <span className="opacity-40">—</span>}
+          </span>
         </div>
 
-        {/* Delete button flush top-right */}
         <button
           onClick={() => onDelete(asset.id)}
           className="absolute top-2 right-2 z-[5] shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 active:scale-90"
