@@ -237,6 +237,13 @@ app.use((req, res, next) => {
     log(`[startup] near-duplicate detection migration failed: ${err?.message}`, "startup");
   }
 
+  // ── industry_profiles column migrations ──────────────────────────────────
+  try {
+    await db.execute(sql`ALTER TABLE industry_profiles ADD COLUMN IF NOT EXISTS notification_prefs JSONB DEFAULT '{}'`);
+  } catch (err: any) {
+    log(`[startup] industry_profiles migration failed: ${err?.message}`, "startup");
+  }
+
   // ── Ensure eden_sessions table exists ────────────────────────────────────
   try {
     await db.execute(sql`
