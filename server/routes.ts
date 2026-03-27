@@ -5935,12 +5935,19 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  const DEFAULT_INDUSTRY_PROFILE = {
+    userName: "", companyName: "", companyType: "",
+    therapeuticAreas: [], dealStages: [], modalities: [], onboardingDone: false,
+  };
+
   app.get("/api/industry/profile", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
       if (!userId) return res.status(400).json({ error: "Missing user id" });
+      if (userRole !== "industry") return res.status(403).json({ error: "Industry role required" });
       const profile = await storage.getIndustryProfileByUserId(userId);
-      return res.json({ profile: profile ?? null });
+      return res.json({ profile: profile ?? DEFAULT_INDUSTRY_PROFILE });
     } catch (err: any) {
       console.error("[industry/profile GET]", err);
       return res.status(500).json({ error: "Failed to load profile" });
@@ -5950,7 +5957,9 @@ If multiple assets appear, return each as a separate array item.`;
   app.put("/api/industry/profile", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
       if (!userId) return res.status(400).json({ error: "Missing user id" });
+      if (userRole !== "industry") return res.status(403).json({ error: "Industry role required" });
       const schema = z.object({
         userName: z.string().default(""),
         companyName: z.string().default(""),

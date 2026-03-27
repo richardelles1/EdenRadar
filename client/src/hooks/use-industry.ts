@@ -21,6 +21,12 @@ const DEFAULT_PROFILE: IndustryProfile = {
   onboardingDone: false,
 };
 
+let _currentAccessToken: string | null = null;
+
+export function setCurrentAccessToken(token: string | null) {
+  _currentAccessToken = token;
+}
+
 export function getIndustryProfile(): IndustryProfile {
   try {
     const raw = localStorage.getItem("eden-industry-profile");
@@ -30,12 +36,6 @@ export function getIndustryProfile(): IndustryProfile {
     }
   } catch {}
   return { ...DEFAULT_PROFILE };
-}
-
-export function saveIndustryProfile(profile: Partial<IndustryProfile>) {
-  const existing = getIndustryProfile();
-  const merged = { ...existing, ...profile };
-  localStorage.setItem("eden-industry-profile", JSON.stringify(merged));
 }
 
 export async function syncIndustryProfileToServer(
@@ -56,6 +56,15 @@ export async function syncIndustryProfileToServer(
   }
 }
 
+export function saveIndustryProfile(profile: Partial<IndustryProfile>) {
+  const existing = getIndustryProfile();
+  const merged = { ...existing, ...profile };
+  localStorage.setItem("eden-industry-profile", JSON.stringify(merged));
+  if (_currentAccessToken) {
+    syncIndustryProfileToServer(merged, _currentAccessToken);
+  }
+}
+
 export function useIndustryHeaders(): Record<string, string> {
   const { session } = useAuth();
   const headers: Record<string, string> = {};
@@ -69,6 +78,8 @@ export function useIndustrySyncOnMount() {
   const { session, role } = useAuth();
 
   useEffect(() => {
+    setCurrentAccessToken(session?.access_token ?? null);
+
     if (!session?.access_token || role !== "industry") return;
 
     async function hydrate() {
@@ -78,17 +89,9 @@ export function useIndustrySyncOnMount() {
         });
         if (!res.ok) return;
         const { profile: serverProfile } = await res.json();
-        if (!serverProfile) {
-          const local = getIndustryProfile();
-          if (local.onboardingDone || local.companyName) {
-            await syncIndustryProfileToServer(local, session!.access_token);
-          }
-          return;
-        }
         const local = getIndustryProfile();
-        const serverUpdated = new Date(serverProfile.updatedAt).getTime();
         const localHasData = local.onboardingDone || !!local.companyName;
-        if (!localHasData || serverUpdated > Date.now() - 5000) {
+        if (!localHasData) {
           saveIndustryProfile({
             userName: serverProfile.userName ?? "",
             companyName: serverProfile.companyName ?? "",
@@ -98,6 +101,8 @@ export function useIndustrySyncOnMount() {
             modalities: serverProfile.modalities ?? [],
             onboardingDone: serverProfile.onboardingDone ?? false,
           });
+        } else if (!serverProfile.onboardingDone && local.onboardingDone) {
+          await syncIndustryProfileToServer(local, session!.access_token);
         }
       } catch (err) {
         console.warn("[use-industry] Hydration failed:", err);

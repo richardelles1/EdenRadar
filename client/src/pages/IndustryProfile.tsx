@@ -21,8 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Building2, Plus, X, CheckCircle2 } from "lucide-react";
-import { getIndustryProfile, saveIndustryProfile, syncIndustryProfileToServer } from "@/hooks/use-industry";
-import { useAuth } from "@/hooks/use-auth";
+import { getIndustryProfile, saveIndustryProfile } from "@/hooks/use-industry";
 import { useToast } from "@/hooks/use-toast";
 
 const COMPANY_TYPES = [
@@ -183,7 +182,6 @@ function StageCheckboxes({
 
 export default function IndustryProfile() {
   const { toast } = useToast();
-  const { session } = useAuth();
   const profile = getIndustryProfile();
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(profile.therapeuticAreas);
   const [modalities, setModalities] = useState<string[]>(profile.modalities);
@@ -200,21 +198,16 @@ export default function IndustryProfile() {
   });
 
   function onSubmit(values: FormValues) {
-    const updated = {
+    saveIndustryProfile({
       userName: values.userName ?? "",
       companyName: values.companyName,
       companyType: values.companyType ?? "",
       therapeuticAreas,
       dealStages,
       modalities,
-    };
-    saveIndustryProfile(updated);
+    });
     forceUpdate((n) => n + 1);
     toast({ title: "Profile saved" });
-    if (session?.access_token) {
-      const full = { ...updated, onboardingDone: getIndustryProfile().onboardingDone };
-      syncIndustryProfileToServer(full, session.access_token);
-    }
   }
 
   return (
