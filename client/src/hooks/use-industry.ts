@@ -75,15 +75,6 @@ export function saveIndustryProfile(profile: Partial<IndustryProfile>) {
   }
 }
 
-export function useIndustryHeaders(): Record<string, string> {
-  const { session } = useAuth();
-  const headers: Record<string, string> = {};
-  if (session?.access_token) {
-    headers["Authorization"] = `Bearer ${session.access_token}`;
-  }
-  return headers;
-}
-
 function isProfileMeaningful(p: IndustryProfile): boolean {
   return (
     !!p.companyName ||
@@ -98,37 +89,10 @@ function isServerProfileEmpty(p: { companyName?: string; therapeuticAreas?: stri
   return !p.companyName && (!p.therapeuticAreas || p.therapeuticAreas.length === 0) && !p.onboardingDone;
 }
 
-export function useIndustryProfile(): { profile: IndustryProfile; isLoading: boolean } {
-  const { session, role } = useAuth();
-  const isIndustry = role === "industry" && !!session?.access_token;
-
-  const { data, isLoading } = useQuery<{ profile: IndustryProfile }>({
-    queryKey: ["/api/industry/profile"],
-    queryFn: async () => {
-      const res = await fetch("/api/industry/profile", {
-        headers: { Authorization: `Bearer ${session!.access_token}` },
-      });
-      if (!res.ok) throw new Error("Failed to load profile");
-      return res.json();
-    },
-    enabled: isIndustry,
-    staleTime: 5 * 60 * 1000,
-    placeholderData: { profile: getIndustryProfile() },
-  });
-
-  const serverProfile = data?.profile;
-  if (serverProfile && isProfileMeaningful(serverProfile)) {
-    try {
-      localStorage.setItem("eden-industry-profile", JSON.stringify(serverProfile));
-    } catch {}
-  }
-
-  return {
-    profile: serverProfile ?? getIndustryProfile(),
-    isLoading: isIndustry ? isLoading : false,
-  };
-}
-
+// Profile reads throughout the app use getIndustryProfile() (synchronous, localStorage-first).
+// DashboardLayout calls useIndustrySyncOnMount() which hydrates localStorage from the server
+// before any child page renders (guarded by hydrated===true spinner gate), so all subsequent
+// synchronous reads are guaranteed to see up-to-date server data.
 export function useIndustrySyncOnMount(): { hydrated: boolean } {
   const { session, role } = useAuth();
   const [hydrated, setHydrated] = useState(false);

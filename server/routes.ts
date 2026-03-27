@@ -5969,8 +5969,11 @@ If multiple assets appear, return each as a separate array item.`;
         modalities: z.array(z.string()).default([]),
         onboardingDone: z.boolean().default(false),
       });
-      const data = schema.parse(req.body);
-      const profile = await storage.upsertIndustryProfile(userId, data);
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
+      }
+      const profile = await storage.upsertIndustryProfile(userId, parsed.data);
       return res.json({ profile });
     } catch (err: any) {
       console.error("[industry/profile PUT]", err);
