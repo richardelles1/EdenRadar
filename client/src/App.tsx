@@ -153,6 +153,11 @@ function Router() {
           <IndustrySettings />
         </DashboardLayout>
       </Route>
+      <Route path="/settings">
+        <DashboardLayout>
+          <IndustrySettings />
+        </DashboardLayout>
+      </Route>
       <Route path="/industry/eden">
         <DashboardLayout>
           <IndustryEden />

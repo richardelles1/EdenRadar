@@ -6032,6 +6032,7 @@ If multiple assets appear, return each as a separate array item.`;
         dealStages: z.array(z.string()).default([]),
         modalities: z.array(z.string()).default([]),
         onboardingDone: z.boolean().default(false),
+        notificationPrefs: z.object({ frequency: z.string() }).nullable().default(null),
       });
       const parsed = schema.safeParse(req.body);
       if (!parsed.success) {
@@ -6054,6 +6055,58 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[admin/industry-profiles]", err);
       return res.status(500).json({ error: "Failed to load profiles" });
+    }
+  });
+
+  app.patch("/api/users/subscribe", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(400).json({ error: "Missing user id" });
+      const schema = z.object({ subscribedToDigest: z.boolean() });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
+      const { subscribedToDigest } = parsed.data;
+      const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+      const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+      if (!sbUrl || !sbKey) return res.status(500).json({ error: "Supabase not configured" });
+      const { createClient } = await import("@supabase/supabase-js");
+      const admin = createClient(sbUrl, sbKey);
+      const { data: existing, error: fetchErr } = await admin.auth.admin.getUserById(userId);
+      if (fetchErr || !existing?.user) return res.status(404).json({ error: "User not found" });
+      const { data, error } = await admin.auth.admin.updateUserById(userId, {
+        user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
+      });
+      if (error) return res.status(500).json({ error: error.message });
+      return res.json({ subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false });
+    } catch (err: any) {
+      console.error("[users/subscribe]", err);
+      return res.status(500).json({ error: err.message ?? "Failed to update subscription" });
+    }
+  });
+
+  app.patch("/api/users/notification-prefs", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const userRole = req.headers["x-user-role"] as string;
+      if (!userId) return res.status(400).json({ error: "Missing user id" });
+      if (userRole !== "industry") return res.status(403).json({ error: "Industry role required" });
+      const schema = z.object({ frequency: z.enum(["realtime", "daily", "weekly"]) });
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Invalid body" });
+      const existing = await storage.getIndustryProfileByUserId(userId);
+      const base = existing ?? {
+        userName: "", companyName: "", companyType: "",
+        therapeuticAreas: [], dealStages: [], modalities: [],
+        onboardingDone: false, notificationPrefs: null,
+      };
+      const updated = await storage.upsertIndustryProfile(userId, {
+        ...base,
+        notificationPrefs: { frequency: parsed.data.frequency },
+      });
+      return res.json({ notificationPrefs: updated.notificationPrefs });
+    } catch (err: any) {
+      console.error("[users/notification-prefs]", err);
+      return res.status(500).json({ error: err.message ?? "Failed to save prefs" });
     }
   });
 
