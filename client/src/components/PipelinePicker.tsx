@@ -48,6 +48,7 @@ type Props = {
   asset?: ScoredAsset;
   alreadySaved?: boolean;
   variant?: "icon" | "button";
+  iconClassName?: string;
 };
 
 function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
@@ -67,7 +68,7 @@ function buildPayload(asset: ScoredAsset): PipelinePickerPayload {
   };
 }
 
-export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon" }: Props) {
+export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon", iconClassName }: Props) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -211,7 +212,9 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon" 
           </Button>
         ) : (
           <button
-            className={`w-7 h-7 rounded flex items-center justify-center transition-all duration-150 ${
+            className={`rounded flex items-center justify-center transition-all duration-150 ${
+              iconClassName ?? "w-7 h-7"
+            } ${
               isSaved
                 ? "text-primary bg-primary/10 border border-primary/30"
                 : "text-muted-foreground hover:text-primary hover:bg-primary/5 border border-transparent hover:border-primary/20"
@@ -221,9 +224,9 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon" 
             title={isSaved ? "Saved — click to save to another pipeline" : "Save to pipeline"}
           >
             {isPending ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className={iconClassName ? "w-4 h-4 animate-spin" : "w-3.5 h-3.5 animate-spin"} />
             ) : (
-              <Bookmark className="w-3.5 h-3.5" fill={isSaved ? "currentColor" : "none"} />
+              <Bookmark className={iconClassName ? "w-4 h-4" : "w-3.5 h-3.5"} fill={isSaved ? "currentColor" : "none"} />
             )}
           </button>
         )}

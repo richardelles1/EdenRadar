@@ -185,7 +185,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   <BookmarkCheck className="w-4 h-4" />
                 </button>
               ) : (
-                <PipelinePicker asset={asset} variant="icon" />
+                <PipelinePicker asset={asset} variant="icon" iconClassName="w-9 h-9 rounded-lg" />
               )}
             </div>
           </div>
