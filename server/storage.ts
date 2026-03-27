@@ -89,6 +89,7 @@ export interface IStorage {
   resolveReviewItem(id: number, note: string): Promise<void>;
   addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
   deleteIngestedAsset(id: number): Promise<void>;
+  markAsIrrelevant(id: number): Promise<void>;
   getIngestedAssetsByInstitution(institution: string): Promise<IngestedAsset[]>;
   getIngestedAssetsByIds(ids: number[]): Promise<RetrievedAsset[]>;
   getInstitutionAssetCounts(): Promise<Record<string, number>>;
@@ -116,7 +117,8 @@ export interface IStorage {
   insertSyncStagingBatch(rows: Array<Omit<SyncStagingRow, "id" | "createdAt">>): Promise<void>;
   getSyncStagingRows(sessionId: string): Promise<SyncStagingRow[]>;
   updateSyncStagingStatus(sessionId: string, status: string, filterIsNew?: boolean, filterRelevant?: boolean): Promise<number>;
-  getExistingFingerprints(institution: string): Promise<Set<string>>;
+  getExistingFingerprints(institution: string): Promise<{ fingerprints: Set<string>; sourceUrls: Set<string> }>;
+  supersedeStagingForInstitution(institution: string): Promise<number>;
   getInstitutionIndexedCount(institution: string): Promise<number>;
 
   getEnrichmentStats(): Promise<{
@@ -893,12 +895,57 @@ export class DatabaseStorage implements IStorage {
     return result.length;
   }
 
-  async getExistingFingerprints(institution: string): Promise<Set<string>> {
-    const rows = await db
-      .select({ fingerprint: ingestedAssets.fingerprint })
+  async getExistingFingerprints(institution: string): Promise<{ fingerprints: Set<string>; sourceUrls: Set<string> }> {
+    // 1. Fingerprints + source URLs already committed to the main table
+    const dbRows = await db
+      .select({ fingerprint: ingestedAssets.fingerprint, sourceUrl: ingestedAssets.sourceUrl })
       .from(ingestedAssets)
       .where(eq(ingestedAssets.institution, institution));
-    return new Set(rows.map(r => r.fingerprint));
+
+    const fingerprints = new Set(dbRows.map(r => r.fingerprint));
+    const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
+
+    // 2. Also include fingerprints + source URLs from pending staging rows for this institution
+    //    (isNew=true, not yet pushed or skipped) — prevents re-staging assets that are already
+    //    in the queue waiting to be pushed to ingested_assets.
+    const stagingRows = await db
+      .select({ fingerprint: syncStaging.fingerprint, sourceUrl: syncStaging.sourceUrl })
+      .from(syncStaging)
+      .where(
+        and(
+          eq(syncStaging.institution, institution),
+          eq(syncStaging.isNew, true),
+          sql`${syncStaging.status} NOT IN ('pushed', 'skipped')`
+        )
+      );
+
+    for (const r of stagingRows) {
+      fingerprints.add(r.fingerprint);
+      if (r.sourceUrl) sourceUrls.add(r.sourceUrl);
+    }
+
+    return { fingerprints, sourceUrls };
+  }
+
+  async supersedeStagingForInstitution(institution: string): Promise<number> {
+    const result = await db
+      .update(syncStaging)
+      .set({ status: "skipped" })
+      .where(
+        and(
+          eq(syncStaging.institution, institution),
+          sql`${syncStaging.status} NOT IN ('pushed', 'skipped')`
+        )
+      )
+      .returning({ id: syncStaging.id });
+    return result.length;
+  }
+
+  async markAsIrrelevant(id: number): Promise<void> {
+    await db
+      .update(ingestedAssets)
+      .set({ relevant: false })
+      .where(eq(ingestedAssets.id, id));
   }
 
   async getInstitutionIndexedCount(institution: string): Promise<number> {

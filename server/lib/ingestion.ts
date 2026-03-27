@@ -179,7 +179,9 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
           const origData = orig ? upsertLookup.get(orig.fingerprint) : undefined;
           try {
             if (!classification.biotechRelevant && classification.categoryConfidence >= 0.7) {
-              await storage.deleteIngestedAsset(id);
+              // Mark as irrelevant rather than deleting — keeps the fingerprint in the DB so
+              // future scans don't re-discover and re-enrich this asset endlessly.
+              await storage.markAsIrrelevant(id);
               removedCount++;
             } else if (!classification.biotechRelevant) {
               await storage.addToReviewQueue(id, orig?.fingerprint || String(id), "low-confidence non-biotech classification");
@@ -400,7 +402,14 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 
     await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing", lastRefreshedAt: new Date() });
 
-    const existingFps = await storage.getExistingFingerprints(institutionName);
+    // Supersede any old pending staging rows for this institution before inserting new ones.
+    // This keeps the queue clean and ensures we never mix stale and fresh results.
+    const superseded = await storage.supersedeStagingForInstitution(institutionName);
+    if (superseded > 0) {
+      console.log(`[sync] ${institutionName}: superseded ${superseded} stale staging rows from previous sessions`);
+    }
+
+    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
 
     const seen = new Set<string>();
     const stagingRows: Array<Omit<SyncStagingRow, "id" | "createdAt">> = [];
@@ -409,7 +418,8 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       const fp = makeFingerprint(l.title, l.institution);
       if (seen.has(fp)) continue;
       seen.add(fp);
-      const isNew = !existingFps.has(fp);
+      const normalizedUrl = normalizeSourceUrl(l.url);
+      const isNew = !existingFps.has(fp) && !(normalizedUrl && existingUrls.has(normalizedUrl));
       stagingRows.push({
         sessionId,
         institution: institutionName,
