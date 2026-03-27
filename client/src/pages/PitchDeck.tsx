@@ -387,7 +387,7 @@ function Slide({
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
       <motion.div
-        className={`relative z-10 w-full max-w-7xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-10"}`}
+        className={`relative z-10 w-full max-w-7xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-12"}`}
         style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
         variants={skip ? undefined : containerVariants}
         initial={skip ? undefined : "hidden"}
@@ -427,7 +427,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-10 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-12 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
@@ -566,7 +566,7 @@ function ProblemSlide({ colors }: { colors: Colors }) {
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>The Problem</span>
       </div>
 
-      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-10 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
+      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-12 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
         <div className="mb-2 sm:mb-3 inline-block px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest w-fit" style={{ background: colors.redDim, color: colors.red }}>
           $2.6B average cost to bring a drug to market
         </div>

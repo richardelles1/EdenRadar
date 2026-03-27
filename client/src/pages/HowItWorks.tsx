@@ -177,7 +177,7 @@ function PricingCards() {
             className="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
             style={{ background: "hsl(142 65% 48% / 0.12)", color: "hsl(142 52% 36%)" }}
           >
-            Save 5%
+            Save 5% on EdenScout
           </span>
         </span>
       </div>
