@@ -147,6 +147,37 @@ app.use((req, res, next) => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
+          // Step 0: Normalize existing source_urls — strip query params and hash fragments.
+          // Many TTO sites embed session tokens (?session=abc) or tracking params that
+          // change on each scrape. Before dedup reconciliation, collapse these so that
+          // /asset?session=1 and /asset?session=2 are treated as the same URL.
+          // Two-step: first null out non-canonical rows within each normalized-URL group
+          // (to avoid unique-index conflicts), then update survivors to the clean URL.
+          await db.execute(sql`
+            UPDATE ingested_assets a
+            SET source_url = NULL
+            FROM (
+              SELECT id FROM (
+                SELECT id,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY regexp_replace(source_url, '[?#].*$', '')
+                    ORDER BY COALESCE(completeness_score, 0) DESC, id ASC
+                  ) AS rn
+                FROM ingested_assets
+                WHERE source_url IS NOT NULL
+                  AND source_url ~ '[?#]'
+              ) ranked
+              WHERE rn > 1
+            ) dups
+            WHERE a.id = dups.id
+          `);
+          await db.execute(sql`
+            UPDATE ingested_assets
+            SET source_url = regexp_replace(source_url, '[?#].*$', '')
+            WHERE source_url IS NOT NULL
+              AND source_url ~ '[?#]'
+          `);
+
           // Reconcile duplicate source_urls before creating the unique index.
           // Strategy: for each URL group with duplicates, select the canonical row
           // (highest completeness_score; tie-break by lowest id = oldest/first ingested)

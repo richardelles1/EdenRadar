@@ -20,6 +20,18 @@ export function makeFingerprint(title: string, institution: string): string {
   return `${normalizeTitle(title)}|${institution.toLowerCase().trim()}`;
 }
 
+export function normalizeSourceUrl(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    parsed.search = "";
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return url.replace(/[?#].*$/, "");
+  }
+}
+
 export interface IngestionResult {
   totalFound: number;
   newCount: number;
@@ -87,7 +99,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
           assetName: l.title,
           institution: l.institution,
           summary: l.description || l.title,
-          sourceUrl: l.url || null,
+          sourceUrl: normalizeSourceUrl(l.url),
           sourceType: "tech_transfer" as const,
           developmentStage: l.stage ?? "unknown",
           runId: run.id,
@@ -403,7 +415,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         institution: institutionName,
         fingerprint: fp,
         assetName: l.title,
-        sourceUrl: l.url || null,
+        sourceUrl: normalizeSourceUrl(l.url),
         summary: l.description || l.title,
         isNew,
         relevant: null,

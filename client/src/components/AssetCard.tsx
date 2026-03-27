@@ -6,7 +6,7 @@ import {
 import {
   BookmarkCheck, Building2, Key,
   FlaskConical, Microscope, ExternalLink, CalendarDays,
-  Link as LinkIcon,
+  Link as LinkIcon, ChevronRight,
 } from "lucide-react";
 import { SourceBadge } from "./SourceBadge";
 import { PipelinePicker } from "./PipelinePicker";
@@ -86,6 +86,7 @@ type AssetCardProps = {
 export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [spotlight, setSpotlight] = useState({ x: 50, y: 30, visible: false });
+  const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [, setLocation] = useLocation();
 
   const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
@@ -95,7 +96,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const hasOwner = asset.owner_name && asset.owner_name !== "unknown";
   const hasInstitution = asset.institution && asset.institution !== "unknown";
   const licensingAvailable = (asset.licensing_status ?? "").toLowerCase().includes("available");
-  const hasWhyItMatters = asset.why_it_matters && asset.why_it_matters.length > 10;
   const isResearcherPublished = asset.source_types?.includes("researcher");
   const accentClass = scoreAccent(asset.score, isUnscored);
   const scoreColor = scoreTextColor(asset.score, isUnscored);
@@ -117,130 +117,143 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    setSpotlight({
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
-      visible: true,
-    });
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    setSpotlight({ x: relX * 100, y: relY * 100, visible: true });
+    setTilt({ x: (relY - 0.5) * -12, y: (relX - 0.5) * 12, active: true });
   };
 
-  const handleMouseLeave = () => setSpotlight((s) => ({ ...s, visible: false }));
+  const handleMouseLeave = () => {
+    setSpotlight((s) => ({ ...s, visible: false }));
+    setTilt({ x: 0, y: 0, active: false });
+  };
 
   return (
     <div
-      ref={cardRef}
-      className={`group relative flex flex-col rounded-xl border bg-card overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl ${
-        isResearcherPublished
-          ? "border-amber-500/30 hover:border-amber-500/50"
-          : "border-card-border hover:border-primary/30"
-      }`}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      data-testid={`asset-card-${asset.id}`}
+      style={{ perspective: "1000px" }}
+      className="cursor-pointer"
+      onClick={handleViewDossier}
+      data-testid={`asset-card-wrapper-${asset.id}`}
     >
-      {/* Spotlight glow */}
       <div
-        className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+        ref={cardRef}
+        className={`relative flex flex-col rounded-xl border bg-card overflow-hidden ${
+          isResearcherPublished
+            ? "border-amber-500/30 hover:border-amber-500/60 hover:shadow-[0_8px_32px_rgba(245,158,11,0.18)]"
+            : "border-card-border hover:border-primary/40 hover:shadow-[0_8px_32px_rgba(34,197,94,0.12)]"
+        }`}
         style={{
-          opacity: spotlight.visible ? 1 : 0,
-          background: isResearcherPublished
-            ? `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(245,158,11,0.13) 0%, transparent 55%)`
-            : `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.13) 0%, transparent 55%)`,
+          transformStyle: "preserve-3d",
+          transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: tilt.active
+            ? "transform 0.08s ease-out, box-shadow 0.3s, border-color 0.3s"
+            : "transform 0.45s ease-out, box-shadow 0.3s, border-color 0.3s",
         }}
-      />
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        data-testid={`asset-card-${asset.id}`}
+      >
+        {/* Spotlight glow */}
+        <div
+          className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+          style={{
+            opacity: spotlight.visible ? 1 : 0,
+            background: isResearcherPublished
+              ? `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(245,158,11,0.13) 0%, transparent 55%)`
+              : `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.13) 0%, transparent 55%)`,
+          }}
+        />
 
-      {/* Left-edge score accent strip */}
-      <div className={`absolute left-0 top-0 bottom-0 w-[4px] ${accentClass}`} />
+        {/* Left-edge score accent strip */}
+        <div className={`absolute left-0 top-0 bottom-0 w-[4px] ${accentClass}`} />
 
-      {/* Researcher banner */}
-      {isResearcherPublished && (
-        <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 relative z-10">
-          <Microscope className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
-          <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 tracking-wide uppercase">
-            Lab Published · Researcher Discovery
-          </span>
-        </div>
-      )}
+        {/* Researcher banner */}
+        {isResearcherPublished && (
+          <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 relative z-10">
+            <Microscope className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
+            <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 tracking-wide uppercase">
+              Lab Published · Researcher Discovery
+            </span>
+          </div>
+        )}
 
-      {/* Card body */}
-      <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2.5 flex-1">
+        {/* Card body */}
+        <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2.5 flex-1">
 
-        {/* Top row: MATCH score (left, large) + actions (right) */}
-        <div className="flex items-start justify-between gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex flex-col items-start select-none cursor-default" data-testid="score-badge">
-                <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase leading-none mb-1">Match</span>
-                <span className={`font-mono text-3xl font-bold leading-none tabular-nums ${scoreColor}`}>
-                  {isUnscored ? <span className="text-2xl opacity-30">—</span> : Math.round(asset.score)}
-                </span>
-              </div>
-            </TooltipTrigger>
-            {asset.score_breakdown && !isUnscored && (
-              <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
-                <p className="text-xs font-semibold text-foreground mb-2">Signal Profile</p>
-                <div className="space-y-1.5">
-                  {SCORE_BREAKDOWN_KEYS.map((k) => {
-                    const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;
-                    if (!val || val === 0) return null;
-                    const barColor = val >= 75 ? "bg-emerald-500/60" : val >= 50 ? "bg-amber-500/60" : "bg-muted-foreground/30";
-                    const textColor = val >= 75 ? "text-emerald-500" : val >= 50 ? "text-amber-500" : "text-muted-foreground";
-                    return (
-                      <div key={k} className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k]}</span>
-                        <div className="flex-1 h-1.5 rounded-full bg-card-border overflow-hidden">
-                          <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
-                        </div>
-                        <span className={`text-[10px] font-mono font-semibold w-7 text-right ${textColor}`}>{val}</span>
-                      </div>
-                    );
-                  })}
+          {/* Top row: MATCH score (left) + actions (right) */}
+          <div className="flex items-start justify-between gap-2">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col items-start select-none cursor-default" data-testid="score-badge">
+                  <span className="text-[9px] font-bold tracking-widest text-muted-foreground uppercase leading-none mb-1">Match</span>
+                  <span className={`font-mono text-2xl font-bold leading-none tabular-nums ${scoreColor}`}>
+                    {isUnscored ? <span className="text-xl opacity-30">—</span> : Math.round(asset.score)}
+                  </span>
                 </div>
-              </TooltipContent>
-            )}
-          </Tooltip>
+              </TooltipTrigger>
+              {asset.score_breakdown && !isUnscored && (
+                <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
+                  <p className="text-xs font-semibold text-foreground mb-2">Signal Profile</p>
+                  <div className="space-y-1.5">
+                    {SCORE_BREAKDOWN_KEYS.map((k) => {
+                      const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;
+                      if (!val || val === 0) return null;
+                      const barColor = val >= 75 ? "bg-emerald-500/60" : val >= 50 ? "bg-amber-500/60" : "bg-muted-foreground/30";
+                      const textColor = val >= 75 ? "text-emerald-500" : val >= 50 ? "text-amber-500" : "text-muted-foreground";
+                      return (
+                        <div key={k} className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k]}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-card-border overflow-hidden">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
+                          </div>
+                          <span className={`text-[10px] font-mono font-semibold w-7 text-right ${textColor}`}>{val}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </TooltipContent>
+              )}
+            </Tooltip>
 
-          {/* Bookmark / pipeline picker */}
-          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-            {isSaved ? (
-              <button
-                onClick={() => onUnsave?.(asset.id, asset.asset_name)}
-                className="w-6 h-6 rounded flex items-center justify-center text-primary bg-primary/10 border border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-150"
-                data-testid={`button-unsave-${asset.id}`}
-                title="Remove from saved"
-              >
-                <BookmarkCheck className="w-3 h-3" />
-              </button>
-            ) : (
-              <PipelinePicker asset={asset} variant="icon" />
+            {/* Bookmark / pipeline picker */}
+            <div className="flex items-center gap-1.5 shrink-0 pt-0.5" onClick={(e) => e.stopPropagation()}>
+              {isSaved ? (
+                <button
+                  onClick={() => onUnsave?.(asset.id, asset.asset_name)}
+                  className="w-6 h-6 rounded flex items-center justify-center text-primary bg-primary/10 border border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-150"
+                  data-testid={`button-unsave-${asset.id}`}
+                  title="Remove from saved"
+                >
+                  <BookmarkCheck className="w-3 h-3" />
+                </button>
+              ) : (
+                <PipelinePicker asset={asset} variant="icon" />
+              )}
+            </div>
+          </div>
+
+          {/* Asset name + institution — always visible */}
+          <div>
+            <h3
+              className="font-semibold text-foreground text-sm leading-snug line-clamp-2"
+              data-testid={`text-asset-name-${asset.id}`}
+            >
+              {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
+            </h3>
+            {(hasInstitution || hasOwner) && (
+              <p className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground truncate">
+                <Building2 className="w-3 h-3 shrink-0 opacity-60" />
+                <span className="truncate" data-testid={`text-institution-${asset.id}`}>
+                  {hasOwner ? asset.owner_name : asset.institution}
+                  {hasOwner && hasInstitution && asset.institution !== asset.owner_name && (
+                    <span className="opacity-60"> · {asset.institution}</span>
+                  )}
+                </span>
+              </p>
             )}
           </div>
-        </div>
 
-        {/* Asset name + institution — always visible */}
-        <div>
-          <h3
-            className="font-semibold text-foreground text-sm leading-snug line-clamp-2"
-            data-testid={`text-asset-name-${asset.id}`}
-          >
-            {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
-          </h3>
-          {(hasInstitution || hasOwner) && (
-            <p className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground truncate">
-              <Building2 className="w-3 h-3 shrink-0 opacity-60" />
-              <span className="truncate" data-testid={`text-institution-${asset.id}`}>
-                {hasOwner ? asset.owner_name : asset.institution}
-                {hasOwner && hasInstitution && asset.institution !== asset.owner_name && (
-                  <span className="opacity-60"> · {asset.institution}</span>
-                )}
-              </span>
-            </p>
-          )}
-        </div>
-
-        {/* Hover-reveal metadata layer */}
-        <div className="overflow-hidden transition-all duration-200 ease-out max-h-0 group-hover:max-h-52 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 flex flex-col gap-2">
-          {/* Badges */}
+          {/* Badges — always visible, primary visual differentiator between cards */}
           {(showStage || showModality || licensingAvailable || (asset.source_types?.length ?? 0) > 0) && (
             <div className="flex flex-wrap gap-1">
               {showStage && (
@@ -265,7 +278,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </div>
           )}
 
-          {/* Target / Indication grid */}
+          {/* Target / Indication — always visible */}
           {(showTarget || showIndication) && (
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
               {showTarget && (
@@ -286,27 +299,11 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               )}
             </div>
           )}
-
-          {/* Why it matters (quote block) or summary fallback (plain italic) */}
-          {hasWhyItMatters ? (
-            <div className="rounded-lg border border-primary/12 bg-primary/[0.04] px-3 py-2">
-              <p className="text-[11px] text-foreground/75 leading-relaxed italic line-clamp-3" data-testid={`text-why-matters-${asset.id}`}>
-                "{asset.why_it_matters}"
-              </p>
-            </div>
-          ) : asset.summary ? (
-            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
-              {asset.summary}
-            </p>
-          ) : null}
         </div>
-      </div>
 
-      {/* Footer — metadata row + single centered CTA */}
-      <div className="relative z-10 pl-5 pr-4 pb-4 pt-0 flex flex-col gap-2">
-        {/* Metadata row: date, signal count, optional source link */}
-        {(dateStr || asset.evidence_count > 1 || hasExternalLink || hasNonTTOLink) && (
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+        {/* Footer — date/signals left, compact CTA right */}
+        <div className="relative z-10 pl-5 pr-4 pb-4 pt-1 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground min-w-0">
             {dateStr && (
               <span className="flex items-center gap-1 shrink-0" data-testid={`text-date-${asset.id}`}>
                 <CalendarDays className="w-3 h-3 opacity-60" />
@@ -321,7 +318,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 href={asset.source_urls[0]}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-6 h-6 ml-auto rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
                 data-testid={`link-tto-contact-${asset.id}`}
                 onClick={(e) => e.stopPropagation()}
                 title={asset.contact_office}
@@ -334,24 +331,26 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 href={asset.source_urls[0]}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-6 h-6 ml-auto rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150"
+                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
                 data-testid={`link-source-${asset.id}`}
+                onClick={(e) => e.stopPropagation()}
                 title="View source"
               >
                 <LinkIcon className="w-3 h-3" />
               </a>
             )}
           </div>
-        )}
 
-        {/* Single centered CTA */}
-        <Button
-          className="w-full h-8 text-[12px] font-semibold"
-          onClick={handleViewDossier}
-          data-testid={`button-dossier-${asset.id}`}
-        >
-          Asset Dossier
-        </Button>
+          <Button
+            size="sm"
+            className="shrink-0 h-7 text-[11px] font-semibold gap-1 px-3"
+            onClick={(e) => { e.stopPropagation(); handleViewDossier(); }}
+            data-testid={`button-dossier-${asset.id}`}
+          >
+            Asset Dossier
+            <ChevronRight className="w-3 h-3" />
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -360,91 +359,105 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: number) => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [spotlight, setSpotlight] = useState({ x: 50, y: 30, visible: false });
+  const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const stageClass = getBadgeClass(STAGE_COLORS, asset.developmentStage);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
-    setSpotlight({
-      x: ((e.clientX - rect.left) / rect.width) * 100,
-      y: ((e.clientY - rect.top) / rect.height) * 100,
-      visible: true,
-    });
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    setSpotlight({ x: relX * 100, y: relY * 100, visible: true });
+    setTilt({ x: (relY - 0.5) * -10, y: (relX - 0.5) * 10, active: true });
+  };
+
+  const handleMouseLeave = () => {
+    setSpotlight((s) => ({ ...s, visible: false }));
+    setTilt({ x: 0, y: 0, active: false });
   };
 
   return (
-    <div
-      ref={cardRef}
-      className="group relative rounded-xl border border-card-border bg-card hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300 flex flex-col overflow-hidden"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setSpotlight((s) => ({ ...s, visible: false }))}
-      data-testid={`saved-card-${asset.id}`}
-    >
+    <div style={{ perspective: "1000px" }}>
       <div
-        className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+        ref={cardRef}
+        className="relative rounded-xl border border-card-border bg-card hover:border-primary/30 hover:shadow-[0_8px_28px_rgba(34,197,94,0.10)] transition-[box-shadow,border-color] duration-300 flex flex-col overflow-hidden"
         style={{
-          opacity: spotlight.visible ? 1 : 0,
-          background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.11) 0%, transparent 55%)`,
+          transformStyle: "preserve-3d",
+          transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: tilt.active
+            ? "transform 0.08s ease-out, box-shadow 0.3s, border-color 0.3s"
+            : "transform 0.45s ease-out, box-shadow 0.3s, border-color 0.3s",
         }}
-      />
-      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-border/60 group-hover:bg-primary/50 transition-colors duration-300" />
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        data-testid={`saved-card-${asset.id}`}
+      >
+        <div
+          className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+          style={{
+            opacity: spotlight.visible ? 1 : 0,
+            background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.11) 0%, transparent 55%)`,
+          }}
+        />
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-border/60 hover:bg-primary/50 transition-colors duration-300" />
 
-      <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2 flex-1">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 mb-1">
-              <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
-              <span className="font-semibold text-sm text-foreground truncate">{asset.assetName}</span>
+        <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2 flex-1">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 mb-1">
+                <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="font-semibold text-sm text-foreground truncate">{asset.assetName}</span>
+              </div>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="shrink-0 w-7 h-7 hover:bg-destructive/10"
+              onClick={() => onDelete(asset.id)}
+              data-testid={`button-delete-saved-${asset.id}`}
+              title="Remove from saved"
+            >
+              <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap gap-1">
+            {asset.developmentStage && asset.developmentStage !== "unknown" && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
+                {asset.developmentStage}
+              </span>
+            )}
+            {asset.modality && asset.modality !== "unknown" && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
+                {asset.modality}
+              </span>
+            )}
+          </div>
+
+          <div className="text-xs space-y-1">
+            <div className="flex gap-1.5">
+              <span className="text-muted-foreground w-16 shrink-0">Target</span>
+              <span className="text-foreground font-medium truncate">{asset.target}</span>
+            </div>
+            <div className="flex gap-1.5">
+              <span className="text-muted-foreground w-16 shrink-0">Disease</span>
+              <span className="text-foreground font-medium truncate">{asset.diseaseIndication}</span>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="shrink-0 w-7 h-7 hover:bg-destructive/10"
-            onClick={() => onDelete(asset.id)}
-            data-testid={`button-delete-saved-${asset.id}`}
-            title="Remove from saved"
-          >
-            <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
-          </Button>
-        </div>
 
-        <div className="flex flex-wrap gap-1">
-          {asset.developmentStage && asset.developmentStage !== "unknown" && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
-              {asset.developmentStage}
-            </span>
-          )}
-          {asset.modality && asset.modality !== "unknown" && (
-            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
-              {asset.modality}
-            </span>
+          {asset.sourceUrl && (
+            <a
+              href={asset.sourceUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+            >
+              <ExternalLink className="w-3 h-3" />
+              {asset.sourceJournal} · {asset.publicationYear}
+            </a>
           )}
         </div>
-
-        <div className="text-xs space-y-1">
-          <div className="flex gap-1.5">
-            <span className="text-muted-foreground w-16 shrink-0">Target</span>
-            <span className="text-foreground font-medium truncate">{asset.target}</span>
-          </div>
-          <div className="flex gap-1.5">
-            <span className="text-muted-foreground w-16 shrink-0">Disease</span>
-            <span className="text-foreground font-medium truncate">{asset.diseaseIndication}</span>
-          </div>
-        </div>
-
-        {asset.sourceUrl && (
-          <a
-            href={asset.sourceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
-          >
-            <ExternalLink className="w-3 h-3" />
-            {asset.sourceJournal} · {asset.publicationYear}
-          </a>
-        )}
       </div>
     </div>
   );
