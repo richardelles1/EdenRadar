@@ -6,6 +6,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
   Bell,
   Shield,
   LogOut,
@@ -99,14 +107,19 @@ function ToggleChip({
   );
 }
 
-function PasswordBlock() {
+function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [pwLoading, setPwLoading] = useState(false);
-  const [pwSuccess, setPwSuccess] = useState(false);
 
-  async function handlePasswordChange() {
+  function reset() {
+    setNewPassword("");
+    setConfirmPassword("");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
     if (!newPassword || newPassword.length < 8) {
       toast({ title: "Password too short", description: "Minimum 8 characters.", variant: "destructive" });
       return;
@@ -121,41 +134,47 @@ function PasswordBlock() {
     if (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
     } else {
-      setPwSuccess(true);
-      setNewPassword("");
-      setConfirmPassword("");
       toast({ title: "Password updated", description: "Your password has been changed." });
-      setTimeout(() => setPwSuccess(false), 3000);
+      reset();
+      onClose();
     }
   }
 
   return (
-    <div className="space-y-2.5">
-      <div className="space-y-1">
-        <Label htmlFor="new-password" className="text-xs text-muted-foreground">New password</Label>
-        <Input id="new-password" type="password" placeholder="Min. 8 characters" value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)} data-testid="input-new-password" />
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor="confirm-password" className="text-xs text-muted-foreground">Confirm new password</Label>
-        <Input id="confirm-password" type="password" placeholder="Repeat new password" value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)} data-testid="input-confirm-password" />
-      </div>
-      <Button size="sm" variant="outline" onClick={handlePasswordChange}
-        disabled={pwLoading || pwSuccess || !newPassword} data-testid="button-save-password" className="gap-1.5">
-        {pwSuccess ? (
-          <><CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Updated</>
-        ) : pwLoading ? "Updating..." : (
-          <><KeyRound className="w-3.5 h-3.5" /> Update password</>
-        )}
-      </Button>
-    </div>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { reset(); onClose(); } }}>
+      <DialogContent className="sm:max-w-md" data-testid="modal-change-password">
+        <DialogHeader>
+          <DialogTitle>Change password</DialogTitle>
+          <DialogDescription>Enter a new password for your account. Must be at least 8 characters.</DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4 pt-1">
+          <div className="space-y-1">
+            <Label htmlFor="new-password" className="text-xs text-muted-foreground">New password</Label>
+            <Input id="new-password" type="password" placeholder="Min. 8 characters" value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)} data-testid="input-new-password" autoFocus />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="confirm-password" className="text-xs text-muted-foreground">Confirm new password</Label>
+            <Input id="confirm-password" type="password" placeholder="Repeat new password" value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)} data-testid="input-confirm-password" />
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => { reset(); onClose(); }} disabled={pwLoading}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={pwLoading || !newPassword} data-testid="button-save-password" className="gap-1.5">
+              {pwLoading ? "Updating..." : <><KeyRound className="w-3.5 h-3.5" /> Update password</>}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export function SimplifiedSettings() {
   const { user, signOut } = useAuth();
-  const { toast } = useToast();
+  const [pwModalOpen, setPwModalOpen] = useState(false);
 
   async function handleSignOut() {
     await signOut();
@@ -184,9 +203,15 @@ export function SimplifiedSettings() {
             </p>
           </div>
           <Separator />
-          <div>
-            <p className="text-xs font-semibold text-foreground mb-3">Change password</p>
-            <PasswordBlock />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-foreground">Password</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Update your account password</p>
+            </div>
+            <Button size="sm" variant="outline" onClick={() => setPwModalOpen(true)}
+              data-testid="button-change-password" className="gap-1.5">
+              <KeyRound className="w-3.5 h-3.5" /> Change password
+            </Button>
           </div>
           <Separator />
           <div className="flex items-center justify-between">
@@ -215,6 +240,8 @@ export function SimplifiedSettings() {
           </div>
         </div>
       </div>
+
+      <ChangePasswordModal open={pwModalOpen} onClose={() => setPwModalOpen(false)} />
     </div>
   );
 }
@@ -238,6 +265,7 @@ export default function IndustrySettings() {
   }>({ therapeuticAreas: [], modalities: [], dealStages: [] });
   const [alertPrefsSaving, setAlertPrefsSaving] = useState(false);
   const [alertPrefsSaved, setAlertPrefsSaved] = useState(false);
+  const [pwModalOpen, setPwModalOpen] = useState(false);
 
   useEffect(() => {
     setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
@@ -566,9 +594,15 @@ export default function IndustrySettings() {
                 </p>
               </div>
               <Separator />
-              <div>
-                <p className="text-xs font-semibold text-foreground mb-3">Change password</p>
-                <PasswordBlock />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-foreground">Password</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Update your account password</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => setPwModalOpen(true)}
+                  data-testid="button-change-password" className="gap-1.5">
+                  <KeyRound className="w-3.5 h-3.5" /> Change password
+                </Button>
               </div>
               <Separator />
               <div className="flex items-center justify-between">
@@ -617,6 +651,8 @@ export default function IndustrySettings() {
           </div>
         </div>
       </div>
+
+      <ChangePasswordModal open={pwModalOpen} onClose={() => setPwModalOpen(false)} />
     </div>
   );
 }
