@@ -387,7 +387,7 @@ function Slide({
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
       </div>
       <motion.div
-        className={`relative z-10 w-full max-w-6xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-20"}`}
+        className={`relative z-10 w-full max-w-7xl mx-auto pt-10 sm:pt-12 pb-12 sm:pb-0 ${noPadding ? "" : "px-5 sm:px-12 lg:px-10"}`}
         style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center" }}
         variants={skip ? undefined : containerVariants}
         initial={skip ? undefined : "hidden"}
@@ -427,11 +427,11 @@ function CoverSlide({ colors }: { colors: Colors }) {
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-10 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
-          <p className="text-lg sm:text-xl font-semibold mb-4" style={{ color: colors.green }}>Biotech Intelligence Platform</p>
+          <p className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4" style={{ color: colors.green }}>Biotech Intelligence Platform</p>
           <p className="text-sm sm:text-base max-w-sm sm:max-w-md mb-8 sm:mb-10" style={{ color: colors.textMuted }}>
             The first platform to connect early-stage concept, development, structured labs, institutional research, and industry asset intelligence in a single ecosystem.
           </p>
@@ -495,7 +495,7 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
           >
             Founded 2026
           </div>
-          <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-5 leading-tight" style={{ color: colors.text }}>
+          <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-5 leading-tight" style={{ color: colors.text }}>
             The team building the{" "}
             <span style={{ color: colors.green }}>connective tissue of research & biotech.</span>
           </h2>
@@ -566,11 +566,11 @@ function ProblemSlide({ colors }: { colors: Colors }) {
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>The Problem</span>
       </div>
 
-      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-20 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
+      <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-10 py-10 sm:py-16 pb-14 sm:pb-16 relative z-10">
         <div className="mb-2 sm:mb-3 inline-block px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-widest w-fit" style={{ background: colors.redDim, color: colors.red }}>
           $2.6B average cost to bring a drug to market
         </div>
-        <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-5" style={{ color: colors.text }}>
+        <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-5" style={{ color: colors.text }}>
           The pipeline is <span style={{ color: colors.red }}>broken</span> before it begins.
         </h2>
 
@@ -625,7 +625,7 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
       <PitchDots color={colors.violet} count={4} seed={1} />
       <PitchDots color={colors.green} count={4} seed={2} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-6" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-6" style={{ color: colors.text }}>
         EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
       <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
@@ -968,7 +968,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
 
       {/* ── DESKTOP LAYOUT: giant orb left, chat right ── */}
       <div className="hidden lg:block">
-        <h2 className="text-2xl lg:text-3xl font-bold mb-7" style={{ color: colors.text }}>
+        <h2 className="text-2xl lg:text-3xl xl:text-4xl font-bold mb-7" style={{ color: colors.text }}>
           Ask EDEN anything about the biotech landscape.
         </h2>
         <div className="flex flex-row gap-10 items-center">
@@ -1007,7 +1007,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
           <Sprout className="w-5 h-5" style={{ color: colors.green }} />
         </div>
         <div>
-          <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold" style={{ color: colors.text }}>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Scout</span>
           </h2>
         </div>
@@ -1052,7 +1052,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
       <PitchDots color={colors.amber} count={5} seed={0} />
       <PitchDots color={colors.violet} count={5} seed={2} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>The supply side of the ecosystem</p>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-7" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-4 sm:mb-7" style={{ color: colors.text }}>
         Early Signal <span style={{ color: colors.green }}>Pipeline</span>.
       </h2>
 
@@ -1181,13 +1181,13 @@ function TractionSlide({ colors }: { colors: Colors }) {
     { num: 11, suffix: "-Step", label: "Research Workflow", icon: Workflow, color: colors.amber },
   ];
   const tiers = [
-    { name: "EdenDiscovery", price: "$19.99", period: "/mo", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
-    { name: "EdenLab", price: "$29.99", period: "/mo", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
+    { name: "EdenDiscovery", price: "Free", period: "", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
+    { name: "EdenLab", price: "Free", period: "", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
     { name: "EdenScout", price: "$299", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Full-access industry intelligence platform — 300+ TTOs, EDEN dossiers, convergence signals, deal flow alerts, and pipeline export" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Built, deployed, <span style={{ color: colors.green }}>running today</span>.
       </h2>
       <p className="text-[10px] sm:text-sm mb-3 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
@@ -1243,7 +1243,7 @@ function ContactSlide({ colors }: { colors: Colors }) {
             </div>
           ))}
         </div>
-        <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-2" style={{ color: colors.text }}>
+        <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-2" style={{ color: colors.text }}>
           Let's build the future of <span style={{ color: colors.green }}>biotech intelligence</span>.
         </h2>
         <p className="text-sm sm:text-base mb-6 sm:mb-8 max-w-lg" style={{ color: colors.textMuted }}>

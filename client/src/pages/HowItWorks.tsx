@@ -75,9 +75,10 @@ const TIERS = [
     colorDim: "hsl(38 92% 50% / 0.08)",
     borderColor: "hsl(38 92% 50% / 0.3)",
     headerBg: "hsl(38 92% 50%)",
-    price: "$19.99",
-    ...derivedYearly(19.99),
-    period: "/mo",
+    price: "Free",
+    yearlyPrice: "",
+    yearlySavings: "",
+    period: "",
     tagline: "Ideal for early discovery and concept validation",
     popular: false,
     features: [
@@ -96,9 +97,10 @@ const TIERS = [
     colorDim: "hsl(265 60% 60% / 0.08)",
     borderColor: "hsl(265 60% 60% / 0.3)",
     headerBg: "hsl(265 60% 60%)",
-    price: "$29.99",
-    ...derivedYearly(29.99),
-    period: "/mo",
+    price: "Free",
+    yearlyPrice: "",
+    yearlySavings: "",
+    period: "",
     tagline: "For research teams and active deal flow exploration",
     popular: true,
     features: [
@@ -218,7 +220,11 @@ function PricingCards() {
 
               {/* Price block */}
               <div className="mb-1">
-                {isYearly ? (
+                {tier.price === "Free" ? (
+                  <div className="flex items-baseline gap-1">
+                    <span className="text-3xl font-black text-white">Free</span>
+                  </div>
+                ) : isYearly ? (
                   <>
                     <div className="flex items-baseline gap-2">
                       <span className="text-3xl font-black text-white">{tier.yearlyPrice}</span>
