@@ -25,10 +25,10 @@ const TIER_SCORE_TEXT: Record<TierKey, string> = {
 };
 
 const TIER_BORDER_BOTTOM_RIGHT: Record<TierKey, string> = {
-  high: "border-emerald-500/60 dark:border-emerald-400/40",
-  mid: "border-amber-500/60 dark:border-amber-400/40",
-  low: "border-zinc-400/40",
-  none: "border-zinc-300/40 dark:border-zinc-600/30",
+  high: "border-emerald-500/50 dark:border-emerald-500/30",
+  mid: "border-amber-500/50 dark:border-amber-500/30",
+  low: "border-zinc-300/60 dark:border-zinc-600/40",
+  none: "border-zinc-200/60 dark:border-zinc-700/40",
 };
 
 const TIER_STRIP_BG: Record<TierKey, string> = {
@@ -47,6 +47,28 @@ const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
   readiness: "Readiness",
   licensability: "Licensability",
 };
+
+function normalizePillValue(val: string | undefined | null): string | null {
+  if (!val || val.trim() === "" || val.toLowerCase() === "unknown" || val.toLowerCase() === "n/a") return null;
+  const v = val.trim();
+  return v.charAt(0).toUpperCase() + v.slice(1);
+}
+
+function stagePillClass(stage: string): string {
+  const s = stage.toLowerCase();
+  if (s.includes("phase 3") || s.includes("phase iii") || s.includes("approved") || s.includes("marketed")) {
+    return "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 text-emerald-700 dark:text-emerald-400";
+  }
+  if (s.includes("phase 2") || s.includes("phase ii")) {
+    return "bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 text-violet-700 dark:text-violet-400";
+  }
+  if (s.includes("phase 1") || s.includes("phase i") || s.includes("phase i/ii")) {
+    return "bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 text-sky-700 dark:text-sky-400";
+  }
+  return "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400";
+}
+
+const MODALITY_PILL_CLASS = "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400";
 
 type AssetCardProps = {
   asset: ScoredAsset;
@@ -76,6 +98,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     : hasInstitution
     ? asset.institution
     : null;
+
+  const stageLabel = normalizePillValue(asset.development_stage);
+  const modalityLabel = normalizePillValue(asset.modality);
+  const hasPills = stageLabel || modalityLabel;
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -130,7 +156,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         onMouseUp={() => setPressed(false)}
         data-testid={`asset-card-${asset.id}`}
       >
-        {/* Subtle tint bloom — erupts from score-badge corner, very transparent */}
+        {/* Subtle tint bloom — erupts from score-badge corner */}
         <div
           className="absolute pointer-events-none"
           style={{
@@ -148,27 +174,31 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           }}
         />
 
-        {/* Left accent strip */}
+        {/* Left accent strip — z-[3], sibling of badge at z-[5] */}
         <div
           className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]"
           style={{ background: TIER_STRIP_BG[tier] }}
         />
 
-        {/* Score badge — flush to top-left corner, only bottom+right borders visible */}
+        {/* Score badge — flush top-left, NO backdrop-filter (causes z-index break) */}
         <Tooltip>
           <TooltipTrigger asChild>
             <div
-              className={`absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-3 py-2 cursor-default select-none border-0 border-b border-r ${TIER_BORDER_BOTTOM_RIGHT[tier]}`}
+              className={`
+                absolute top-0 left-0 z-[5]
+                flex flex-col items-center justify-center
+                px-3 py-1.5
+                border-b border-r
+                bg-white dark:bg-zinc-900
+                ${TIER_BORDER_BOTTOM_RIGHT[tier]}
+              `}
               style={{
                 borderRadius: "17px 0 10px 0",
-                background: "rgba(255,255,255,0.50)",
-                backdropFilter: "blur(2px)",
-                WebkitBackdropFilter: "blur(2px)",
-                minWidth: "54px",
+                minWidth: "52px",
               }}
               data-testid="score-badge"
             >
-              <span className={`text-[9px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground`}>
+              <span className="text-[9px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">
                 Score
               </span>
               <span className={`font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5 ${TIER_SCORE_TEXT[tier]}`}>
@@ -202,7 +232,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           )}
         </Tooltip>
 
-        {/* Bookmark — top-right, absolute */}
+        {/* Bookmark — top-right */}
         <div
           className="absolute top-2.5 right-2.5 z-[5]"
           onClick={(e) => e.stopPropagation()}
@@ -221,10 +251,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           )}
         </div>
 
-        {/* Main content — starts below the badge */}
-        <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[62px] pb-3">
+        {/* Main content — below badge */}
+        <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-[56px] pb-3">
 
-          {/* Researcher badge */}
+          {/* Researcher label */}
           {isResearcherPublished && (
             <div className="flex items-center gap-1 mb-1">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
@@ -242,32 +272,50 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
           </h3>
 
-          {/* Institution — legible secondary color */}
+          {/* Metadata pill row — stage + modality */}
+          {hasPills && (
+            <div className="flex flex-wrap gap-1 mt-2">
+              {stageLabel && (
+                <span
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(stageLabel)}`}
+                  data-testid={`pill-stage-${asset.id}`}
+                >
+                  {stageLabel}
+                </span>
+              )}
+              {modalityLabel && (
+                <span
+                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${MODALITY_PILL_CLASS}`}
+                  data-testid={`pill-modality-${asset.id}`}
+                >
+                  {modalityLabel}
+                </span>
+              )}
+            </div>
+          )}
+
+          {/* Spacer — shorter now that pills fill center */}
+          <div className="flex-1" />
+
+          {/* Institution — bottom-aligned, slightly darker than muted */}
           {institutionDisplay && (
-            <p
-              className="flex items-start gap-1 text-[11px] text-zinc-600 dark:text-zinc-300 leading-snug line-clamp-2 mt-2"
-            >
-              <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50 mt-0.5" />
+            <p className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mb-2 line-clamp-1">
+              <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
               <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
             </p>
           )}
 
-          {/* Spacer pushes CTA to bottom */}
-          <div className="flex-1" />
-
           {/* CTA */}
-          <div className="pt-1.5">
-            <button
-              className="w-full h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-emerald-500/20"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleViewDossier();
-              }}
-              data-testid={`button-dossier-${asset.id}`}
-            >
-              Asset Dossier
-            </button>
-          </div>
+          <button
+            className="w-full h-7 rounded-md text-[11px] font-semibold tracking-wide bg-emerald-600 hover:bg-emerald-500 text-white transition-all duration-200 active:scale-95 hover:shadow-md hover:shadow-emerald-500/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleViewDossier();
+            }}
+            data-testid={`button-dossier-${asset.id}`}
+          >
+            Asset Dossier
+          </button>
         </div>
       </div>
     </div>

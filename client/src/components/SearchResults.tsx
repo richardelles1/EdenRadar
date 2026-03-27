@@ -27,8 +27,8 @@ function LoadingSkeleton() {
           <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400/50 dark:bg-emerald-500/30" />
           {/* Flush score badge skeleton */}
           <div
-            className="absolute top-0 left-0 z-10 flex flex-col items-center justify-center px-3 py-2 border-b border-r border-emerald-400/30 dark:border-emerald-500/20"
-            style={{ borderRadius: "17px 0 10px 0", background: "rgba(255,255,255,0.4)", minWidth: "54px" }}
+            className="absolute top-0 left-0 z-10 flex flex-col items-center justify-center px-3 py-1.5 border-b border-r border-emerald-400/30 dark:border-emerald-500/20 bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "17px 0 10px 0", minWidth: "52px" }}
           >
             <Skeleton className="h-2 w-7 bg-muted/60 dark:bg-zinc-700 mb-1" />
             <Skeleton className="h-6 w-5 bg-muted/60 dark:bg-zinc-700" />
