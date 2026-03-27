@@ -3134,18 +3134,36 @@ export async function registerRoutes(
 
       // Standard semantic retrieval (two-pass institution detection with portfolio names)
       const institutionName = detectInstitutionName(message.trim(), portfolioInstitutionNames);
-      const [queryEmbedding, institutionAssets] = await Promise.all([
-        embedQuery(message.trim()),
-        institutionName
-          ? storage.searchIngestedAssetsByInstitution(institutionName, 10)
-          : Promise.resolve([] as import("./storage").RetrievedAsset[]),
-      ]);
 
       let allSemantic: import("./storage").RetrievedAsset[];
-      if (filtersActive) {
-        allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
-      } else {
-        allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+      let institutionAssets: import("./storage").RetrievedAsset[] = [];
+
+      try {
+        const [queryEmbedding, instAssets] = await Promise.all([
+          embedQuery(message.trim()),
+          institutionName
+            ? storage.searchIngestedAssetsByInstitution(institutionName, 10)
+            : Promise.resolve([] as import("./storage").RetrievedAsset[]),
+        ]);
+        institutionAssets = instAssets;
+        if (filtersActive) {
+          allSemantic = await storage.filteredSemanticSearch(queryEmbedding, geoRx, filters.modality, filters.stage, filters.indication, filters.institution, 15);
+        } else {
+          allSemantic = await storage.semanticSearch(queryEmbedding, 15);
+        }
+      } catch (embedErr) {
+        console.warn("[eden/rag] embedding failed, falling back to keyword search:", (embedErr as Error)?.message ?? embedErr);
+        // Keyword fallback: uses ILIKE against asset_name, indication, target, summary, institution
+        const kwResults = await storage.keywordSearchIngestedAssets(message.trim(), 15, {
+          modality: filters.modality,
+          stage: filters.stage,
+          indication: filters.indication,
+          institution: filters.institution ?? (institutionName ?? undefined),
+        }).catch(() => [] as import("./storage").RetrievedAsset[]);
+        allSemantic = kwResults.map((a) => ({ ...a, similarity: 0.6 }));
+        if (institutionName) {
+          institutionAssets = await storage.searchIngestedAssetsByInstitution(institutionName, 10).catch(() => []);
+        }
       }
 
       const threshold = institutionName ? 0.38 : 0.45;

@@ -62,8 +62,8 @@ const NAV_GROUPS: NavGroup[] = [
     groupLabel: "Workspace",
     items: [
       { href: "/assets", label: "Pipelines", icon: Layers },
-      { href: "/industry/projects", label: "Lab", icon: FlaskConical },
       { href: "/industry/concepts", label: "Discovery", icon: Lightbulb },
+      { href: "/industry/projects", label: "Lab", icon: FlaskConical },
     ],
   },
 ];

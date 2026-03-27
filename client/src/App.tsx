@@ -50,6 +50,7 @@ import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
 import Login from "@/pages/Login";
+import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
 
 function ThemeInit() {
@@ -255,6 +256,7 @@ function App() {
           <Toaster />
           <SiteGate>
             <Router />
+            <EdenWidget />
           </SiteGate>
         </AuthProvider>
       </TooltipProvider>

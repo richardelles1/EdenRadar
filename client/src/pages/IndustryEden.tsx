@@ -3,121 +3,17 @@ import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
-  Loader2, Zap, Mic, MicOff, ThumbsUp, ThumbsDown,
-  ChevronDown, ChevronRight, Clock, ExternalLink,
+  Loader2, Zap, Mic, MicOff,
+  ChevronRight, Clock,
 } from "lucide-react";
 import { EdenAvatar, EdenOrb, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
-import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-import { useEdenChat, type ChatAsset, type EdenSessionSummary, type EdenUserContext } from "@/hooks/useEdenChat";
+import { EdenChatThread } from "@/components/EdenChatThread";
+import { useEdenChat, type EdenSessionSummary, type EdenUserContext } from "@/hooks/useEdenChat";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { getIndustryProfile } from "@/hooks/use-industry";
 
 const SITE_PW = "quality";
-
-
-// ── Helpers ───────────────────────────────────────────────────────────────
-function sortAssetsByMention(assets: ChatAsset[], content: string): ChatAsset[] {
-  if (!assets.length || !content) return assets;
-  const lower = content.toLowerCase();
-  const UNMENTIONED = 999999;
-  return [...assets].sort((a, b) => {
-    const nameA = a.assetName.toLowerCase().slice(0, 30);
-    const nameB = b.assetName.toLowerCase().slice(0, 30);
-    const posA = lower.indexOf(nameA);
-    const posB = lower.indexOf(nameB);
-    const ia = posA === -1 ? UNMENTIONED : posA;
-    const ib = posB === -1 ? UNMENTIONED : posB;
-    return ia - ib;
-  });
-}
-
-function relevanceLabel(sim: number): { label: string; cls: string } {
-  if (sim >= 0.85) return { label: "Strong match",  cls: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20" };
-  if (sim >= 0.70) return { label: "Good match",    cls: "bg-primary/10 text-primary border-primary/20" };
-  if (sim >= 0.55) return { label: "Possible fit",  cls: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20" };
-  return             { label: "Exploratory",        cls: "bg-muted text-muted-foreground border-border" };
-}
-
-function modalityBadgeClass(m?: string): string {
-  if (!m) return "bg-muted text-muted-foreground border-border";
-  const lm = m.toLowerCase();
-  if (lm.includes("antibody") || lm.includes("bispecific")) return "bg-indigo-500/10 text-indigo-700 dark:text-indigo-400 border-indigo-500/20";
-  if (lm.includes("small") || lm.includes("molecule")) return "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/20";
-  if (lm.includes("gene") || lm.includes("cell") || lm.includes("rna") || lm.includes("mrna")) return "bg-pink-500/10 text-pink-700 dark:text-pink-400 border-pink-500/20";
-  if (lm.includes("platform") || lm.includes("diagnostic") || lm.includes("device")) return "bg-teal-500/10 text-teal-700 dark:text-teal-400 border-teal-500/20";
-  return "bg-muted text-muted-foreground border-border";
-}
-
-// ── Citation card ─────────────────────────────────────────────────────────
-function CitationCard({ asset, index, savedIngestedIds }: {
-  asset: ChatAsset;
-  index: number;
-  savedIngestedIds: Set<number>;
-}) {
-  const { label, cls } = relevanceLabel(asset.similarity);
-  const isSaved = savedIngestedIds.has(asset.id);
-
-  const pickerPayload: PipelinePickerPayload = {
-    asset_name: asset.assetName,
-    target: "unknown",
-    modality: asset.modality || "unknown",
-    development_stage: asset.developmentStage || "unknown",
-    disease_indication: asset.indication || "unknown",
-    summary: "",
-    source_title: asset.assetName,
-    source_journal: asset.institution,
-    publication_year: "",
-    source_name: asset.sourceName || "tto",
-    source_url: asset.sourceUrl ?? null,
-    ingested_asset_id: asset.id,
-  };
-
-  return (
-    <div
-      className="rounded-xl border bg-card p-3 flex flex-col gap-1.5 hover:border-emerald-500/30 transition-all hover:shadow-sm"
-      data-testid={`citation-card-${index}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-xs font-semibold text-foreground leading-snug line-clamp-2 flex-1">{asset.assetName}</p>
-        <div className="flex items-center gap-1 shrink-0">
-          <PipelinePicker payload={pickerPayload} alreadySaved={isSaved} />
-          <span className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${cls}`}>{label}</span>
-        </div>
-      </div>
-      <p className="text-[11px] text-muted-foreground truncate">{asset.institution}</p>
-      <div className="flex flex-wrap gap-1 mt-0.5">
-        {asset.modality && asset.modality !== "unknown" && (
-          <span className={`text-[10px] font-medium border rounded px-1.5 py-0.5 ${modalityBadgeClass(asset.modality)}`}>
-            {asset.modality.length > 22 ? asset.modality.slice(0, 22) + "…" : asset.modality}
-          </span>
-        )}
-        {asset.developmentStage && asset.developmentStage !== "unknown" && (
-          <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-muted text-muted-foreground border-border">
-            {asset.developmentStage}
-          </span>
-        )}
-        {asset.ipType && (
-          <span className="text-[10px] font-medium border rounded px-1.5 py-0.5 bg-muted text-muted-foreground border-border">
-            {asset.ipType}
-          </span>
-        )}
-      </div>
-      {asset.sourceUrl && (
-        <a
-          href={asset.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[11px] text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 mt-0.5"
-          data-testid={`citation-link-${index}`}
-        >
-          <ExternalLink className="h-2.5 w-2.5 shrink-0" />
-          View source
-        </a>
-      )}
-    </div>
-  );
-}
 
 // ── Empty state with prompt cards ────────────────────────────────────────
 function EmptyState({
@@ -143,7 +39,6 @@ function EmptyState({
 
   return (
     <div className="flex flex-col items-center justify-center flex-1 px-4 py-4" data-testid="chat-empty">
-      {/* EdenOrb + name */}
       <div
         className="flex flex-col items-center mb-4 w-full"
         style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both" }}
@@ -182,7 +77,6 @@ function EmptyState({
         )}
       </div>
 
-      {/* Prompt cards grid — 2×3 or 2×2 on mobile */}
       <div
         className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3 w-full max-w-2xl"
         style={{ animation: "ie-fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: "120ms" }}
@@ -215,13 +109,11 @@ export default function IndustryEden() {
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
   const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
 
-  // Intro animation state — only suppress once user has sent their first message
   const [introPlayed, setIntroPlayed] = useState(() => {
     try { return sessionStorage.getItem("eden-intro-played") === "1"; } catch { return false; }
   });
   const handleIntroDone = () => setIntroPlayed(true);
 
-  // Read industry profile from localStorage for context injection
   const profile = useMemo(() => getIndustryProfile(), []);
   const userContext = useMemo((): EdenUserContext | undefined => {
     const hasData = profile.companyName || profile.companyType ||
@@ -268,7 +160,6 @@ export default function IndustryEden() {
     loadSession,
   } = useEdenChat(SITE_PW, userContext);
 
-  // Mark intro as permanently played (this session) once the user sends their first message
   useEffect(() => {
     if (messages.length > 0) {
       try { sessionStorage.setItem("eden-intro-played", "1"); } catch {}
@@ -367,7 +258,7 @@ export default function IndustryEden() {
           33%      { transform: translateY(-10px) translateX(4px); }
           66%      { transform: translateY(-5px) translateX(-3px); }
         }
-        @keyframes ie-pill-in {
+        @keyframes em-pill-in {
           from { opacity: 0; transform: translateY(6px) scale(0.95); }
           to   { opacity: 1; transform: translateY(0) scale(1); }
         }
@@ -504,139 +395,24 @@ export default function IndustryEden() {
               />
             )}
 
-            {/* Message thread */}
+            {/* Message thread via shared component */}
             {messages.length > 0 && (
-              <div className="px-4 sm:px-6 py-5 space-y-5 max-w-3xl w-full mx-auto">
-                {messages.map((msg, i) => {
-                  const followUps = !msg.isStreaming && msg.role === "assistant" && msg.content
-                    ? getFollowUpPills(msg.content, (msg.assets?.length ?? 0) > 0)
-                    : [];
-
-                  return (
-                    <div
-                      key={i}
-                      className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-                      style={{
-                        animation: msg.role === "user"
-                          ? "em-slide-user 320ms cubic-bezier(0.16, 1, 0.3, 1) both"
-                          : "em-slide-assistant 320ms cubic-bezier(0.16, 1, 0.3, 1) both"
-                      }}
-                      data-testid={`chat-msg-${i}`}
-                    >
-                      {msg.role === "assistant" && (
-                        <div className="shrink-0 mt-1 mr-2">
-                          <EdenAvatar isThinking={!!(msg.isStreaming)} size={22} />
-                        </div>
-                      )}
-
-                      <div className={`${msg.role === "user" ? "max-w-[78%]" : "flex-1 min-w-0"}`}>
-                        {/* Bubble */}
-                        <div className={`${
-                          msg.role === "user"
-                            ? "rounded-2xl rounded-tr-sm px-4 py-2.5 bg-emerald-600 text-white text-sm ml-auto w-fit shadow-sm"
-                            : "rounded-2xl rounded-tl-sm px-4 py-3 bg-muted/50 border-l-2 border-l-emerald-500/50 text-foreground"
-                        }`}>
-                          {msg.role === "assistant" && msg.isStreaming && !msg.content && (
-                            <div className="flex gap-1 items-center py-0.5">
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "0ms" }} />
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "130ms" }} />
-                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500/70 animate-bounce" style={{ animationDelay: "260ms" }} />
-                            </div>
-                          )}
-                          {msg.role === "user" && (
-                            <p className="text-sm leading-relaxed">{msg.content}</p>
-                          )}
-                          {msg.role === "assistant" && msg.content && (
-                            <MarkdownContent text={msg.content} isStreaming={msg.isStreaming} />
-                          )}
-                        </div>
-
-                        {/* Feedback row */}
-                        {msg.role === "assistant" && !msg.isStreaming && msg.content && (
-                          <div className="flex items-center gap-0.5 mt-1 ml-0.5">
-                            <button
-                              onClick={() => handleFeedback(i, "up")}
-                              className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "up" ? "text-emerald-500" : "text-muted-foreground/30 hover:text-emerald-500"}`}
-                              title="Good response"
-                              data-testid={`button-feedback-up-${i}`}
-                            >
-                              <ThumbsUp className="h-3 w-3" fill={messageFeedback[i] === "up" ? "currentColor" : "none"} />
-                            </button>
-                            <button
-                              onClick={() => handleFeedback(i, "down")}
-                              className={`p-1 rounded-md transition-colors ${messageFeedback[i] === "down" ? "text-rose-400" : "text-muted-foreground/30 hover:text-rose-400"}`}
-                              title="Bad response"
-                              data-testid={`button-feedback-down-${i}`}
-                            >
-                              <ThumbsDown className="h-3 w-3" fill={messageFeedback[i] === "down" ? "currentColor" : "none"} />
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Contextual follow-up pills */}
-                        {followUps.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2 ml-0.5" data-testid={`follow-up-pills-${i}`}>
-                            {followUps.map((pill, pi) => (
-                              <button
-                                key={pill}
-                                onClick={() => handleSend(pill)}
-                                disabled={streaming}
-                                className="text-[11px] px-2.5 py-1 rounded-full border border-emerald-500/25 bg-emerald-500/5 text-muted-foreground hover:text-foreground hover:border-emerald-500/50 hover:bg-emerald-500/10 transition-all disabled:opacity-40"
-                                style={{ animation: `ie-pill-in 280ms cubic-bezier(0.16, 1, 0.3, 1) both`, animationDelay: `${pi * 60}ms` }}
-                                data-testid={`pill-followup-${i}-${pi}`}
-                              >
-                                {pill}
-                              </button>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Citation cards */}
-                        {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
-                          <div className="mt-2.5" data-testid={`chat-citations-${i}`}>
-                            {!expandedCitations[i] ? (
-                              <button
-                                className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors group"
-                                onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: true }))}
-                                data-testid={`button-show-citations-${i}`}
-                              >
-                                <ChevronDown className="h-3 w-3 shrink-0" />
-                                Show {msg.assets.length} matched asset{msg.assets.length !== 1 ? "s" : ""}
-                              </button>
-                            ) : (
-                              <>
-                                <button
-                                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors mb-2 group"
-                                  onClick={() => setExpandedCitations((prev) => ({ ...prev, [i]: false }))}
-                                  data-testid={`button-hide-citations-${i}`}
-                                >
-                                  <ChevronDown className="h-3 w-3 shrink-0 rotate-180" />
-                                  Hide assets
-                                </button>
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                  {sortAssetsByMention(msg.assets, msg.content).map((a, ci) => (
-                                    <div
-                                      key={a.id}
-                                      style={{ animation: "em-fade-in 300ms cubic-bezier(0.16, 1, 0.3, 1) both", animationDelay: `${ci * 50}ms` }}
-                                    >
-                                      <CitationCard asset={a} index={ci} savedIngestedIds={savedIngestedIds} />
-                                    </div>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-                <div ref={chatEndRef} />
-              </div>
+              <EdenChatThread
+                messages={messages}
+                streaming={streaming}
+                messageFeedback={messageFeedback}
+                expandedCitations={expandedCitations}
+                savedIngestedIds={savedIngestedIds}
+                onFeedback={handleFeedback}
+                onSend={handleSend}
+                onToggleCitations={(i, open) => setExpandedCitations((prev) => ({ ...prev, [i]: open }))}
+                compact={false}
+                chatEndRef={chatEndRef as React.RefObject<HTMLDivElement>}
+              />
             )}
           </div>
 
-          {/* Input bar — anchored at bottom, no outer border */}
+          {/* Input bar */}
           {messages.length === 0 && (
             <div className="px-4 sm:px-6 pb-2 shrink-0">
               <div className="max-w-3xl mx-auto">

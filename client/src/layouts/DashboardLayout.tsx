@@ -6,7 +6,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { EdenWidget } from "@/components/EdenWidget";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -55,7 +54,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
           {children}
         </ErrorBoundary>
       </main>
-      <EdenWidget />
       <IndustryOnboarding
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
