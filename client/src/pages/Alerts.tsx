@@ -207,11 +207,33 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
             zIndex: 1,
           }}
         />
-        {/* Left amber strip */}
+        {/* Left amber strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
 
-        <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3 flex items-start gap-3">
-          <div className="flex-1 min-w-0 space-y-1.5">
+        {/* Flush top-left filter-count badge — NO backdrop-filter */}
+        <div
+          className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
+          style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+          data-testid={`alert-badge-${alert.id}`}
+        >
+          <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Filters</span>
+          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-amber-600 dark:text-amber-400">
+            {(alert.modalities?.length ?? 0) + (alert.stages?.length ?? 0) + (alert.institutions?.length ?? 0) + (alert.query ? 1 : 0)}
+          </span>
+        </div>
+
+        {/* Delete button flush top-right */}
+        <button
+          onClick={() => onDelete(alert.id)}
+          className="absolute top-2 right-2 z-[5] text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
+          data-testid={`button-delete-alert-${alert.id}`}
+          disabled={isPending}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="relative z-[4] pt-7 pb-3 pl-4 pr-3">
+          <div className="space-y-1.5">
             {draft ? (
               <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
                 <p className="text-xs font-semibold text-foreground hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer" data-testid={`alert-title-${alert.id}`}>
@@ -242,14 +264,6 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
               </Link>
             )}
           </div>
-          <button
-            onClick={() => onDelete(alert.id)}
-            className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-0.5 w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
-            data-testid={`button-delete-alert-${alert.id}`}
-            disabled={isPending}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
         </div>
       </div>
     </div>
@@ -351,6 +365,53 @@ function TtoAssetsSection({ data, since }: { data: IndustryDeltaResponse["newAss
   );
 }
 
+function MiniAssetBloomCard({ asset, index }: { asset: { id: number; name: string }; index: number }) {
+  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(5);
+  return (
+    <div style={{ perspective: "1000px" }}>
+      <Link href={`/asset/${asset.id}`}>
+        <div
+          ref={cardRef}
+          className="relative rounded-[11px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          style={cardStyle}
+          {...bloomHandlers}
+          data-testid={`alert-asset-mini-${index}`}
+        >
+          {/* Green bloom */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              width: "32px",
+              height: "32px",
+              borderRadius: "50%",
+              background: "rgba(38, 122, 70, 0.55)",
+              top: "-16px",
+              left: "-16px",
+              transform: hovered ? "scale(20)" : "scale(1)",
+              opacity: hovered ? 0.11 : 0,
+              transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+              zIndex: 1,
+            }}
+          />
+          {/* Left strip */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+          {/* New badge top-left */}
+          <div
+            className="absolute top-0 left-0 z-[5] flex items-center justify-center px-1.5 py-0.5 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "11px 0 8px 0", minWidth: "28px" }}
+          >
+            <span className="text-[8px] font-bold tracking-widest uppercase text-emerald-600 dark:text-emerald-400">New</span>
+          </div>
+          <div className="relative z-[4] pl-4 pr-3 pt-5 pb-2 flex items-center justify-between gap-2">
+            <span className="text-[11px] font-medium text-foreground truncate">{asset.name}</span>
+            <span className="text-[10px] text-primary shrink-0 font-medium">View →</span>
+          </div>
+        </div>
+      </Link>
+    </div>
+  );
+}
+
 function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number }) {
   const [open, setOpen] = useState(false);
   const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(6);
@@ -393,23 +454,14 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
             {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
           </div>
           {open && inst.sampleAssets.length > 0 && (
-            <div className="pl-4 pr-3 pb-3 border-t border-white/20 dark:border-white/10">
-              <ul className="space-y-1.5 pt-2">
+            <div className="px-3 pb-3 border-t border-white/20 dark:border-white/10">
+              <div className="space-y-1.5 pt-2">
                 {inst.sampleAssets.map((asset, i) => (
-                  <li key={i} className="flex items-start gap-2 text-[11px]">
-                    <span className="w-1 h-1 rounded-full bg-emerald-500/50 mt-1.5 shrink-0" />
-                    <Link
-                      href={`/asset/${asset.id}`}
-                      className="truncate text-primary/80 hover:text-primary hover:underline transition-colors"
-                      data-testid={`alert-asset-link-${i}`}
-                    >
-                      {asset.name}
-                    </Link>
-                  </li>
+                  <MiniAssetBloomCard key={asset.id} asset={asset} index={i} />
                 ))}
-              </ul>
+              </div>
               {inst.count > inst.sampleAssets.length && (
-                <p className="text-[10px] text-muted-foreground mt-1.5 pl-3">
+                <p className="text-[10px] text-muted-foreground mt-1.5">
                   +{inst.count - inst.sampleAssets.length} more
                 </p>
               )}
@@ -458,10 +510,21 @@ function ConceptAlertCard({ concept }: { concept: ConceptItem }) {
               zIndex: 1,
             }}
           />
-          {/* Left amber strip */}
+          {/* Left amber strip — z-[3], behind badge */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
 
-          <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3">
+          {/* Flush top-left concept badge — NO backdrop-filter */}
+          <div
+            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+          >
+            <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Idea</span>
+            <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-amber-600 dark:text-amber-400">
+              {concept.therapeuticArea ? concept.therapeuticArea.slice(0, 2).toUpperCase() : "—"}
+            </span>
+          </div>
+
+          <div className="relative z-[4] pl-4 pr-3 pt-7 pb-3">
             <p className="text-xs font-semibold text-foreground truncate">{concept.title}</p>
             {concept.oneLiner && (
               <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{concept.oneLiner}</p>
@@ -508,10 +571,21 @@ function ProjectAlertCard({ proj }: { proj: ProjectItem }) {
               zIndex: 1,
             }}
           />
-          {/* Left violet strip */}
+          {/* Left violet strip — z-[3], behind badge */}
           <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#7c3aed" }} />
 
-          <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3">
+          {/* Flush top-left lab badge — NO backdrop-filter */}
+          <div
+            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-violet-500/40 bg-white dark:bg-zinc-900"
+            style={{ borderRadius: "13px 0 10px 0", minWidth: "34px" }}
+          >
+            <span className="text-[8px] font-bold tracking-[0.1em] uppercase leading-none text-muted-foreground">Lab</span>
+            <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-violet-600 dark:text-violet-400">
+              {proj.researchArea ? proj.researchArea.slice(0, 2).toUpperCase() : "—"}
+            </span>
+          </div>
+
+          <div className="relative z-[4] pl-4 pr-3 pt-7 pb-3">
             <p className="text-xs font-semibold text-foreground truncate">
               {proj.discoveryTitle || proj.title}
             </p>

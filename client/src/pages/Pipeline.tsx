@@ -61,13 +61,22 @@ function getBadgeClass(map: Record<string, string>, value: string) {
   return map[value.toLowerCase().trim()] ?? "bg-muted text-muted-foreground border-border";
 }
 
+const STAGE_ABBREV: Record<string, string> = {
+  discovery: "DI",
+  preclinical: "PC",
+  "phase 1": "P1",
+  "phase 2": "P2",
+  "phase 3": "P3",
+  approved: "AP",
+};
+
 function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: number) => void }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
-  const stageClass = getBadgeClass(BADGE_COLORS, asset.developmentStage);
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "—";
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
@@ -128,33 +137,38 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
           }}
         />
 
-        {/* Left accent strip */}
+        {/* Left accent strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
-        <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3 flex flex-col gap-2.5">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span className="font-semibold text-sm text-foreground truncate leading-tight">
-                {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
-              </span>
-            </div>
-            <button
-              onClick={() => onDelete(asset.id)}
-              className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 active:scale-90"
-              data-testid={`button-delete-pipeline-${asset.id}`}
-              title="Remove asset"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
+        {/* Flush top-left stage badge — NO backdrop-filter */}
+        <div
+          className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
+          style={{ borderRadius: "14px 0 10px 0", minWidth: "36px" }}
+          data-testid={`pipeline-stage-badge-${asset.id}`}
+        >
+          <span className="text-[8px] font-bold tracking-[0.12em] uppercase leading-none text-muted-foreground">Stage</span>
+          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{stageAbbr}</span>
+        </div>
+
+        {/* Delete button flush top-right */}
+        <button
+          onClick={() => onDelete(asset.id)}
+          className="absolute top-2 right-2 z-[5] shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 active:scale-90"
+          data-testid={`button-delete-pipeline-${asset.id}`}
+          title="Remove asset"
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
+
+        <div className="relative z-[4] pl-4 pr-3 pt-8 pb-3 flex flex-col gap-2.5">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span className="font-semibold text-sm text-foreground truncate leading-tight">
+              {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
+            </span>
           </div>
 
           <div className="flex flex-wrap gap-1">
-            {asset.developmentStage && asset.developmentStage !== "unknown" && (
-              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
-                {asset.developmentStage}
-              </span>
-            )}
             {asset.modality && asset.modality !== "unknown" && (
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
                 {asset.modality}

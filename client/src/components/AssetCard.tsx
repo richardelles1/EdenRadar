@@ -338,6 +338,19 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   );
 }
 
+const STAGE_ABBREV: Record<string, string> = {
+  discovery: "DI",
+  preclinical: "PC",
+  "phase 1": "P1",
+  "phase 2": "P2",
+  "phase 3": "P3",
+  approved: "AP",
+};
+
+function stageAbbrev(stage: string): string {
+  return STAGE_ABBREV[stage?.toLowerCase().trim()] ?? "—";
+}
+
 export function SavedAssetCard({
   asset,
   onDelete,
@@ -349,6 +362,8 @@ export function SavedAssetCard({
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
+
+  const abbrev = stageAbbrev(asset.developmentStage);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
@@ -409,34 +424,51 @@ export function SavedAssetCard({
             zIndex: 1,
           }}
         />
-        {/* Left strip */}
+
+        {/* Left emerald strip — z-[3], behind badge */}
         <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
-        <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3 flex flex-col gap-2">
-          <div className="flex items-start justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <FlaskConical className="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                <span className="font-semibold text-sm text-foreground truncate">{asset.assetName}</span>
-              </div>
-            </div>
-            <button
-              className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center bg-transparent text-emerald-600 dark:text-emerald-400 hover:text-red-500 hover:bg-red-500/10 transition-all duration-150 active:scale-90"
-              onClick={() => onDelete(asset.id)}
-              data-testid={`button-delete-saved-${asset.id}`}
-              title="Remove from saved"
-            >
-              <BookmarkCheck className="w-3.5 h-3.5" />
-            </button>
+        {/* Flush top-left stage badge — NO backdrop-filter */}
+        <div
+          className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
+          style={{ borderRadius: "14px 0 10px 0", minWidth: "36px" }}
+          data-testid={`saved-stage-badge-${asset.id}`}
+        >
+          <span className="text-[8px] font-bold tracking-[0.12em] uppercase leading-none text-muted-foreground">Stage</span>
+          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">{abbrev}</span>
+        </div>
+
+        {/* Remove button flush top-right */}
+        <button
+          className="absolute top-2 right-2 z-[5] w-6 h-6 rounded-md flex items-center justify-center bg-transparent text-emerald-600 dark:text-emerald-400 hover:text-red-500 hover:bg-red-500/10 transition-all duration-150 active:scale-90"
+          onClick={() => onDelete(asset.id)}
+          data-testid={`button-delete-saved-${asset.id}`}
+          title="Remove from saved"
+        >
+          <BookmarkCheck className="w-3.5 h-3.5" />
+        </button>
+
+        <div className="relative z-[4] pt-8 pb-3 pl-4 pr-3 flex flex-col gap-2">
+          <div className="flex items-center gap-1.5">
+            <FlaskConical className="w-3 h-3 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <span className="font-semibold text-sm text-foreground truncate">{asset.assetName}</span>
           </div>
+
+          {/* Institution chip */}
+          {asset.sourceName && asset.sourceName !== "pubmed" && (
+            <span className="self-start text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 truncate max-w-full">
+              {asset.sourceName}
+            </span>
+          )}
+
           <div className="text-xs space-y-1">
             <div className="flex gap-1.5">
               <span className="text-muted-foreground w-14 shrink-0">Target</span>
-              <span className="font-medium text-foreground truncate">{asset.target}</span>
+              <span className="font-medium text-foreground truncate">{asset.target !== "unknown" ? asset.target : "—"}</span>
             </div>
             <div className="flex gap-1.5">
               <span className="text-muted-foreground w-14 shrink-0">Disease</span>
-              <span className="font-medium text-foreground truncate">{asset.diseaseIndication}</span>
+              <span className="font-medium text-foreground truncate">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</span>
             </div>
           </div>
           {asset.sourceUrl && (
