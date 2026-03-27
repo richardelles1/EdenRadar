@@ -25,6 +25,20 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+export const industryProfiles = pgTable("industry_profiles", {
+  userId: text("user_id").primaryKey(),
+  userName: text("user_name").notNull().default(""),
+  companyName: text("company_name").notNull().default(""),
+  companyType: text("company_type").notNull().default(""),
+  therapeuticAreas: text("therapeutic_areas").array().notNull().default(sql`'{}'::text[]`),
+  dealStages: text("deal_stages").array().notNull().default(sql`'{}'::text[]`),
+  modalities: text("modalities").array().notNull().default(sql`'{}'::text[]`),
+  onboardingDone: boolean("onboarding_done").notNull().default(false),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export type IndustryProfileRow = typeof industryProfiles.$inferSelect;
+
 export const searchHistory = pgTable("search_history", {
   id: serial("id").primaryKey(),
   query: text("query").notNull(),

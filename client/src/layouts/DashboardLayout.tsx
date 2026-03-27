@@ -4,7 +4,7 @@ import { IndustrySidebar } from "@/components/IndustrySidebar";
 import { IndustryOnboarding } from "@/components/IndustryOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
-import { getIndustryProfile } from "@/hooks/use-industry";
+import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 type DashboardLayoutProps = {
@@ -15,6 +15,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  useIndustrySyncOnMount();
 
   useEffect(() => {
     if (loading) return;

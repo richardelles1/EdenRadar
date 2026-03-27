@@ -11,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Plus, X, CheckCircle2, Building2 } from "lucide-react";
-import { getIndustryProfile, saveIndustryProfile } from "@/hooks/use-industry";
+import { getIndustryProfile, saveIndustryProfile, syncIndustryProfileToServer } from "@/hooks/use-industry";
+import { useAuth } from "@/hooks/use-auth";
 
 const DEAL_STAGES = [
   "Discovery",
@@ -41,6 +42,7 @@ const MODALITIES = [
 ];
 
 export function IndustryOnboarding({ open, onClose }: Props) {
+  const { session } = useAuth();
   const saved = getIndustryProfile();
   const [companyName, setCompanyName] = useState(saved.companyName || "");
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(
@@ -75,18 +77,27 @@ export function IndustryOnboarding({ open, onClose }: Props) {
   }
 
   function handleSave() {
-    saveIndustryProfile({
+    const updated = {
       companyName,
       therapeuticAreas,
       dealStages,
       modalities,
       onboardingDone: true,
-    });
+    };
+    saveIndustryProfile(updated);
+    if (session?.access_token) {
+      const full = { ...getIndustryProfile(), ...updated };
+      syncIndustryProfileToServer(full, session.access_token);
+    }
     onClose();
   }
 
   function handleSkip() {
     saveIndustryProfile({ onboardingDone: true });
+    if (session?.access_token) {
+      const full = getIndustryProfile();
+      syncIndustryProfileToServer(full, session.access_token);
+    }
     onClose();
   }
 

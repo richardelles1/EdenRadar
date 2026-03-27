@@ -5935,5 +5935,51 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.get("/api/industry/profile", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(400).json({ error: "Missing user id" });
+      const profile = await storage.getIndustryProfileByUserId(userId);
+      return res.json({ profile: profile ?? null });
+    } catch (err: any) {
+      console.error("[industry/profile GET]", err);
+      return res.status(500).json({ error: "Failed to load profile" });
+    }
+  });
+
+  app.put("/api/industry/profile", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(400).json({ error: "Missing user id" });
+      const schema = z.object({
+        userName: z.string().default(""),
+        companyName: z.string().default(""),
+        companyType: z.string().default(""),
+        therapeuticAreas: z.array(z.string()).default([]),
+        dealStages: z.array(z.string()).default([]),
+        modalities: z.array(z.string()).default([]),
+        onboardingDone: z.boolean().default(false),
+      });
+      const data = schema.parse(req.body);
+      const profile = await storage.upsertIndustryProfile(userId, data);
+      return res.json({ profile });
+    } catch (err: any) {
+      console.error("[industry/profile PUT]", err);
+      return res.status(500).json({ error: "Failed to save profile" });
+    }
+  });
+
+  app.get("/api/admin/industry-profiles", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const profiles = await storage.getAllIndustryProfiles();
+      return res.json({ profiles });
+    } catch (err: any) {
+      console.error("[admin/industry-profiles]", err);
+      return res.status(500).json({ error: "Failed to load profiles" });
+    }
+  });
+
   return httpServer;
 }

@@ -3880,6 +3880,16 @@ interface AdminUser {
   lastSignInAt: string | null;
 }
 
+interface AdminIndustryProfile {
+  userId: string;
+  companyName: string;
+  companyType: string;
+  therapeuticAreas: string[];
+  dealStages: string[];
+  modalities: string[];
+  onboardingDone: boolean;
+}
+
 function AccountCenter({ pw }: { pw: string }) {
   const { toast } = useToast();
   const [showInvite, setShowInvite] = useState(false);
@@ -3898,6 +3908,21 @@ function AccountCenter({ pw }: { pw: string }) {
     staleTime: 30000,
     enabled: !!pw,
   });
+
+  const { data: profilesData } = useQuery<{ profiles: AdminIndustryProfile[] }>({
+    queryKey: ["/api/admin/industry-profiles"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/industry-profiles", { headers: { "x-admin-password": pw } });
+      if (!res.ok) return { profiles: [] };
+      return res.json();
+    },
+    staleTime: 60000,
+    enabled: !!pw,
+  });
+
+  const industryProfileMap = new Map<string, AdminIndustryProfile>(
+    (profilesData?.profiles ?? []).map((p) => [p.userId, p])
+  );
 
   const updateRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: PortalRole }) => {
@@ -4216,33 +4241,53 @@ function AccountCenter({ pw }: { pw: string }) {
                       )}
                     </td>
                     <td className="py-2.5 px-4">
-                      <select
-                        className="h-7 rounded-md border border-input bg-background px-2 text-xs"
-                        value={user.role ?? ""}
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            updateRole.mutate({ userId: user.id, role: e.target.value as PortalRole });
-                          }
-                        }}
-                        data-testid={`select-role-${user.id}`}
-                      >
-                        {!user.role && <option value="">No portal assigned</option>}
-                        {ALL_PORTAL_ROLES.map((r) => (
-                          <option key={r} value={r}>
-                            {PORTAL_CONFIG[r].label} (Tier {PORTAL_CONFIG[r].tier})
-                          </option>
-                        ))}
-                      </select>
-                      {portal && (
-                        <span className={`ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${portal.badgeClass}`} data-testid={`badge-portal-${user.id}`}>
-                          {portal.label}
-                        </span>
-                      )}
-                      {!portal && user.role === null && (
-                        <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground" data-testid={`badge-unassigned-${user.id}`}>
-                          Unassigned
-                        </span>
-                      )}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <select
+                          className="h-7 rounded-md border border-input bg-background px-2 text-xs"
+                          value={user.role ?? ""}
+                          onChange={(e) => {
+                            if (e.target.value) {
+                              updateRole.mutate({ userId: user.id, role: e.target.value as PortalRole });
+                            }
+                          }}
+                          data-testid={`select-role-${user.id}`}
+                        >
+                          {!user.role && <option value="">No portal assigned</option>}
+                          {ALL_PORTAL_ROLES.map((r) => (
+                            <option key={r} value={r}>
+                              {PORTAL_CONFIG[r].label} (Tier {PORTAL_CONFIG[r].tier})
+                            </option>
+                          ))}
+                        </select>
+                        {portal && (
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${portal.badgeClass}`} data-testid={`badge-portal-${user.id}`}>
+                            {portal.label}
+                          </span>
+                        )}
+                        {!portal && user.role === null && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground" data-testid={`badge-unassigned-${user.id}`}>
+                            Unassigned
+                          </span>
+                        )}
+                      </div>
+                      {user.role === "industry" && (() => {
+                        const ip = industryProfileMap.get(user.id);
+                        if (!ip) return null;
+                        const interests = [...(ip.therapeuticAreas ?? []), ...(ip.modalities ?? [])].slice(0, 4);
+                        if (interests.length === 0 && !ip.companyName) return null;
+                        return (
+                          <div className="mt-1 flex flex-wrap gap-1" data-testid={`interests-${user.id}`}>
+                            {ip.companyName && (
+                              <span className="text-[10px] text-muted-foreground italic">{ip.companyName}</span>
+                            )}
+                            {interests.map((tag) => (
+                              <span key={tag} className="inline-flex items-center px-1 py-0.5 rounded text-[9px] font-medium bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                {tag}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="text-center py-2.5 px-4">
                       <input

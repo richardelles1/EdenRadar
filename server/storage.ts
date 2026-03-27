@@ -20,6 +20,7 @@ import {
   userAlerts, type UserAlert, type InsertUserAlert,
   manualInstitutions, type ManualInstitution, type InsertManualInstitution,
   dispatchLogs, type DispatchLog, type InsertDispatchLog,
+  industryProfiles, type IndustryProfileRow,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -269,6 +270,10 @@ export interface IStorage {
     unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string;
     ipType?: string; completenessScore?: number;
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
+
+  getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt">): Promise<IndustryProfileRow>;
+  getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2061,6 +2066,27 @@ export class DatabaseStorage implements IStorage {
     }
 
     return { updated, skipped, notFoundIds };
+  }
+
+  async getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined> {
+    const [row] = await db.select().from(industryProfiles).where(eq(industryProfiles.userId, userId));
+    return row;
+  }
+
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt">): Promise<IndustryProfileRow> {
+    const [row] = await db
+      .insert(industryProfiles)
+      .values({ userId, ...data, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: industryProfiles.userId,
+        set: { ...data, updatedAt: new Date() },
+      })
+      .returning();
+    return row;
+  }
+
+  async getAllIndustryProfiles(): Promise<IndustryProfileRow[]> {
+    return db.select().from(industryProfiles).orderBy(desc(industryProfiles.updatedAt));
   }
 }
 
