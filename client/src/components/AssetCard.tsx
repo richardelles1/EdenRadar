@@ -1,12 +1,13 @@
 import { useState, useRef } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip, TooltipContent, TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   BookmarkCheck, ExternalLink,
   FlaskConical, Building2, Key, ArrowRight, CalendarDays,
   Microscope, Link as LinkIcon,
 } from "lucide-react";
-import { ScoreBadge } from "./ScoreBadge";
 import { SourceBadge } from "./SourceBadge";
 import { PipelinePicker } from "./PipelinePicker";
 import type { ScoredAsset } from "@/lib/types";
@@ -130,7 +131,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
       />
 
       {/* Left-edge score accent strip */}
-      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accentClass} transition-all duration-300 group-hover:opacity-100 opacity-80`} />
+      <div className={`absolute left-0 top-0 bottom-0 w-[4px] ${accentClass} transition-all duration-300 group-hover:opacity-100 opacity-80`} />
 
       {/* Researcher banner */}
       {isResearcherPublished && (
@@ -163,12 +164,41 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </h3>
           </div>
 
-          {/* Score metric — passive display, not a CTA */}
+          {/* Score metric — purely passive, tooltip shows breakdown */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <div className="flex flex-col items-end select-none" title="Match score — how well this asset fits your search and buyer thesis">
-              <span className="text-[8px] font-bold tracking-widest text-muted-foreground uppercase leading-none mb-0.5">Match</span>
-              <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="sm" />
-            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex flex-col items-end select-none cursor-default" data-testid="score-badge">
+                  <span className="text-[8px] font-bold tracking-widest text-muted-foreground uppercase leading-none mb-0.5">Match</span>
+                  <span className={`font-mono text-[13px] font-bold leading-none ${scoreColor}`}>
+                    {isUnscored ? <span className="opacity-40 text-[11px]">—</span> : Math.round(asset.score)}
+                  </span>
+                </div>
+              </TooltipTrigger>
+              {asset.score_breakdown && !isUnscored && (
+                <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
+                  <p className="text-xs font-semibold text-foreground mb-1">Signal Profile</p>
+                  <div className="space-y-1.5 mt-2">
+                    {(["fit", "novelty", "readiness", "licensability"] as const).map((k) => {
+                      const val = (asset.score_breakdown as unknown as Record<string, number>)[k];
+                      if (!val || val === 0) return null;
+                      const barColor = val >= 75 ? "bg-emerald-500/60" : val >= 50 ? "bg-amber-500/60" : "bg-muted-foreground/30";
+                      const textColor = val >= 75 ? "text-emerald-500" : val >= 50 ? "text-amber-500" : "text-muted-foreground";
+                      const labels: Record<string, string> = { fit: "Buyer Fit", novelty: "Novelty", readiness: "Readiness", licensability: "Licensability" };
+                      return (
+                        <div key={k} className="flex items-center gap-2">
+                          <span className="text-[10px] text-muted-foreground w-24 shrink-0">{labels[k]}</span>
+                          <div className="flex-1 h-1.5 rounded-full bg-card-border overflow-hidden">
+                            <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
+                          </div>
+                          <span className={`text-[10px] font-mono font-semibold w-7 text-right ${textColor}`}>{val}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </TooltipContent>
+              )}
+            </Tooltip>
             {isSaved ? (
               <button
                 onClick={() => onUnsave?.(asset.id, asset.asset_name)}
@@ -296,7 +326,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             onClick={handleViewDossier}
             data-testid={`button-dossier-${asset.id}`}
           >
-            Dossier
+            Open Dossier
             <ArrowRight className="w-3 h-3" />
           </Button>
         </div>
