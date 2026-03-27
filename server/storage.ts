@@ -277,6 +277,7 @@ export interface IStorage {
 
   getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]>;
   getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
+  getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2150,6 +2151,11 @@ export class DatabaseStorage implements IStorage {
         return { ...a, score, matchedFields };
       })
       .sort((a, b) => b.score - a.score);
+  }
+
+  async getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }> {
+    const assets = await this._getNewRelevantAssets(windowHours);
+    return { totalCount: assets.length, top5Ids: assets.slice(0, 5).map((a) => a.id) };
   }
 
   private async _getNewRelevantAssets(windowHours: number): Promise<Omit<AssetSuggestion, "score" | "matchedFields">[]> {

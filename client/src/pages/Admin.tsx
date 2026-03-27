@@ -7422,8 +7422,23 @@ function DispatchTab({ pw }: { pw: string }) {
               onDrop={(e) => {
                 e.preventDefault();
                 setSmartDragOver(false);
+                if (!selectedSubId) return;
+                const reorderStr = e.dataTransfer.getData("digest-smart-idx");
+                if (reorderStr !== "") {
+                  const fromIdx = Number(reorderStr);
+                  const toIdx = smartDragIdx ?? fromIdx;
+                  setSmartDragIdx(null);
+                  if (fromIdx === toIdx) return;
+                  setSmartDigests((prev) => {
+                    const items = [...(prev[selectedSubId] ?? [])];
+                    const [moved] = items.splice(fromIdx, 1);
+                    items.splice(toIdx, 0, moved);
+                    return { ...prev, [selectedSubId]: items };
+                  });
+                  return;
+                }
                 const idStr = e.dataTransfer.getData("smart-asset-id");
-                if (!idStr || !selectedSubId) return;
+                if (!idStr) return;
                 const id = Number(idStr);
                 const asset = smartQueueAssets.find((a) => a.id === id);
                 if (asset && !smartStagedIds.has(id)) addToSmartDigest(selectedSubId, asset);

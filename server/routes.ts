@@ -5732,7 +5732,7 @@ If multiple assets appear, return each as a separate array item.`;
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours) || 168));
-      const [profileMatches, supabaseSubscribers] = await Promise.all([
+      const [profileMatches, supabaseSubscribers, windowSummary] = await Promise.all([
         storage.getSubscriberMatches(windowHours),
         (async () => {
           if (!supabaseServiceRoleKey || !supabaseUrl) return [] as Array<{ id: string; email: string }>;
@@ -5743,13 +5743,14 @@ If multiple assets appear, return each as a separate array item.`;
             .filter((u) => u.user_metadata?.subscribedToDigest === true)
             .map((u) => ({ id: u.id, email: u.user_metadata?.contactEmail || u.email || "" }));
         })(),
+        storage.getWindowAssetSummary(windowHours),
       ]);
       const profileByUserId = new Map(profileMatches.map((m) => [m.userId, m]));
       const subscribers = supabaseSubscribers.map((s) => {
         const profile = profileByUserId.get(s.id);
         return profile
           ? { ...profile, email: s.email }
-          : { userId: s.id, email: s.email, companyName: null, therapeuticAreas: [], modalities: [], dealStages: [], totalMatches: 0, top5AssetIds: [] };
+          : { userId: s.id, email: s.email, companyName: null, therapeuticAreas: [], modalities: [], dealStages: [], totalMatches: windowSummary.totalCount, top5AssetIds: windowSummary.top5Ids };
       }).sort((a, b) => b.totalMatches - a.totalMatches);
       return res.json({ subscribers, windowHours });
     } catch (err: any) {
