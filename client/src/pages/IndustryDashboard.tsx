@@ -14,6 +14,7 @@ import {
   BarChart3,
   BookOpen,
   Bell,
+  Settings,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -487,15 +488,27 @@ export default function IndustryDashboard() {
               {subtitleLine}
             </p>
           </div>
-          <Button
-            size="sm"
-            className="gap-2 shrink-0"
-            onClick={() => navigate("/scout")}
-            data-testid="button-start-discovery"
-          >
-            <Search className="w-4 h-4" />
-            Start Discovery
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={() => navigate("/scout")}
+              data-testid="button-start-discovery"
+            >
+              <Search className="w-4 h-4" />
+              Start Discovery
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+              onClick={() => navigate("/settings")}
+              data-testid="button-dashboard-settings"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+          </div>
         </div>
 
         {/* KPI row */}

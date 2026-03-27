@@ -251,10 +251,10 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
             <AnimatedLabel>Profile</AnimatedLabel>
           </button>
           <button
-            onClick={() => navigate("/industry/settings")}
+            onClick={() => navigate("/settings")}
             className={cn(
               "flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-              location === "/industry/settings"
+              location === "/settings" || location === "/industry/settings"
                 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
             )}

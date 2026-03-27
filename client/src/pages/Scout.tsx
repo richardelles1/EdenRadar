@@ -21,7 +21,7 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -507,7 +507,15 @@ export default function Scout() {
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="px-4 sm:px-6 pt-8 pb-5 space-y-4">
-            <div className="max-w-3xl mx-auto text-center mb-6">
+            <div className="max-w-3xl mx-auto text-center mb-6 relative">
+              <button
+                onClick={() => setLocation("/settings")}
+                className="absolute right-0 top-0 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors"
+                data-testid="button-scout-settings"
+                title="Settings"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-2">
                 <span className="gradient-text dark:gradient-text gradient-text-light">
                   Asset Discovery

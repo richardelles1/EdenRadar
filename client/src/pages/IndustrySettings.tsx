@@ -17,6 +17,7 @@ import {
   Building2,
   TriangleAlert,
   ExternalLink,
+  Save,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -24,34 +25,25 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const SETTINGS_KEY = "eden-industry-settings";
+const THERAPEUTIC_AREA_OPTIONS = [
+  "Oncology",
+  "Immunology",
+  "Neurology",
+  "Rare Disease",
+  "Cardiology",
+  "Infectious Disease",
+  "Metabolic Disease",
+  "Ophthalmology",
+  "Dermatology",
+  "Respiratory",
+  "Hematology",
+  "Gastroenterology",
+  "Musculoskeletal",
+  "Endocrinology",
+  "Psychiatry",
+];
 
-type LocalSettings = {
-  defaultModalities: string[];
-  defaultStages: string[];
-};
-
-const DEFAULT_LOCAL: LocalSettings = {
-  defaultModalities: [],
-  defaultStages: [],
-};
-
-function getLocalSettings(): LocalSettings {
-  try {
-    const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return { ...DEFAULT_LOCAL };
-    return { ...DEFAULT_LOCAL, ...JSON.parse(raw) };
-  } catch {
-    return { ...DEFAULT_LOCAL };
-  }
-}
-
-function saveLocalSettings(partial: Partial<LocalSettings>) {
-  const existing = getLocalSettings();
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify({ ...existing, ...partial }));
-}
-
-const MODALITIES = [
+const MODALITY_OPTIONS = [
   "Small Molecule",
   "Antibody",
   "ADC",
@@ -63,7 +55,7 @@ const MODALITIES = [
   "Cell Therapy",
 ];
 
-const STAGES = ["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3", "Approved"];
+const STAGE_OPTIONS = ["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3", "Approved"];
 
 type Frequency = "realtime" | "daily" | "weekly";
 
@@ -73,7 +65,7 @@ const FREQUENCY_OPTIONS: { value: Frequency; label: string; description: string 
   { value: "weekly", label: "Weekly digest", description: "Summary once per week" },
 ];
 
-type ProfileData = {
+type ProfilePrefs = {
   companyName: string;
   companyType: string;
   onboardingDone: boolean;
@@ -108,16 +100,18 @@ function ToggleChip({
   label,
   active,
   onClick,
+  testId,
 }: {
   label: string;
   active: boolean;
   onClick: () => void;
+  testId?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      data-testid={`chip-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      data-testid={testId ?? `chip-${label.toLowerCase().replace(/\s+/g, "-")}`}
       className={cn(
         "px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 select-none",
         active
@@ -134,8 +128,6 @@ export default function IndustrySettings() {
   const { user, session, signOut } = useAuth();
   const { toast } = useToast();
 
-  const [localSettings, setLocalSettings] = useState<LocalSettings>(getLocalSettings);
-
   const [emailDigest, setEmailDigest] = useState<boolean>(
     () => user?.user_metadata?.subscribedToDigest === true
   );
@@ -144,8 +136,16 @@ export default function IndustrySettings() {
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [freqLoading, setFreqLoading] = useState(false);
 
-  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [profile, setProfile] = useState<ProfilePrefs | null>(null);
   const [profileLoading, setProfileLoading] = useState(true);
+
+  const [alertPrefs, setAlertPrefs] = useState<{
+    therapeuticAreas: string[];
+    modalities: string[];
+    dealStages: string[];
+  }>({ therapeuticAreas: [], modalities: [], dealStages: [] });
+  const [alertPrefsSaving, setAlertPrefsSaving] = useState(false);
+  const [alertPrefsSaved, setAlertPrefsSaved] = useState(false);
 
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -164,6 +164,11 @@ export default function IndustrySettings() {
             companyName: p.companyName ?? "",
             companyType: p.companyType ?? "",
             onboardingDone: p.onboardingDone ?? false,
+            therapeuticAreas: p.therapeuticAreas ?? [],
+            modalities: p.modalities ?? [],
+            dealStages: p.dealStages ?? [],
+          });
+          setAlertPrefs({
             therapeuticAreas: p.therapeuticAreas ?? [],
             modalities: p.modalities ?? [],
             dealStages: p.dealStages ?? [],
@@ -201,7 +206,9 @@ export default function IndustrySettings() {
         setEmailDigest(body.subscribedToDigest);
         toast({
           title: value ? "Email digest enabled" : "Email digest disabled",
-          description: value ? "You will receive digest emails based on your alert frequency." : "You will no longer receive digest emails.",
+          description: value
+            ? "You will receive digest emails based on your alert frequency."
+            : "You will no longer receive digest emails.",
         });
       }
     } catch {
@@ -235,16 +242,62 @@ export default function IndustrySettings() {
     }
   }
 
-  function updateLocalSetting<K extends keyof LocalSettings>(key: K, value: LocalSettings[K]) {
-    const updated = { ...localSettings, [key]: value };
-    setLocalSettings(updated);
-    saveLocalSettings({ [key]: value });
+  function toggleAlertPref(key: "therapeuticAreas" | "modalities" | "dealStages", item: string) {
+    setAlertPrefs((prev) => {
+      const current = prev[key];
+      const updated = current.includes(item)
+        ? current.filter((v) => v !== item)
+        : [...current, item];
+      return { ...prev, [key]: updated };
+    });
+    setAlertPrefsSaved(false);
   }
 
-  function toggleLocalArrayItem(key: "defaultModalities" | "defaultStages", item: string) {
-    const current = localSettings[key];
-    const updated = current.includes(item) ? current.filter((v) => v !== item) : [...current, item];
-    updateLocalSetting(key, updated);
+  async function saveAlertPrefs() {
+    if (!session?.access_token || !profile) return;
+    setAlertPrefsSaving(true);
+    try {
+      const res = await fetch("/api/industry/profile", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
+          userName: profile.companyName ? "" : "",
+          companyName: profile.companyName,
+          companyType: profile.companyType,
+          therapeuticAreas: alertPrefs.therapeuticAreas,
+          dealStages: alertPrefs.dealStages,
+          modalities: alertPrefs.modalities,
+          onboardingDone: profile.onboardingDone,
+          notificationPrefs: { frequency },
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        toast({ title: "Save failed", description: body.error ?? "Unknown error", variant: "destructive" });
+      } else {
+        const { profile: saved } = await res.json();
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                therapeuticAreas: saved.therapeuticAreas ?? alertPrefs.therapeuticAreas,
+                modalities: saved.modalities ?? alertPrefs.modalities,
+                dealStages: saved.dealStages ?? alertPrefs.dealStages,
+              }
+            : prev
+        );
+        setAlertPrefsSaved(true);
+        toast({ title: "Alert preferences saved" });
+        setTimeout(() => setAlertPrefsSaved(false), 2500);
+      }
+    } catch {
+      toast({ title: "Network error", description: "Could not reach the server.", variant: "destructive" });
+    } finally {
+      setAlertPrefsSaving(false);
+    }
   }
 
   async function handlePasswordChange() {
@@ -275,6 +328,14 @@ export default function IndustrySettings() {
     window.location.href = "/login";
   }
 
+  const alertPrefsChanged =
+    JSON.stringify(alertPrefs.therapeuticAreas.slice().sort()) !==
+      JSON.stringify((profile?.therapeuticAreas ?? []).slice().sort()) ||
+    JSON.stringify(alertPrefs.modalities.slice().sort()) !==
+      JSON.stringify((profile?.modalities ?? []).slice().sort()) ||
+    JSON.stringify(alertPrefs.dealStages.slice().sort()) !==
+      JSON.stringify((profile?.dealStages ?? []).slice().sort());
+
   return (
     <div className="max-w-2xl mx-auto px-5 py-8 space-y-8">
       <div className="flex items-center gap-3">
@@ -283,7 +344,7 @@ export default function IndustrySettings() {
         </div>
         <div>
           <h1 className="text-lg font-bold text-foreground tracking-tight">Settings</h1>
-          <p className="text-xs text-muted-foreground">Notifications, alert defaults, and account management</p>
+          <p className="text-xs text-muted-foreground">Notifications, alert preferences, and account management</p>
         </div>
       </div>
 
@@ -347,7 +408,130 @@ export default function IndustrySettings() {
         </div>
       </div>
 
-      {/* Section 2: Profile summary */}
+      {/* Section 2: Alert Preferences (server-backed) */}
+      <div className="rounded-xl border border-card-border bg-card p-5">
+        <div className="flex items-start justify-between mb-5">
+          <SectionHeader
+            icon={Layers}
+            title="Alert Preferences"
+            description="Therapeutic focus, modalities, and deal stages used to score and filter TTO assets"
+          />
+        </div>
+
+        {profileLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-4 rounded bg-muted animate-pulse w-3/4" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1.5">Therapeutic areas</p>
+              <p className="text-[11px] text-muted-foreground mb-2.5">
+                Areas you actively watch for new assets
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {THERAPEUTIC_AREA_OPTIONS.map((area) => (
+                  <ToggleChip
+                    key={area}
+                    label={area}
+                    active={alertPrefs.therapeuticAreas.includes(area)}
+                    onClick={() => toggleAlertPref("therapeuticAreas", area)}
+                    testId={`chip-ta-${area.toLowerCase().replace(/\s+/g, "-")}`}
+                  />
+                ))}
+              </div>
+              {alertPrefs.therapeuticAreas.filter((a) => !THERAPEUTIC_AREA_OPTIONS.includes(a)).length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {alertPrefs.therapeuticAreas
+                    .filter((a) => !THERAPEUTIC_AREA_OPTIONS.includes(a))
+                    .map((area) => (
+                      <ToggleChip
+                        key={area}
+                        label={area}
+                        active
+                        onClick={() => toggleAlertPref("therapeuticAreas", area)}
+                        testId={`chip-ta-custom-${area.toLowerCase().replace(/\s+/g, "-")}`}
+                      />
+                    ))}
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1.5">Modalities of interest</p>
+              <p className="text-[11px] text-muted-foreground mb-2.5">
+                Asset types you are actively evaluating
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {MODALITY_OPTIONS.map((m) => (
+                  <ToggleChip
+                    key={m}
+                    label={m}
+                    active={alertPrefs.modalities.includes(m)}
+                    onClick={() => toggleAlertPref("modalities", m)}
+                    testId={`chip-modality-${m.toLowerCase().replace(/\s+/g, "-")}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <Separator />
+
+            <div>
+              <p className="text-xs font-semibold text-foreground mb-1.5">Preferred deal stages</p>
+              <p className="text-[11px] text-muted-foreground mb-2.5">
+                Development stages you actively pursue
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {STAGE_OPTIONS.map((s) => (
+                  <ToggleChip
+                    key={s}
+                    label={s}
+                    active={alertPrefs.dealStages.includes(s)}
+                    onClick={() => toggleAlertPref("dealStages", s)}
+                    testId={`chip-stage-${s.toLowerCase().replace(/\s+/g, "-")}`}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <Button
+                size="sm"
+                onClick={saveAlertPrefs}
+                disabled={alertPrefsSaving || alertPrefsSaved || !alertPrefsChanged}
+                data-testid="button-save-alert-prefs"
+                className="gap-1.5"
+              >
+                {alertPrefsSaved ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Saved
+                  </>
+                ) : alertPrefsSaving ? (
+                  "Saving..."
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" /> Save preferences
+                  </>
+                )}
+              </Button>
+              <Link
+                href="/industry/profile"
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+                data-testid="link-full-profile-from-alerts"
+              >
+                Full profile <ExternalLink className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Section 3: Profile summary */}
       <div className="rounded-xl border border-card-border bg-card p-5">
         <SectionHeader
           icon={Building2}
@@ -357,7 +541,7 @@ export default function IndustrySettings() {
 
         {profileLoading ? (
           <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
+            {[1, 2].map((i) => (
               <div key={i} className="h-4 rounded bg-muted animate-pulse w-1/2" />
             ))}
           </div>
@@ -365,19 +549,29 @@ export default function IndustrySettings() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Company</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+                  Company
+                </p>
                 <p className="text-foreground" data-testid="text-company-name">
-                  {profile.companyName || <span className="text-muted-foreground italic">Not set</span>}
+                  {profile.companyName || (
+                    <span className="text-muted-foreground italic">Not set</span>
+                  )}
                 </p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Type</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+                  Type
+                </p>
                 <p className="text-foreground" data-testid="text-company-type">
-                  {profile.companyType || <span className="text-muted-foreground italic">Not set</span>}
+                  {profile.companyType || (
+                    <span className="text-muted-foreground italic">Not set</span>
+                  )}
                 </p>
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Onboarding</p>
+                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">
+                  Onboarding
+                </p>
                 <span
                   data-testid="text-onboarding-status"
                   className={cn(
@@ -389,15 +583,6 @@ export default function IndustrySettings() {
                 >
                   {profile.onboardingDone ? "Complete" : "Incomplete"}
                 </span>
-              </div>
-              <div>
-                <p className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-0.5">Therapeutic areas</p>
-                <p className="text-foreground text-xs" data-testid="text-therapeutic-areas">
-                  {profile.therapeuticAreas.length > 0
-                    ? profile.therapeuticAreas.slice(0, 3).join(", ") +
-                      (profile.therapeuticAreas.length > 3 ? ` +${profile.therapeuticAreas.length - 3}` : "")
-                    : <span className="text-muted-foreground italic">None set</span>}
-                </p>
               </div>
             </div>
             <Separator />
@@ -412,69 +597,6 @@ export default function IndustrySettings() {
         ) : (
           <p className="text-xs text-muted-foreground">Profile not found.</p>
         )}
-      </div>
-
-      {/* Section 3: Alert defaults (stored locally) */}
-      <div className="rounded-xl border border-card-border bg-card p-5">
-        <SectionHeader
-          icon={Layers}
-          title="Alert Defaults"
-          description="Default filters pre-filled when creating new Scout alerts"
-        />
-
-        <div className="space-y-5">
-          <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Default modalities</p>
-            <p className="text-[11px] text-muted-foreground mb-2.5">New alerts will pre-select these modalities</p>
-            <div className="flex flex-wrap gap-1.5">
-              {MODALITIES.map((m) => (
-                <ToggleChip
-                  key={m}
-                  label={m}
-                  active={localSettings.defaultModalities.includes(m)}
-                  onClick={() => toggleLocalArrayItem("defaultModalities", m)}
-                />
-              ))}
-            </div>
-            {localSettings.defaultModalities.length > 0 && (
-              <button
-                type="button"
-                onClick={() => updateLocalSetting("defaultModalities", [])}
-                className="text-[11px] text-muted-foreground hover:text-foreground mt-2 transition-colors"
-                data-testid="button-clear-modalities"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-
-          <Separator />
-
-          <div>
-            <p className="text-xs font-semibold text-foreground mb-2">Default stages</p>
-            <p className="text-[11px] text-muted-foreground mb-2.5">New alerts will pre-select these development stages</p>
-            <div className="flex flex-wrap gap-1.5">
-              {STAGES.map((s) => (
-                <ToggleChip
-                  key={s}
-                  label={s}
-                  active={localSettings.defaultStages.includes(s)}
-                  onClick={() => toggleLocalArrayItem("defaultStages", s)}
-                />
-              ))}
-            </div>
-            {localSettings.defaultStages.length > 0 && (
-              <button
-                type="button"
-                onClick={() => updateLocalSetting("defaultStages", [])}
-                className="text-[11px] text-muted-foreground hover:text-foreground mt-2 transition-colors"
-                data-testid="button-clear-stages"
-              >
-                Clear all
-              </button>
-            )}
-          </div>
-        </div>
       </div>
 
       {/* Section 4: Account */}
