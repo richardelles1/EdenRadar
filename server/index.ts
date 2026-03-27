@@ -525,6 +525,26 @@ app.use((req, res, next) => {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Ensure industry_profiles table exists ─────────────────────────────────
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS industry_profiles (
+        user_id TEXT PRIMARY KEY,
+        user_name TEXT NOT NULL DEFAULT '',
+        company_name TEXT NOT NULL DEFAULT '',
+        company_type TEXT NOT NULL DEFAULT '',
+        therapeutic_areas TEXT[] NOT NULL DEFAULT '{}',
+        deal_stages TEXT[] NOT NULL DEFAULT '{}',
+        modalities TEXT[] NOT NULL DEFAULT '{}',
+        onboarding_done BOOLEAN NOT NULL DEFAULT false,
+        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] industry_profiles table ready", "startup");
+  } catch (err: any) {
+    log(`[startup] industry_profiles migration failed: ${err?.message}`, "startup");
+  }
+
   await registerRoutes(httpServer, app);
 
   // ── Restore scheduler state from DB ──────────────────────────────────────
