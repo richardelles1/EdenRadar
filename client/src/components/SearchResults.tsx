@@ -21,24 +21,31 @@ function LoadingSkeleton() {
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="relative w-[192px] h-56 rounded-xl overflow-hidden shrink-0"
-          style={{ background: "#3d3c3d" }}
+          className="relative w-[190px] h-[254px] rounded-[17px] overflow-hidden shrink-0"
+          style={{
+            background: "rgba(255,255,255,0.65)",
+            backdropFilter: "blur(6px)",
+            WebkitBackdropFilter: "blur(6px)",
+            border: "1px solid rgba(255,255,255,0.80)",
+            boxShadow: "12px 17px 51px rgba(0,0,0,0.12)",
+          }}
         >
-          <div className="absolute inset-0.5 rounded-[10px]" style={{ background: "#323132" }} />
-          <div className="relative flex flex-col h-full px-3 pt-3 pb-3 gap-3">
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-300/60 dark:bg-emerald-500/30" />
+          <div className="absolute inset-0 dark:block hidden" style={{ background: "rgba(24,24,27,0.75)", borderRadius: "inherit" }} />
+          <div className="relative z-10 flex flex-col h-full pl-4 pr-3 pt-3 pb-3 gap-3">
             <div className="flex items-start justify-between">
-              <div className="flex flex-col gap-1">
-                <Skeleton className="h-2 w-8 bg-zinc-700" />
-                <Skeleton className="h-5 w-6 bg-zinc-700" />
+              <div className="border border-emerald-300/50 dark:border-emerald-500/30 rounded-lg px-2 py-1 flex flex-col gap-1">
+                <Skeleton className="h-2 w-8 bg-muted/60 dark:bg-zinc-700" />
+                <Skeleton className="h-4 w-5 bg-muted/60 dark:bg-zinc-700" />
               </div>
-              <Skeleton className="w-9 h-9 rounded-lg bg-zinc-700" />
+              <Skeleton className="w-8 h-8 rounded-lg bg-muted/60 dark:bg-zinc-700" />
             </div>
             <div className="flex-1 flex flex-col gap-2 justify-center">
-              <Skeleton className="h-3.5 w-full bg-zinc-700" />
-              <Skeleton className="h-3.5 w-4/5 bg-zinc-700" />
-              <Skeleton className="h-2.5 w-3/5 bg-zinc-800 mt-1" />
+              <Skeleton className="h-3.5 w-full bg-muted/50 dark:bg-zinc-700" />
+              <Skeleton className="h-3.5 w-4/5 bg-muted/50 dark:bg-zinc-700" />
+              <Skeleton className="h-2.5 w-3/5 bg-muted/40 dark:bg-zinc-800 mt-1" />
             </div>
-            <Skeleton className="h-7 w-full rounded-md bg-zinc-700" />
+            <Skeleton className="h-7 w-full rounded-md bg-primary/20 dark:bg-zinc-700" />
           </div>
         </div>
       ))}
