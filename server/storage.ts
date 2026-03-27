@@ -630,7 +630,7 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(ingestedAssets)
-      .where(and(eq(ingestedAssets.institution, institution), eq(ingestedAssets.sourceType, "tech_transfer")))
+      .where(and(ilike(ingestedAssets.institution, `%${institution}%`), eq(ingestedAssets.sourceType, "tech_transfer")))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 

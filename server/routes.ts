@@ -1275,8 +1275,8 @@ export async function registerRoutes(
         hkust: "Hong Kong University of Science and Technology",
         hku: "University of Hong Kong",
       };
-      const name = SLUG_TO_NAME[req.params.slug];
-      if (!name) return res.status(404).json({ error: "Institution not found" });
+      const name = SLUG_TO_NAME[req.params.slug]
+        ?? req.params.slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
       const assets = await storage.getIngestedAssetsByInstitution(name);
       res.json({ assets, institution: name });
     } catch (err: any) {

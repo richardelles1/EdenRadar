@@ -696,7 +696,7 @@ export default function Scout() {
               <>
                 {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
                 {hasSearched && (
-                  <div className="flex items-center justify-end gap-2">
+                  <div className="flex items-center justify-start gap-2">
                     <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
                       {([0, 60, 70, 80] as const).map((threshold) => (
                         <button
@@ -825,7 +825,7 @@ export default function Scout() {
                         </Button>
                       </div>
                     </div>
-                    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(185px,220px))]">
+                    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
                       {researchResults.map((asset) => (
                         <ResearchCard
                           key={asset.id + "-research"}

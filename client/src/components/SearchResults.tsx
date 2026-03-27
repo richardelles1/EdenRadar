@@ -17,7 +17,7 @@ type SearchResultsProps = {
 
 function LoadingSkeleton() {
   return (
-    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(185px,220px))]">
+    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
@@ -127,7 +127,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           </p>
         )}
       </div>
-      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(185px,220px))]">
+      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
         {assets.map((asset) => (
           <AssetCard
             key={asset.id}
