@@ -432,7 +432,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
           <p className="text-lg sm:text-xl lg:text-2xl font-semibold mb-4" style={{ color: colors.green }}>Biotech Intelligence Platform</p>
-          <p className="text-sm sm:text-base max-w-sm sm:max-w-md mb-8 sm:mb-10" style={{ color: colors.textMuted }}>
+          <p className="text-sm sm:text-base lg:text-lg max-w-sm sm:max-w-md lg:max-w-xl mb-8 sm:mb-10" style={{ color: colors.textMuted }}>
             The first platform to connect early-stage concept, development, structured labs, institutional research, and industry asset intelligence in a single ecosystem.
           </p>
           <div className="flex flex-wrap items-center gap-3 sm:gap-5 text-xs" style={{ color: colors.textMuted }}>
@@ -500,7 +500,7 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
             <span style={{ color: colors.green }}>connective tissue of research & biotech.</span>
           </h2>
           <blockquote
-            className="text-sm sm:text-base italic mb-5 max-w-lg leading-relaxed pl-4"
+            className="text-sm sm:text-base lg:text-lg italic mb-5 max-w-lg leading-relaxed pl-4"
             style={{ color: colors.textMuted, borderLeft: `3px solid ${colors.green}44` }}
           >
             "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments, creating direct connections between scientists and the industry partners who can advance it."
@@ -1012,7 +1012,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
           </h2>
         </div>
       </div>
-      <p className="text-sm sm:text-base mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
+      <p className="text-sm sm:text-base lg:text-lg mb-5 sm:mb-7 max-w-2xl" style={{ color: colors.textMuted }}>
         The industry-facing layer. EdenScout monitors 300+ Technology Transfer Offices, ingests new listings, and enriches every asset with classification, scoring, and supporting literature. Direct signals from EdenLab and EdenDiscovery ensure you see advancements directly from the labs and researchers themselves.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
@@ -1190,7 +1190,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
       <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-1 sm:mb-2" style={{ color: colors.text }}>
         Built, deployed, <span style={{ color: colors.green }}>running today</span>.
       </h2>
-      <p className="text-[10px] sm:text-sm mb-3 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
+      <p className="text-[10px] sm:text-sm lg:text-base mb-3 sm:mb-6 max-w-2xl" style={{ color: colors.textMuted }}>
         This is not a roadmap. Every component below is processing real biotech data in production.
       </p>
       <div ref={statsRef} className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 sm:gap-3 mb-4 sm:mb-7">
@@ -1246,7 +1246,7 @@ function ContactSlide({ colors }: { colors: Colors }) {
         <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-2" style={{ color: colors.text }}>
           Let's build the future of <span style={{ color: colors.green }}>biotech intelligence</span>.
         </h2>
-        <p className="text-sm sm:text-base mb-6 sm:mb-8 max-w-lg" style={{ color: colors.textMuted }}>
+        <p className="text-sm sm:text-base lg:text-lg mb-6 sm:mb-8 max-w-lg" style={{ color: colors.textMuted }}>
           We're seeking advisors and early partners who believe the drug discovery pipeline should start earlier and move faster.
         </p>
         <a
