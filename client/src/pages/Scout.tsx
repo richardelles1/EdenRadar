@@ -553,6 +553,8 @@ export default function Scout() {
         const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
         return db - da;
       });
+    } else {
+      results = [...results].sort((a, b) => b.score - a.score);
     }
     return results;
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
@@ -892,7 +894,7 @@ export default function Scout() {
                         </Button>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
                       {researchResults.map((asset) => (
                         <AssetCard
                           key={asset.id + "-research"}
