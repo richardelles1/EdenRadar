@@ -194,7 +194,7 @@ export function ResearchCard({ asset }: ResearchCardProps) {
           {/* Institution */}
           {institution && (
             <p
-              className="text-[10px] truncate mb-1.5 text-zinc-600 dark:text-zinc-300"
+              className="text-[10px] truncate mb-1.5 text-zinc-700 dark:text-zinc-200 font-medium"
               data-testid={`text-research-institution-${asset.id}`}
             >
               {institution}

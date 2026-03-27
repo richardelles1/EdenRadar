@@ -369,10 +369,7 @@ export function EdenWidget() {
                 <Sparkles className="h-3.5 w-3.5 text-white" />
               </div>
               {/* Label */}
-              <div className="flex flex-col items-start leading-none">
-                <span className="text-xs font-bold tracking-wide text-white">Ask EDEN</span>
-                <span className="text-[8px] text-white/50 tracking-[0.18em] font-medium mt-0.5">EDENNX</span>
-              </div>
+              <span className="text-xs font-bold tracking-wide text-white">Ask EDEN</span>
               {/* Unread dot */}
               {messages.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-background" />

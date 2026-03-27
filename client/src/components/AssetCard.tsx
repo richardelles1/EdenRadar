@@ -315,7 +315,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
           {/* Institution — bottom-aligned, legible secondary */}
           {institutionDisplay && (
-            <p className="flex items-center gap-1 text-[11px] text-zinc-600 dark:text-zinc-300 leading-snug mb-2 line-clamp-1">
+            <p className="flex items-center gap-1 text-[11px] text-zinc-700 dark:text-zinc-200 font-medium leading-snug mb-2 line-clamp-1">
               <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
               <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
             </p>

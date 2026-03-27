@@ -396,22 +396,22 @@ export async function registerRoutes(
 
       let results: import("./storage").RetrievedAsset[] = [];
       let fallback = false;
-      try {
-        const embedding = await embedQuery(query);
-        results = await storage.scoutVectorSearch(embedding, {
-          modality, stage, indication, institution, limit, minSimilarity, since: sinceDate, before: beforeDate,
-        });
-      } catch (embedErr: any) {
-        console.warn("[scout/search] Embedding failed, trying keyword fallback:", embedErr?.message);
-        results = [];
+
+      const searchOpts = { modality, stage, indication, institution, since: sinceDate, before: beforeDate };
+      const [vectorSettled, keywordSettled] = await Promise.allSettled([
+        embedQuery(query).then(emb => storage.scoutVectorSearch(emb, { ...searchOpts, limit, minSimilarity })),
+        storage.keywordSearchIngestedAssets(query, limit, searchOpts),
+      ]);
+
+      const vectorResults = vectorSettled.status === "fulfilled" ? vectorSettled.value : [];
+      const keywordResults = keywordSettled.status === "fulfilled" ? keywordSettled.value : [];
+      if (vectorSettled.status === "rejected") {
+        console.warn("[scout/search] Embedding failed, using keyword only:", (vectorSettled.reason as any)?.message);
+        fallback = true;
       }
 
-      if (results.length === 0) {
-        fallback = true;
-        results = await storage.keywordSearchIngestedAssets(query, limit, {
-          modality, stage, indication, institution, since: sinceDate, before: beforeDate,
-        });
-      }
+      const seen = new Set(vectorResults.map(r => r.id));
+      results = [...vectorResults, ...keywordResults.filter(r => !seen.has(r.id))].slice(0, limit);
 
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
