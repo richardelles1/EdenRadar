@@ -6282,9 +6282,9 @@ function DispatchTab({ pw }: { pw: string }) {
   });
 
   const allUsersQuery = useQuery<{ users: Array<{ id: string; email: string; contactEmail: string | null; subscribedToDigest: boolean; role: string | null }> }>({
-    queryKey: ["/api/admin/all-users"],
+    queryKey: ["/api/admin/users"],
     queryFn: async () => {
-      const r = await fetch("/api/admin/all-users", { headers: { "x-admin-password": pw } });
+      const r = await fetch("/api/admin/users", { headers: { "x-admin-password": pw } });
       if (!r.ok) return { users: [] };
       return r.json();
     },
@@ -7432,7 +7432,7 @@ function DispatchTab({ pw }: { pw: string }) {
                           } else {
                             toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet. Ask them to sign up first.`, variant: "destructive" }); return;
                           }
-                          queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
                           queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
                           queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
                           toast({ title: "Subscribed", description: `${testSubscriberEmail} added to digest list.` });
@@ -7456,7 +7456,7 @@ function DispatchTab({ pw }: { pw: string }) {
                           } else {
                             toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet.`, variant: "destructive" }); return;
                           }
-                          queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
                           queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
                           queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
                           toast({ title: "Subscribed", description: `${testSubscriberEmail} added.` });
@@ -7516,7 +7516,7 @@ function DispatchTab({ pw }: { pw: string }) {
                                       body: JSON.stringify({ subscribedToDigest: !u.subscribedToDigest }),
                                     });
                                     if (!r.ok) throw new Error("Failed");
-                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
                                     queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
                                     queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
                                     toast({ title: u.subscribedToDigest ? "Unsubscribed" : "Subscribed", description: `${u.contactEmail || u.email} ${u.subscribedToDigest ? "removed from" : "added to"} digest list.` });
