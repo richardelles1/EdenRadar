@@ -48,10 +48,23 @@ const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
   licensability: "Licensability",
 };
 
+const BIOTECH_ACRONYM_MAP: Record<string, string> = {
+  "adc": "ADC", "cart": "CAR-T", "carnk": "CAR-NK",
+  "glp1": "GLP-1", "glp2": "GLP-2",
+  "mrna": "mRNA", "sirna": "siRNA", "shrna": "shRNA", "mirna": "miRNA",
+  "crispr": "CRISPR", "her2": "HER2", "egfr": "EGFR", "vegf": "VEGF",
+  "pd1": "PD-1", "pdl1": "PD-L1", "ctla4": "CTLA-4",
+  "bite": "BiTE", "mab": "mAb", "aav": "AAV", "lnp": "LNP",
+  "tcr": "TCR", "nk": "NK", "nkcel": "NK Cell", "rnai": "RNAi",
+  "aso": "ASO", "tki": "TKI", "adc1": "ADC",
+};
+
 function normalizePillValue(val: string | undefined | null): string | null {
   if (!val) return null;
   const v = val.trim();
   if (!v || v.toLowerCase() === "unknown" || v.toLowerCase() === "n/a") return null;
+  const key = v.toLowerCase().replace(/[-\s]/g, "");
+  if (BIOTECH_ACRONYM_MAP[key]) return BIOTECH_ACRONYM_MAP[key];
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
 
@@ -267,9 +280,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </div>
           )}
 
-          {/* Title — natural height, no flex-1 */}
+          {/* Title — natural height, mt-2 for breathing room below badge */}
           <h3
-            className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3"
+            className="text-[13px] font-semibold text-foreground leading-snug line-clamp-3 mt-2"
             data-testid={`text-asset-name-${asset.id}`}
           >
             {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
@@ -300,9 +313,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {/* Spacer — shorter now that pills fill center */}
           <div className="flex-1" />
 
-          {/* Institution — bottom-aligned, slightly darker than muted */}
+          {/* Institution — bottom-aligned, legible secondary */}
           {institutionDisplay && (
-            <p className="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400 leading-snug mb-2 line-clamp-1">
+            <p className="flex items-center gap-1 text-[11px] text-zinc-600 dark:text-zinc-300 leading-snug mb-2 line-clamp-1">
               <Building2 className="w-2.5 h-2.5 shrink-0 opacity-50" />
               <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
             </p>

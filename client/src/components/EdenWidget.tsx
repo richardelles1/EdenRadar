@@ -348,13 +348,13 @@ export function EdenWidget() {
           </div>
         )}
 
-        {/* Trigger bubble */}
+        {/* Trigger — pill when closed, circle when open */}
         <button
           onClick={() => setOpen((v) => !v)}
-          className={`relative w-12 h-12 rounded-full flex items-center justify-center transition-all duration-200 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${
+          className={`relative flex items-center transition-all duration-300 shadow-lg hover:shadow-xl hover:scale-105 active:scale-95 ${
             open
-              ? "bg-foreground text-background"
-              : "bg-emerald-600 text-white"
+              ? "w-11 h-11 rounded-full justify-center bg-foreground text-background"
+              : "h-11 pl-2.5 pr-4 rounded-full gap-2.5 bg-emerald-600 hover:bg-emerald-500 text-white"
           }`}
           style={!open ? { animation: "eden-bubble-pulse 3s ease-in-out infinite" } : undefined}
           data-testid="widget-button-toggle"
@@ -364,7 +364,16 @@ export function EdenWidget() {
             <X className="h-5 w-5" />
           ) : (
             <>
-              <Sparkles className="h-5 w-5" />
+              {/* EdenNX logomark — small orb container */}
+              <div className="w-7 h-7 rounded-full bg-white/15 border border-white/25 flex items-center justify-center shrink-0">
+                <Sparkles className="h-3.5 w-3.5 text-white" />
+              </div>
+              {/* Label */}
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-xs font-bold tracking-wide text-white">Ask EDEN</span>
+                <span className="text-[8px] text-white/50 tracking-[0.18em] font-medium mt-0.5">EDENNX</span>
+              </div>
+              {/* Unread dot */}
               {messages.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-background" />
               )}
