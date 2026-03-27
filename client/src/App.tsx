@@ -41,6 +41,7 @@ import HowItWorks from "@/pages/HowItWorks";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
+import IndustrySettings from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
@@ -145,6 +146,11 @@ function Router() {
       <Route path="/industry/profile">
         <DashboardLayout>
           <IndustryProfile />
+        </DashboardLayout>
+      </Route>
+      <Route path="/industry/settings">
+        <DashboardLayout>
+          <IndustrySettings />
         </DashboardLayout>
       </Route>
       <Route path="/industry/eden">

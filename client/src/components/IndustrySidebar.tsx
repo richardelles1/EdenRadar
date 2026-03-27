@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Lightbulb, FlaskConical, Building2, Bell,
   Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
-  LayoutDashboard,
+  LayoutDashboard, Settings,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
@@ -249,6 +249,19 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           >
             <User className="w-4 h-4 shrink-0" />
             <AnimatedLabel>Profile</AnimatedLabel>
+          </button>
+          <button
+            onClick={() => navigate("/industry/settings")}
+            className={cn(
+              "flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
+              location === "/industry/settings"
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+            )}
+            data-testid="industry-sidebar-link-settings"
+          >
+            <Settings className="w-4 h-4 shrink-0" />
+            <AnimatedLabel>Settings</AnimatedLabel>
           </button>
         </div>
       </nav>
