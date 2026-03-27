@@ -5744,10 +5744,13 @@ If multiple assets appear, return each as a separate array item.`;
             .map((u) => ({ id: u.id, email: u.user_metadata?.contactEmail || u.email || "" }));
         })(),
       ]);
-      const emailByUserId = new Map(supabaseSubscribers.map((s) => [s.id, s.email]));
-      const subscribers = profileMatches
-        .filter((m) => emailByUserId.has(m.userId))
-        .map((m) => ({ ...m, email: emailByUserId.get(m.userId) ?? "" }));
+      const profileByUserId = new Map(profileMatches.map((m) => [m.userId, m]));
+      const subscribers = supabaseSubscribers.map((s) => {
+        const profile = profileByUserId.get(s.id);
+        return profile
+          ? { ...profile, email: s.email }
+          : { userId: s.id, email: s.email, companyName: null, therapeuticAreas: [], modalities: [], dealStages: [], totalMatches: 0, top5AssetIds: [] };
+      }).sort((a, b) => b.totalMatches - a.totalMatches);
       return res.json({ subscribers, windowHours });
     } catch (err: any) {
       console.error("[dispatch/subscriber-matches]", err);

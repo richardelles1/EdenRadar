@@ -2192,7 +2192,7 @@ export class DatabaseStorage implements IStorage {
 }
 
 function scoreAssetAgainstProfile(
-  asset: { indication: string; modality: string; target: string; developmentStage: string; _categories?: string[] },
+  asset: { id: number; indication: string; modality: string; target: string; developmentStage: string; _categories?: string[] },
   profile: { therapeuticAreas: string[]; modalities: string[]; dealStages: string[] }
 ): { assetId: number; score: number; matchedFields: string[] } {
   let score = 0;
@@ -2221,7 +2221,7 @@ function scoreAssetAgainstProfile(
       break;
     }
   }
-  return { assetId: (asset as any).id ?? 0, score, matchedFields };
+  return { assetId: asset.id, score, matchedFields };
 }
 
 export const storage = new DatabaseStorage();
