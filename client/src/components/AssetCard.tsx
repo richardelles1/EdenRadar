@@ -289,18 +289,17 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {asset.evidence_count > 1 && (
             <span className="shrink-0">{asset.evidence_count} signals</span>
           )}
-          {asset.source_types?.includes("tech_transfer") && asset.contact_office && (
+          {asset.source_types?.includes("tech_transfer") && asset.contact_office && asset.source_urls?.[0] && (
             <a
-              href={asset.source_urls?.[0] ?? "#"}
+              href={asset.source_urls[0]}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-0.5 text-primary hover:text-primary/70 transition-colors shrink-0 truncate"
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
               data-testid={`link-tto-contact-${asset.id}`}
               onClick={(e) => e.stopPropagation()}
               title={asset.contact_office}
             >
-              <ExternalLink className="w-2.5 h-2.5 shrink-0" />
-              {asset.contact_office}
+              <ExternalLink className="w-3 h-3" />
             </a>
           )}
         </div>
