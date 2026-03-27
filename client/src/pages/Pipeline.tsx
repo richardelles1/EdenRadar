@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -62,74 +62,145 @@ function getBadgeClass(map: Record<string, string>, value: string) {
 }
 
 function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: number) => void }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
+  const stageClass = getBadgeClass(BADGE_COLORS, asset.developmentStage);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    setTilt({ x: (relY - 0.5) * -8, y: (relX - 0.5) * 8, active: true });
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+    setTilt({ x: 0, y: 0, active: false });
+    setPressed(false);
+  };
+
   return (
-    <div
-      className="group p-3.5 rounded-md border border-card-border bg-card hover:border-primary/30 transition-all duration-200 flex flex-col gap-2.5"
-      data-testid={`pipeline-card-${asset.id}`}
-    >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="font-semibold text-sm text-foreground truncate leading-tight">
-            {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
-          </span>
-        </div>
-        <button
-          onClick={() => onDelete(asset.id)}
-          className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
-          data-testid={`button-delete-pipeline-${asset.id}`}
-          title="Remove asset"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
-      </div>
+    <div style={{ perspective: "1000px" }} data-testid={`pipeline-card-${asset.id}`}>
+      <div
+        ref={cardRef}
+        className="relative rounded-[14px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        style={{
+          willChange: "transform",
+          transformStyle: "preserve-3d",
+          transform: pressed
+            ? "perspective(1000px) scale(0.97)"
+            : tilt.active
+            ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+            : "perspective(1000px)",
+          transition: pressed
+            ? "transform 0.07s ease-in"
+            : tilt.active
+            ? "transform 0.08s ease-out"
+            : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
+          boxShadow: hovered
+            ? "0 14px 40px rgba(0,0,0,0.16), 0 4px 12px rgba(0,0,0,0.10)"
+            : "0 4px 16px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
+        }}
+        onMouseMove={handleMouseMove}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={handleMouseLeave}
+        onMouseDown={() => setPressed(true)}
+        onMouseUp={() => setPressed(false)}
+      >
+        {/* Green bloom from top-left */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            width: "48px",
+            height: "48px",
+            borderRadius: "50%",
+            background: "rgba(38, 122, 70, 0.55)",
+            top: "-24px",
+            left: "-24px",
+            transform: hovered ? "scale(26)" : "scale(1)",
+            opacity: hovered ? 0.12 : 0,
+            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            zIndex: 1,
+          }}
+        />
 
-      <div className="flex flex-wrap gap-1">
-        {asset.modality && asset.modality !== "unknown" && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
-            {asset.modality}
-          </span>
-        )}
-      </div>
+        {/* Left accent strip */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
 
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-        <div>
-          <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Target</p>
-          <p className="text-foreground truncate mt-0.5">{asset.target !== "unknown" ? asset.target : "—"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Disease</p>
-          <p className="text-foreground truncate mt-0.5">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</p>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-0.5 border-t border-card-border">
-        <p className="text-[10px] text-muted-foreground truncate">
-          {asset.sourceJournal} · {asset.publicationYear}
-        </p>
-        <div className="flex items-center gap-2 shrink-0">
-          {asset.ingestedAssetId && (
-            <Link
-              href={`/asset/${asset.ingestedAssetId}`}
-              className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
-              data-testid={`link-pipeline-dossier-${asset.id}`}
+        <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3 flex flex-col gap-2.5">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="font-semibold text-sm text-foreground truncate leading-tight">
+                {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
+              </span>
+            </div>
+            <button
+              onClick={() => onDelete(asset.id)}
+              className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all duration-150 active:scale-90"
+              data-testid={`button-delete-pipeline-${asset.id}`}
+              title="Remove asset"
             >
-              Dossier →
-            </Link>
-          )}
-          {asset.sourceUrl && (
-            <a
-              href={asset.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
-              data-testid={`link-pipeline-source-${asset.id}`}
-            >
-              <ExternalLink className="w-2.5 h-2.5" />
-              Source
-            </a>
-          )}
+              <Trash2 className="w-3 h-3" />
+            </button>
+          </div>
+
+          <div className="flex flex-wrap gap-1">
+            {asset.developmentStage && asset.developmentStage !== "unknown" && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
+                {asset.developmentStage}
+              </span>
+            )}
+            {asset.modality && asset.modality !== "unknown" && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
+                {asset.modality}
+              </span>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+            <div>
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Target</p>
+              <p className="text-foreground truncate mt-0.5">{asset.target !== "unknown" ? asset.target : "—"}</p>
+            </div>
+            <div>
+              <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Disease</p>
+              <p className="text-foreground truncate mt-0.5">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</p>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-1.5 border-t border-white/20 dark:border-white/10">
+            <p className="text-[10px] text-muted-foreground truncate">
+              {asset.sourceJournal} · {asset.publicationYear}
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              {asset.ingestedAssetId && (
+                <Link
+                  href={`/asset/${asset.ingestedAssetId}`}
+                  className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
+                  data-testid={`link-pipeline-dossier-${asset.id}`}
+                >
+                  Dossier →
+                </Link>
+              )}
+              {asset.sourceUrl && (
+                <a
+                  href={asset.sourceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-primary transition-colors"
+                  data-testid={`link-pipeline-source-${asset.id}`}
+                >
+                  <ExternalLink className="w-2.5 h-2.5" />
+                  Source
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

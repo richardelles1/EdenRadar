@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -82,6 +82,55 @@ function formatRelative(dateStr: string | null | undefined): string {
   return `the last ${Math.round(days / 30)} months`;
 }
 
+function useBloomCard(rotateMax = 8) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
+  const [pressed, setPressed] = useState(false);
+  const [hovered, setHovered] = useState(false);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const relX = (e.clientX - rect.left) / rect.width;
+    const relY = (e.clientY - rect.top) / rect.height;
+    setTilt({ x: (relY - 0.5) * -rotateMax, y: (relX - 0.5) * rotateMax, active: true });
+  }, [rotateMax]);
+
+  const handleMouseLeave = useCallback(() => {
+    setHovered(false);
+    setTilt({ x: 0, y: 0, active: false });
+    setPressed(false);
+  }, []);
+
+  const cardStyle: React.CSSProperties = {
+    willChange: "transform",
+    transformStyle: "preserve-3d",
+    transform: pressed
+      ? "perspective(1000px) scale(0.97)"
+      : tilt.active
+      ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+      : "perspective(1000px)",
+    transition: pressed
+      ? "transform 0.07s ease-in"
+      : tilt.active
+      ? "transform 0.08s ease-out"
+      : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
+    boxShadow: hovered
+      ? "0 12px 32px rgba(0,0,0,0.15), 0 3px 10px rgba(0,0,0,0.08)"
+      : "0 3px 12px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.04)",
+  };
+
+  const bloomHandlers = {
+    onMouseMove: handleMouseMove,
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: handleMouseLeave,
+    onMouseDown: () => setPressed(true),
+    onMouseUp: () => setPressed(false),
+  };
+
+  return { cardRef, hovered, cardStyle, bloomHandlers };
+}
+
 function SectionHeader({
   icon: Icon,
   label,
@@ -125,6 +174,85 @@ function SectionHeader({
         <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
       )}
     </button>
+  );
+}
+
+function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert; onDelete: (id: number) => void; isPending: boolean }) {
+  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
+
+  const parts = [alert.query, ...(alert.modalities ?? []), ...(alert.stages ?? [])].filter(Boolean);
+  const draft = parts.join(" ");
+
+  return (
+    <div style={{ perspective: "1000px" }} data-testid={`alert-card-${alert.id}`}>
+      <div
+        ref={cardRef}
+        className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        style={cardStyle}
+        {...bloomHandlers}
+      >
+        {/* Amber bloom from top-left */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            width: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            background: "rgba(217, 119, 6, 0.55)",
+            top: "-20px",
+            left: "-20px",
+            transform: hovered ? "scale(22)" : "scale(1)",
+            opacity: hovered ? 0.11 : 0,
+            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            zIndex: 1,
+          }}
+        />
+        {/* Left amber strip */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
+
+        <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3 flex items-start gap-3">
+          <div className="flex-1 min-w-0 space-y-1.5">
+            {draft ? (
+              <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+                <p className="text-xs font-semibold text-foreground hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer" data-testid={`alert-title-${alert.id}`}>
+                  {alert.query || "Any query"}
+                </p>
+              </Link>
+            ) : (
+              <p className="text-xs font-semibold text-foreground" data-testid={`alert-title-${alert.id}`}>
+                {alert.query || "Any query"}
+              </p>
+            )}
+            <div className="flex flex-wrap gap-1">
+              {(alert.modalities ?? []).map((m) => (
+                <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{m}</span>
+              ))}
+              {(alert.stages ?? []).map((s) => (
+                <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{s}</span>
+              ))}
+              {(alert.institutions ?? []).map((inst) => (
+                <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
+              ))}
+            </div>
+            {draft && (
+              <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
+                  Explore matches →
+                </span>
+              </Link>
+            )}
+          </div>
+          <button
+            onClick={() => onDelete(alert.id)}
+            className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-0.5 w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
+            data-testid={`button-delete-alert-${alert.id}`}
+            disabled={isPending}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -173,67 +301,12 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
           ) : (
             <div className="pt-3 space-y-2">
               {alerts.map((alert) => (
-                <div
+                <AlertDefinitionCard
                   key={alert.id}
-                  className="rounded-md border border-card-border/60 bg-background/50 p-3 flex items-start gap-3"
-                  data-testid={`alert-card-${alert.id}`}
-                >
-                  <div className="flex-1 min-w-0 space-y-1.5">
-                    {(() => {
-                      const parts = [
-                        alert.query,
-                        ...(alert.modalities ?? []),
-                        ...(alert.stages ?? []),
-                      ].filter(Boolean);
-                      const draft = parts.join(" ");
-                      return draft ? (
-                        <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
-                          <p className="text-xs font-medium text-foreground hover:text-primary transition-colors cursor-pointer" data-testid={`alert-title-${alert.id}`}>
-                            {alert.query || "Any query"}
-                          </p>
-                        </Link>
-                      ) : (
-                        <p className="text-xs font-medium text-foreground">
-                          {alert.query || "Any query"}
-                        </p>
-                      );
-                    })()}
-                    <div className="flex flex-wrap gap-1">
-                      {(alert.modalities ?? []).map((m) => (
-                        <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{m}</span>
-                      ))}
-                      {(alert.stages ?? []).map((s) => (
-                        <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{s}</span>
-                      ))}
-                      {(alert.institutions ?? []).map((inst) => (
-                        <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
-                      ))}
-                    </div>
-                    {(() => {
-                      const parts = [
-                        alert.query,
-                        ...(alert.modalities ?? []),
-                        ...(alert.stages ?? []),
-                      ].filter(Boolean);
-                      const draft = parts.join(" ");
-                      return draft ? (
-                        <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
-                          <span className="text-[10px] text-primary hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
-                            Explore matches →
-                          </span>
-                        </Link>
-                      ) : null;
-                    })()}
-                  </div>
-                  <button
-                    onClick={() => deleteMutation.mutate(alert.id)}
-                    className="text-muted-foreground hover:text-destructive transition-colors shrink-0 mt-0.5"
-                    data-testid={`button-delete-alert-${alert.id}`}
-                    disabled={deleteMutation.isPending}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
+                  alert={alert}
+                  onDelete={(id) => deleteMutation.mutate(id)}
+                  isPending={deleteMutation.isPending}
+                />
               ))}
             </div>
           )}
@@ -280,50 +353,201 @@ function TtoAssetsSection({ data, since }: { data: IndustryDeltaResponse["newAss
 
 function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number }) {
   const [open, setOpen] = useState(false);
+  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(6);
+
   return (
-    <div
-      className="rounded-md border border-card-border/60 bg-background/50"
-      data-testid={`delta-card-${index}`}
-    >
+    <div style={{ perspective: "1000px" }} data-testid={`delta-card-${index}`}>
       <div
-        className="flex items-center gap-2.5 p-3 cursor-pointer"
-        onClick={() => setOpen((v) => !v)}
+        ref={cardRef}
+        className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10"
+        style={cardStyle}
+        {...bloomHandlers}
       >
-        <Building2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-        <span className="flex-1 text-xs font-medium text-foreground truncate">{inst.institution}</span>
-        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0">+{inst.count}</Badge>
-        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-      </div>
-      {open && inst.sampleAssets.length > 0 && (
-        <div className="px-3 pb-3 border-t border-card-border/60">
-          <ul className="space-y-1 pt-2">
-            {inst.sampleAssets.map((asset, i) => (
-              <li key={i} className="flex items-start gap-2 text-[11px]">
-                <span className="w-1 h-1 rounded-full bg-primary/50 mt-1.5 shrink-0" />
-                <Link
-                  href={`/asset/${asset.id}`}
-                  className="truncate text-primary/80 hover:text-primary hover:underline transition-colors"
-                  data-testid={`alert-asset-link-${i}`}
-                >
-                  {asset.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
-          {inst.count > inst.sampleAssets.length && (
-            <p className="text-[10px] text-muted-foreground mt-1.5 pl-3">
-              +{inst.count - inst.sampleAssets.length} more
-            </p>
-          )}
-          <Link
-            href={`/scout?q=${encodeURIComponent(inst.institution)}`}
-            className="inline-flex items-center gap-1 text-[10px] text-primary/70 hover:text-primary hover:underline mt-2 transition-colors"
-            data-testid={`alert-scout-link-${inst.institution}`}
+        {/* Green bloom */}
+        <div
+          className="absolute pointer-events-none"
+          style={{
+            width: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            background: "rgba(38, 122, 70, 0.55)",
+            top: "-20px",
+            left: "-20px",
+            transform: hovered ? "scale(22)" : "scale(1)",
+            opacity: hovered ? 0.11 : 0,
+            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+            zIndex: 1,
+          }}
+        />
+        {/* Left green strip */}
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+
+        <div className="relative z-[4]">
+          <div
+            className="flex items-center gap-2.5 pl-4 pr-3 py-3 cursor-pointer"
+            onClick={() => setOpen((v) => !v)}
           >
-            Search Scout for {inst.institution} assets
-          </Link>
+            <Building2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            <span className="flex-1 text-xs font-semibold text-foreground truncate">{inst.institution}</span>
+            <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">+{inst.count}</Badge>
+            {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+          </div>
+          {open && inst.sampleAssets.length > 0 && (
+            <div className="pl-4 pr-3 pb-3 border-t border-white/20 dark:border-white/10">
+              <ul className="space-y-1.5 pt-2">
+                {inst.sampleAssets.map((asset, i) => (
+                  <li key={i} className="flex items-start gap-2 text-[11px]">
+                    <span className="w-1 h-1 rounded-full bg-emerald-500/50 mt-1.5 shrink-0" />
+                    <Link
+                      href={`/asset/${asset.id}`}
+                      className="truncate text-primary/80 hover:text-primary hover:underline transition-colors"
+                      data-testid={`alert-asset-link-${i}`}
+                    >
+                      {asset.name}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+              {inst.count > inst.sampleAssets.length && (
+                <p className="text-[10px] text-muted-foreground mt-1.5 pl-3">
+                  +{inst.count - inst.sampleAssets.length} more
+                </p>
+              )}
+              <Link
+                href={`/scout?q=${encodeURIComponent(inst.institution)}`}
+                className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline mt-2 transition-colors"
+                data-testid={`alert-scout-link-${inst.institution}`}
+              >
+                Search Scout for {inst.institution} assets
+              </Link>
+            </div>
+          )}
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+type ConceptItem = IndustryDeltaResponse["newConcepts"]["items"][number];
+type ProjectItem = IndustryDeltaResponse["newProjects"]["items"][number];
+
+function ConceptAlertCard({ concept }: { concept: ConceptItem }) {
+  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
+  return (
+    <div style={{ perspective: "1000px" }} data-testid={`alert-concept-${concept.id}`}>
+      <Link href={`/discovery/concept/${concept.id}`}>
+        <div
+          ref={cardRef}
+          className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          style={cardStyle}
+          {...bloomHandlers}
+        >
+          {/* Amber bloom */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              background: "rgba(217, 119, 6, 0.55)",
+              top: "-20px",
+              left: "-20px",
+              transform: hovered ? "scale(22)" : "scale(1)",
+              opacity: hovered ? 0.11 : 0,
+              transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+              zIndex: 1,
+            }}
+          />
+          {/* Left amber strip */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
+
+          <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3">
+            <p className="text-xs font-semibold text-foreground truncate">{concept.title}</p>
+            {concept.oneLiner && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{concept.oneLiner}</p>
+            )}
+            <div className="flex items-center gap-2 mt-1.5">
+              {concept.therapeuticArea && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400">{concept.therapeuticArea}</span>
+              )}
+              {concept.submitterAffiliation && (
+                <span className="text-[10px] text-muted-foreground truncate">{concept.submitterAffiliation}</span>
+              )}
+            </div>
+          </div>
+        </div>
+      </Link>
+    </div>
+  );
+}
+
+function ProjectAlertCard({ proj }: { proj: ProjectItem }) {
+  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
+  return (
+    <div style={{ perspective: "1000px" }} data-testid={`alert-project-${proj.id}`}>
+      <Link href="/industry/projects">
+        <div
+          ref={cardRef}
+          className="relative rounded-[13px] overflow-hidden bg-white/80 dark:bg-zinc-900/85 border border-white/90 dark:border-white/10 cursor-pointer"
+          style={cardStyle}
+          {...bloomHandlers}
+        >
+          {/* Violet bloom */}
+          <div
+            className="absolute pointer-events-none"
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              background: "rgba(124, 58, 237, 0.55)",
+              top: "-20px",
+              left: "-20px",
+              transform: hovered ? "scale(22)" : "scale(1)",
+              opacity: hovered ? 0.11 : 0,
+              transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
+              zIndex: 1,
+            }}
+          />
+          {/* Left violet strip */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#7c3aed" }} />
+
+          <div className="relative z-[4] pl-4 pr-3 pt-3 pb-3">
+            <p className="text-xs font-semibold text-foreground truncate">
+              {proj.discoveryTitle || proj.title}
+            </p>
+            {(proj.discoverySummary || proj.description) && (
+              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                {proj.discoverySummary || proj.description}
+              </p>
+            )}
+            <div className="flex items-center justify-between mt-1.5 gap-2">
+              <div className="flex items-center gap-2 flex-wrap min-w-0">
+                {proj.researchArea && (
+                  <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                )}
+                {(proj.projectContributors ?? [])[0]?.institution && (
+                  <span className="text-[10px] text-muted-foreground truncate">
+                    {(proj.projectContributors ?? [])[0].institution}
+                  </span>
+                )}
+                <span className="text-[10px] text-muted-foreground/60 capitalize">{proj.status}</span>
+              </div>
+              {proj.projectUrl && (
+                <a
+                  href={proj.projectUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-[10px] text-violet-500 hover:underline shrink-0"
+                  data-testid={`alert-project-source-${proj.id}`}
+                >
+                  Source
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      </Link>
     </div>
   );
 }
@@ -353,25 +577,7 @@ function ConceptsSection({ data }: { data: IndustryDeltaResponse["newConcepts"] 
           ) : (
             <div className="pt-3 space-y-2">
               {data.items.map((concept) => (
-                <Link key={concept.id} href={`/discovery/concept/${concept.id}`}>
-                  <div
-                    className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-amber-500/30 cursor-pointer transition-colors"
-                    data-testid={`alert-concept-${concept.id}`}
-                  >
-                    <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
-                    {concept.oneLiner && (
-                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{concept.oneLiner}</p>
-                    )}
-                    <div className="flex items-center gap-2 mt-1.5">
-                      {concept.therapeuticArea && (
-                        <span className="text-[10px] text-amber-500">{concept.therapeuticArea}</span>
-                      )}
-                      {concept.submitterAffiliation && (
-                        <span className="text-[10px] text-muted-foreground truncate">{concept.submitterAffiliation}</span>
-                      )}
-                    </div>
-                  </div>
-                </Link>
+                <ConceptAlertCard key={concept.id} concept={concept} />
               ))}
               {data.total > data.items.length && (
                 <Link href="/industry/concepts">
@@ -413,46 +619,7 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
           ) : (
             <div className="pt-3 space-y-2">
               {data.items.map((proj) => (
-                <Link key={proj.id} href="/industry/projects">
-                  <div
-                    className="rounded-md border border-card-border/60 bg-background/50 p-3 hover:border-violet-500/30 cursor-pointer transition-colors"
-                    data-testid={`alert-project-${proj.id}`}
-                  >
-                    <p className="text-xs font-medium text-foreground truncate">
-                      {proj.discoveryTitle || proj.title}
-                    </p>
-                    {(proj.discoverySummary || proj.description) && (
-                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                        {proj.discoverySummary || proj.description}
-                      </p>
-                    )}
-                    <div className="flex items-center justify-between mt-1.5 gap-2">
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        {proj.researchArea && (
-                          <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
-                        )}
-                        {(proj.projectContributors ?? [])[0]?.institution && (
-                          <span className="text-[10px] text-muted-foreground truncate">
-                            {(proj.projectContributors ?? [])[0].institution}
-                          </span>
-                        )}
-                        <span className="text-[10px] text-muted-foreground/60 capitalize">{proj.status}</span>
-                      </div>
-                      {proj.projectUrl && (
-                        <a
-                          href={proj.projectUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[10px] text-primary hover:underline shrink-0"
-                          data-testid={`alert-project-source-${proj.id}`}
-                        >
-                          Source
-                        </a>
-                      )}
-                    </div>
-                  </div>
-                </Link>
+                <ProjectAlertCard key={proj.id} proj={proj} />
               ))}
               {data.total > data.items.length && (
                 <Link href="/industry/projects">
