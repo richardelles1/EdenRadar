@@ -82,8 +82,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     >
       <div
         ref={cardRef}
-        className="relative w-full h-full rounded-xl overflow-hidden drop-shadow-xl bg-[#3d3c3d]"
+        className="relative w-full h-full rounded-xl overflow-hidden"
         style={{
+          background: "#3d3c3d",
           transformStyle: "preserve-3d",
           transform: pressed
             ? `perspective(1000px) rotateX(${-tilt.x * 0.4}deg) rotateY(${-tilt.y * 0.4}deg) scale(0.97)`
@@ -103,16 +104,19 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         onMouseUp={() => setPressed(false)}
         data-testid={`asset-card-${asset.id}`}
       >
-        {/* Inner panel — the bezel layer (matches thin-sloth-31 reference exactly) */}
+        {/* Bezel inner panel — renders above outer bg, below content */}
         <div
-          className="absolute flex items-center justify-center text-white z-[-1] opacity-90 rounded-xl inset-0.5"
+          className="absolute inset-0.5 rounded-[10px] opacity-90"
           style={{ background: "#323132" }}
         />
 
-        {/* White ambient glow — fixed top-left (matches reference: w-56 h-48 blur-[50px]) */}
+        {/* White ambient glow — top-left corner */}
         <div
-          className="absolute w-56 h-48 bg-white pointer-events-none z-0"
+          className="absolute pointer-events-none"
           style={{
+            width: "224px",
+            height: "192px",
+            background: "white",
             filter: "blur(50px)",
             left: "-50%",
             top: "-50%",
@@ -122,7 +126,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
         {/* Cursor-following spotlight */}
         <div
-          className="absolute inset-0 pointer-events-none z-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
             opacity: spotlight.visible ? 1 : 0,
             transition: "opacity 0.3s",
@@ -130,8 +134,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           }}
         />
 
-        {/* Content layer */}
-        <div className="relative z-10 flex flex-col h-full px-3 pt-3 pb-3">
+        {/* Content — z-10 above bezel and glows */}
+        <div className="absolute inset-0 z-10 flex flex-col px-3 pt-3 pb-3">
 
           {/* Top: score + bookmark */}
           <div className="flex items-start justify-between">
@@ -199,7 +203,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </div>
           )}
 
-          {/* Middle: title + institution — vertically centered */}
+          {/* Middle: title + institution */}
           <div className="flex-1 flex flex-col justify-center gap-1.5 min-h-0 mt-1.5">
             <h3
               className="text-[13px] font-semibold text-white/90 leading-snug line-clamp-2"
@@ -267,8 +271,9 @@ export function SavedAssetCard({
     <div style={{ perspective: "1000px" }}>
       <div
         ref={cardRef}
-        className="relative rounded-xl overflow-hidden drop-shadow-xl bg-[#3d3c3d]"
+        className="relative rounded-xl overflow-hidden"
         style={{
+          background: "#3d3c3d",
           transformStyle: "preserve-3d",
           transform: pressed
             ? `perspective(1000px) rotateX(${-tilt.x * 0.4}deg) rotateY(${-tilt.y * 0.4}deg) scale(0.97)`
@@ -286,17 +291,15 @@ export function SavedAssetCard({
         onMouseUp={() => setPressed(false)}
         data-testid={`saved-card-${asset.id}`}
       >
-        <div className="absolute inset-0.5 rounded-[10px] z-[-1]" style={{ background: "#323132" }} />
+        <div className="absolute inset-0.5 rounded-[10px] opacity-90" style={{ background: "#323132" }} />
         <div
-          className="absolute inset-0 pointer-events-none z-0"
+          className="absolute inset-0 pointer-events-none"
           style={{
             opacity: spotlight.visible ? 1 : 0,
             transition: "opacity 0.3s",
             background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(255,255,255,0.07) 0%, transparent 65%)`,
           }}
         />
-
-        {/* Content */}
         <div className="relative z-10 px-3 pt-3 pb-3 flex flex-col gap-2">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0 flex-1">
@@ -316,7 +319,6 @@ export function SavedAssetCard({
               <BookmarkCheck className="w-3.5 h-3.5" />
             </Button>
           </div>
-
           <div className="text-xs space-y-1">
             <div className="flex gap-1.5">
               <span className="text-zinc-500 w-14 shrink-0">Target</span>
@@ -327,7 +329,6 @@ export function SavedAssetCard({
               <span className="text-zinc-200 font-medium truncate">{asset.diseaseIndication}</span>
             </div>
           </div>
-
           {asset.sourceUrl && (
             <a
               href={asset.sourceUrl}

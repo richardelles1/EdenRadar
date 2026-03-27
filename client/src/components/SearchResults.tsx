@@ -17,11 +17,11 @@ type SearchResultsProps = {
 
 function LoadingSkeleton() {
   return (
-    <div className="grid gap-3 xl:grid-cols-4 justify-items-start">
+    <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-4 justify-items-start">
       {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="w-[192px] h-56 rounded-xl overflow-hidden shrink-0"
+          className="relative w-[192px] h-56 rounded-xl overflow-hidden shrink-0"
           style={{ background: "#3d3c3d" }}
         >
           <div className="absolute inset-0.5 rounded-[10px]" style={{ background: "#323132" }} />
@@ -120,7 +120,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           </p>
         )}
       </div>
-      <div className="grid gap-3 xl:grid-cols-4 justify-items-start">
+      <div className="grid gap-3 grid-cols-1 md:grid-cols-2 xl:grid-cols-4 justify-items-start">
         {assets.map((asset) => (
           <AssetCard
             key={asset.id}
