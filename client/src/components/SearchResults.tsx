@@ -17,35 +17,28 @@ type SearchResultsProps = {
 
 function LoadingSkeleton() {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-      {Array.from({ length: 6 }).map((_, i) => (
-        <div key={i} className="border border-card-border rounded-lg p-5 bg-card flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 flex-1">
-              <Skeleton className="w-8 h-8 rounded-md" />
-              <Skeleton className="h-4 flex-1" />
+    <div className="grid gap-3 xl:grid-cols-4 justify-items-start">
+      {Array.from({ length: 8 }).map((_, i) => (
+        <div
+          key={i}
+          className="w-[192px] h-56 rounded-xl overflow-hidden shrink-0"
+          style={{ background: "#3d3c3d" }}
+        >
+          <div className="absolute inset-0.5 rounded-[10px]" style={{ background: "#323132" }} />
+          <div className="relative flex flex-col h-full px-3 pt-3 pb-3 gap-3">
+            <div className="flex items-start justify-between">
+              <div className="flex flex-col gap-1">
+                <Skeleton className="h-2 w-8 bg-zinc-700" />
+                <Skeleton className="h-5 w-6 bg-zinc-700" />
+              </div>
+              <Skeleton className="w-9 h-9 rounded-lg bg-zinc-700" />
             </div>
-            <Skeleton className="w-14 h-6 rounded-md" />
-          </div>
-          <div className="flex gap-2">
-            <Skeleton className="h-5 w-20 rounded-sm" />
-            <Skeleton className="h-5 w-24 rounded-sm" />
-            <Skeleton className="h-5 w-16 rounded-sm" />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <Skeleton className="h-3 w-10" />
-              <Skeleton className="h-4 w-24" />
+            <div className="flex-1 flex flex-col gap-2 justify-center">
+              <Skeleton className="h-3.5 w-full bg-zinc-700" />
+              <Skeleton className="h-3.5 w-4/5 bg-zinc-700" />
+              <Skeleton className="h-2.5 w-3/5 bg-zinc-800 mt-1" />
             </div>
-            <div className="space-y-1">
-              <Skeleton className="h-3 w-14" />
-              <Skeleton className="h-4 w-20" />
-            </div>
-          </div>
-          <Skeleton className="h-12 w-full rounded-md" />
-          <div className="border-t border-card-border pt-3 flex items-center justify-between">
-            <Skeleton className="h-3 w-20" />
-            <Skeleton className="h-6 w-20 rounded" />
+            <Skeleton className="h-7 w-full rounded-md bg-zinc-700" />
           </div>
         </div>
       ))}
@@ -127,7 +120,7 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           </p>
         )}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <div className="grid gap-3 xl:grid-cols-4 justify-items-start">
         {assets.map((asset) => (
           <AssetCard
             key={asset.id}

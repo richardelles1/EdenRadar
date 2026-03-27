@@ -894,7 +894,7 @@ export default function Scout() {
                         </Button>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-3">
+                    <div className="grid gap-3 xl:grid-cols-4 justify-items-start">
                       {researchResults.map((asset) => (
                         <AssetCard
                           key={asset.id + "-research"}
