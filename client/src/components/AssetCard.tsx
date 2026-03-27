@@ -87,6 +87,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const cardRef = useRef<HTMLDivElement>(null);
   const [spotlight, setSpotlight] = useState({ x: 50, y: 30, visible: false });
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
+  const [pressed, setPressed] = useState(false);
   const [, setLocation] = useLocation();
 
   const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
@@ -144,13 +145,19 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         }`}
         style={{
           transformStyle: "preserve-3d",
-          transform: `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
-          transition: tilt.active
+          transform: pressed
+            ? `perspective(1000px) rotateX(${-tilt.x * 0.4}deg) rotateY(${-tilt.y * 0.4}deg) scale(0.97)`
+            : `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+          transition: pressed
+            ? "transform 0.06s ease-in, box-shadow 0.15s, border-color 0.15s"
+            : tilt.active
             ? "transform 0.08s ease-out, box-shadow 0.3s, border-color 0.3s"
             : "transform 0.45s ease-out, box-shadow 0.3s, border-color 0.3s",
         }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeave}
+        onMouseLeave={() => { handleMouseLeave(); setPressed(false); }}
+        onMouseDown={() => setPressed(true)}
+        onMouseUp={() => setPressed(false)}
         data-testid={`asset-card-${asset.id}`}
       >
         {/* Spotlight glow */}
