@@ -280,6 +280,7 @@ export interface IStorage {
   getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]>;
   getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
   getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
+  getAllInstitutionNames(): Promise<string[]>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2207,6 +2208,21 @@ export class DatabaseStorage implements IStorage {
   async getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }> {
     const assets = await this._getNewRelevantAssets(windowHours);
     return { totalCount: assets.length, top5Ids: assets.slice(0, 5).map((a) => a.id) };
+  }
+
+  async getAllInstitutionNames(): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({ institution: ingestedAssets.institution })
+      .from(ingestedAssets)
+      .where(and(
+        eq(ingestedAssets.relevant, true),
+        isNotNull(ingestedAssets.institution),
+      ))
+      .orderBy(ingestedAssets.institution);
+    return rows
+      .map((r) => r.institution)
+      .filter((n): n is string => !!n && n.trim().length > 0)
+      .sort((a, b) => a.localeCompare(b));
   }
 
   private async _getNewRelevantAssets(windowHours: number): Promise<Omit<AssetSuggestion, "score" | "matchedFields">[]> {

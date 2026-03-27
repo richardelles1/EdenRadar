@@ -5790,6 +5790,48 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.get("/api/admin/all-institutions", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const institutions = await storage.getAllInstitutionNames();
+      return res.json({ institutions });
+    } catch (err: any) {
+      console.error("[all-institutions] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load institutions" });
+    }
+  });
+
+  app.get("/api/admin/all-users", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const search = String(req.query.search ?? "").toLowerCase().trim();
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 1000 });
+      if (error) return res.status(500).json({ error: error.message });
+      const users = (data?.users ?? [])
+        .map((u) => ({
+          id: u.id,
+          email: u.email ?? "",
+          contactEmail: u.user_metadata?.contactEmail ?? null,
+          subscribedToDigest: u.user_metadata?.subscribedToDigest === true,
+          role: u.user_metadata?.role ?? null,
+          createdAt: u.created_at,
+        }))
+        .filter((u) => !search || u.email.toLowerCase().includes(search) || (u.contactEmail ?? "").toLowerCase().includes(search))
+        .sort((a, b) => a.email.localeCompare(b.email));
+      return res.json({ users });
+    } catch (err: any) {
+      console.error("[all-users] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to load users" });
+    }
+  });
+
   app.get("/api/admin/platform-stats", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];

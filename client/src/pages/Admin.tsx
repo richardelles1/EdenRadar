@@ -6242,6 +6242,9 @@ function DispatchTab({ pw }: { pw: string }) {
   const [smartDragIdx, setSmartDragIdx] = useState<number | null>(null);
   const [sendingSmartId, setSendingSmartId] = useState<string | null>(null);
   const [sendAllPending, setSendAllPending] = useState(false);
+  const [subscriberMgmtOpen, setSubscriberMgmtOpen] = useState(false);
+  const [allUsersSearch, setAllUsersSearch] = useState("");
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
 
   const subscriberCountQuery = useQuery<{ subscribers: { id: string; username: string; effectiveEmail: string }[] }>({
     queryKey: ["/api/admin/dispatch/subscribers"],
@@ -6262,6 +6265,28 @@ function DispatchTab({ pw }: { pw: string }) {
     { label: "Last 14 days", value: 336 },
     { label: "Last 30 days", value: 720 },
   ];
+
+  const allInstitutionsQuery = useQuery<{ institutions: string[] }>({
+    queryKey: ["/api/admin/all-institutions"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/all-institutions", { headers: { "x-admin-password": pw } });
+      if (!r.ok) return { institutions: [] };
+      return r.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!pw,
+  });
+
+  const allUsersQuery = useQuery<{ users: Array<{ id: string; email: string; contactEmail: string | null; subscribedToDigest: boolean; role: string | null }> }>({
+    queryKey: ["/api/admin/all-users"],
+    queryFn: async () => {
+      const r = await fetch("/api/admin/all-users", { headers: { "x-admin-password": pw } });
+      if (!r.ok) return { users: [] };
+      return r.json();
+    },
+    staleTime: 60 * 1000,
+    enabled: !!pw && subscriberMgmtOpen,
+  });
 
   const discoveriesQuery = useQuery<{ assets: DiscoveryAsset[]; windowHours: number }>({
     queryKey: ["/api/admin/new-discoveries", windowHours],
@@ -6353,7 +6378,11 @@ function DispatchTab({ pw }: { pw: string }) {
     return true;
   });
 
-  const institutionOptions = Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
+  const windowInstCounts = allAssets.reduce<Record<string, number>>((acc, a) => {
+    if (a.institution) acc[a.institution] = (acc[a.institution] ?? 0) + 1;
+    return acc;
+  }, {});
+  const institutionOptions = allInstitutionsQuery.data?.institutions ?? Array.from(new Set(allAssets.map((a) => a.institution).filter(Boolean))).sort();
   const modalityOptions = Array.from(new Set(allAssets.map((a) => a.modality).filter((m): m is string => !!m && m !== "unknown"))).sort();
   const visibleInstOptions = instFilterSearch
     ? institutionOptions.filter((n) => n.toLowerCase().includes(instFilterSearch.toLowerCase()))
@@ -6776,20 +6805,26 @@ function DispatchTab({ pw }: { pw: string }) {
                       {discoveriesQuery.isLoading && (
                         <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">Loading...</div>
                       )}
-                      {!discoveriesQuery.isLoading && visibleInstOptions.length === 0 && (
+                      {visibleInstOptions.length === 0 && (
                         <div className="px-2.5 py-3 text-xs text-muted-foreground text-center">
-                          {instFilterSearch ? `No match for "${instFilterSearch}"` : "No institutions in this window"}
+                          {instFilterSearch ? `No match for "${instFilterSearch}"` : allInstitutionsQuery.isLoading ? "Loading..." : "No institutions found"}
                         </div>
                       )}
-                      {!discoveriesQuery.isLoading && visibleInstOptions.length > 0 && (
+                      {visibleInstOptions.length > 0 && (
                         <>
                           <button onClick={() => setFilterInstitutions([])} className="w-full text-left px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-muted rounded" data-testid="button-clear-inst-filter">Clear all</button>
-                          {visibleInstOptions.map((inst) => (
-                            <label key={inst} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
-                              <input type="checkbox" checked={filterInstitutions.includes(inst)} onChange={() => setFilterInstitutions((prev) => prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst])} className="h-3 w-3 accent-primary" />
-                              <span className="text-xs text-foreground truncate">{inst}</span>
-                            </label>
-                          ))}
+                          {visibleInstOptions.map((inst) => {
+                            const windowCount = windowInstCounts[inst] ?? 0;
+                            return (
+                              <label key={inst} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-muted rounded cursor-pointer">
+                                <input type="checkbox" checked={filterInstitutions.includes(inst)} onChange={() => setFilterInstitutions((prev) => prev.includes(inst) ? prev.filter((i) => i !== inst) : [...prev, inst])} className="h-3 w-3 accent-primary" />
+                                <span className="text-xs text-foreground truncate flex-1">{inst}</span>
+                                {windowCount > 0 && (
+                                  <span className="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400">{windowCount}</span>
+                                )}
+                              </label>
+                            );
+                          })}
                         </>
                       )}
                     </div>
@@ -6884,62 +6919,84 @@ function DispatchTab({ pw }: { pw: string }) {
                   )}
                 </div>
               )}
-              {filteredAssets.map((asset) => (
-                <div
-                  key={asset.id}
-                  draggable
-                  onDragStart={(e) => handleDiscoveryDragStart(e, asset)}
-                  className="p-3 hover:bg-muted/40 transition-colors group cursor-grab active:cursor-grabbing"
-                  data-testid={`card-discovery-${asset.id}`}
-                >
-                  <div className="flex items-start gap-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
-                      <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                        <button
-                          onClick={() => setFilterInstitutions((p) => p.includes(asset.institution) ? p : [...p, asset.institution])}
-                          className="text-[10px] bg-muted text-muted-foreground hover:bg-primary/10 hover:text-primary px-1.5 py-0.5 rounded truncate"
-                        >
-                          {asset.institution}
-                        </button>
-                        <span className="text-[9px] text-muted-foreground/50">{assetAge(asset.firstSeenAt)}</span>
-                        {asset.sourceUrl && (
-                          <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary/60 hover:text-primary" title="View source" onClick={(e) => e.stopPropagation()} data-testid={`link-source-${asset.id}`}>
-                            <ExternalLink className="h-2.5 w-2.5" />
-                          </a>
-                        )}
-                      </div>
-                      {asset.indication && asset.indication !== "unknown" && (
-                        <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{asset.indication}</p>
-                      )}
-                      {asset.target && asset.target !== "unknown" && (
-                        <p className="text-[10px] text-amber-600/80 dark:text-amber-400/70 truncate font-mono">&#x2192; {asset.target}</p>
-                      )}
-                      <div className="mt-1 flex flex-wrap gap-1">
-                        <StagePill stage={asset.developmentStage} />
-                        {asset.modality && asset.modality !== "unknown" && (
-                          <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-[9px] font-medium">
-                            {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
-                          </span>
-                        )}
-                        {asset.previouslySent && (
-                          <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 text-[9px] font-semibold">
-                            <Check className="h-2.5 w-2.5" /> Sent
-                          </span>
-                        )}
-                      </div>
+              {(() => {
+                const grouped: Array<{ inst: string; assets: typeof filteredAssets }> = [];
+                const seen = new Set<string>();
+                for (const asset of filteredAssets) {
+                  const inst = asset.institution || "Unknown";
+                  if (!seen.has(inst)) { seen.add(inst); grouped.push({ inst, assets: [] }); }
+                  grouped[grouped.length - 1].assets.push(asset);
+                }
+                const sortedGroups = grouped.sort((a, b) => a.inst.localeCompare(b.inst));
+                return sortedGroups.map(({ inst, assets: grpAssets }) => (
+                  <div key={inst}>
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-muted/60 border-b border-border sticky top-0 z-10">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide truncate">{inst}</span>
+                      <button
+                        onClick={() => {
+                          const toAdd = grpAssets.filter((a) => !digestIds.has(a.id));
+                          setDigestAssets((prev) => [...prev, ...toAdd]);
+                        }}
+                        className="shrink-0 text-[9px] text-primary/70 hover:text-primary flex items-center gap-0.5 font-medium"
+                        data-testid={`button-add-all-${inst.replace(/\s+/g, "-")}`}
+                        title={`Add all ${grpAssets.length} from ${inst}`}
+                      >
+                        <Plus className="h-2.5 w-2.5" />Add all
+                      </button>
                     </div>
-                    <button
-                      onClick={() => addToDigest(asset)}
-                      className="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all"
-                      data-testid={`button-add-asset-${asset.id}`}
-                      title="Add to digest (or drag)"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                    </button>
+                    {grpAssets.map((asset) => (
+                      <div
+                        key={asset.id}
+                        draggable
+                        onDragStart={(e) => handleDiscoveryDragStart(e, asset)}
+                        className="p-3 hover:bg-muted/40 transition-colors group cursor-grab active:cursor-grabbing"
+                        data-testid={`card-discovery-${asset.id}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate leading-snug">{asset.assetName}</p>
+                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                              <span className="text-[9px] text-muted-foreground/50">{assetAge(asset.firstSeenAt)}</span>
+                              {asset.sourceUrl && (
+                                <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-primary/60 hover:text-primary" title="View source" onClick={(e) => e.stopPropagation()} data-testid={`link-source-${asset.id}`}>
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              )}
+                            </div>
+                            {asset.indication && asset.indication !== "unknown" && (
+                              <p className="text-[10px] text-muted-foreground/80 truncate mt-0.5">{asset.indication}</p>
+                            )}
+                            {asset.target && asset.target !== "unknown" && (
+                              <p className="text-[10px] text-amber-600/80 dark:text-amber-400/70 truncate font-mono">&#x2192; {asset.target}</p>
+                            )}
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              <StagePill stage={asset.developmentStage} />
+                              {asset.modality && asset.modality !== "unknown" && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 text-[9px] font-medium">
+                                  {asset.modality.charAt(0).toUpperCase() + asset.modality.slice(1)}
+                                </span>
+                              )}
+                              {asset.previouslySent && (
+                                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 text-[9px] font-semibold">
+                                  <Check className="h-2.5 w-2.5" /> Sent
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => addToDigest(asset)}
+                            className="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all"
+                            data-testid={`button-add-asset-${asset.id}`}
+                            title="Add to digest (or drag)"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
-              ))}
+                ));
+              })()}
             </div>
           </div>
         </div>
@@ -7311,6 +7368,77 @@ function DispatchTab({ pw }: { pw: string }) {
                   </div>
                 </button>
               ))}
+            </div>
+
+            {/* Subscriber Management */}
+            <div className="border border-border rounded-xl bg-card overflow-hidden">
+              <button
+                onClick={() => setSubscriberMgmtOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors"
+                data-testid="button-subscriber-mgmt-toggle"
+              >
+                <span className="flex items-center gap-1.5"><Users className="h-3 w-3 text-muted-foreground" />Manage Subscribers</span>
+                <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${subscriberMgmtOpen ? "rotate-180" : ""}`} />
+              </button>
+              {subscriberMgmtOpen && (
+                <div className="border-t border-border p-2 space-y-2">
+                  <input
+                    type="text"
+                    placeholder="Search by email..."
+                    value={allUsersSearch}
+                    onChange={(e) => setAllUsersSearch(e.target.value)}
+                    className="w-full h-7 px-2.5 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
+                    data-testid="input-all-users-search"
+                  />
+                  {allUsersQuery.isLoading && (
+                    <div className="flex items-center justify-center py-3">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
+                  {!allUsersQuery.isLoading && (allUsersQuery.data?.users ?? []).length === 0 && (
+                    <p className="text-[10px] text-muted-foreground text-center py-2">No users found.</p>
+                  )}
+                  <div className="max-h-56 overflow-y-auto space-y-1">
+                    {(allUsersQuery.data?.users ?? [])
+                      .filter((u) => !allUsersSearch || u.email.toLowerCase().includes(allUsersSearch.toLowerCase()) || (u.contactEmail ?? "").toLowerCase().includes(allUsersSearch.toLowerCase()))
+                      .map((u) => (
+                        <div key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-muted/40" data-testid={`user-row-${u.id}`}>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-medium text-foreground truncate">{u.contactEmail || u.email}</p>
+                            {u.role && <p className="text-[9px] text-muted-foreground">{u.role}</p>}
+                          </div>
+                          <button
+                            onClick={async () => {
+                              setTogglingUserId(u.id);
+                              try {
+                                const r = await fetch(`/api/admin/users/${u.id}/subscribed`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json", "x-admin-password": pw },
+                                  body: JSON.stringify({ subscribedToDigest: !u.subscribedToDigest }),
+                                });
+                                if (!r.ok) throw new Error("Failed");
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
+                                queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
+                                toast({ title: u.subscribedToDigest ? "Unsubscribed" : "Subscribed", description: `${u.contactEmail || u.email} ${u.subscribedToDigest ? "removed from" : "added to"} digest list.` });
+                              } catch {
+                                toast({ title: "Error", description: "Failed to update subscription.", variant: "destructive" });
+                              } finally {
+                                setTogglingUserId(null);
+                              }
+                            }}
+                            disabled={togglingUserId === u.id}
+                            className={`shrink-0 text-[9px] font-semibold px-2 py-1 rounded-full transition-colors ${u.subscribedToDigest ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-red-100 hover:text-red-600" : "bg-muted text-muted-foreground hover:bg-emerald-100 hover:text-emerald-700"}`}
+                            data-testid={`button-toggle-sub-${u.id}`}
+                            title={u.subscribedToDigest ? "Click to unsubscribe" : "Click to subscribe"}
+                          >
+                            {togglingUserId === u.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : u.subscribedToDigest ? "Subscribed" : "Subscribe"}
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
