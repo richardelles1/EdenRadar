@@ -38,18 +38,12 @@ const TIER_STRIP_BG: Record<TierKey, string> = {
   none: "#71717a",
 };
 
+// Brand green fill: hsl(142, 52%, 36%) family — rich, recognizable, readable with white text
 const TIER_FILL_GRADIENT: Record<TierKey, string> = {
-  high: "linear-gradient(135deg, #166534, #052e16)",
+  high: "linear-gradient(135deg, #267a46, #0f3d22)",
   mid: "linear-gradient(135deg, #92400e, #451a03)",
   low: "linear-gradient(135deg, #3f3f46, #18181b)",
   none: "linear-gradient(135deg, #3f3f46, #18181b)",
-};
-
-const TIER_CORNER_GRADIENT: Record<TierKey, string> = {
-  high: "linear-gradient(135deg, #16a34a, #14532d)",
-  mid: "linear-gradient(135deg, #d97706, #78350f)",
-  low: "linear-gradient(135deg, #71717a, #3f3f46)",
-  none: "linear-gradient(135deg, #71717a, #3f3f46)",
 };
 
 const SCORE_BREAKDOWN_KEYS = ["fit", "novelty", "readiness", "licensability"] as const;
@@ -81,6 +75,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const tier = scoreTier(asset.score, isUnscored);
 
   const rawScore = isUnscored ? null : Math.round(asset.score);
+  // 1–10 scale for display; divide by 10, floor to 1 minimum
   const scoreDisplay = rawScore !== null ? Math.max(1, Math.round(rawScore / 10)) : null;
 
   const hasOwner = asset.owner_name && asset.owner_name !== "unknown";
@@ -96,17 +91,17 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
     setLocation(`/asset/${asset.id}`);
   };
 
+  // Tilt tracks mouse at all times — no hovered guard
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || hovered) return;
+    if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setTilt({ x: (relY - 0.5) * -8, y: (relX - 0.5) * 8, active: true });
+    setTilt({ x: (relY - 0.5) * -10, y: (relX - 0.5) * 10, active: true });
   };
 
   const handleMouseEnter = () => {
     setHovered(true);
-    setTilt({ x: 0, y: 0, active: false });
   };
 
   const handleMouseLeave = () => {
@@ -130,15 +125,13 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           transformStyle: "preserve-3d",
           transform: pressed
             ? `perspective(1000px) scale(0.96) rotateZ(0.4deg)`
-            : tilt.active && !hovered
+            : tilt.active
             ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
             : `perspective(1000px)`,
           transition: pressed
             ? "transform 0.07s ease-in, box-shadow 0.1s"
-            : hovered
-            ? "transform 0.3s ease-out, box-shadow 0.3s"
             : tilt.active
-            ? "transform 0.08s ease-out"
+            ? "transform 0.08s ease-out, box-shadow 0.2s"
             : "transform 0.5s cubic-bezier(0.23,1,0.32,1), box-shadow 0.4s",
           boxShadow: hovered
             ? "0 20px 60px rgba(0,0,0,0.22), 0 4px 12px rgba(0,0,0,0.12)"
@@ -151,38 +144,22 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         onMouseUp={() => setPressed(false)}
         data-testid={`asset-card-${asset.id}`}
       >
-        {/* Corner-fill circle — expands from top-right on hover */}
+        {/* Fill circle — erupts from top-left, behind score badge */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "44px",
-            height: "44px",
+            width: "48px",
+            height: "48px",
             borderRadius: "50%",
             background: TIER_FILL_GRADIENT[tier],
-            top: "-22px",
-            right: "-22px",
-            transform: hovered ? "scale(30)" : "scale(1)",
+            top: "-24px",
+            left: "-24px",
+            transform: hovered ? "scale(28)" : "scale(1)",
             transformOrigin: "center center",
             transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)",
             zIndex: 1,
           }}
         />
-
-        {/* Go-corner decorative cap at top-right */}
-        <div
-          className="absolute top-0 right-0 z-[2] w-8 h-8 flex items-center justify-center overflow-hidden pointer-events-none select-none"
-          style={{
-            borderRadius: "0 17px 0 28px",
-            background: TIER_CORNER_GRADIENT[tier],
-          }}
-        >
-          <span
-            className="text-white/80 text-[11px] font-bold"
-            style={{ marginTop: "-4px", marginRight: "-4px", lineHeight: 1 }}
-          >
-            →
-          </span>
-        </div>
 
         {/* Left accent strip */}
         <div
@@ -193,29 +170,31 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         {/* Content */}
         <div className="absolute inset-0 z-[4] flex flex-col pl-4 pr-3 pt-3 pb-3">
 
-          {/* Top row: score pill + bookmark (above corner) */}
-          <div className="flex items-start gap-1">
+          {/* Top row: score pill + bookmark */}
+          <div className="flex items-start gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  className={`flex flex-col items-start px-2 py-1 rounded-lg border bg-transparent cursor-default select-none transition-colors duration-500 ${
+                  className={`flex flex-col items-center px-2.5 py-1.5 rounded-lg border bg-transparent cursor-default select-none transition-colors duration-500 ${
                     hovered ? "border-white/50" : TIER_BORDER[tier]
                   }`}
                   data-testid="score-badge"
                 >
                   <span
-                    className="text-[7px] font-bold tracking-[0.14em] uppercase leading-none transition-colors duration-500"
+                    className={`text-[9px] font-bold tracking-[0.15em] uppercase leading-none transition-colors duration-500 ${
+                      hovered ? "" : "text-muted-foreground"
+                    }`}
                     style={{ color: hovered ? "rgba(255,255,255,0.65)" : undefined }}
                   >
-                    {isUnscored ? <span className="text-muted-foreground">Score</span> : "Score"}
+                    Score
                   </span>
                   <span
-                    className={`font-mono text-xl font-bold leading-tight tabular-nums transition-colors duration-500 ${
+                    className={`font-mono text-2xl font-bold leading-tight tabular-nums mt-0.5 transition-colors duration-500 ${
                       hovered ? "" : TIER_SCORE_TEXT[tier]
                     }`}
                     style={{ color: hovered ? "#ffffff" : undefined }}
                   >
-                    {scoreDisplay !== null ? scoreDisplay : <span className="opacity-40 text-base">—</span>}
+                    {scoreDisplay !== null ? scoreDisplay : <span className="opacity-40 text-lg">—</span>}
                   </span>
                 </div>
               </TooltipTrigger>
@@ -245,11 +224,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               )}
             </Tooltip>
 
-            {/* Spacer pushes bookmark away from corner cap */}
             <div className="flex-1" />
 
-            {/* Bookmark — right of score, not in corner cap */}
-            <div onClick={(e) => e.stopPropagation()} className="mt-0.5 mr-8 z-[5] relative">
+            {/* Bookmark */}
+            <div onClick={(e) => e.stopPropagation()} className="mt-0.5 z-[5] relative">
               {isSaved ? (
                 <button
                   onClick={() => onUnsave?.(asset.id, asset.asset_name)}
@@ -264,7 +242,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                   <BookmarkCheck className="w-3.5 h-3.5" />
                 </button>
               ) : (
-                <div className={hovered ? "text-white/80" : ""}>
+                <div className={hovered ? "[&_button]:text-white/80 [&_button]:border-white/30" : ""}>
                   <PipelinePicker asset={asset} variant="icon" iconClassName="w-7 h-7 rounded-lg" />
                 </div>
               )}
@@ -276,40 +254,40 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             <div className="flex items-center gap-1 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0" />
               <span
-                className="text-[8px] font-semibold uppercase tracking-wide leading-none transition-colors duration-500"
+                className={`text-[8px] font-semibold uppercase tracking-wide leading-none transition-colors duration-500 ${
+                  hovered ? "" : "text-amber-600 dark:text-amber-400"
+                }`}
                 style={{ color: hovered ? "rgba(255,255,255,0.7)" : undefined }}
               >
-                <span className={hovered ? "" : "text-amber-600 dark:text-amber-400"}>Researcher</span>
+                Researcher
               </span>
             </div>
           )}
 
-          {/* Title */}
+          {/* Title — grows to fill available space */}
           <div className="mt-2 flex-1 min-h-0">
             <h3
-              className="text-[13px] font-semibold leading-snug line-clamp-3 transition-colors duration-500"
+              className={`text-[13px] font-semibold leading-snug line-clamp-3 transition-colors duration-500 ${
+                hovered ? "" : "text-foreground"
+              }`}
               style={{ color: hovered ? "#ffffff" : undefined }}
               data-testid={`text-asset-name-${asset.id}`}
             >
-              {!hovered && <span className="text-foreground" />}
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
             </h3>
           </div>
 
-          {/* Institution — below title */}
+          {/* Institution — below title, up to 2 lines */}
           {institutionDisplay && (
-            <div className="mt-1.5 mb-1">
+            <div className="mt-2 mb-1">
               <p
-                className="flex items-start gap-1 text-[11px] leading-snug line-clamp-2 transition-colors duration-500"
-                style={{ color: hovered ? "rgba(255,255,255,0.65)" : undefined }}
+                className={`flex items-start gap-1 text-[11px] leading-snug line-clamp-2 transition-colors duration-500 ${
+                  hovered ? "" : "text-muted-foreground"
+                }`}
+                style={{ color: hovered ? "rgba(255,255,255,0.60)" : undefined }}
               >
                 <Building2 className="w-2.5 h-2.5 shrink-0 opacity-60 mt-0.5" />
-                <span
-                  className={hovered ? "" : "text-muted-foreground"}
-                  data-testid={`text-institution-${asset.id}`}
-                >
-                  {institutionDisplay}
-                </span>
+                <span data-testid={`text-institution-${asset.id}`}>{institutionDisplay}</span>
               </p>
             </div>
           )}
@@ -317,12 +295,11 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {/* CTA */}
           <div className="mt-auto pt-1.5">
             <button
-              className={`w-full h-7 rounded-md text-[11px] font-semibold tracking-wide transition-all duration-200
-                active:scale-95 active:brightness-90
-                ${hovered
+              className={`w-full h-7 rounded-md text-[11px] font-semibold tracking-wide transition-all duration-200 active:scale-95 active:brightness-90 ${
+                hovered
                   ? "bg-white text-zinc-900 hover:bg-white/90 shadow-sm"
-                  : "bg-emerald-600 hover:bg-emerald-500 dark:bg-emerald-600 dark:hover:bg-emerald-500 text-white hover:shadow-md hover:scale-[1.02]"
-                }`}
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white hover:shadow-md hover:scale-[1.02]"
+              }`}
               onClick={(e) => {
                 e.stopPropagation();
                 handleViewDossier();
@@ -351,11 +328,11 @@ export function SavedAssetCard({
   const [hovered, setHovered] = useState(false);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current || hovered) return;
+    if (!cardRef.current) return;
     const rect = cardRef.current.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
-    setTilt({ x: (relY - 0.5) * -6, y: (relX - 0.5) * 6, active: true });
+    setTilt({ x: (relY - 0.5) * -7, y: (relX - 0.5) * 7, active: true });
   };
 
   const handleMouseLeave = () => {
@@ -374,7 +351,7 @@ export function SavedAssetCard({
           transformStyle: "preserve-3d",
           transform: pressed
             ? "perspective(1000px) scale(0.97)"
-            : tilt.active && !hovered
+            : tilt.active
             ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
             : "perspective(1000px)",
           transition: pressed
@@ -393,17 +370,17 @@ export function SavedAssetCard({
         onMouseUp={() => setPressed(false)}
         data-testid={`saved-card-${asset.id}`}
       >
-        {/* Corner fill */}
+        {/* Fill circle — brand green, from top-left */}
         <div
           className="absolute pointer-events-none"
           style={{
-            width: "36px",
-            height: "36px",
+            width: "40px",
+            height: "40px",
             borderRadius: "50%",
-            background: "linear-gradient(135deg, #166534, #052e16)",
-            top: "-18px",
-            right: "-18px",
-            transform: hovered ? "scale(28)" : "scale(1)",
+            background: "linear-gradient(135deg, #267a46, #0f3d22)",
+            top: "-20px",
+            left: "-20px",
+            transform: hovered ? "scale(26)" : "scale(1)",
             transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1)",
             zIndex: 1,
           }}
@@ -420,20 +397,16 @@ export function SavedAssetCard({
                   style={{ color: hovered ? "rgba(255,255,255,0.8)" : "#22c55e" }}
                 />
                 <span
-                  className="font-semibold text-sm truncate transition-colors duration-500"
+                  className={`font-semibold text-sm truncate transition-colors duration-500 ${hovered ? "" : "text-foreground"}`}
                   style={{ color: hovered ? "#ffffff" : undefined }}
                 >
-                  {!hovered && <span className="text-foreground" />}
                   {asset.assetName}
                 </span>
               </div>
             </div>
             <button
-              className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90"
-              style={{
-                color: hovered ? "rgba(255,255,255,0.7)" : "#22c55e",
-                background: "transparent",
-              }}
+              className="shrink-0 w-7 h-7 rounded-md flex items-center justify-center transition-all duration-150 active:scale-90 bg-transparent"
+              style={{ color: hovered ? "rgba(255,255,255,0.7)" : "#22c55e" }}
               onClick={() => onDelete(asset.id)}
               data-testid={`button-delete-saved-${asset.id}`}
               title="Remove from saved"
@@ -444,33 +417,29 @@ export function SavedAssetCard({
           <div className="text-xs space-y-1">
             <div className="flex gap-1.5">
               <span
-                className="w-14 shrink-0 transition-colors duration-500"
+                className={`w-14 shrink-0 transition-colors duration-500 ${hovered ? "" : "text-muted-foreground"}`}
                 style={{ color: hovered ? "rgba(255,255,255,0.5)" : undefined }}
               >
-                {!hovered && <span className="text-muted-foreground" />}
                 Target
               </span>
               <span
-                className="font-medium truncate transition-colors duration-500"
+                className={`font-medium truncate transition-colors duration-500 ${hovered ? "" : "text-foreground"}`}
                 style={{ color: hovered ? "#ffffff" : undefined }}
               >
-                {!hovered && <span className="text-foreground" />}
                 {asset.target}
               </span>
             </div>
             <div className="flex gap-1.5">
               <span
-                className="w-14 shrink-0 transition-colors duration-500"
+                className={`w-14 shrink-0 transition-colors duration-500 ${hovered ? "" : "text-muted-foreground"}`}
                 style={{ color: hovered ? "rgba(255,255,255,0.5)" : undefined }}
               >
-                {!hovered && <span className="text-muted-foreground" />}
                 Disease
               </span>
               <span
-                className="font-medium truncate transition-colors duration-500"
+                className={`font-medium truncate transition-colors duration-500 ${hovered ? "" : "text-foreground"}`}
                 style={{ color: hovered ? "#ffffff" : undefined }}
               >
-                {!hovered && <span className="text-foreground" />}
                 {asset.diseaseIndication}
               </span>
             </div>
@@ -480,10 +449,9 @@ export function SavedAssetCard({
               href={asset.sourceUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 transition-colors text-[11px] font-medium"
+              className={`flex items-center gap-1 transition-colors text-[11px] font-medium ${hovered ? "" : "text-primary"}`}
               style={{ color: hovered ? "rgba(255,255,255,0.75)" : undefined }}
             >
-              {!hovered && <span className="text-primary" />}
               <ExternalLink className="w-3 h-3" />
               {asset.sourceJournal} · {asset.publicationYear}
             </a>
