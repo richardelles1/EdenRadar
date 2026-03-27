@@ -67,67 +67,6 @@ function parseDateLoose(dateStr: string | undefined): Date | null {
   return null;
 }
 
-const RADAR_FACT_TEMPLATES = [
-  (stats: RadarStats) => `Scanning ${stats.total > 0 ? stats.total.toLocaleString() + "+" : "26,000+"} exclusive TTO assets`,
-  (stats: RadarStats) => `${stats.institutions > 0 ? stats.institutions : "262"}+ institutions in our network`,
-  () => "Matching against your acquisition thesis",
-  () => "40+ therapy areas indexed and monitored",
-  () => "CAR-T sees highest convergence signal this week",
-  () => "Filtering for biotech and pharma relevance",
-  () => "Scoring novelty, fit, and licensability",
-];
-
-type RadarStats = { total: number; institutions: number; topModality: string };
-
-function RadarOverlay({ stats }: { stats: RadarStats }) {
-  const [factIdx, setFactIdx] = useState(0);
-  const facts = RADAR_FACT_TEMPLATES.map((fn) => fn(stats));
-  useEffect(() => {
-    const iv = setInterval(() => setFactIdx((i) => (i + 1) % facts.length), 4500);
-    return () => clearInterval(iv);
-  }, [facts.length]);
-  return (
-    <div className="flex flex-col items-center gap-4 py-12">
-      <div className="relative w-24 h-24 flex items-center justify-center">
-        {[1, 0.72, 0.44].map((scale, i) => (
-          <div
-            key={i}
-            className="absolute rounded-full border border-primary/25"
-            style={{ width: `${scale * 100}%`, height: `${scale * 100}%` }}
-          />
-        ))}
-        <div className="absolute inset-0 rounded-full overflow-hidden radar-sweep" style={{ transformOrigin: "center center" }}>
-          <div
-            className="absolute inset-0 rounded-full"
-            style={{
-              background: "conic-gradient(from 0deg, transparent 250deg, hsl(142 65% 48% / 0.06) 290deg, hsl(142 65% 48% / 0.3) 360deg)",
-            }}
-          />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div
-            className="w-px h-1/2 origin-bottom"
-            style={{ background: "linear-gradient(to top, hsl(142 65% 55% / 0.9), transparent)" }}
-          />
-        </div>
-        <div className="w-2 h-2 rounded-full bg-primary glow-pulse absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
-      </div>
-      <div className="text-center min-h-[2.5rem]">
-        <p className="text-sm font-medium text-foreground transition-all duration-500">
-          {facts[factIdx]}
-        </p>
-        <div className="flex justify-center gap-1 mt-2">
-          {facts.map((_, i) => (
-            <span
-              key={i}
-              className={`block w-1 h-1 rounded-full transition-all duration-300 ${i === factIdx ? "bg-primary" : "bg-primary/20"}`}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 
 type InstitutionsResponse = {
@@ -343,15 +282,6 @@ export default function Scout() {
   });
   const liveInstitutionCount = institutionsData?.total ?? COVERED_INSTITUTIONS.length;
 
-  const { data: dashStats } = useQuery<{ stats: { total: number; byModality: { modality: string; count: number }[] } }>({
-    queryKey: ["/api/dashboard/stats"],
-    staleTime: 10 * 60 * 1000,
-  });
-  const radarStats: RadarStats = {
-    total: dashStats?.stats?.total ?? 0,
-    institutions: liveInstitutionCount,
-    topModality: dashStats?.stats?.byModality?.[0]?.modality ?? "",
-  };
 
   function getDateBounds(filter: string): { since?: string; before?: string } {
     const now = Date.now();
@@ -658,10 +588,10 @@ export default function Scout() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
           </div>
 
-          {/* TTO loading overlay — only blocks on the fast TTO query */}
+          {/* TTO loading indicator */}
           {searchMutation.isPending && (
-            <div className="px-4 sm:px-6">
-              <RadarOverlay stats={radarStats} />
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-primary opacity-60" />
             </div>
           )}
 

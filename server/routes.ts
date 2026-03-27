@@ -395,30 +395,9 @@ export async function registerRoutes(
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
       let results: import("./storage").RetrievedAsset[] = [];
-      let fallback = false;
 
       const searchOpts = { modality, stage, indication, institution, since: sinceDate, before: beforeDate };
-
-      // Start keyword search immediately so it runs concurrently with embedding + vector
-      const keywordPromise = storage.keywordSearchIngestedAssets(query, limit, searchOpts);
-
-      let vectorResults: import("./storage").RetrievedAsset[] = [];
-      try {
-        const emb = await embedQuery(query);
-        try {
-          vectorResults = await storage.scoutVectorSearch(emb, { ...searchOpts, limit, minSimilarity });
-        } catch (vecErr: any) {
-          console.warn("[scout/search] Vector search failed:", vecErr?.message);
-        }
-      } catch (embedErr: any) {
-        console.warn("[scout/search] Embedding failed, using keyword only:", embedErr?.message);
-        fallback = true;
-      }
-
-      const keywordResults = await keywordPromise.catch(() => [] as import("./storage").RetrievedAsset[]);
-
-      const seen = new Set(vectorResults.map(r => r.id));
-      results = [...vectorResults, ...keywordResults.filter(r => !seen.has(r.id))].slice(0, limit);
+      results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
@@ -491,7 +470,7 @@ export async function registerRoutes(
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length }).catch(() => {});
 
-      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], fallback });
+      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], fallback: false });
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
       return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: err.message ?? "Search failed" });
