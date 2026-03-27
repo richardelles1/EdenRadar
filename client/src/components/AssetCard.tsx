@@ -1,11 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
-  BookmarkCheck, ExternalLink, ChevronDown, ChevronUp,
-  FlaskConical, FileText, Building2, Key, ArrowRight, CalendarDays,
-  Microscope,
+  BookmarkCheck, ExternalLink,
+  FlaskConical, Building2, Key, ArrowRight, CalendarDays,
+  Microscope, Link as LinkIcon,
 } from "lucide-react";
 import { ScoreBadge } from "./ScoreBadge";
 import { SourceBadge } from "./SourceBadge";
@@ -52,6 +51,20 @@ function getBadgeClass(map: Record<string, string>, value: string, fallback = "b
   return map[value.toLowerCase().trim()] ?? fallback;
 }
 
+function scoreAccent(score: number, isUnscored: boolean): string {
+  if (isUnscored || score === 0) return "bg-border/60";
+  if (score >= 75) return "bg-emerald-500";
+  if (score >= 50) return "bg-amber-500";
+  return "bg-muted-foreground/30";
+}
+
+function scoreTextColor(score: number, isUnscored: boolean): string {
+  if (isUnscored || score === 0) return "text-muted-foreground";
+  if (score >= 75) return "text-emerald-500";
+  if (score >= 50) return "text-amber-500";
+  return "text-muted-foreground";
+}
+
 type AssetCardProps = {
   asset: ScoredAsset;
   isSaved?: boolean;
@@ -60,9 +73,11 @@ type AssetCardProps = {
 };
 
 export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) {
-  const [expanded, setExpanded] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [spotlight, setSpotlight] = useState({ x: 50, y: 30, visible: false });
   const [, setLocation] = useLocation();
 
+  const isUnscored = asset.score === 0 || (asset.score_breakdown?.signal_coverage ?? 0) === 0;
   const stageClass = getBadgeClass(STAGE_COLORS, asset.development_stage);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
 
@@ -70,70 +85,98 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const hasInstitution = asset.institution && asset.institution !== "unknown" && asset.institution !== asset.owner_name;
   const licensingAvailable = (asset.licensing_status ?? "").toLowerCase().includes("available");
   const hasWhyItMatters = asset.why_it_matters && asset.why_it_matters.length > 10;
+  const isResearcherPublished = asset.source_types?.includes("researcher");
+  const accentClass = scoreAccent(asset.score, isUnscored);
+  const scoreColor = scoreTextColor(asset.score, isUnscored);
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
     setLocation(`/asset/${asset.id}`);
   };
 
-  const isResearcherPublished = asset.source_types?.includes("researcher");
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    setSpotlight({ x, y, visible: true });
+  };
+
+  const handleMouseLeave = () => {
+    setSpotlight((s) => ({ ...s, visible: false }));
+  };
 
   return (
-    <Card
-      className={`group relative border bg-card transition-all duration-300 flex flex-col overflow-hidden hover:-translate-y-px hover:shadow-md ${
+    <div
+      ref={cardRef}
+      className={`group relative flex flex-col rounded-xl border bg-card overflow-hidden transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
         isResearcherPublished
-          ? "border-amber-500/40 hover:border-amber-500/60 ring-1 ring-amber-500/10"
-          : "border-card-border hover:border-primary/40"
+          ? "border-amber-500/30 hover:border-amber-500/50"
+          : "border-card-border hover:border-primary/30"
       }`}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
       data-testid={`asset-card-${asset.id}`}
     >
-      {/* Glow bloom from icon top-left */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-[inherit] overflow-hidden">
-        <div style={{
-          position: "absolute",
-          top: -20, left: -20,
-          width: 180, height: 180,
+      {/* Spotlight glow that follows the cursor */}
+      <div
+        className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+        style={{
+          opacity: spotlight.visible ? 1 : 0,
           background: isResearcherPublished
-            ? "radial-gradient(circle at center, rgba(245,158,11,0.09) 0%, rgba(245,158,11,0.04) 45%, transparent 70%)"
-            : "radial-gradient(circle at center, rgba(34,197,94,0.10) 0%, rgba(34,197,94,0.04) 45%, transparent 70%)",
-        }} />
-      </div>
+            ? `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(245,158,11,0.13) 0%, transparent 55%)`
+            : `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.13) 0%, transparent 55%)`,
+        }}
+      />
+
+      {/* Left-edge score accent strip */}
+      <div className={`absolute left-0 top-0 bottom-0 w-[3px] ${accentClass} transition-all duration-300 group-hover:opacity-100 opacity-80`} />
+
+      {/* Researcher banner */}
       {isResearcherPublished && (
-        <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20">
+        <div className="flex items-center gap-1.5 px-4 py-1.5 bg-amber-500/10 border-b border-amber-500/20 relative z-10">
           <Microscope className="w-3 h-3 text-amber-600 dark:text-amber-400 shrink-0" />
           <span className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 tracking-wide uppercase">
             Lab Published · Researcher Discovery
           </span>
         </div>
       )}
-      <div className="p-5 flex flex-col gap-3 flex-1">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-center gap-2 min-w-0 flex-1">
-            <div className={`shrink-0 w-8 h-8 rounded-md flex items-center justify-center transition-colors duration-300 ${
+
+      {/* Card body */}
+      <div className="relative z-10 pl-5 pr-4 pt-4 pb-0 flex flex-col gap-3 flex-1">
+
+        {/* Header: icon + title + score metric + bookmark */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2 min-w-0 flex-1">
+            <div className={`mt-0.5 shrink-0 w-7 h-7 rounded-md flex items-center justify-center transition-colors duration-300 ${
               isResearcherPublished
                 ? "bg-amber-500/10 group-hover:bg-amber-500/20"
-                : "bg-primary/10 group-hover:bg-primary/20"
+                : "bg-primary/10 group-hover:bg-primary/15"
             }`}>
-              {isResearcherPublished ? (
-                <Microscope className="w-4 h-4 text-amber-500" />
-              ) : (
-                <FlaskConical className="w-4 h-4 text-primary" />
-              )}
+              {isResearcherPublished
+                ? <Microscope className="w-3.5 h-3.5 text-amber-500" />
+                : <FlaskConical className="w-3.5 h-3.5 text-primary" />
+              }
             </div>
-            <h3 className="font-semibold text-foreground text-sm leading-tight truncate" data-testid={`text-asset-name-${asset.id}`}>
+            <h3 className="font-semibold text-foreground text-sm leading-snug line-clamp-2 flex-1" data-testid={`text-asset-name-${asset.id}`}>
               {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
             </h3>
           </div>
+
+          {/* Score metric — passive display, not a CTA */}
           <div className="flex items-center gap-1.5 shrink-0">
-            <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="sm" />
+            <div className="flex flex-col items-end select-none" title="Match score — how well this asset fits your search and buyer thesis">
+              <span className="text-[8px] font-bold tracking-widest text-muted-foreground uppercase leading-none mb-0.5">Match</span>
+              <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="sm" />
+            </div>
             {isSaved ? (
               <button
                 onClick={() => onUnsave?.(asset.id, asset.asset_name)}
-                className="w-7 h-7 rounded flex items-center justify-center text-primary bg-primary/10 border border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-150"
+                className="w-6 h-6 rounded flex items-center justify-center text-primary bg-primary/10 border border-primary/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30 transition-all duration-150"
                 data-testid={`button-unsave-${asset.id}`}
                 title="Remove from saved"
               >
-                <BookmarkCheck className="w-3.5 h-3.5" />
+                <BookmarkCheck className="w-3 h-3" />
               </button>
             ) : (
               <PipelinePicker asset={asset} variant="icon" />
@@ -141,158 +184,162 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           </div>
         </div>
 
+        {/* Taxonomy badges */}
         <div className="flex flex-wrap gap-1.5">
           {asset.development_stage && asset.development_stage !== "unknown" && (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${stageClass}`}>
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
               {asset.development_stage}
             </span>
           )}
           {asset.modality && asset.modality !== "unknown" && (
-            <span className={`inline-flex items-center px-2 py-0.5 rounded-sm text-xs font-medium border ${modalityClass}`}>
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
               {asset.modality}
             </span>
           )}
           {asset.source_types?.map((st) => (
             <SourceBadge key={st} sourceType={st} />
           ))}
+          {licensingAvailable && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded px-1.5 py-0.5 font-semibold">
+              <Key className="w-2.5 h-2.5" />
+              Available
+            </span>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+        {/* Target / Indication / Owner */}
+        <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           <div>
-            <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Target</span>
-            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-target-${asset.id}`}>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Target</p>
+            <p className="text-foreground font-medium truncate" data-testid={`text-target-${asset.id}`}>
               {asset.target !== "unknown" ? asset.target : "—"}
             </p>
           </div>
           <div>
-            <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Indication</span>
-            <p className="text-foreground font-medium mt-0.5 truncate" data-testid={`text-indication-${asset.id}`}>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Indication</p>
+            <p className="text-foreground font-medium truncate" data-testid={`text-indication-${asset.id}`}>
               {asset.indication !== "unknown" ? asset.indication : "—"}
             </p>
           </div>
           {hasOwner && (
             <div className="col-span-2">
-              <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">Owner</span>
-              <p className="text-foreground font-medium mt-0.5 truncate flex items-center gap-1" data-testid={`text-owner-${asset.id}`}>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold mb-0.5">Owner</p>
+              <p className="text-foreground font-medium truncate flex items-center gap-1" data-testid={`text-owner-${asset.id}`}>
                 <Building2 className="w-3 h-3 shrink-0 text-muted-foreground" />
                 {asset.owner_name}
-                {hasInstitution && <span className="text-muted-foreground font-normal">· {asset.institution}</span>}
-              </p>
-            </div>
-          )}
-          {asset.source_types?.includes("tech_transfer") && asset.contact_office && (
-            <div className="col-span-2">
-              <span className="text-muted-foreground uppercase tracking-wide text-[10px] font-semibold">TTO Contact</span>
-              <p className="mt-0.5">
-                <a
-                  href={asset.source_urls?.[0] ?? "#"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-primary text-xs font-medium flex items-center gap-1 hover:underline truncate"
-                  data-testid={`link-tto-contact-${asset.id}`}
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <ExternalLink className="w-3 h-3 shrink-0" />
-                  {asset.contact_office}
-                </a>
+                {hasInstitution && <span className="text-muted-foreground font-normal text-[10px]">· {asset.institution}</span>}
               </p>
             </div>
           )}
         </div>
 
-        {hasWhyItMatters && (
-          <div className="bg-primary/5 border border-primary/15 rounded-md px-3 py-2">
-            <p className="text-[11px] text-primary/80 leading-relaxed italic" data-testid={`text-why-matters-${asset.id}`}>
+        {/* Why it matters / summary */}
+        {hasWhyItMatters ? (
+          <div className="rounded-lg border border-primary/12 bg-primary/[0.04] px-3 py-2">
+            <p className="text-[11px] text-foreground/75 leading-relaxed italic line-clamp-3" data-testid={`text-why-matters-${asset.id}`}>
               "{asset.why_it_matters}"
             </p>
           </div>
-        )}
-
-        {!hasWhyItMatters && asset.summary && (
-          <div>
-            <p className={`text-xs text-muted-foreground leading-relaxed ${!expanded ? "line-clamp-3" : ""}`}>
-              {asset.summary}
-            </p>
-            {asset.summary.length > 150 && (
-              <button
-                onClick={() => setExpanded(!expanded)}
-                className="mt-1 text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
-              >
-                {expanded ? <><ChevronUp className="w-3 h-3" /> Show less</> : <><ChevronDown className="w-3 h-3" /> Show more</>}
-              </button>
-            )}
-          </div>
-        )}
+        ) : asset.summary ? (
+          <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+            {asset.summary}
+          </p>
+        ) : null}
       </div>
 
-      <div className="border-t border-card-border px-4 py-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          {licensingAvailable && (
-            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-sm px-1.5 py-0.5 font-semibold shrink-0">
-              <Key className="w-2.5 h-2.5" />
-              Available
-            </span>
-          )}
-          {asset.evidence_count > 1 && (
-            <span className="text-[10px] text-muted-foreground shrink-0">{asset.evidence_count} signals</span>
-          )}
+      {/* Footer */}
+      <div className="relative z-10 pl-5 pr-3 py-3 mt-3 border-t border-card-border/70 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-[10px] text-muted-foreground min-w-0">
           {asset.latest_signal_date && (
-            <span className="flex items-center gap-1 text-[11px] text-muted-foreground shrink-0" data-testid={`text-date-${asset.id}`}>
-              <CalendarDays className="w-3 h-3 shrink-0 text-muted-foreground/60" />
+            <span className="flex items-center gap-1 shrink-0" data-testid={`text-date-${asset.id}`}>
+              <CalendarDays className="w-3 h-3 opacity-60" />
               {formatSignalDate(asset.latest_signal_date)}
             </span>
           )}
+          {asset.evidence_count > 1 && (
+            <span className="shrink-0">{asset.evidence_count} signals</span>
+          )}
+          {asset.source_types?.includes("tech_transfer") && asset.contact_office && (
+            <a
+              href={asset.source_urls?.[0] ?? "#"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-0.5 text-primary hover:text-primary/70 transition-colors shrink-0 truncate"
+              data-testid={`link-tto-contact-${asset.id}`}
+              onClick={(e) => e.stopPropagation()}
+              title={asset.contact_office}
+            >
+              <ExternalLink className="w-2.5 h-2.5 shrink-0" />
+              {asset.contact_office}
+            </a>
+          )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {asset.source_urls?.[0] && (
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {/* External source — icon only, not a CTA */}
+          {asset.source_urls?.[0] && !asset.source_types?.includes("tech_transfer") && (
             <a
               href={asset.source_urls[0]}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 text-[11px] text-primary hover:text-primary/80 transition-colors"
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150"
               data-testid={`link-source-${asset.id}`}
+              title="View source"
             >
-              <ExternalLink className="w-3 h-3" />
-              View
+              <LinkIcon className="w-3 h-3" />
             </a>
           )}
+          {/* Single CTA */}
           <Button
-            variant="ghost"
             size="sm"
-            className="h-7 text-[11px] px-2 text-muted-foreground hover:text-primary gap-1"
+            className="h-7 text-[11px] px-3 gap-1 font-semibold"
             onClick={handleViewDossier}
             data-testid={`button-dossier-${asset.id}`}
           >
-            <FileText className="w-3 h-3" />
             Dossier
             <ArrowRight className="w-3 h-3" />
           </Button>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
 export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: number) => void }) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [spotlight, setSpotlight] = useState({ x: 50, y: 30, visible: false });
   const stageClass = getBadgeClass(STAGE_COLORS, asset.developmentStage);
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
 
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    setSpotlight({
+      x: ((e.clientX - rect.left) / rect.width) * 100,
+      y: ((e.clientY - rect.top) / rect.height) * 100,
+      visible: true,
+    });
+  };
+
   return (
     <div
-      className="group relative p-4 rounded-lg border border-card-border bg-card hover:border-primary/40 hover:-translate-y-px hover:shadow-md transition-all duration-300 flex flex-col gap-3 overflow-hidden"
+      ref={cardRef}
+      className="group relative p-4 rounded-xl border border-card-border bg-card hover:border-primary/30 hover:-translate-y-0.5 hover:shadow-lg transition-all duration-300 flex flex-col gap-3 overflow-hidden"
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setSpotlight((s) => ({ ...s, visible: false }))}
       data-testid={`saved-card-${asset.id}`}
     >
-      {/* Glow bloom */}
-      <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none rounded-[inherit] overflow-hidden">
-        <div style={{
-          position: "absolute",
-          top: -20, left: -20,
-          width: 160, height: 160,
-          background: "radial-gradient(circle at center, rgba(34,197,94,0.09) 0%, rgba(34,197,94,0.04) 45%, transparent 70%)",
-        }} />
-      </div>
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
+      <div
+        className="pointer-events-none absolute inset-0 z-0 rounded-[inherit] transition-opacity duration-300"
+        style={{
+          opacity: spotlight.visible ? 1 : 0,
+          background: `radial-gradient(circle at ${spotlight.x}% ${spotlight.y}%, rgba(34,197,94,0.11) 0%, transparent 55%)`,
+        }}
+      />
+      <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-border/60 group-hover:bg-primary/50 transition-colors duration-300" />
+
+      <div className="relative z-10 flex items-start justify-between gap-2">
+        <div className="flex items-center gap-2 min-w-0 pl-1">
           <FlaskConical className="w-4 h-4 text-primary shrink-0" />
           <span className="font-medium text-sm text-foreground truncate">{asset.assetName}</span>
         </div>
@@ -307,19 +354,21 @@ export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelet
           <BookmarkCheck className="w-3.5 h-3.5 text-primary" />
         </Button>
       </div>
-      <div className="flex flex-wrap gap-1">
+
+      <div className="relative z-10 flex flex-wrap gap-1 pl-1">
         {asset.developmentStage && asset.developmentStage !== "unknown" && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${stageClass}`}>
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
             {asset.developmentStage}
           </span>
         )}
         {asset.modality && asset.modality !== "unknown" && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded-sm text-[10px] font-medium border ${modalityClass}`}>
+          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
             {asset.modality}
           </span>
         )}
       </div>
-      <div className="text-xs space-y-1">
+
+      <div className="relative z-10 text-xs space-y-1 pl-1">
         <div className="flex gap-1.5">
           <span className="text-muted-foreground w-16 shrink-0">Target</span>
           <span className="text-foreground font-medium truncate">{asset.target}</span>
@@ -329,12 +378,13 @@ export function SavedAssetCard({ asset, onDelete }: { asset: SavedAsset; onDelet
           <span className="text-foreground font-medium truncate">{asset.diseaseIndication}</span>
         </div>
       </div>
+
       {asset.sourceUrl && (
         <a
           href={asset.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors"
+          className="relative z-10 text-[11px] text-primary hover:text-primary/80 flex items-center gap-1 transition-colors pl-1"
         >
           <ExternalLink className="w-3 h-3" />
           {asset.sourceJournal} · {asset.publicationYear}

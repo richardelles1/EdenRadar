@@ -17,7 +17,10 @@ import {
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio } from "lucide-react";
+import {
+  Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -171,7 +174,7 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "lab_discoveries",  label: "Lab Discoveries",      desc: "Research lab discoveries" },
 ];
 
-function ScoutSidebar({
+function SourcesDropdown({
   researchSources,
   onSourcesChange,
 }: {
@@ -185,55 +188,79 @@ function ScoutSidebar({
     onSourcesChange(next);
   }
 
+  const label = researchSources.length === 0
+    ? "Sources"
+    : `Sources · ${researchSources.length}`;
+
   return (
-    <div className="flex flex-col h-full" data-testid="scout-sidebar">
-      <div className="px-3 py-2.5 border-b border-border shrink-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <Database className="h-3.5 w-3.5 text-primary" />
-            <span className="text-[10px] font-semibold text-foreground uppercase tracking-wide">External Paper Sources</span>
-          </div>
-          {researchSources.length > 0 && (
-            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded bg-primary text-primary-foreground text-[8px] font-bold px-1">
-              {researchSources.length}
-            </span>
-          )}
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          className={`inline-flex items-center gap-1 text-[11px] transition-colors shrink-0 ${
+            researchSources.length > 0
+              ? "text-primary font-semibold"
+              : "text-muted-foreground hover:text-foreground"
+          }`}
+          data-testid="button-sources-dropdown"
+        >
+          <Database className="w-3 h-3" />
+          {label}
+          <ChevronDown className="w-3 h-3 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0 max-h-[420px] overflow-hidden flex flex-col">
+        <div className="px-3 py-2.5 border-b border-border shrink-0">
+          <p className="text-[11px] font-semibold text-foreground">External Paper Sources</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">
+            Search academic databases alongside TTO assets.
+            {researchSources.length > 0 && (
+              <button
+                className="ml-1.5 text-primary hover:underline"
+                onClick={() => onSourcesChange([])}
+              >
+                Clear all
+              </button>
+            )}
+          </p>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1 leading-relaxed">
-          Opt in to search external academic paper databases alongside TTO assets.
-        </p>
-      </div>
-
-      <div className="flex-1 overflow-y-auto min-h-0 p-2 space-y-1.5">
-        {RESEARCH_SOURCE_OPTIONS.map((src) => {
-          const checked = researchSources.includes(src.key);
-          return (
-            <label
-              key={src.key}
-              className="flex items-start gap-2.5 p-2 rounded-lg border border-border/50 hover:border-primary/30 hover:bg-primary/5 cursor-pointer transition-all"
-              data-testid={`source-toggle-${src.key}`}
-            >
-              <input
-                type="checkbox"
-                checked={checked}
-                onChange={() => toggleSource(src.key)}
-                className="mt-0.5 accent-primary w-3.5 h-3.5 shrink-0"
-              />
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold text-foreground">{src.label}</p>
-                <p className="text-[10px] text-muted-foreground">{src.desc}</p>
-              </div>
-            </label>
-          );
-        })}
-      </div>
-
-      <div className="shrink-0 px-3 py-2 border-t border-border">
-        <p className="text-[10px] text-muted-foreground/70">
-          {researchSources.length} of {RESEARCH_SOURCE_OPTIONS.length} sources active
-        </p>
-      </div>
-    </div>
+        <div className="overflow-y-auto flex-1 p-2">
+          <div className="grid grid-cols-2 gap-1">
+            {RESEARCH_SOURCE_OPTIONS.map((src) => {
+              const checked = researchSources.includes(src.key);
+              return (
+                <label
+                  key={src.key}
+                  className={`flex items-start gap-2 p-2 rounded-md border cursor-pointer transition-all ${
+                    checked
+                      ? "border-primary/30 bg-primary/5"
+                      : "border-border/50 hover:border-primary/20 hover:bg-primary/[0.03]"
+                  }`}
+                  data-testid={`source-toggle-${src.key}`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={() => toggleSource(src.key)}
+                    className="mt-0.5 accent-primary w-3 h-3 shrink-0"
+                  />
+                  <div className="min-w-0">
+                    <p className={`text-[10px] font-semibold leading-tight ${checked ? "text-primary" : "text-foreground"}`}>
+                      {src.label}
+                    </p>
+                    <p className="text-[9px] text-muted-foreground leading-tight mt-0.5">{src.desc}</p>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+        </div>
+        {researchSources.length > 0 && (
+          <div className="shrink-0 px-3 py-2 border-t border-border">
+            <p className="text-[10px] text-muted-foreground">{researchSources.length} of {RESEARCH_SOURCE_OPTIONS.length} sources active</p>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }
 
@@ -563,7 +590,7 @@ export default function Scout() {
                 <OrientationHint
                   hintId="scout-cross-source"
                   title="TTO asset discovery."
-                  body="Search across 300+ TTO disclosures — scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) from the right panel."
+                  body="Search across 300+ TTO disclosures — scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) using the Sources selector below."
                   accent="emerald"
                 />
               </div>
@@ -618,11 +645,11 @@ export default function Scout() {
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
-              {researchSources.length > 0 && (
-                <span className="text-[11px] text-muted-foreground" data-testid="research-sources-indicator">
-                  + {researchSources.length} research source{researchSources.length !== 1 ? "s" : ""} active
-                </span>
-              )}
+              <div className="h-3 w-px bg-border/60" />
+              <SourcesDropdown
+                researchSources={researchSources}
+                onSourcesChange={setResearchSources}
+              />
             </div>
 
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
@@ -881,13 +908,6 @@ export default function Scout() {
             )}
           </div>
         </main>
-
-        <div className="hidden lg:flex lg:flex-col w-72 shrink-0 border-l border-border sticky top-0 h-screen overflow-hidden">
-          <ScoutSidebar
-            researchSources={researchSources}
-            onSourcesChange={setResearchSources}
-          />
-        </div>
       </div>
 
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
