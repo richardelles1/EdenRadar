@@ -6170,6 +6170,22 @@ type DispatchLogEntry = {
   isTest: boolean;
 };
 
+type SubscriberMatchData = {
+  userId: string;
+  email: string;
+  companyName: string;
+  therapeuticAreas: string[];
+  modalities: string[];
+  dealStages: string[];
+  totalMatches: number;
+  top5AssetIds: number[];
+};
+
+type SmartAsset = DiscoveryAsset & {
+  score: number;
+  matchedFields: string[];
+};
+
 function StagePill({ stage }: { stage: string }) {
   const s = stage.toLowerCase();
   let cls = "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300";
@@ -6219,6 +6235,13 @@ function DispatchTab({ pw }: { pw: string }) {
   const [isTest, setIsTest] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [loadingSubscribers, setLoadingSubscribers] = useState(false);
+  const [dispatchMode, setDispatchMode] = useState<"manual" | "smart">("manual");
+  const [selectedSubId, setSelectedSubId] = useState<string | null>(null);
+  const [smartDigests, setSmartDigests] = useState<Record<string, DiscoveryAsset[]>>({});
+  const [smartDragOver, setSmartDragOver] = useState(false);
+  const [smartDragIdx, setSmartDragIdx] = useState<number | null>(null);
+  const [sendingSmartId, setSendingSmartId] = useState<string | null>(null);
+  const [sendAllPending, setSendAllPending] = useState(false);
 
   const subscriberCountQuery = useQuery<{ subscribers: { id: string; username: string; effectiveEmail: string }[] }>({
     queryKey: ["/api/admin/dispatch/subscribers"],
@@ -6258,6 +6281,28 @@ function DispatchTab({ pw }: { pw: string }) {
       return r.json();
     },
     enabled: historyOpen,
+  });
+
+  const subscriberMatchesQuery = useQuery<{ subscribers: SubscriberMatchData[]; windowHours: number }>({
+    queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/dispatch/subscriber-matches?windowHours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      if (!r.ok) throw new Error("Failed to load subscriber matches");
+      return r.json();
+    },
+    enabled: dispatchMode === "smart" && !!pw,
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const suggestionsQuery = useQuery<{ assets: SmartAsset[]; windowHours: number }>({
+    queryKey: ["/api/admin/dispatch/suggestions", selectedSubId, windowHours],
+    queryFn: async () => {
+      const r = await fetch(`/api/admin/dispatch/suggestions/${selectedSubId}?windowHours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      if (!r.ok) throw new Error("Failed to load suggestions");
+      return r.json();
+    },
+    enabled: dispatchMode === "smart" && !!selectedSubId && !!pw,
+    staleTime: 2 * 60 * 1000,
   });
 
   const sendMutation = useMutation({
@@ -6552,14 +6597,112 @@ function DispatchTab({ pw }: { pw: string }) {
 
   const windowLabel = windowOptions.find((o) => o.value === windowHours)?.label ?? `${windowHours}h`;
 
+  function getSmartDigest(userId: string): DiscoveryAsset[] {
+    return smartDigests[userId] ?? [];
+  }
+
+  function addToSmartDigest(userId: string, asset: DiscoveryAsset) {
+    setSmartDigests((prev) => ({ ...prev, [userId]: [...(prev[userId] ?? []), asset] }));
+  }
+
+  function removeFromSmartDigest(userId: string, assetId: number) {
+    setSmartDigests((prev) => ({ ...prev, [userId]: (prev[userId] ?? []).filter((a) => a.id !== assetId) }));
+  }
+
+  function addTop5(userId: string) {
+    const suggestions = suggestionsQuery.data?.assets ?? [];
+    const already = new Set(getSmartDigest(userId).map((a) => a.id));
+    const top5 = suggestions.filter((a) => !already.has(a.id)).slice(0, 5);
+    setSmartDigests((prev) => ({ ...prev, [userId]: [...(prev[userId] ?? []), ...top5] }));
+  }
+
+  async function sendSmartDigest(sub: SubscriberMatchData): Promise<void> {
+    const staged = getSmartDigest(sub.userId);
+    const r = await fetch("/api/admin/dispatch/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+      body: JSON.stringify({
+        subject: `EdenRadar: ${staged.length} new TTO asset${staged.length !== 1 ? "s" : ""} matched for you`,
+        recipients: [sub.email],
+        assetIds: staged.map((a) => a.id),
+        windowHours,
+        isTest: false,
+        colorMode,
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: "Send failed" }));
+      throw new Error(err.error ?? "Send failed");
+    }
+    setSmartDigests((prev) => ({ ...prev, [sub.userId]: [] }));
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/history"] });
+  }
+
+  async function sendToSubscriber(sub: SubscriberMatchData) {
+    const staged = getSmartDigest(sub.userId);
+    if (staged.length === 0) {
+      toast({ title: "No assets staged", description: "Add assets to this subscriber's digest zone first.", variant: "destructive" });
+      return;
+    }
+    setSendingSmartId(sub.userId);
+    try {
+      await sendSmartDigest(sub);
+      toast({ title: `Sent to ${sub.email}`, description: `${staged.length} asset${staged.length !== 1 ? "s" : ""} dispatched.` });
+    } catch (err: any) {
+      toast({ title: "Send failed", description: err.message, variant: "destructive" });
+    } finally {
+      setSendingSmartId(null);
+    }
+  }
+
+  async function sendAllPersonalized() {
+    const subs = subscriberMatchesQuery.data?.subscribers ?? [];
+    const subsWithDigests = subs.filter((s) => getSmartDigest(s.userId).length > 0);
+    if (subsWithDigests.length === 0) {
+      toast({ title: "No staged digests", description: "Stage assets for at least one subscriber first.", variant: "destructive" });
+      return;
+    }
+    setSendAllPending(true);
+    let sent = 0; let failed = 0;
+    for (const sub of subsWithDigests) {
+      try { await sendSmartDigest(sub); sent++; } catch { failed++; }
+    }
+    setSendAllPending(false);
+    toast({
+      title: failed === 0 ? `${sent} personalized digest${sent !== 1 ? "s" : ""} sent` : `${sent} sent, ${failed} failed`,
+      variant: failed > 0 ? "destructive" : "default",
+    });
+  }
+
+  const selectedSub = (subscriberMatchesQuery.data?.subscribers ?? []).find((s) => s.userId === selectedSubId) ?? null;
+  const smartQueueAssets = suggestionsQuery.data?.assets ?? [];
+  const smartStagedIds = new Set(getSmartDigest(selectedSubId ?? "").map((a) => a.id));
+
   return (
     <div className="space-y-0">
-      <div className="mb-6">
+      <div className="mb-4">
         <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Dispatch</h2>
         <p className="text-sm text-muted-foreground mt-1">Curate new TTO discoveries into a branded email digest and send to subscriber lists.</p>
       </div>
 
-      <div className="flex gap-4 items-start">
+      <div className="mb-5 flex items-center gap-1 p-1 bg-muted rounded-lg w-fit" data-testid="toggle-dispatch-mode">
+        <button
+          onClick={() => setDispatchMode("manual")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dispatchMode === "manual" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          data-testid="button-mode-manual"
+        >
+          Manual
+        </button>
+        <button
+          onClick={() => setDispatchMode("smart")}
+          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${dispatchMode === "smart" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+          data-testid="button-mode-smart"
+        >
+          Smart
+        </button>
+      </div>
+
+      {dispatchMode === "manual" && <div className="flex gap-4 items-start">
 
         {/* LEFT: Discovery Browser */}
         <div className="w-80 shrink-0 flex flex-col gap-3">
@@ -7119,7 +7262,240 @@ function DispatchTab({ pw }: { pw: string }) {
             </div>
           )}
         </div>
-      </div>
+      </div>}
+
+      {dispatchMode === "smart" && (
+        <div className="flex gap-4 items-start">
+
+          {/* SUBSCRIBER ROSTER */}
+          <div className="w-52 shrink-0 flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">Subscribers</p>
+              {subscriberMatchesQuery.isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
+            </div>
+            <Select value={String(windowHours)} onValueChange={(v) => setWindowHours(Number(v))}>
+              <SelectTrigger className="h-7 text-xs" data-testid="smart-select-window">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {windowOptions.map((o) => <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <div className="flex flex-col gap-1.5 max-h-[calc(100vh-260px)] overflow-y-auto pr-0.5">
+              {subscriberMatchesQuery.data?.subscribers.length === 0 && (
+                <div className="p-3 text-xs text-muted-foreground text-center bg-card border border-border rounded-lg">
+                  No subscribers with profiles.<br />Ask subscribers to complete their profile.
+                </div>
+              )}
+              {(subscriberMatchesQuery.data?.subscribers ?? []).map((sub) => (
+                <button
+                  key={sub.userId}
+                  onClick={() => setSelectedSubId(sub.userId)}
+                  className={`w-full text-left p-3 rounded-lg border transition-colors ${selectedSubId === sub.userId ? "border-primary bg-primary/5" : "border-border bg-card hover:bg-muted/40"}`}
+                  data-testid={`sub-card-${sub.userId}`}
+                >
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <p className="text-xs font-medium text-foreground truncate">{sub.companyName || sub.email}</p>
+                    <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${sub.totalMatches > 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" : "bg-muted text-muted-foreground"}`}>
+                      {sub.totalMatches}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground truncate mb-1">{sub.email}</p>
+                  <div className="flex flex-wrap gap-0.5">
+                    {[...sub.therapeuticAreas.slice(0, 2), ...sub.modalities.slice(0, 1)].map((tag, i) => (
+                      <span key={i} className="text-[9px] px-1 py-0.5 rounded bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">{tag}</span>
+                    ))}
+                    {sub.therapeuticAreas.length + sub.modalities.length > 3 && (
+                      <span className="text-[9px] px-1 py-0.5 rounded bg-muted text-muted-foreground">+{sub.therapeuticAreas.length + sub.modalities.length - 3}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* SMART QUEUE */}
+          <div className="flex-1 min-w-0 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">
+                {selectedSub ? `Matches for ${selectedSub.companyName || selectedSub.email}` : "Select a subscriber"}
+              </p>
+              {selectedSub && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2.5 text-xs gap-1.5"
+                  onClick={() => addTop5(selectedSub.userId)}
+                  disabled={!selectedSubId || suggestionsQuery.isLoading}
+                  data-testid="button-add-top5"
+                >
+                  <Plus className="h-3 w-3" />
+                  Add top 5
+                </Button>
+              )}
+            </div>
+
+            {!selectedSubId && (
+              <div className="border border-border rounded-xl p-10 bg-card text-center text-sm text-muted-foreground">
+                Select a subscriber to see their personalized asset recommendations.
+              </div>
+            )}
+
+            {selectedSubId && (
+              <div className="border border-border rounded-xl bg-card overflow-hidden" style={{ maxHeight: "calc(100vh - 260px)" }}>
+                <div className="overflow-y-auto flex-1 divide-y divide-border">
+                  {suggestionsQuery.isLoading && (
+                    <div className="p-6 text-center text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />Loading matches...
+                    </div>
+                  )}
+                  {!suggestionsQuery.isLoading && smartQueueAssets.length === 0 && (
+                    <div className="p-8 text-center text-sm text-muted-foreground">No new assets in this window.</div>
+                  )}
+                  {smartQueueAssets.map((asset) => {
+                    const inDigest = smartStagedIds.has(asset.id);
+                    return (
+                      <div
+                        key={asset.id}
+                        draggable={!inDigest}
+                        onDragStart={(e) => { e.dataTransfer.setData("smart-asset-id", String(asset.id)); e.dataTransfer.effectAllowed = "copy"; }}
+                        className={`p-3 transition-colors group ${inDigest ? "opacity-40" : "hover:bg-muted/40 cursor-grab active:cursor-grabbing"}`}
+                        data-testid={`smart-asset-${asset.id}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">{asset.assetName}</p>
+                            <p className="text-[10px] text-muted-foreground truncate">{asset.institution}</p>
+                            <div className="mt-1 flex flex-wrap gap-1 items-center">
+                              <StagePill stage={asset.developmentStage} />
+                              {asset.modality && asset.modality !== "unknown" && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+                                  {asset.modality}
+                                </span>
+                              )}
+                              {asset.score > 0 && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 font-semibold">
+                                  {asset.score}pt
+                                </span>
+                              )}
+                              {asset.matchedFields.slice(0, 2).map((f, i) => (
+                                <span key={i} className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">{f}</span>
+                              ))}
+                            </div>
+                          </div>
+                          {!inDigest && selectedSubId && (
+                            <button
+                              onClick={() => addToSmartDigest(selectedSubId, asset)}
+                              className="shrink-0 opacity-0 group-hover:opacity-100 h-6 w-6 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-white flex items-center justify-center transition-all"
+                              data-testid={`smart-add-${asset.id}`}
+                              title="Add to digest"
+                            >
+                              <Plus className="h-3.5 w-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* PER-USER DIGEST ZONE */}
+          <div className="w-72 shrink-0 flex flex-col gap-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-foreground">
+                Digest Zone
+                {selectedSub && <span className="ml-1.5 text-xs font-normal text-muted-foreground">for {selectedSub.companyName || selectedSub.email}</span>}
+              </p>
+              {selectedSubId && getSmartDigest(selectedSubId).length > 0 && (
+                <button onClick={() => setSmartDigests((p) => ({ ...p, [selectedSubId]: [] }))} className="text-xs text-muted-foreground hover:text-destructive" data-testid="smart-clear-digest">
+                  Clear
+                </button>
+              )}
+            </div>
+
+            <div
+              onDragOver={(e) => { e.preventDefault(); setSmartDragOver(true); }}
+              onDragLeave={() => setSmartDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setSmartDragOver(false);
+                const idStr = e.dataTransfer.getData("smart-asset-id");
+                if (!idStr || !selectedSubId) return;
+                const id = Number(idStr);
+                const asset = smartQueueAssets.find((a) => a.id === id);
+                if (asset && !smartStagedIds.has(id)) addToSmartDigest(selectedSubId, asset);
+              }}
+              className={`min-h-[120px] border border-border rounded-xl bg-card overflow-hidden transition-colors ${smartDragOver ? "ring-2 ring-primary/20 ring-inset bg-primary/5" : ""}`}
+              data-testid="smart-digest-zone"
+            >
+              {!selectedSubId ? (
+                <div className="p-6 text-center text-xs text-muted-foreground">Select a subscriber first.</div>
+              ) : getSmartDigest(selectedSubId).length === 0 ? (
+                <div className="p-6 text-center text-xs text-muted-foreground">
+                  <Send className="h-6 w-6 mx-auto mb-2 opacity-20" />
+                  Drag assets here or use "Add top 5".
+                </div>
+              ) : (
+                <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
+                  {getSmartDigest(selectedSubId).map((asset, i) => (
+                    <div
+                      key={asset.id}
+                      draggable
+                      onDragStart={(e) => { e.dataTransfer.setData("digest-smart-idx", String(i)); e.dataTransfer.effectAllowed = "move"; setSmartDragIdx(i); }}
+                      onDragOver={(e) => { e.preventDefault(); setSmartDragIdx(i); }}
+                      className={`flex items-start gap-2 px-3 py-2.5 cursor-grab ${smartDragIdx === i ? "bg-primary/5" : "hover:bg-muted/30"}`}
+                      data-testid={`smart-digest-item-${asset.id}`}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{asset.assetName}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{asset.institution}</p>
+                      </div>
+                      <button
+                        onClick={() => removeFromSmartDigest(selectedSubId, asset.id)}
+                        className="text-muted-foreground hover:text-destructive mt-0.5"
+                        data-testid={`smart-remove-${asset.id}`}
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {selectedSub && (
+              <Button
+                size="sm"
+                onClick={() => sendToSubscriber(selectedSub)}
+                disabled={sendingSmartId === selectedSub.userId || getSmartDigest(selectedSub.userId).length === 0}
+                className="w-full gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white"
+                data-testid={`button-send-to-${selectedSub.userId}`}
+              >
+                {sendingSmartId === selectedSub.userId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Send to {selectedSub.companyName || selectedSub.email}
+              </Button>
+            )}
+
+            {(subscriberMatchesQuery.data?.subscribers ?? []).some((s) => getSmartDigest(s.userId).length > 0) && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={sendAllPersonalized}
+                disabled={sendAllPending}
+                className="w-full gap-1.5"
+                data-testid="button-send-all-personalized"
+              >
+                {sendAllPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                Send All Personalized
+              </Button>
+            )}
+          </div>
+
+        </div>
+      )}
 
       {/* Dispatch History */}
       <div className="mt-6 border border-border rounded-xl overflow-hidden bg-card">

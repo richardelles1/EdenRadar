@@ -274,7 +274,35 @@ export interface IStorage {
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
   upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt">): Promise<IndustryProfileRow>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
+
+  getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]>;
+  getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
 }
+
+export type SubscriberMatchEntry = {
+  userId: string;
+  companyName: string;
+  therapeuticAreas: string[];
+  modalities: string[];
+  dealStages: string[];
+  totalMatches: number;
+  top5AssetIds: number[];
+};
+
+export type AssetSuggestion = {
+  id: number;
+  assetName: string;
+  institution: string;
+  indication: string;
+  modality: string;
+  target: string;
+  developmentStage: string;
+  summary: string | null;
+  sourceUrl: string | null;
+  firstSeenAt: Date;
+  score: number;
+  matchedFields: string[];
+};
 
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
@@ -2088,6 +2116,112 @@ export class DatabaseStorage implements IStorage {
   async getAllIndustryProfiles(): Promise<IndustryProfileRow[]> {
     return db.select().from(industryProfiles).orderBy(desc(industryProfiles.updatedAt));
   }
+
+  async getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]> {
+    const assets = await this._getNewRelevantAssets(windowHours);
+    const profiles = await this.getAllIndustryProfiles();
+    return profiles
+      .map((p) => {
+        const scored = assets.map((a) => scoreAssetAgainstProfile(a, p));
+        const matches = scored.filter((s) => s.score > 0);
+        const sorted = matches.sort((a, b) => b.score - a.score);
+        return {
+          userId: p.userId,
+          companyName: p.companyName,
+          therapeuticAreas: p.therapeuticAreas,
+          modalities: p.modalities,
+          dealStages: p.dealStages,
+          totalMatches: matches.length,
+          top5AssetIds: sorted.slice(0, 5).map((s) => s.assetId),
+        };
+      })
+      .sort((a, b) => b.totalMatches - a.totalMatches);
+  }
+
+  async getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]> {
+    const profile = await this.getIndustryProfileByUserId(userId);
+    const assets = await this._getNewRelevantAssets(windowHours);
+    if (!profile) {
+      return assets.map((a) => ({ ...a, score: 0, matchedFields: [] }));
+    }
+    return assets
+      .map((a) => {
+        const { score, matchedFields } = scoreAssetAgainstProfile(a, profile);
+        return { ...a, score, matchedFields };
+      })
+      .sort((a, b) => b.score - a.score);
+  }
+
+  private async _getNewRelevantAssets(windowHours: number): Promise<Omit<AssetSuggestion, "score" | "matchedFields">[]> {
+    const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        assetName: ingestedAssets.assetName,
+        institution: ingestedAssets.institution,
+        indication: ingestedAssets.indication,
+        modality: ingestedAssets.modality,
+        target: ingestedAssets.target,
+        developmentStage: ingestedAssets.developmentStage,
+        summary: ingestedAssets.summary,
+        sourceUrl: ingestedAssets.sourceUrl,
+        firstSeenAt: ingestedAssets.firstSeenAt,
+        categories: ingestedAssets.categories,
+      })
+      .from(ingestedAssets)
+      .where(and(
+        eq(ingestedAssets.relevant, true),
+        gte(ingestedAssets.firstSeenAt, cutoff),
+      ))
+      .orderBy(desc(ingestedAssets.firstSeenAt))
+      .limit(500);
+    return rows.map((r) => ({
+      id: r.id,
+      assetName: r.assetName,
+      institution: r.institution ?? "",
+      indication: r.indication ?? "",
+      modality: r.modality ?? "",
+      target: r.target ?? "",
+      developmentStage: r.developmentStage ?? "",
+      summary: r.summary,
+      sourceUrl: r.sourceUrl,
+      firstSeenAt: r.firstSeenAt ?? new Date(),
+      _categories: r.categories ?? [],
+    }));
+  }
+}
+
+function scoreAssetAgainstProfile(
+  asset: { indication: string; modality: string; target: string; developmentStage: string; _categories?: string[] },
+  profile: { therapeuticAreas: string[]; modalities: string[]; dealStages: string[] }
+): { assetId: number; score: number; matchedFields: string[] } {
+  let score = 0;
+  const matchedFields: string[] = [];
+  const assetText = `${asset.indication} ${asset.target} ${(asset._categories ?? []).join(" ")}`.toLowerCase();
+  for (const area of profile.therapeuticAreas) {
+    if (assetText.includes(area.toLowerCase())) {
+      score += 3;
+      matchedFields.push(area);
+    }
+  }
+  const assetModality = asset.modality.toLowerCase();
+  for (const mod of profile.modalities) {
+    const modL = mod.toLowerCase();
+    if (assetModality.includes(modL) || modL.includes(assetModality)) {
+      score += 2;
+      matchedFields.push(mod);
+      break;
+    }
+  }
+  const assetStage = asset.developmentStage.toLowerCase();
+  for (const stage of profile.dealStages) {
+    if (assetStage.includes(stage.toLowerCase()) || stage.toLowerCase().includes(assetStage)) {
+      score += 1;
+      matchedFields.push(stage);
+      break;
+    }
+  }
+  return { assetId: (asset as any).id ?? 0, score, matchedFields };
 }
 
 export const storage = new DatabaseStorage();

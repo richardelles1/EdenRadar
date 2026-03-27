@@ -5727,6 +5727,49 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.get("/api/admin/dispatch/subscriber-matches", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours) || 168));
+      const [profileMatches, supabaseSubscribers] = await Promise.all([
+        storage.getSubscriberMatches(windowHours),
+        (async () => {
+          if (!supabaseServiceRoleKey || !supabaseUrl) return [] as Array<{ id: string; email: string }>;
+          const { createClient } = await import("@supabase/supabase-js");
+          const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+          const { data } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
+          return (data?.users ?? [])
+            .filter((u) => u.user_metadata?.subscribedToDigest === true)
+            .map((u) => ({ id: u.id, email: u.user_metadata?.contactEmail || u.email || "" }));
+        })(),
+      ]);
+      const emailByUserId = new Map(supabaseSubscribers.map((s) => [s.id, s.email]));
+      const subscribers = profileMatches
+        .filter((m) => emailByUserId.has(m.userId))
+        .map((m) => ({ ...m, email: emailByUserId.get(m.userId) ?? "" }));
+      return res.json({ subscribers, windowHours });
+    } catch (err: any) {
+      console.error("[dispatch/subscriber-matches]", err);
+      return res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  app.get("/api/admin/dispatch/suggestions/:userId", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const { userId } = req.params;
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours) || 168));
+      const assets = await storage.getSubscriberSuggestions(userId, windowHours);
+      return res.json({ assets, windowHours });
+    } catch (err: any) {
+      console.error("[dispatch/suggestions]", err);
+      return res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
   app.get("/api/admin/dispatch/history", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
