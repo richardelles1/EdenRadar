@@ -6244,7 +6244,11 @@ function DispatchTab({ pw }: { pw: string }) {
   const [sendAllPending, setSendAllPending] = useState(false);
   const [subscriberMgmtOpen, setSubscriberMgmtOpen] = useState(false);
   const [allUsersSearch, setAllUsersSearch] = useState("");
+  const [allUsersPage, setAllUsersPage] = useState(1);
   const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+  const [testSubscriberEmail, setTestSubscriberEmail] = useState("");
+  const [addingTestSubscriber, setAddingTestSubscriber] = useState(false);
+  const [manualWindowInput, setManualWindowInput] = useState("");
 
   const subscriberCountQuery = useQuery<{ subscribers: { id: string; username: string; effectiveEmail: string }[] }>({
     queryKey: ["/api/admin/dispatch/subscribers"],
@@ -6744,16 +6748,37 @@ function DispatchTab({ pw }: { pw: string }) {
               )}
             </div>
 
-            <Select value={String(windowHours)} onValueChange={(v) => { setWindowHours(Number(v)); setFilterInstitutions([]); setFilterModalities([]); }}>
-              <SelectTrigger className="h-8 text-xs" data-testid="select-window-hours">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {windowOptions.map((o) => (
-                  <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap gap-1">
+                {[{ label: "24h", value: 24 }, { label: "48h", value: 48 }, { label: "7d", value: 168 }, { label: "14d", value: 336 }, { label: "30d", value: 720 }].map((o) => (
+                  <button
+                    key={o.value}
+                    onClick={() => { setWindowHours(o.value); setManualWindowInput(""); setFilterInstitutions([]); setFilterModalities([]); }}
+                    className={`h-6 px-2.5 text-[10px] font-medium rounded-full border transition-colors ${windowHours === o.value && !manualWindowInput ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary"}`}
+                    data-testid={`button-window-preset-${o.label}`}
+                  >
+                    {o.label}
+                  </button>
                 ))}
-              </SelectContent>
-            </Select>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  max={8760}
+                  placeholder="Custom hrs"
+                  value={manualWindowInput}
+                  onChange={(e) => {
+                    setManualWindowInput(e.target.value);
+                    const n = parseInt(e.target.value, 10);
+                    if (!isNaN(n) && n >= 1 && n <= 8760) { setWindowHours(n); setFilterInstitutions([]); setFilterModalities([]); }
+                  }}
+                  className="flex-1 h-6 px-2 text-[10px] border border-border rounded-md bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                  data-testid="input-window-custom-hours"
+                />
+                <span className="text-[10px] text-muted-foreground shrink-0">hrs</span>
+              </div>
+            </div>
 
             <div className="relative">
               <input
@@ -6920,14 +6945,15 @@ function DispatchTab({ pw }: { pw: string }) {
                 </div>
               )}
               {(() => {
-                const grouped: Array<{ inst: string; assets: typeof filteredAssets }> = [];
-                const seen = new Set<string>();
+                const groupMap = new Map<string, typeof filteredAssets>();
                 for (const asset of filteredAssets) {
                   const inst = asset.institution || "Unknown";
-                  if (!seen.has(inst)) { seen.add(inst); grouped.push({ inst, assets: [] }); }
-                  grouped[grouped.length - 1].assets.push(asset);
+                  if (!groupMap.has(inst)) groupMap.set(inst, []);
+                  groupMap.get(inst)!.push(asset);
                 }
-                const sortedGroups = grouped.sort((a, b) => a.inst.localeCompare(b.inst));
+                const sortedGroups = Array.from(groupMap.entries())
+                  .map(([inst, assets]) => ({ inst, assets }))
+                  .sort((a, b) => a.inst.localeCompare(b.inst));
                 return sortedGroups.map(({ inst, assets: grpAssets }) => (
                   <div key={inst}>
                     <div className="flex items-center justify-between px-3 py-1.5 bg-muted/60 border-b border-border sticky top-0 z-10">
@@ -7330,14 +7356,18 @@ function DispatchTab({ pw }: { pw: string }) {
               <p className="text-sm font-semibold text-foreground">Subscribers</p>
               {subscriberMatchesQuery.isLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
             </div>
-            <Select value={String(windowHours)} onValueChange={(v) => setWindowHours(Number(v))}>
-              <SelectTrigger className="h-7 text-xs" data-testid="smart-select-window">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {windowOptions.map((o) => <SelectItem key={o.value} value={String(o.value)}>{o.label}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex flex-wrap gap-1">
+              {[{ label: "24h", value: 24 }, { label: "48h", value: 48 }, { label: "7d", value: 168 }, { label: "14d", value: 336 }, { label: "30d", value: 720 }].map((o) => (
+                <button
+                  key={o.value}
+                  onClick={() => { setWindowHours(o.value); setManualWindowInput(""); }}
+                  className={`h-6 px-2.5 text-[10px] font-medium rounded-full border transition-colors ${windowHours === o.value && !manualWindowInput ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-primary/50 hover:text-primary"}`}
+                  data-testid={`button-smart-window-preset-${o.label}`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
             <div className="flex flex-col gap-1.5 max-h-[calc(100vh-260px)] overflow-y-auto pr-0.5">
               {subscriberMatchesQuery.data?.subscribers.length === 0 && (
                 <div className="p-3 text-xs text-muted-foreground text-center bg-card border border-border rounded-lg">
@@ -7382,11 +7412,71 @@ function DispatchTab({ pw }: { pw: string }) {
               </button>
               {subscriberMgmtOpen && (
                 <div className="border-t border-border p-2 space-y-2">
+                  {/* Create test subscriber */}
+                  <div className="flex gap-1.5">
+                    <input
+                      type="email"
+                      placeholder="email@company.com"
+                      value={testSubscriberEmail}
+                      onChange={(e) => setTestSubscriberEmail(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && testSubscriberEmail.trim() && !addingTestSubscriber && (async () => {
+                        const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (!emailRx.test(testSubscriberEmail.trim())) { toast({ title: "Invalid email", variant: "destructive" }); return; }
+                        setAddingTestSubscriber(true);
+                        try {
+                          const allUsers = allUsersQuery.data?.users ?? [];
+                          const existing = allUsers.find((u) => u.email.toLowerCase() === testSubscriberEmail.trim().toLowerCase());
+                          if (existing) {
+                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-admin-password": pw }, body: JSON.stringify({ subscribedToDigest: true }) });
+                            if (!r.ok) throw new Error("Failed");
+                          } else {
+                            toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet. Ask them to sign up first.`, variant: "destructive" }); return;
+                          }
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
+                          toast({ title: "Subscribed", description: `${testSubscriberEmail} added to digest list.` });
+                          setTestSubscriberEmail("");
+                        } catch { toast({ title: "Error", variant: "destructive" }); } finally { setAddingTestSubscriber(false); }
+                      })()}
+                      className="flex-1 h-7 px-2.5 text-[10px] border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      data-testid="input-test-subscriber-email"
+                    />
+                    <button
+                      onClick={async () => {
+                        const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                        if (!emailRx.test(testSubscriberEmail.trim())) { toast({ title: "Invalid email", variant: "destructive" }); return; }
+                        setAddingTestSubscriber(true);
+                        try {
+                          const allUsers = allUsersQuery.data?.users ?? [];
+                          const existing = allUsers.find((u) => u.email.toLowerCase() === testSubscriberEmail.trim().toLowerCase());
+                          if (existing) {
+                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-admin-password": pw }, body: JSON.stringify({ subscribedToDigest: true }) });
+                            if (!r.ok) throw new Error("Failed");
+                          } else {
+                            toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet.`, variant: "destructive" }); return;
+                          }
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
+                          queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
+                          toast({ title: "Subscribed", description: `${testSubscriberEmail} added.` });
+                          setTestSubscriberEmail("");
+                        } catch { toast({ title: "Error", variant: "destructive" }); } finally { setAddingTestSubscriber(false); }
+                      }}
+                      disabled={addingTestSubscriber || !testSubscriberEmail.trim()}
+                      className="shrink-0 h-7 px-2 text-[9px] font-semibold rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-40 flex items-center gap-0.5"
+                      data-testid="button-add-test-subscriber"
+                    >
+                      {addingTestSubscriber ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : <Plus className="h-2.5 w-2.5" />}
+                      Add
+                    </button>
+                  </div>
+                  {/* Search existing users */}
                   <input
                     type="text"
-                    placeholder="Search by email..."
+                    placeholder="Search users by email..."
                     value={allUsersSearch}
-                    onChange={(e) => setAllUsersSearch(e.target.value)}
+                    onChange={(e) => { setAllUsersSearch(e.target.value); setAllUsersPage(1); }}
                     className="w-full h-7 px-2.5 text-xs border border-border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-primary/30"
                     data-testid="input-all-users-search"
                   />
@@ -7398,45 +7488,66 @@ function DispatchTab({ pw }: { pw: string }) {
                   {!allUsersQuery.isLoading && (allUsersQuery.data?.users ?? []).length === 0 && (
                     <p className="text-[10px] text-muted-foreground text-center py-2">No users found.</p>
                   )}
-                  <div className="max-h-56 overflow-y-auto space-y-1">
-                    {(allUsersQuery.data?.users ?? [])
-                      .filter((u) => !allUsersSearch || u.email.toLowerCase().includes(allUsersSearch.toLowerCase()) || (u.contactEmail ?? "").toLowerCase().includes(allUsersSearch.toLowerCase()))
-                      .map((u) => (
-                        <div key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-muted/40" data-testid={`user-row-${u.id}`}>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] font-medium text-foreground truncate">{u.contactEmail || u.email}</p>
-                            {u.role && <p className="text-[9px] text-muted-foreground">{u.role}</p>}
-                          </div>
-                          <button
-                            onClick={async () => {
-                              setTogglingUserId(u.id);
-                              try {
-                                const r = await fetch(`/api/admin/users/${u.id}/subscribed`, {
-                                  method: "PATCH",
-                                  headers: { "Content-Type": "application/json", "x-admin-password": pw },
-                                  body: JSON.stringify({ subscribedToDigest: !u.subscribedToDigest }),
-                                });
-                                if (!r.ok) throw new Error("Failed");
-                                queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
-                                queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
-                                queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
-                                toast({ title: u.subscribedToDigest ? "Unsubscribed" : "Subscribed", description: `${u.contactEmail || u.email} ${u.subscribedToDigest ? "removed from" : "added to"} digest list.` });
-                              } catch {
-                                toast({ title: "Error", description: "Failed to update subscription.", variant: "destructive" });
-                              } finally {
-                                setTogglingUserId(null);
-                              }
-                            }}
-                            disabled={togglingUserId === u.id}
-                            className={`shrink-0 text-[9px] font-semibold px-2 py-1 rounded-full transition-colors ${u.subscribedToDigest ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-red-100 hover:text-red-600" : "bg-muted text-muted-foreground hover:bg-emerald-100 hover:text-emerald-700"}`}
-                            data-testid={`button-toggle-sub-${u.id}`}
-                            title={u.subscribedToDigest ? "Click to unsubscribe" : "Click to subscribe"}
-                          >
-                            {togglingUserId === u.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : u.subscribedToDigest ? "Subscribed" : "Subscribe"}
-                          </button>
+                  {(() => {
+                    const PAGE_SIZE = 30;
+                    const filtered = (allUsersQuery.data?.users ?? []).filter((u) =>
+                      !allUsersSearch || u.email.toLowerCase().includes(allUsersSearch.toLowerCase()) || (u.contactEmail ?? "").toLowerCase().includes(allUsersSearch.toLowerCase())
+                    );
+                    const paginated = filtered.slice(0, allUsersPage * PAGE_SIZE);
+                    return (
+                      <>
+                        {filtered.length > 0 && (
+                          <p className="text-[9px] text-muted-foreground">Showing {paginated.length} of {filtered.length} users</p>
+                        )}
+                        <div className="max-h-56 overflow-y-auto space-y-1">
+                          {paginated.map((u) => (
+                            <div key={u.id} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-muted/40" data-testid={`user-row-${u.id}`}>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-[10px] font-medium text-foreground truncate">{u.contactEmail || u.email}</p>
+                                {u.role && <p className="text-[9px] text-muted-foreground">{u.role}</p>}
+                              </div>
+                              <button
+                                onClick={async () => {
+                                  setTogglingUserId(u.id);
+                                  try {
+                                    const r = await fetch(`/api/admin/users/${u.id}/subscribed`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+                                      body: JSON.stringify({ subscribedToDigest: !u.subscribedToDigest }),
+                                    });
+                                    if (!r.ok) throw new Error("Failed");
+                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscribers"] });
+                                    queryClient.invalidateQueries({ queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours] });
+                                    toast({ title: u.subscribedToDigest ? "Unsubscribed" : "Subscribed", description: `${u.contactEmail || u.email} ${u.subscribedToDigest ? "removed from" : "added to"} digest list.` });
+                                  } catch {
+                                    toast({ title: "Error", description: "Failed to update subscription.", variant: "destructive" });
+                                  } finally {
+                                    setTogglingUserId(null);
+                                  }
+                                }}
+                                disabled={togglingUserId === u.id}
+                                className={`shrink-0 text-[9px] font-semibold px-2 py-1 rounded-full transition-colors ${u.subscribedToDigest ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 hover:bg-red-100 hover:text-red-600" : "bg-muted text-muted-foreground hover:bg-emerald-100 hover:text-emerald-700"}`}
+                                data-testid={`button-toggle-sub-${u.id}`}
+                                title={u.subscribedToDigest ? "Click to unsubscribe" : "Click to subscribe"}
+                              >
+                                {togglingUserId === u.id ? <Loader2 className="h-2.5 w-2.5 animate-spin" /> : u.subscribedToDigest ? "Subscribed" : "Subscribe"}
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      ))}
-                  </div>
+                        {paginated.length < filtered.length && (
+                          <button
+                            onClick={() => setAllUsersPage((p) => p + 1)}
+                            className="w-full text-[10px] text-primary hover:underline py-1"
+                            data-testid="button-load-more-users"
+                          >
+                            Load more ({filtered.length - paginated.length} remaining)
+                          </button>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               )}
             </div>
