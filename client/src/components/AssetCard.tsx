@@ -5,11 +5,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   BookmarkCheck, Building2, Key,
-  FlaskConical, Microscope, ExternalLink,
+  FlaskConical, Microscope, ExternalLink, CalendarDays,
+  Link as LinkIcon,
 } from "lucide-react";
 import { SourceBadge } from "./SourceBadge";
 import { PipelinePicker } from "./PipelinePicker";
-import type { ScoredAsset } from "@/lib/types";
+import type { ScoredAsset, ScoreBreakdown } from "@/lib/types";
 import type { SavedAsset } from "@shared/schema";
 import { useLocation } from "wouter";
 
@@ -55,6 +56,26 @@ function scoreTextColor(score: number, isUnscored: boolean): string {
   return "text-muted-foreground";
 }
 
+function formatSignalDate(dateStr: string | undefined): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  }
+  const yearMatch = dateStr.match(/^(\d{4})/);
+  return yearMatch ? yearMatch[1] : "";
+}
+
+const SCORE_BREAKDOWN_KEYS = ["fit", "novelty", "readiness", "licensability"] as const;
+type BreakdownKey = typeof SCORE_BREAKDOWN_KEYS[number];
+
+const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
+  fit: "Buyer Fit",
+  novelty: "Novelty",
+  readiness: "Readiness",
+  licensability: "Licensability",
+};
+
 type AssetCardProps = {
   asset: ScoredAsset;
   isSaved?: boolean;
@@ -74,12 +95,19 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   const hasOwner = asset.owner_name && asset.owner_name !== "unknown";
   const hasInstitution = asset.institution && asset.institution !== "unknown";
   const licensingAvailable = (asset.licensing_status ?? "").toLowerCase().includes("available");
-  const excerpt = asset.why_it_matters && asset.why_it_matters.length > 10
-    ? asset.why_it_matters
-    : asset.summary ?? null;
+  const hasWhyItMatters = asset.why_it_matters && asset.why_it_matters.length > 10;
   const isResearcherPublished = asset.source_types?.includes("researcher");
   const accentClass = scoreAccent(asset.score, isUnscored);
   const scoreColor = scoreTextColor(asset.score, isUnscored);
+
+  const showTarget = asset.target && asset.target !== "unknown";
+  const showIndication = asset.indication && asset.indication !== "unknown";
+  const showStage = asset.development_stage && asset.development_stage !== "unknown";
+  const showModality = asset.modality && asset.modality !== "unknown";
+
+  const dateStr = formatSignalDate(asset.latest_signal_date);
+  const hasExternalLink = !!(asset.source_urls?.[0] && asset.source_types?.includes("tech_transfer") && asset.contact_office);
+  const hasNonTTOLink = !!(asset.source_urls?.[0] && !asset.source_types?.includes("tech_transfer"));
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -97,11 +125,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
   };
 
   const handleMouseLeave = () => setSpotlight((s) => ({ ...s, visible: false }));
-
-  const showTarget = asset.target && asset.target !== "unknown";
-  const showIndication = asset.indication && asset.indication !== "unknown";
-  const showStage = asset.development_stage && asset.development_stage !== "unknown";
-  const showModality = asset.modality && asset.modality !== "unknown";
 
   return (
     <div
@@ -127,7 +150,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
       />
 
       {/* Left-edge score accent strip */}
-      <div className={`absolute left-0 top-0 bottom-0 w-[4px] ${accentClass} transition-all duration-300`} />
+      <div className={`absolute left-0 top-0 bottom-0 w-[4px] ${accentClass}`} />
 
       {/* Researcher banner */}
       {isResearcherPublished && (
@@ -140,9 +163,9 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
       )}
 
       {/* Card body */}
-      <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2 flex-1">
+      <div className="relative z-10 pl-5 pr-4 pt-4 pb-3 flex flex-col gap-2.5 flex-1">
 
-        {/* Top row: score (left) + actions (right) */}
+        {/* Top row: MATCH score (left, large) + actions (right) */}
         <div className="flex items-start justify-between gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -157,15 +180,14 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
               <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
                 <p className="text-xs font-semibold text-foreground mb-2">Signal Profile</p>
                 <div className="space-y-1.5">
-                  {(["fit", "novelty", "readiness", "licensability"] as const).map((k) => {
-                    const val = (asset.score_breakdown as unknown as Record<string, number>)[k];
+                  {SCORE_BREAKDOWN_KEYS.map((k) => {
+                    const val: number = asset.score_breakdown[k as keyof ScoreBreakdown] as number;
                     if (!val || val === 0) return null;
                     const barColor = val >= 75 ? "bg-emerald-500/60" : val >= 50 ? "bg-amber-500/60" : "bg-muted-foreground/30";
                     const textColor = val >= 75 ? "text-emerald-500" : val >= 50 ? "text-amber-500" : "text-muted-foreground";
-                    const labels: Record<string, string> = { fit: "Buyer Fit", novelty: "Novelty", readiness: "Readiness", licensability: "Licensability" };
                     return (
                       <div key={k} className="flex items-center gap-2">
-                        <span className="text-[10px] text-muted-foreground w-24 shrink-0">{labels[k]}</span>
+                        <span className="text-[10px] text-muted-foreground w-24 shrink-0">{BREAKDOWN_LABELS[k]}</span>
                         <div className="flex-1 h-1.5 rounded-full bg-card-border overflow-hidden">
                           <div className={`h-full rounded-full ${barColor}`} style={{ width: `${val}%` }} />
                         </div>
@@ -178,8 +200,8 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             )}
           </Tooltip>
 
-          {/* Action buttons top-right */}
-          <div className="flex items-center gap-1.5 shrink-0 pt-1">
+          {/* Bookmark / pipeline picker */}
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
             {isSaved ? (
               <button
                 onClick={() => onUnsave?.(asset.id, asset.asset_name)}
@@ -196,7 +218,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         </div>
 
         {/* Asset name + institution — always visible */}
-        <div className="mt-0.5">
+        <div>
           <h3
             className="font-semibold text-foreground text-sm leading-snug line-clamp-2"
             data-testid={`text-asset-name-${asset.id}`}
@@ -217,10 +239,10 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
         </div>
 
         {/* Hover-reveal metadata layer */}
-        <div className="overflow-hidden transition-all duration-200 ease-out max-h-0 group-hover:max-h-48 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 flex flex-col gap-2">
-          {/* Badges row */}
-          {(showStage || showModality || licensingAvailable || isResearcherPublished) && (
-            <div className="flex flex-wrap gap-1 pt-0.5">
+        <div className="overflow-hidden transition-all duration-200 ease-out max-h-0 group-hover:max-h-52 opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 flex flex-col gap-2">
+          {/* Badges */}
+          {(showStage || showModality || licensingAvailable || (asset.source_types?.length ?? 0) > 0) && (
+            <div className="flex flex-wrap gap-1">
               {showStage && (
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${stageClass}`}>
                   {asset.development_stage}
@@ -265,17 +287,64 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             </div>
           )}
 
-          {/* Excerpt */}
-          {excerpt && (
-            <p className="text-[11px] text-muted-foreground leading-relaxed line-clamp-2 italic">
-              "{excerpt}"
+          {/* Why it matters (quote block) or summary fallback (plain italic) */}
+          {hasWhyItMatters ? (
+            <div className="rounded-lg border border-primary/12 bg-primary/[0.04] px-3 py-2">
+              <p className="text-[11px] text-foreground/75 leading-relaxed italic line-clamp-3" data-testid={`text-why-matters-${asset.id}`}>
+                "{asset.why_it_matters}"
+              </p>
+            </div>
+          ) : asset.summary ? (
+            <p className="text-xs text-muted-foreground leading-relaxed line-clamp-3">
+              {asset.summary}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
 
-      {/* Footer — single centered CTA */}
-      <div className="relative z-10 pl-5 pr-4 pb-4 pt-1">
+      {/* Footer — metadata row + single centered CTA */}
+      <div className="relative z-10 pl-5 pr-4 pb-4 pt-0 flex flex-col gap-2">
+        {/* Metadata row: date, signal count, optional source link */}
+        {(dateStr || asset.evidence_count > 1 || hasExternalLink || hasNonTTOLink) && (
+          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            {dateStr && (
+              <span className="flex items-center gap-1 shrink-0" data-testid={`text-date-${asset.id}`}>
+                <CalendarDays className="w-3 h-3 opacity-60" />
+                {dateStr}
+              </span>
+            )}
+            {asset.evidence_count > 1 && (
+              <span className="shrink-0">{asset.evidence_count} signals</span>
+            )}
+            {hasExternalLink && (
+              <a
+                href={asset.source_urls[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 ml-auto rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150 shrink-0"
+                data-testid={`link-tto-contact-${asset.id}`}
+                onClick={(e) => e.stopPropagation()}
+                title={asset.contact_office}
+              >
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+            {hasNonTTOLink && (
+              <a
+                href={asset.source_urls[0]}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-6 h-6 ml-auto rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all duration-150"
+                data-testid={`link-source-${asset.id}`}
+                title="View source"
+              >
+                <LinkIcon className="w-3 h-3" />
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Single centered CTA */}
         <Button
           className="w-full h-8 text-[12px] font-semibold"
           onClick={handleViewDossier}
