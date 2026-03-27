@@ -112,7 +112,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           transform: pressed
             ? `perspective(1000px) scale(0.96) rotateZ(0.4deg)`
             : tilt.active
-            ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
+            ? `perspective(1000px) scale(1.015) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
             : `perspective(1000px)`,
           transition: pressed
             ? "transform 0.07s ease-in, box-shadow 0.1s"
