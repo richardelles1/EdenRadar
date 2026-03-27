@@ -143,7 +143,7 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
           style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }}
           data-testid={`pipeline-stage-badge-${asset.id}`}
         >
-          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
+          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
           <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
             {stageAbbr !== "—" ? stageAbbr : <span className="opacity-40">—</span>}
           </span>

@@ -431,7 +431,7 @@ export function SavedAssetCard({
           style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }}
           data-testid={`saved-stage-badge-${asset.id}`}
         >
-          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Score</span>
+          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
           <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
             {abbrev !== "—" ? abbrev : <span className="opacity-40">—</span>}
           </span>
