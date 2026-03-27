@@ -805,7 +805,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSyncSession(sessionId: string, institution: string, currentIndexed: number): Promise<SyncSession> {
-    await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
+    // NOTE: Do NOT delete staging rows here. Pending staging rows from prior sessions
+    // must remain available for fingerprint dedup in runInstitutionSync (getExistingFingerprints
+    // reads them). Superseding (marking as 'skipped') is done after dedup in runInstitutionSync.
 
     const existing = await db
       .select({ id: syncSessions.id })
