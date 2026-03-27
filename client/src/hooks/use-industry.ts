@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 
 export type IndustryProfile = {
@@ -41,9 +42,9 @@ export function getIndustryProfile(): IndustryProfile {
 export async function syncIndustryProfileToServer(
   profile: IndustryProfile,
   accessToken: string
-): Promise<void> {
+): Promise<{ ok: boolean; error?: string }> {
   try {
-    await fetch("/api/industry/profile", {
+    const res = await fetch("/api/industry/profile", {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
@@ -51,8 +52,17 @@ export async function syncIndustryProfileToServer(
       },
       body: JSON.stringify(profile),
     });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const msg = body.error ?? `HTTP ${res.status}`;
+      console.warn("[use-industry] Server sync failed:", msg);
+      return { ok: false, error: msg };
+    }
+    return { ok: true };
   } catch (err) {
-    console.warn("[use-industry] Failed to sync profile to server:", err);
+    const msg = err instanceof Error ? err.message : "Network error";
+    console.warn("[use-industry] Server sync failed:", msg);
+    return { ok: false, error: msg };
   }
 }
 
@@ -88,9 +98,41 @@ function isServerProfileEmpty(p: { companyName?: string; therapeuticAreas?: stri
   return !p.companyName && (!p.therapeuticAreas || p.therapeuticAreas.length === 0) && !p.onboardingDone;
 }
 
+export function useIndustryProfile(): { profile: IndustryProfile; isLoading: boolean } {
+  const { session, role } = useAuth();
+  const isIndustry = role === "industry" && !!session?.access_token;
+
+  const { data, isLoading } = useQuery<{ profile: IndustryProfile }>({
+    queryKey: ["/api/industry/profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/industry/profile", {
+        headers: { Authorization: `Bearer ${session!.access_token}` },
+      });
+      if (!res.ok) throw new Error("Failed to load profile");
+      return res.json();
+    },
+    enabled: isIndustry,
+    staleTime: 5 * 60 * 1000,
+    placeholderData: { profile: getIndustryProfile() },
+  });
+
+  const serverProfile = data?.profile;
+  if (serverProfile && isProfileMeaningful(serverProfile)) {
+    try {
+      localStorage.setItem("eden-industry-profile", JSON.stringify(serverProfile));
+    } catch {}
+  }
+
+  return {
+    profile: serverProfile ?? getIndustryProfile(),
+    isLoading: isIndustry ? isLoading : false,
+  };
+}
+
 export function useIndustrySyncOnMount(): { hydrated: boolean } {
   const { session, role } = useAuth();
   const [hydrated, setHydrated] = useState(false);
+  const qc = useQueryClient();
 
   useEffect(() => {
     setCurrentAccessToken(session?.access_token ?? null);
@@ -114,8 +156,10 @@ export function useIndustrySyncOnMount(): { hydrated: boolean } {
 
         if (isServerProfileEmpty(serverProfile) && isProfileMeaningful(local)) {
           await syncIndustryProfileToServer(local, session!.access_token);
+          qc.invalidateQueries({ queryKey: ["/api/industry/profile"] });
         } else if (!isServerProfileEmpty(serverProfile) && !isProfileMeaningful(local)) {
-          saveIndustryProfile({
+          localStorage.setItem("eden-industry-profile", JSON.stringify({
+            ...DEFAULT_PROFILE,
             userName: serverProfile.userName ?? "",
             companyName: serverProfile.companyName ?? "",
             companyType: serverProfile.companyType ?? "",
@@ -123,7 +167,8 @@ export function useIndustrySyncOnMount(): { hydrated: boolean } {
             dealStages: serverProfile.dealStages ?? [],
             modalities: serverProfile.modalities ?? [],
             onboardingDone: serverProfile.onboardingDone ?? false,
-          });
+          }));
+          qc.invalidateQueries({ queryKey: ["/api/industry/profile"] });
         }
       } catch (err) {
         console.warn("[use-industry] Hydration failed:", err);
