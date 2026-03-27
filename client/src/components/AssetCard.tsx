@@ -49,23 +49,26 @@ const BREAKDOWN_LABELS: Record<BreakdownKey, string> = {
 };
 
 function normalizePillValue(val: string | undefined | null): string | null {
-  if (!val || val.trim() === "" || val.toLowerCase() === "unknown" || val.toLowerCase() === "n/a") return null;
+  if (!val) return null;
   const v = val.trim();
+  if (!v || v.toLowerCase() === "unknown" || v.toLowerCase() === "n/a") return null;
   return v.charAt(0).toUpperCase() + v.slice(1);
 }
+
+const PILL_MUTED_TEXT = "text-zinc-500 dark:text-zinc-400";
 
 function stagePillClass(stage: string): string {
   const s = stage.toLowerCase();
   if (s.includes("phase 3") || s.includes("phase iii") || s.includes("approved") || s.includes("marketed")) {
-    return "bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 text-emerald-700 dark:text-emerald-400";
+    return `bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-700/30 ${PILL_MUTED_TEXT}`;
   }
   if (s.includes("phase 2") || s.includes("phase ii")) {
-    return "bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 text-violet-700 dark:text-violet-400";
+    return `bg-violet-50 dark:bg-violet-950/40 border border-violet-200/70 dark:border-violet-700/30 ${PILL_MUTED_TEXT}`;
   }
   if (s.includes("phase 1") || s.includes("phase i") || s.includes("phase i/ii")) {
-    return "bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 text-sky-700 dark:text-sky-400";
+    return `bg-sky-50 dark:bg-sky-950/40 border border-sky-200/70 dark:border-sky-700/30 ${PILL_MUTED_TEXT}`;
   }
-  return "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400";
+  return `bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 ${PILL_MUTED_TEXT}`;
 }
 
 const MODALITY_PILL_CLASS = "bg-zinc-100 dark:bg-zinc-700/50 border border-zinc-200/80 dark:border-zinc-600/50 text-zinc-500 dark:text-zinc-400";
