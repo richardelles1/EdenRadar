@@ -228,6 +228,9 @@ app.use((req, res, next) => {
         END IF;
       END $$
     `);
+    await db.execute(sql`
+      ALTER TABLE eden_sessions ADD COLUMN IF NOT EXISTS focus_context jsonb
+    `);
     log("[startup] eden_sessions table ready", "startup");
   } catch (err: any) {
     log(`[startup] eden_sessions migration failed: ${err?.message}`, "startup");
