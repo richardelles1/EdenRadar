@@ -402,14 +402,18 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 
     await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing", lastRefreshedAt: new Date() });
 
-    // Supersede any old pending staging rows for this institution before inserting new ones.
-    // This keeps the queue clean and ensures we never mix stale and fresh results.
+    // Step 1: Collect known fingerprints + URLs BEFORE superseding old staging rows.
+    // Old pending staging rows (not yet pushed) must contribute to the known set so that
+    // assets already queued from a previous scan are not re-staged as "new" on this scan.
+    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
+
+    // Step 2: NOW supersede old pending staging rows for this institution.
+    // This cleans up the queue so only the current session's results are actionable,
+    // but it does NOT affect the known-fingerprint dedup since we already captured those above.
     const superseded = await storage.supersedeStagingForInstitution(institutionName);
     if (superseded > 0) {
       console.log(`[sync] ${institutionName}: superseded ${superseded} stale staging rows from previous sessions`);
     }
-
-    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
 
     const seen = new Set<string>();
     const stagingRows: Array<Omit<SyncStagingRow, "id" | "createdAt">> = [];
