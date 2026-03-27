@@ -8,7 +8,6 @@ import {
   Building2,
   Bell,
   Layers,
-  Sparkles,
   User,
   Moon,
   Sun,
@@ -31,16 +30,42 @@ type AlertsBadgeData = {
   newProjects: { total: number };
 };
 
-const NAV_ITEMS = [
-  { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/scout", label: "EdenScout", icon: Search, exact: true },
-  { href: "/industry/eden", label: "Eden", icon: Sparkles },
-  { href: "/institutions", label: "Institutions", icon: Building2 },
-  { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
-  { href: "/assets", label: "Pipelines", icon: Layers },
-  { href: "/industry/projects", label: "EdenLab", icon: FlaskConical },
-  { href: "/industry/concepts", label: "EdenDiscovery", icon: Lightbulb },
-  { href: "/industry/profile", label: "Profile", icon: User },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact?: boolean;
+  alertsBadge?: boolean;
+};
+
+type NavGroup = {
+  groupLabel: string;
+  items: NavItem[];
+};
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    groupLabel: "Overview",
+    items: [
+      { href: "/industry/dashboard", label: "Dashboard", icon: LayoutDashboard, exact: true },
+    ],
+  },
+  {
+    groupLabel: "Intelligence",
+    items: [
+      { href: "/scout", label: "Scout", icon: Search, exact: true },
+      { href: "/alerts", label: "Alerts", icon: Bell, exact: true, alertsBadge: true },
+      { href: "/institutions", label: "Institutions", icon: Building2 },
+    ],
+  },
+  {
+    groupLabel: "Workspace",
+    items: [
+      { href: "/assets", label: "Pipelines", icon: Layers },
+      { href: "/industry/projects", label: "Lab", icon: FlaskConical },
+      { href: "/industry/concepts", label: "Discovery", icon: Lightbulb },
+    ],
+  },
 ];
 
 function getInitials(name: string): string {
@@ -114,50 +139,74 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
-      <div className="px-3 pt-3 pb-1 shrink-0">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3">
-          Industry Portal
-        </p>
-      </div>
+      <nav className="flex-1 px-3 pt-3 pb-2 overflow-y-auto space-y-4">
+        {NAV_GROUPS.map(({ groupLabel, items }) => (
+          <div key={groupLabel}>
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-1">
+              {groupLabel}
+            </p>
+            <div className="space-y-0.5">
+              {items.map(({ href, label, icon: Icon, exact, alertsBadge }) => {
+                const isActive = exact
+                  ? location === href
+                  : location === href || location.startsWith(href + "/");
+                const showDot = alertsBadge && totalAlerts > 0 && !isActive;
+                return (
+                  <Link key={href} href={href}>
+                    <div
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
+                        isActive
+                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                          : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                      }`}
+                      data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
+                      onClick={onClose}
+                    >
+                      <div className="relative shrink-0">
+                        <Icon
+                          className={`w-4 h-4 ${alertsBadge && !isActive && totalAlerts > 0 ? "text-emerald-500" : ""}`}
+                        />
+                        {showDot && (
+                          <span
+                            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border-2 border-background"
+                            data-testid="alerts-dot"
+                          />
+                        )}
+                      </div>
+                      <span>{label}</span>
+                      {showDot && (
+                        <span className="ml-auto text-[10px] font-semibold text-emerald-500 tabular-nums" data-testid="alerts-count">
+                          {totalAlerts}
+                        </span>
+                      )}
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
 
-      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, exact, alertsBadge }) => {
-          const isActive = exact
-            ? location === href
-            : location === href || location.startsWith(href + "/");
-          const showDot = alertsBadge && totalAlerts > 0 && !isActive;
-          return (
-            <Link key={href} href={href}>
-              <div
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
-                  isActive
-                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                }`}
-                data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                onClick={onClose}
-              >
-                <div className="relative shrink-0">
-                  <Icon
-                    className={`w-4 h-4 ${alertsBadge && !isActive && totalAlerts > 0 ? "text-emerald-500" : ""}`}
-                  />
-                  {showDot && (
-                    <span
-                      className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border-2 border-background"
-                      data-testid="alerts-dot"
-                    />
-                  )}
-                </div>
-                <span>{label}</span>
-                {showDot && (
-                  <span className="ml-auto text-[10px] font-semibold text-emerald-500 tabular-nums" data-testid="alerts-count">
-                    {totalAlerts}
-                  </span>
-                )}
-              </div>
-            </Link>
-          );
-        })}
+        {/* Profile link at bottom of nav */}
+        <div>
+          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-1">
+            Account
+          </p>
+          <Link href="/industry/profile">
+            <div
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
+                location === "/industry/profile"
+                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+              }`}
+              data-testid="industry-sidebar-link-profile"
+              onClick={onClose}
+            >
+              <User className="w-4 h-4 shrink-0" />
+              <span>Profile</span>
+            </div>
+          </Link>
+        </div>
       </nav>
 
       <div className="px-3 pb-4 pt-2 border-t border-border space-y-0.5 shrink-0">

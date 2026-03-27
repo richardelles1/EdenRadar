@@ -6,6 +6,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { EdenWidget } from "@/components/EdenWidget";
 
 type DashboardLayoutProps = {
   children: React.ReactNode;
@@ -35,9 +36,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
     }
   }, [session, role, loading, hydrated, navigate]);
 
-  const [location] = useLocation();
-  const isEden = location === "/industry/eden";
-
   if (loading || (!hydrated && session && role === "industry")) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -50,13 +48,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="flex min-h-screen bg-background relative">
-      {!isEden && <PortalBackground variant="radar" />}
+      <PortalBackground variant="radar" />
       <IndustrySidebar />
       <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         <ErrorBoundary>
           {children}
         </ErrorBoundary>
       </main>
+      <EdenWidget />
       <IndustryOnboarding
         open={onboardingOpen}
         onClose={() => setOnboardingOpen(false)}
