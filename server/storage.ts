@@ -907,17 +907,19 @@ export class DatabaseStorage implements IStorage {
     const fingerprints = new Set(dbRows.map(r => r.fingerprint));
     const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
 
-    // 2. Also include fingerprints + source URLs from pending staging rows for this institution
-    //    (isNew=true, not yet pushed or skipped) — prevents re-staging assets that are already
-    //    in the queue waiting to be pushed to ingested_assets.
+    // 2. Also include fingerprints + source URLs from staging rows for this institution.
+    //    Include ALL staging rows regardless of isNew flag (a Day-N scan may have inserted
+    //    the same asset as isNew=false, and we must still recognise it on Day N+1).
+    //    Only exclude 'pushed' rows since those are already reflected in ingested_assets.
+    //    Use a 90-day window to keep the query efficient as the table accumulates over time.
     const stagingRows = await db
       .select({ fingerprint: syncStaging.fingerprint, sourceUrl: syncStaging.sourceUrl })
       .from(syncStaging)
       .where(
         and(
           eq(syncStaging.institution, institution),
-          eq(syncStaging.isNew, true),
-          sql`${syncStaging.status} NOT IN ('pushed', 'skipped')`
+          sql`${syncStaging.status} != 'pushed'`,
+          gte(syncStaging.createdAt, sql`NOW() - INTERVAL '90 days'`)
         )
       );
 
