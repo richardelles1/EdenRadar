@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -20,9 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Building2, Plus, X, CheckCircle2 } from "lucide-react";
+import { Building2, CheckCircle2, Save } from "lucide-react";
 import { getIndustryProfile, saveIndustryProfile } from "@/hooks/use-industry";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 const COMPANY_TYPES = [
   "Large Pharma",
@@ -36,14 +36,19 @@ const COMPANY_TYPES = [
   "Other",
 ];
 
-const DEAL_STAGES = [
-  "Discovery",
-  "Preclinical",
-  "Phase 1",
-  "Phase 2",
-  "Phase 3",
-  "Approved",
+const THERAPEUTIC_AREA_OPTIONS = [
+  "Oncology", "Immunology", "Neurology", "Rare Disease", "Cardiology",
+  "Infectious Disease", "Metabolic Disease", "Ophthalmology", "Dermatology",
+  "Respiratory", "Hematology", "Gastroenterology", "Musculoskeletal",
+  "Endocrinology", "Psychiatry",
 ];
+
+const MODALITY_OPTIONS = [
+  "Small Molecule", "Antibody", "ADC", "CAR-T", "Gene Therapy",
+  "mRNA Therapy", "Peptide", "Bispecific Antibody", "Cell Therapy",
+];
+
+const STAGE_OPTIONS = ["Discovery", "Preclinical", "Phase 1", "Phase 2", "Phase 3", "Approved"];
 
 const formSchema = z.object({
   userName: z.string().optional(),
@@ -53,128 +58,77 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-function TagInput({
+function ToggleChip({
   label,
-  description,
-  items,
-  setItems,
-  placeholder,
-  testIdPrefix,
-  badgeClass,
+  active,
+  onClick,
+  testId,
+  color = "emerald",
 }: {
   label: string;
-  description?: string;
-  items: string[];
-  setItems: (fn: (prev: string[]) => string[]) => void;
-  placeholder: string;
-  testIdPrefix: string;
-  badgeClass?: string;
+  active: boolean;
+  onClick: () => void;
+  testId?: string;
+  color?: "emerald" | "blue" | "violet";
 }) {
-  const [value, setValue] = useState("");
-
-  function add() {
-    const trimmed = value.trim();
-    if (trimmed && !items.includes(trimmed)) {
-      setItems((prev) => [...prev, trimmed]);
-      setValue("");
-    }
-  }
-
-  function remove(item: string) {
-    setItems((prev) => prev.filter((a) => a !== item));
-  }
+  const activeClass = {
+    emerald: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/40",
+    blue: "bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/40",
+    violet: "bg-violet-500/15 text-violet-700 dark:text-violet-300 border-violet-500/40",
+  }[color];
 
   return (
-    <div className="space-y-2">
-      <FormLabel>{label}</FormLabel>
-      {description && <p className="text-xs text-muted-foreground">{description}</p>}
-      <div className="flex gap-2">
-        <Input
-          placeholder={placeholder}
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              add();
-            }
-          }}
-          data-testid={`input-${testIdPrefix}-new`}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          onClick={add}
-          data-testid={`button-add-${testIdPrefix}`}
-        >
-          <Plus className="w-4 h-4" />
-        </Button>
-      </div>
-      {items.length > 0 && (
-        <div className="flex flex-wrap gap-2 pt-1">
-          {items.map((item) => (
-            <Badge
-              key={item}
-              variant="secondary"
-              className={`gap-1.5 pr-1.5 ${badgeClass ?? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"}`}
-              data-testid={`badge-${testIdPrefix}-${item}`}
-            >
-              {item}
-              <button
-                type="button"
-                onClick={() => remove(item)}
-                className="hover:text-red-500 transition-colors"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId ?? `chip-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      className={cn(
+        "px-2.5 py-1 rounded-full text-xs font-medium border transition-all duration-150 select-none flex items-center gap-1",
+        active
+          ? activeClass
+          : "bg-transparent text-muted-foreground border-border hover:border-primary/30 hover:text-foreground"
       )}
-    </div>
+    >
+      {active && <CheckCircle2 className="w-3 h-3 shrink-0" />}
+      {label}
+    </button>
   );
 }
 
-function StageCheckboxes({
+function ChipGroup({
+  label,
+  description,
+  options,
   selected,
-  onChange,
+  onToggle,
+  color = "emerald",
+  testIdPrefix,
 }: {
+  label: string;
+  description?: string;
+  options: string[];
   selected: string[];
-  onChange: (stages: string[]) => void;
+  onToggle: (item: string) => void;
+  color?: "emerald" | "blue" | "violet";
+  testIdPrefix: string;
 }) {
-  function toggle(stage: string) {
-    if (selected.includes(stage)) {
-      onChange(selected.filter((s) => s !== stage));
-    } else {
-      onChange([...selected, stage]);
-    }
-  }
-
   return (
     <div className="space-y-2">
-      <FormLabel>Preferred Deal Stages</FormLabel>
-      <p className="text-xs text-muted-foreground">Select all stages you actively pursue.</p>
-      <div className="flex flex-wrap gap-2 pt-1">
-        {DEAL_STAGES.map((stage) => {
-          const active = selected.includes(stage);
-          return (
-            <button
-              key={stage}
-              type="button"
-              onClick={() => toggle(stage)}
-              className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
-                active
-                  ? "border-emerald-500 bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-medium"
-                  : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-emerald-500/40"
-              }`}
-              data-testid={`toggle-deal-stage-${stage}`}
-            >
-              {active && <CheckCircle2 className="w-3 h-3 inline mr-1" />}
-              {stage}
-            </button>
-          );
-        })}
+      <div>
+        <p className="text-sm font-medium text-foreground">{label}</p>
+        {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+      </div>
+      <div className="flex flex-wrap gap-1.5 pt-0.5">
+        {options.map((opt) => (
+          <ToggleChip
+            key={opt}
+            label={opt}
+            active={selected.includes(opt)}
+            onClick={() => onToggle(opt)}
+            color={color}
+            testId={`chip-${testIdPrefix}-${opt.toLowerCase().replace(/\s+/g, "-")}`}
+          />
+        ))}
       </div>
     </div>
   );
@@ -186,7 +140,7 @@ export default function IndustryProfile() {
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(profile.therapeuticAreas);
   const [modalities, setModalities] = useState<string[]>(profile.modalities);
   const [dealStages, setDealStages] = useState<string[]>(profile.dealStages);
-  const [, forceUpdate] = useState(0);
+  const [saved, setSaved] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -197,6 +151,11 @@ export default function IndustryProfile() {
     },
   });
 
+  function toggleArea(item: string, setter: (fn: (prev: string[]) => string[]) => void) {
+    setter((prev) => prev.includes(item) ? prev.filter((a) => a !== item) : [...prev, item]);
+    setSaved(false);
+  }
+
   function onSubmit(values: FormValues) {
     saveIndustryProfile({
       userName: values.userName ?? "",
@@ -206,8 +165,9 @@ export default function IndustryProfile() {
       dealStages,
       modalities,
     });
-    forceUpdate((n) => n + 1);
+    setSaved(true);
     toast({ title: "Profile saved" });
+    setTimeout(() => setSaved(false), 2500);
   }
 
   return (
@@ -219,91 +179,116 @@ export default function IndustryProfile() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Company Profile</h1>
           <p className="text-sm text-muted-foreground">
-            Personalize your dashboard, alerts, and Eden recommendations.
+            Your interests here power the dashboard, alerts, and Scout recommendations.
           </p>
         </div>
       </div>
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-          <FormField
-            control={form.control}
-            name="userName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Your Name <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g., Alex" {...field} data-testid="input-user-name" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
 
-          <FormField
-            control={form.control}
-            name="companyName"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Company Name</FormLabel>
-                <FormControl>
-                  <Input placeholder="e.g., Acme Therapeutics" {...field} data-testid="input-company-name" />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+          <div className="rounded-xl border border-card-border bg-card p-5 space-y-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Company</p>
 
-          <FormField
-            control={form.control}
-            name="companyType"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Company Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+            <FormField
+              control={form.control}
+              name="userName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Your Name <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
                   <FormControl>
-                    <SelectTrigger data-testid="select-company-type">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
+                    <Input placeholder="e.g., Alex" {...field} data-testid="input-user-name" />
                   </FormControl>
-                  <SelectContent>
-                    {COMPANY_TYPES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <TagInput
-            label="Therapeutic Focus Areas"
-            description="Primary areas of interest. Used to personalize Scout results and Eden responses."
-            items={therapeuticAreas}
-            setItems={setTherapeuticAreas}
-            placeholder="e.g., Oncology, CRISPR, mRNA"
-            testIdPrefix="therapeutic-area"
-          />
+            <FormField
+              control={form.control}
+              name="companyName"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company Name</FormLabel>
+                  <FormControl>
+                    <Input placeholder="e.g., Acme Therapeutics" {...field} data-testid="input-company-name" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-          <TagInput
-            label="Modalities of Interest"
-            description="Drug modality types you actively pursue."
-            items={modalities}
-            setItems={setModalities}
-            placeholder="e.g., Small molecule, CAR-T, ADC"
-            testIdPrefix="modality"
-            badgeClass="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30"
-          />
+            <FormField
+              control={form.control}
+              name="companyType"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company Type <span className="text-muted-foreground font-normal">(optional)</span></FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-company-type">
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {COMPANY_TYPES.map((t) => (
+                        <SelectItem key={t} value={t}>{t}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-          <StageCheckboxes selected={dealStages} onChange={setDealStages} />
+          <div className="rounded-xl border border-card-border bg-card p-5 space-y-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Interests</p>
+            <p className="text-xs text-muted-foreground -mt-3">
+              These drive your "Explore for You" panel, alert scoring, and email digest content.
+            </p>
+
+            <ChipGroup
+              label="Therapeutic Focus Areas"
+              description="Areas you actively watch for new assets."
+              options={THERAPEUTIC_AREA_OPTIONS}
+              selected={therapeuticAreas}
+              onToggle={(item) => toggleArea(item, setTherapeuticAreas)}
+              color="emerald"
+              testIdPrefix="ta"
+            />
+
+            <ChipGroup
+              label="Modalities of Interest"
+              description="Drug modality types you actively evaluate."
+              options={MODALITY_OPTIONS}
+              selected={modalities}
+              onToggle={(item) => toggleArea(item, setModalities)}
+              color="blue"
+              testIdPrefix="modality"
+            />
+
+            <ChipGroup
+              label="Preferred Deal Stages"
+              description="Development stages you actively pursue."
+              options={STAGE_OPTIONS}
+              selected={dealStages}
+              onToggle={(item) => toggleArea(item, setDealStages)}
+              color="violet"
+              testIdPrefix="stage"
+            />
+          </div>
 
           <Button
             type="submit"
-            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+            className="w-full gap-2"
             data-testid="button-save-industry-profile"
           >
-            Save Profile
+            {saved ? (
+              <><CheckCircle2 className="w-4 h-4" /> Saved</>
+            ) : (
+              <><Save className="w-4 h-4" /> Save Profile</>
+            )}
           </Button>
         </form>
       </Form>

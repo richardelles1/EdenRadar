@@ -513,6 +513,7 @@ export async function registerRoutes(
           institution: ingestedAssets.institution,
           modality: ingestedAssets.modality,
           indication: ingestedAssets.indication,
+          categories: ingestedAssets.categories,
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
         .from(ingestedAssets)
@@ -4315,9 +4316,16 @@ If a field cannot be determined, use "N/A".`
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const offset = parseInt(req.query.offset as string) || 0;
 
+      const rawAreas: string[] = req.query.therapyAreas
+        ? (Array.isArray(req.query.therapyAreas) ? req.query.therapyAreas as string[] : [req.query.therapyAreas as string])
+        : therapyArea ? [therapyArea] : [];
+
       const conditions = [eq(ingestedAssets.relevant, true)];
-      if (therapyArea) {
-        conditions.push(sql`${ingestedAssets.categories}::jsonb @> ${JSON.stringify([therapyArea])}::jsonb`);
+      if (rawAreas.length > 0) {
+        const areaConditions = rawAreas.map(area =>
+          sql`lower(${ingestedAssets.categories}::text) LIKE ${"%" + area.toLowerCase() + "%"}`
+        );
+        conditions.push(areaConditions.length === 1 ? areaConditions[0] : sql`(${sql.join(areaConditions, sql` OR `)})`);
       }
       if (institution) {
         conditions.push(eq(ingestedAssets.institution, institution));

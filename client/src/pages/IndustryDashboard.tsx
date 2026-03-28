@@ -41,7 +41,7 @@ type PortfolioStats = {
 type DashboardData = {
   stats: PortfolioStats;
   recentSearches: Array<{ id: number; query: string; resultCount: number; searchedAt: string }>;
-  recentAssets: Array<{ id: number; assetName: string; institution: string; modality: string; indication: string; firstSeenAt: string }>;
+  recentAssets: Array<{ id: number; assetName: string; institution: string; modality: string; indication: string; categories: string[] | null; firstSeenAt: string }>;
   therapyAreaCount: number;
   institutionCount: number;
   assetsInReview: number;
@@ -217,9 +217,8 @@ export default function IndustryDashboard() {
   });
 
   const userInterests = profile.therapeuticAreas ?? [];
-  const primaryInterest = userInterests[0] ?? null;
-  const exploreUrl = primaryInterest
-    ? `/api/browse/assets?limit=16&therapyArea=${encodeURIComponent(primaryInterest)}`
+  const exploreUrl = userInterests.length > 0
+    ? `/api/browse/assets?limit=16&${userInterests.map(a => `therapyAreas[]=${encodeURIComponent(a)}`).join("&")}`
     : "/api/browse/assets?limit=16";
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
@@ -255,10 +254,11 @@ export default function IndustryDashboard() {
 
   const matchedAssets = userInterests.length > 0
     ? recentAssets.filter((a) => {
-        const ind = a.indication?.toLowerCase() ?? "";
+        const ind = (a.indication ?? "").toLowerCase();
+        const cats = Array.isArray(a.categories) ? a.categories.join(" ").toLowerCase() : "";
         return userInterests.some((interest) => {
           const lc = interest.toLowerCase();
-          return ind.includes(lc) || (ind.length > 0 && lc.includes(ind));
+          return ind.includes(lc) || cats.includes(lc);
         });
       })
     : [];
@@ -463,10 +463,19 @@ export default function IndustryDashboard() {
                 </Link>
               </div>
 
-              {primaryInterest && (
-                <span className="inline-block text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize">
-                  {primaryInterest}
-                </span>
+              {userInterests.length > 0 && (
+                <div className="flex flex-wrap gap-1">
+                  {userInterests.slice(0, 3).map((area) => (
+                    <span key={area} className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize">
+                      {area}
+                    </span>
+                  ))}
+                  {userInterests.length > 3 && (
+                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border capitalize">
+                      +{userInterests.length - 3}
+                    </span>
+                  )}
+                </div>
               )}
 
               <div
@@ -478,11 +487,11 @@ export default function IndustryDashboard() {
                 ) : exploreAssets.length === 0 ? (
                   <div className="py-4 text-center space-y-2">
                     <p className="text-xs text-muted-foreground">
-                      {primaryInterest ? `No assets found for "${primaryInterest}" yet.` : "No assets indexed yet."}
+                      {userInterests.length > 0 ? "No matching assets indexed yet." : "No assets indexed yet."}
                     </p>
-                    {!primaryInterest && (
-                      <Link href="/settings">
-                        <span className="text-xs text-primary hover:underline cursor-pointer">Add interests</span>
+                    {userInterests.length === 0 && (
+                      <Link href="/industry/profile">
+                        <span className="text-xs text-primary hover:underline cursor-pointer">Set your interests</span>
                       </Link>
                     )}
                   </div>
@@ -533,9 +542,9 @@ export default function IndustryDashboard() {
                   Add therapeutic interest areas to see assets matched to your focus.
                 </p>
               </div>
-              <Link href="/settings">
+              <Link href="/industry/profile">
                 <span className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0">
-                  Complete settings <ArrowRight className="w-3 h-3" />
+                  Set interests <ArrowRight className="w-3 h-3" />
                 </span>
               </Link>
             </div>
@@ -550,17 +559,7 @@ export default function IndustryDashboard() {
                   <span className="text-sm font-semibold text-foreground">Matched to Your Interests</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="flex gap-1 flex-wrap justify-end">
-                    {userInterests.slice(0, 3).map((area) => (
-                      <span key={area} className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize">
-                        {area}
-                      </span>
-                    ))}
-                    {userInterests.length > 3 && (
-                      <span className="text-[9px] text-muted-foreground">+{userInterests.length - 3}</span>
-                    )}
-                  </div>
-                  <Link href="/settings">
+                  <Link href="/industry/profile">
                     <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer ml-1">
                       Edit <ArrowRight className="w-3 h-3" />
                     </span>
