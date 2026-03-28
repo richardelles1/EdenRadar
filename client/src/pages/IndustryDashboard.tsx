@@ -17,6 +17,7 @@ import {
   Settings,
   Clock,
   Globe,
+  Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,6 +25,9 @@ import { getIndustryProfile } from "@/hooks/use-industry";
 import { slugifyInstitutionName } from "@/lib/institutions";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
+const TICKER_WINDOW = 4;
+const TICKER_MS = 6000;
+const TICKER_FADE_MS = 350;
 
 type PortfolioStats = {
   total: number;
@@ -51,6 +55,18 @@ type PipelineSummaryData = {
   institutionCount: number;
 };
 
+type BrowseAsset = {
+  id: number;
+  assetName: string;
+  institution: string;
+  modality: string | null;
+  indication: string | null;
+  developmentStage: string | null;
+  categories: string[] | null;
+  completenessScore: number | null;
+  firstSeenAt: string;
+};
+
 interface DeltaInstitution {
   institution: string;
   count: number;
@@ -76,6 +92,32 @@ function timeAgo(dateStr: string): string {
   const days = Math.floor(ms / 86400000);
   if (days < 7) return `${days}d ago`;
   return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function useWindowTicker<T>(items: T[], size = TICKER_WINDOW, ms = TICKER_MS) {
+  const [page, setPage] = useState(0);
+  const [faded, setFaded] = useState(false);
+  const pages = Math.max(1, Math.ceil(items.length / size));
+
+  useEffect(() => {
+    setPage(0);
+    setFaded(false);
+  }, [items.length]);
+
+  useEffect(() => {
+    if (pages <= 1) return;
+    const timer = setInterval(() => {
+      setFaded(true);
+      setTimeout(() => {
+        setPage((p) => (p + 1) % pages);
+        setFaded(false);
+      }, TICKER_FADE_MS);
+    }, ms);
+    return () => clearInterval(timer);
+  }, [pages, ms]);
+
+  const slice = items.slice(page * size, (page + 1) * size);
+  return { slice, faded, page, pages };
 }
 
 function KpiCard({
@@ -170,6 +212,17 @@ export default function IndustryDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const userInterests = profile.therapeuticAreas ?? [];
+  const primaryInterest = userInterests[0] ?? null;
+  const exploreUrl = primaryInterest
+    ? `/api/browse/assets?limit=16&therapyArea=${encodeURIComponent(primaryInterest)}`
+    : "/api/browse/assets?limit=16";
+
+  const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
+    queryKey: [exploreUrl],
+    staleTime: 10 * 60 * 1000,
+  });
+
   const stats = data?.stats;
   const therapyAreaCount = data?.therapyAreaCount ?? 0;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
@@ -177,6 +230,7 @@ export default function IndustryDashboard() {
   const recentAssets = data?.recentAssets ?? [];
   const deltaTotal = deltaData?.newAssets.total ?? 0;
   const deltaInstitutions = deltaData?.newAssets.byInstitution ?? [];
+  const exploreAssets = exploreData?.assets ?? [];
 
   const categoryAreas = (stats?.byTherapyArea && stats.byTherapyArea.length > 0)
     ? stats.byTherapyArea
@@ -195,7 +249,6 @@ export default function IndustryDashboard() {
     ? `${deltaTotal.toLocaleString()} new asset${deltaTotal !== 1 ? "s" : ""} since your last visit`
     : (profile.companyName || "Your TTO asset intelligence dashboard");
 
-  const userInterests = profile.therapeuticAreas ?? [];
   const matchedAssets = userInterests.length > 0
     ? recentAssets.filter((a) => {
         const ind = a.indication?.toLowerCase() ?? "";
@@ -205,6 +258,10 @@ export default function IndustryDashboard() {
         });
       })
     : [];
+
+  const { slice: assetWindow, faded: assetsFaded } = useWindowTicker(recentAssets, TICKER_WINDOW, TICKER_MS);
+  const { slice: instWindow, faded: instsFaded } = useWindowTicker(deltaInstitutions, TICKER_WINDOW, TICKER_MS + 1200);
+  const { slice: exploreWindow, faded: exploreFaded } = useWindowTicker(exploreAssets, TICKER_WINDOW, TICKER_MS + 600);
 
   return (
     <div className="min-h-full relative overflow-hidden">
@@ -263,8 +320,8 @@ export default function IndustryDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-            {/* New Assets — list */}
-            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-assets">
+            {/* ── New Assets panel ── */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-assets">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-primary" />
@@ -277,13 +334,12 @@ export default function IndustryDashboard() {
                 </Link>
               </div>
 
-              <div className="space-y-1.5">
+              <div
+                className="space-y-1.5"
+                style={{ opacity: assetsFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
+              >
                 {isLoading ? (
-                  <>
-                    {[1, 2, 3, 4].map((i) => (
-                      <Skeleton key={i} className="h-12 rounded-lg" />
-                    ))}
-                  </>
+                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)
                 ) : recentAssets.length === 0 ? (
                   <div className="py-6 text-center space-y-2">
                     <p className="text-xs text-muted-foreground">No assets indexed yet.</p>
@@ -292,7 +348,7 @@ export default function IndustryDashboard() {
                     </button>
                   </div>
                 ) : (
-                  recentAssets.slice(0, 6).map((asset) => (
+                  assetWindow.map((asset) => (
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
@@ -320,16 +376,16 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!isLoading && recentAssets.length > 0 && (
+              {!isLoading && recentAssets.length > TICKER_WINDOW && (
                 <div className="pt-1 border-t border-border/50">
                   <span className="text-[10px] text-muted-foreground">
-                    Showing {Math.min(6, recentAssets.length)} of {recentAssets.length} recent assets
+                    {recentAssets.length} recent assets — cycling every 6s
                   </span>
                 </div>
               )}
             </div>
 
-            {/* By Institution — delta activity */}
+            {/* ── By Institution panel ── */}
             <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-by-institution">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -343,11 +399,12 @@ export default function IndustryDashboard() {
                 </Link>
               </div>
 
-              <div className="space-y-1.5">
+              <div
+                className="space-y-1.5"
+                style={{ opacity: instsFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
+              >
                 {deltaLoading ? (
-                  <>
-                    {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)}
-                  </>
+                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
                 ) : deltaInstitutions.length === 0 ? (
                   <div className="py-4 text-center space-y-2">
                     <p className="text-xs text-muted-foreground">No new institutional activity since your last visit.</p>
@@ -356,7 +413,7 @@ export default function IndustryDashboard() {
                     </Link>
                   </div>
                 ) : (
-                  deltaInstitutions.slice(0, 5).map((inst, i) => (
+                  instWindow.map((inst, i) => (
                     <button
                       key={`${inst.institution}-${i}`}
                       onClick={() => navigate(`/institutions/${slugifyInstitutionName(inst.institution)}`)}
@@ -379,14 +436,85 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!deltaLoading && deltaInstitutions.length > 5 && (
+              {!deltaLoading && deltaInstitutions.length > TICKER_WINDOW && (
                 <div className="pt-1 border-t border-border/50">
                   <span className="text-[10px] text-muted-foreground">
-                    +{deltaInstitutions.length - 5} more institutions with activity
+                    {deltaInstitutions.length} active institutions — cycling
                   </span>
                 </div>
               )}
             </div>
+
+            {/* ── Explore for You panel ── */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-explore-for-you">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Compass className="w-4 h-4 text-primary" />
+                  <span className="text-sm font-semibold text-foreground">Explore for You</span>
+                </div>
+                <Link href="/scout">
+                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                    Scout <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
+              </div>
+
+              {primaryInterest && (
+                <span className="inline-block text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize">
+                  {primaryInterest}
+                </span>
+              )}
+
+              <div
+                className="space-y-1.5"
+                style={{ opacity: exploreFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
+              >
+                {exploreLoading ? (
+                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
+                ) : exploreAssets.length === 0 ? (
+                  <div className="py-4 text-center space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      {primaryInterest ? `No assets found for "${primaryInterest}" yet.` : "No assets indexed yet."}
+                    </p>
+                    {!primaryInterest && (
+                      <Link href="/settings">
+                        <span className="text-xs text-primary hover:underline cursor-pointer">Add interests</span>
+                      </Link>
+                    )}
+                  </div>
+                ) : (
+                  exploreWindow.map((asset) => (
+                    <button
+                      key={asset.id}
+                      onClick={() => navigate(`/asset/${asset.id}`)}
+                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                      data-testid={`dashboard-explore-asset-${asset.id}`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                          {asset.assetName}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.institution}</p>
+                      </div>
+                      {asset.modality && asset.modality !== "unknown" && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize shrink-0 hidden sm:inline-block">
+                          {asset.modality}
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+
+              {!exploreLoading && exploreAssets.length > TICKER_WINDOW && (
+                <div className="pt-1 border-t border-border/50">
+                  <span className="text-[10px] text-muted-foreground">
+                    {exploreAssets.length} assets — cycling every 6s
+                  </span>
+                </div>
+              )}
+            </div>
+
           </div>
 
           {/* Matched to Your Interests */}
