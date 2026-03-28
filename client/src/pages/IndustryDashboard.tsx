@@ -106,14 +106,18 @@ function useWindowTicker<T>(items: T[], size = TICKER_WINDOW, ms = TICKER_MS) {
 
   useEffect(() => {
     if (pages <= 1) return;
+    let fadeTimeout: ReturnType<typeof setTimeout>;
     const timer = setInterval(() => {
       setFaded(true);
-      setTimeout(() => {
+      fadeTimeout = setTimeout(() => {
         setPage((p) => (p + 1) % pages);
         setFaded(false);
       }, TICKER_FADE_MS);
     }, ms);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      clearTimeout(fadeTimeout);
+    };
   }, [pages, ms]);
 
   const slice = items.slice(page * size, (page + 1) * size);
@@ -260,8 +264,8 @@ export default function IndustryDashboard() {
     : [];
 
   const { slice: assetWindow, faded: assetsFaded } = useWindowTicker(recentAssets, TICKER_WINDOW, TICKER_MS);
-  const { slice: instWindow, faded: instsFaded } = useWindowTicker(deltaInstitutions, TICKER_WINDOW, TICKER_MS + 1200);
-  const { slice: exploreWindow, faded: exploreFaded } = useWindowTicker(exploreAssets, TICKER_WINDOW, TICKER_MS + 600);
+  const { slice: instWindow, faded: instsFaded } = useWindowTicker(deltaInstitutions, TICKER_WINDOW, TICKER_MS);
+  const { slice: exploreWindow, faded: exploreFaded } = useWindowTicker(exploreAssets, TICKER_WINDOW, TICKER_MS);
 
   return (
     <div className="min-h-full relative overflow-hidden">
