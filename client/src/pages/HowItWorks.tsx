@@ -380,14 +380,16 @@ function PricingCards() {
         </span>
       </div>
 
-      {/* Bento grid: free tiers stacked on left, Scout spanning full height on right */}
+      {/* Bento grid: free tiers stacked on left, Scout full-height on right */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-5">
-        {freeTiers.map((tier) => (
-          <FreeTierCard key={tier.name} tier={tier} />
-        ))}
-        <div className="md:col-start-2 md:row-start-1 md:row-span-2 h-full">
-          <ScoutCard isYearly={isYearly} />
+        {/* Left column: Discovery + Lab stacked */}
+        <div className="flex flex-col gap-5">
+          {freeTiers.map((tier) => (
+            <FreeTierCard key={tier.name} tier={tier} />
+          ))}
         </div>
+        {/* Right column: Scout spans full height */}
+        <ScoutCard isYearly={isYearly} />
       </div>
     </div>
   );
