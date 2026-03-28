@@ -344,7 +344,7 @@
 
 /* Gradient text utility */
 .gradient-text {
-  background: linear-gradient(135deg, hsl(142 65% 52%) 0%, hsl(142 60% 48%) 100%);
+  background: linear-gradient(135deg, hsl(142 52% 36%) 0%, hsl(142 48% 32%) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -525,13 +525,8 @@
 }
 
 /* ============================================================
-   GLASS PILL BUTTONS — hero CTAs with hover-only rotating border
+   GLASS PILL BUTTONS — hero CTAs with emerald outline on hover
    ============================================================ */
-
-@keyframes glass-btn-rotate {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to   { transform: translate(-50%, -50%) rotate(360deg); }
-}
 
 .glass-btn,
 .glass-btn-wrap {
@@ -540,31 +535,13 @@
   padding: 1.5px;
   border-radius: 9999px;
   overflow: hidden;
+  background: transparent;
+  transition: background 0.18s ease;
 }
 
-.glass-btn::before,
-.glass-btn-wrap::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 300%;
-  height: 300%;
-  transform: translate(-50%, -50%) rotate(0deg);
-  background: conic-gradient(
-    from 0deg,
-    transparent 0deg,
-    rgba(52, 211, 153, 0.9) 50deg,
-    transparent 100deg
-  );
-  animation: glass-btn-rotate 3s linear infinite;
-  animation-play-state: paused;
-  z-index: 0;
-}
-
-.glass-btn:hover::before,
-.glass-btn-wrap:hover::before {
-  animation-play-state: running;
+.glass-btn:hover,
+.glass-btn-wrap:hover {
+  background: hsl(142 52% 36%);
 }
 
 .glass-btn-inner {
@@ -581,13 +558,13 @@
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background 0.18s ease;
   white-space: nowrap;
   min-height: 48px;
 }
 
 .glass-btn-inner:hover {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.94);
 }
 
 .dark .glass-btn-inner {
@@ -598,11 +575,4 @@
 
 .dark .glass-btn-inner:hover {
   background: rgba(255, 255, 255, 0.15);
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .glass-btn::before,
-  .glass-btn-wrap::before {
-    animation: none !important;
-  }
 }

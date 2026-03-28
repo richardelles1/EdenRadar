@@ -198,6 +198,79 @@ function PitchDots({ color, count = 8, seed = 0 }: { color: string; count?: numb
   );
 }
 
+/* ─── Canvas wave background ─── */
+function PitchWaves({ bg }: { bg: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dark = bg !== "#ffffff";
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const WAVES = [
+      { color: "#065f46", aDark: 0.22, aLight: 0.05, amp: 80, freq: 0.0018, spd: 0.007, yr: 0.52 },
+      { color: "#10b981", aDark: 0.16, aLight: 0.04, amp: 58, freq: 0.0026, spd: 0.012, yr: 0.65 },
+      { color: "#059669", aDark: 0.12, aLight: 0.03, amp: 42, freq: 0.0036, spd: 0.018, yr: 0.76 },
+      { color: "#34d399", aDark: 0.08, aLight: 0.03, amp: 26, freq: 0.0048, spd: 0.025, yr: 0.86 },
+    ];
+
+    let animId: number;
+    let frame = 0;
+
+    function resize() {
+      if (!canvas) return;
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
+
+    function draw() {
+      if (!canvas || !ctx) return;
+      const W = canvas.width;
+      const H = canvas.height;
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, W, H);
+      for (const w of WAVES) {
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 2) {
+          const y =
+            w.yr * H +
+            Math.sin(x * w.freq + frame * w.spd) * w.amp +
+            Math.sin(x * w.freq * 1.8 + frame * w.spd * 0.65) * w.amp * 0.3;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.lineTo(W, H);
+        ctx.lineTo(0, H);
+        ctx.closePath();
+        ctx.globalAlpha = dark ? w.aDark : w.aLight;
+        ctx.fillStyle = w.color;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      frame++;
+      animId = requestAnimationFrame(draw);
+    }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    draw();
+
+    return () => { cancelAnimationFrame(animId); ro.disconnect(); };
+  }, [bg, dark]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full block"
+      style={{ zIndex: 0 }}
+      aria-hidden
+    />
+  );
+}
+
 /* ─── Mycelium vine (cover only) ─── */
 const PRIMARY_PATHS = [
   "M 500 300 C 470 330, 420 380, 360 420 C 310 450, 250 485, 180 520",
@@ -417,8 +490,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-1"
     >
-      <PitchLeftRadar color={colors.green} opacity={0.2} />
-      <CoverVine color={colors.green} />
+      <PitchWaves bg={colors.bg} />
       <PitchDots color={colors.green} count={12} />
 
       <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
@@ -484,7 +556,6 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={2} section="Who We Are" accent={colors.green} colors={colors}>
       <PitchDots color={colors.green} count={10} />
-      <PitchLeftRadar color={colors.green} opacity={0.1} />
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-14 items-start lg:items-center">
 
         {/* LEFT: mission + vision text */}
@@ -940,7 +1011,6 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
 function PitchEdenChatSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={7} section="EDEN" accent={colors.green} colors={colors}>
-      <PitchCenterRadar color={colors.green} opacity={0.1} />
 
       {/* ── MOBILE LAYOUT: absolute-fill so chat uses all remaining screen space ── */}
       <div className="lg:hidden absolute inset-0 flex flex-col pt-14 pb-14 px-5" style={{ zIndex: 11 }}>
@@ -1000,7 +1070,6 @@ function RadarSlide({ colors }: { colors: Colors }) {
   ];
   return (
     <Slide index={6} section="EdenScout" accent={colors.green} colors={colors}>
-      <PitchCenterRadar color={colors.green} opacity={0.12} />
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
@@ -1224,7 +1293,6 @@ function TractionSlide({ colors }: { colors: Colors }) {
 function ContactSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={9} section="Contact" accent={colors.green} colors={colors}>
-      <PitchCenterRadar color={colors.green} opacity={0.08} />
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
         <div className="flex flex-col items-start gap-3 mb-6">

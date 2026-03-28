@@ -83,7 +83,7 @@ const TIERS = [
     yearlyPrice: "",
     yearlySavings: "",
     period: "",
-    tagline: "Ideal for early discovery and concept validation",
+    tagline: "Explore concepts. Validate ideas. Start free.",
     popular: false,
     features: [
       "Submit early-stage concepts before research begins",
@@ -105,7 +105,7 @@ const TIERS = [
     yearlyPrice: "",
     yearlySavings: "",
     period: "",
-    tagline: "For research teams and active deal flow exploration",
+    tagline: "Structure your research from concept to publication.",
     popular: false,
     features: [
       "Everything in EdenDiscovery",
@@ -201,39 +201,22 @@ function FreeTierCard({ tier }: { tier: typeof TIERS[0] }) {
 const SCOUT = TIERS[2];
 
 const SCOUT_CATEGORIES = [
-  {
-    icon: Globe,
-    label: "World-class intelligence database",
-    items: [
-      "EDEN natural language queries across 300+ TTOs",
-      "Institution intelligence and TTO profiles",
-      "Therapy area, stage, and modality filters",
-    ],
-  },
-  {
-    icon: Bell,
-    label: "Custom email alerts for up-to-the-minute knowledge",
-    items: [
-      "Custom push alerts via email",
-    ],
-  },
-  {
-    icon: FileText,
-    label: "AI-enriched Dossiers",
-    items: [
-      "Enriched asset dossiers with competitive cross-reference",
-      "EDEN readiness scoring per asset",
-      "Researcher contact information",
-    ],
-  },
-  {
-    icon: GitMerge,
-    label: "Pipeline Builder",
-    items: [
-      "Saved asset lists and pipeline tracking",
-      "PDF and CSV pipeline export",
-    ],
-  },
+  { icon: Globe,    label: "TTO Intelligence" },
+  { icon: Bell,     label: "Smart Alerts"      },
+  { icon: FileText, label: "Asset Dossiers"    },
+  { icon: GitMerge, label: "Deal Pipeline"     },
+];
+
+const SCOUT_BULLETS = [
+  "EDEN queries across 300+ TTOs",
+  "Custom push alerts via email",
+  "Institution intelligence and TTO profiles",
+  "Enriched dossiers with competitive cross-reference",
+  "Therapy area, stage, and modality filters",
+  "EDEN readiness scoring per asset",
+  "Researcher contact information",
+  "Saved asset lists and pipeline tracking",
+  "PDF and CSV pipeline export",
 ];
 
 function ScoutCard({ isYearly }: { isYearly: boolean }) {
@@ -296,26 +279,29 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
         </div>
       </div>
 
-      <div className="flex-1 px-7 py-5 bg-card grid grid-cols-1 sm:grid-cols-2 gap-5">
+      {/* Top half — 2x2 icon + label tiles */}
+      <div className="px-7 pt-5 pb-4 bg-card grid grid-cols-2 gap-3">
         {SCOUT_CATEGORIES.map((cat) => (
-          <div key={cat.label}>
-            <div className="flex items-center gap-2 mb-2.5">
-              <div
-                className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
-                style={{ background: SCOUT.colorDim }}
-              >
-                <cat.icon className="w-3.5 h-3.5" style={{ color: SCOUT.headerBg }} />
-              </div>
-              <p className="text-xs font-semibold text-foreground leading-snug">{cat.label}</p>
-            </div>
-            <ul className="space-y-1.5 pl-8">
-              {cat.items.map((item, i) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                  <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: SCOUT.headerBg }} />
-                  <span>{item}</span>
-                </li>
-              ))}
-            </ul>
+          <div
+            key={cat.label}
+            className="flex items-center gap-3 px-4 py-3.5 rounded-xl"
+            style={{ background: SCOUT.colorDim }}
+          >
+            <cat.icon className="w-7 h-7 flex-shrink-0" style={{ color: SCOUT.headerBg }} />
+            <span className="text-sm font-bold text-foreground leading-tight">{cat.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Divider */}
+      <div className="mx-7 h-px bg-border" />
+
+      {/* Bottom half — 2-column bullet list */}
+      <div className="px-7 py-4 bg-card grid grid-cols-2 gap-x-6 gap-y-1.5">
+        {SCOUT_BULLETS.map((item, i) => (
+          <div key={i} className="flex items-start gap-2">
+            <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: SCOUT.headerBg }} />
+            <span className="text-xs text-muted-foreground">{item}</span>
           </div>
         ))}
       </div>
