@@ -481,7 +481,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
                   <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Connection may be broken — 0 results returned</p>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Site was likely rate-limited or unreachable — 0 results returned. Run a manual scrape to retry.</p>
                     <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper returned no results. This could indicate a broken connection, website change, or temporary outage. Push is blocked.</p>
                   </div>
                 </div>
