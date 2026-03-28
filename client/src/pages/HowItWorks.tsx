@@ -129,17 +129,7 @@ const TIERS = [
     period: "/mo",
     tagline: "Full platform access for serious BD teams",
     popular: true,
-    features: [
-      "EDEN natural language queries across 300+ TTOs",
-      "Enriched asset dossiers with competitive cross-reference",
-      "Therapy area, stage, and modality filters",
-      "EDEN readiness scoring per asset (0-100)",
-      "Institution intelligence and TTO profiles",
-      "Saved asset lists and pipeline tracking",
-      "Custom push alerts via email for up-to-the-minute knowledge",
-      "Researcher contact information",
-      "PDF and CSV pipeline export",
-    ],
+    features: [],
   },
 ];
 
