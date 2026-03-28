@@ -197,12 +197,13 @@ export default function IndustryDashboard() {
 
   const userInterests = profile.therapeuticAreas ?? [];
   const matchedAssets = userInterests.length > 0
-    ? recentAssets.filter((a) =>
-        userInterests.some((interest) =>
-          a.indication?.toLowerCase().includes(interest.toLowerCase()) ||
-          interest.toLowerCase().includes(a.indication?.toLowerCase() ?? "___")
-        )
-      )
+    ? recentAssets.filter((a) => {
+        const ind = a.indication?.toLowerCase() ?? "";
+        return userInterests.some((interest) => {
+          const lc = interest.toLowerCase();
+          return ind.includes(lc) || (ind.length > 0 && lc.includes(ind));
+        });
+      })
     : [];
 
   return (
