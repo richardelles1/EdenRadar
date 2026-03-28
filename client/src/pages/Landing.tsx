@@ -40,16 +40,9 @@ function useReveal(threshold = 0.18) {
   return ref;
 }
 
-/* ─────────────────────────── WavyBackground ──────────────────── */
+/* ─────────────────────────── RadarBackground ─────────────────── */
 
-const HERO_WAVES = [
-  { color: "#065f46", alphaDark: 0.28, alphaLight: 0.05, amp: 80, freq: 0.0018, spd: 0.008, yr: 0.55 },
-  { color: "#10b981", alphaDark: 0.20, alphaLight: 0.04, amp: 58, freq: 0.0026, spd: 0.014, yr: 0.68 },
-  { color: "#059669", alphaDark: 0.15, alphaLight: 0.03, amp: 42, freq: 0.0036, spd: 0.020, yr: 0.78 },
-  { color: "#34d399", alphaDark: 0.10, alphaLight: 0.03, amp: 26, freq: 0.0048, spd: 0.028, yr: 0.87 },
-];
-
-function WavyBackground() {
+function RadarBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -59,7 +52,7 @@ function WavyBackground() {
     if (!ctx) return;
 
     let animId: number;
-    let frame = 0;
+    let angle = 0;
     let isDark = document.documentElement.classList.contains("dark");
 
     const mo = new MutationObserver(() => {
@@ -77,30 +70,43 @@ function WavyBackground() {
       if (!canvas || !ctx) return;
       const W = canvas.width;
       const H = canvas.height;
+      const cx = W / 2;
+      const cy = H / 2;
+      const maxR = Math.sqrt(cx * cx + cy * cy) * 1.05;
+      const ringCount = 7;
+      const ringSpacing = maxR / ringCount;
+      const ringAlpha = isDark ? 0.08 : 0.03;
+      const sweepPeak = isDark ? 0.15 : 0.05;
+      const sweepAngle = Math.PI / 2;
+      const sweepSteps = 24;
 
       ctx.fillStyle = isDark ? "#060a06" : "#f3fef6";
       ctx.fillRect(0, 0, W, H);
 
-      for (const wave of HERO_WAVES) {
+      ctx.strokeStyle = "#065f46";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= ringCount; i++) {
         ctx.beginPath();
-        for (let x = 0; x <= W; x += 2) {
-          const y =
-            wave.yr * H +
-            Math.sin(x * wave.freq + frame * wave.spd) * wave.amp +
-            Math.sin(x * wave.freq * 1.8 + frame * wave.spd * 0.65) * wave.amp * 0.3;
-          if (x === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
-        }
-        ctx.lineTo(W, H);
-        ctx.lineTo(0, H);
+        ctx.arc(cx, cy, ringSpacing * i, 0, Math.PI * 2);
+        ctx.globalAlpha = ringAlpha;
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < sweepSteps; i++) {
+        const t = (i + 1) / sweepSteps;
+        const startA = angle - sweepAngle + (i / sweepSteps) * sweepAngle;
+        const endA = angle - sweepAngle + ((i + 1) / sweepSteps) * sweepAngle;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR, startA, endA);
         ctx.closePath();
-        ctx.globalAlpha = isDark ? wave.alphaDark : wave.alphaLight;
-        ctx.fillStyle = wave.color;
+        ctx.fillStyle = "#065f46";
+        ctx.globalAlpha = t * sweepPeak;
         ctx.fill();
       }
-      ctx.globalAlpha = 1;
 
-      frame++;
+      ctx.globalAlpha = 1;
+      angle += (Math.PI * 2) / (25 * 60);
       animId = requestAnimationFrame(draw);
     }
 
@@ -444,7 +450,7 @@ export default function Landing() {
       <main className="flex-1">
         {/* ── Hero ── */}
         <section className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
-          <WavyBackground />
+          <RadarBackground />
 
           <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center"
             style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem" }}>
@@ -506,7 +512,7 @@ export default function Landing() {
                   <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
                     {s.value}
                   </div>
-                  <div className="text-xs tracking-wide text-foreground/50 dark:text-white/55">{s.label}</div>
+                  <div className="text-xs tracking-wide font-semibold text-foreground/70 dark:text-white/75">{s.label}</div>
                 </div>
               ))}
             </div>
