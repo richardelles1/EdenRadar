@@ -400,9 +400,6 @@ function BottomCTA({ onLogin }: { onLogin: () => void }) {
           </Button>
         </div>
 
-        <p className="mt-6 text-xs" style={{ color: "hsl(210 15% 45%)" }}>
-          All portals share the same secure login. Choose your path once you're in.
-        </p>
       </div>
     </section>
   );
