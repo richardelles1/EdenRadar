@@ -79,8 +79,6 @@ export async function fetchHtml(
             "Accept-Language": "en-US,en;q=0.9",
           },
         });
-        cleanup();
-        releaseFetchSlot();
         if (res.status === 429) {
           throw new Error(`HTTP 429 rate limited`);
         }
@@ -90,10 +88,9 @@ export async function fetchHtml(
         }
         const html = await res.text();
         return cheerio.load(html);
-      } catch (err: any) {
+      } finally {
         cleanup();
         releaseFetchSlot();
-        throw err;
       }
     }, retries, 1000, url);
   } catch (err: any) {
@@ -124,8 +121,6 @@ export async function fetchJson<T = any>(
             "Accept": "application/json, text/plain, */*",
           },
         });
-        cleanup();
-        releaseFetchSlot();
         if (res.status === 429) {
           throw new Error(`HTTP 429 rate limited`);
         }
@@ -134,10 +129,9 @@ export async function fetchJson<T = any>(
           return null;
         }
         return await res.json() as T;
-      } catch (err: any) {
+      } finally {
         cleanup();
         releaseFetchSlot();
-        throw err;
       }
     }, retries, 1000, url);
   } catch (err: any) {
