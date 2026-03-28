@@ -53,6 +53,7 @@ function RadarBackground() {
 
     let animId: number;
     let angle = 0;
+    let lastTime = performance.now();
     let isDark = document.documentElement.classList.contains("dark");
 
     const mo = new MutationObserver(() => {
@@ -66,8 +67,10 @@ function RadarBackground() {
       canvas.height = canvas.offsetHeight;
     }
 
-    function draw() {
+    function draw(now: number) {
       if (!canvas || !ctx) return;
+      const dt = now - lastTime;
+      lastTime = now;
       const W = canvas.width;
       const H = canvas.height;
       const cx = W / 2;
@@ -106,14 +109,14 @@ function RadarBackground() {
       }
 
       ctx.globalAlpha = 1;
-      angle += (Math.PI * 2) / (25 * 60);
+      angle += (Math.PI * 2) * (dt / 25000);
       animId = requestAnimationFrame(draw);
     }
 
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(canvas);
-    draw();
+    draw(performance.now());
 
     return () => {
       cancelAnimationFrame(animId);
