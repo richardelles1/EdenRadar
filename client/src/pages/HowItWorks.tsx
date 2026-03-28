@@ -235,7 +235,7 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
       ref={cardRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="rounded-2xl flex flex-col overflow-hidden relative"
+      className="rounded-2xl flex flex-col overflow-hidden relative h-full"
       style={{
         border: `1px solid ${SCOUT.borderColor}`,
         borderTop: `3px solid ${SCOUT.color}`,
@@ -380,13 +380,15 @@ function PricingCards() {
         </span>
       </div>
 
-      {/* Bento grid: free tiers on top, Scout full-width below */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+      {/* Bento grid: free tiers stacked on left, Scout spanning full height on right */}
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_1.5fr] gap-5">
         {freeTiers.map((tier) => (
           <FreeTierCard key={tier.name} tier={tier} />
         ))}
+        <div className="md:col-start-2 md:row-start-1 md:row-span-2 h-full">
+          <ScoutCard isYearly={isYearly} />
+        </div>
       </div>
-      <ScoutCard isYearly={isYearly} />
     </div>
   );
 }
