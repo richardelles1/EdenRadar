@@ -165,8 +165,8 @@ function PitchLeftRadar({ bg }: { bg: string }) {
           left: "25%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          width: "min(70vh, 620px)",
-          height: "min(70vh, 620px)",
+          width: "min(80vh, 700px)",
+          height: "min(80vh, 700px)",
         }}
       />
     </div>
@@ -204,9 +204,9 @@ function PitchDots({ color, count = 8, seed = 0 }: { color: string; count?: numb
 }
 
 /* ─── Canvas wave background ─── */
-const DEFAULT_WAVE_PALETTE = ["#065f46", "#10b981", "#059669", "#34d399"];
+const DEFAULT_WAVE_PALETTE: [string, string, string, string] = ["#065f46", "#10b981", "#059669", "#34d399"];
 
-function PitchWaves({ bg, palette }: { bg: string; palette?: string[] }) {
+function PitchWaves({ bg, palette }: { bg: string; palette?: [string, string, string, string] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dark = bg !== "#ffffff";
   const palRef = useRef(palette ?? DEFAULT_WAVE_PALETTE);
@@ -450,7 +450,7 @@ const childVariants = {
 function Slide({
   index, section, accent, children, className = "", noPadding = false, colors, waves = false, wavePalette,
 }: {
-  index: number; section: string; accent?: string; children: ReactNode; className?: string; noPadding?: boolean; colors: Colors; waves?: boolean; wavePalette?: string[];
+  index: number; section: string; accent?: string; children: ReactNode; className?: string; noPadding?: boolean; colors: Colors; waves?: boolean; wavePalette?: [string, string, string, string];
 }) {
   const accentColor = accent || colors.green;
   const sectionRef = useRef<HTMLElement>(null);
