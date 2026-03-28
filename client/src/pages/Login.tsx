@@ -99,8 +99,8 @@ export default function Login() {
     : "border-gray-300/60 text-gray-500 hover:border-emerald-400 hover:text-gray-700";
   const dividerLine = isDark ? "bg-white/10" : "bg-gray-300/90";
   const dividerText = isDark ? "text-white/30" : "text-gray-500/90";
-  const forgotLink  = isDark ? "text-white/40 hover:text-white/70" : "text-gray-400 hover:text-gray-600";
-  const backLink    = isDark ? "text-white/25 hover:text-white/50" : "text-gray-400/70 hover:text-gray-500";
+  const forgotLink  = isDark ? "text-emerald-400/70 hover:text-emerald-400" : "text-emerald-700/60 hover:text-emerald-700";
+  const backLink    = isDark ? "text-emerald-400/40 hover:text-emerald-400/70" : "text-emerald-700/40 hover:text-emerald-700/70";
   const googleBtn   = isDark
     ? "bg-white/5 border border-white/10 text-white hover:bg-white/10"
     : "bg-gray-500/10 border border-transparent text-gray-700 hover:bg-gray-500/15";
