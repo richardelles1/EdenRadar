@@ -513,6 +513,9 @@ function isTransientDbError(msg: string): boolean {
     m.includes("connection failure") ||
     m.includes("connection timeout") ||
     m.includes("connectiontimeout") ||
+    m.includes("connection may be broken") ||
+    m.includes("connection terminated") ||
+    m.includes("terminating connection") ||
     m.includes("econnreset") ||
     m.includes("econnrefused") ||
     m.includes("pool") ||
@@ -540,7 +543,11 @@ async function runOne(institution: string, gen: number): Promise<void> {
     const result = await runInstitutionSync(institution);
     if (runGeneration === gen) {
       completedThisCycle++;
-      console.log(`[scheduler] ${institution} complete — ${result.newCount} new, ${result.relevantCount} relevant`);
+      if (result.rawCount === 0) {
+        console.warn(`[scheduler] WARNING: ${institution} returned 0 raw listings — site may be rate-limiting or unreachable (${result.newCount} new, ${result.relevantCount} relevant)`);
+      } else {
+        console.log(`[scheduler] ${institution} complete — ${result.rawCount} scraped, ${result.newCount} new, ${result.relevantCount} relevant`);
+      }
     }
     await updateScraperHealth(institution, true, undefined, result.newCount);
     scraperHealthCache.set(institution, {

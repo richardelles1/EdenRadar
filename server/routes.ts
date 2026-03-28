@@ -1695,7 +1695,7 @@ export async function registerRoutes(
       if (!session) return res.status(404).json({ error: "No sync session found" });
       if (session.status === "pushed") return res.status(400).json({ error: "Already pushed" });
       if (session.status !== "enriched") return res.status(400).json({ error: `Session not ready for push (status: ${session.status})` });
-      if (session.rawCount === 0) return res.status(400).json({ error: "Cannot push — scraper returned 0 results (connection may be broken)" });
+      if (session.rawCount === 0) return res.status(400).json({ error: "Cannot push — scraper returned 0 results. The site was likely rate-limited or unreachable during the sync. Run a manual scrape to retry." });
 
       const stagingRows = await storage.getSyncStagingRows(session.sessionId);
       const toPush = stagingRows.filter((r) => r.isNew && r.relevant === true);

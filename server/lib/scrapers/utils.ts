@@ -1,5 +1,32 @@
 import * as cheerio from "cheerio";
 
+// ── Global outbound-HTTP semaphore ────────────────────────────────────────────
+// Caps the total number of concurrent outbound fetch() calls across ALL scrapers
+// so that running two institutions simultaneously (MAX_HTTP_CONCURRENT=2) does
+// not generate 20+ simultaneous connections and trigger rate-limiting at TTO sites.
+const MAX_CONCURRENT_FETCH = 8;
+let _fetchSlots = MAX_CONCURRENT_FETCH;
+const _fetchQueue: Array<() => void> = [];
+
+function acquireFetchSlot(): Promise<void> {
+  if (_fetchSlots > 0) {
+    _fetchSlots--;
+    return Promise.resolve();
+  }
+  return new Promise<void>((resolve) => {
+    _fetchQueue.push(resolve);
+  });
+}
+
+function releaseFetchSlot(): void {
+  const next = _fetchQueue.shift();
+  if (next) {
+    next();
+  } else {
+    _fetchSlots++;
+  }
+}
+
 function combineSignal(timeoutMs: number, external?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
   const timeoutSignal = AbortSignal.timeout(timeoutMs);
   const signal = external
@@ -40,6 +67,7 @@ export async function fetchHtml(
   if (externalSignal?.aborted) return null;
   try {
     return await withRetry(async () => {
+      await acquireFetchSlot();
       const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
       try {
         const res = await fetch(url, {
@@ -52,6 +80,7 @@ export async function fetchHtml(
           },
         });
         cleanup();
+        releaseFetchSlot();
         if (res.status === 429) {
           throw new Error(`HTTP 429 rate limited`);
         }
@@ -63,6 +92,7 @@ export async function fetchHtml(
         return cheerio.load(html);
       } catch (err: any) {
         cleanup();
+        releaseFetchSlot();
         throw err;
       }
     }, retries, 1000, url);
@@ -83,6 +113,7 @@ export async function fetchJson<T = any>(
   if (externalSignal?.aborted) return null;
   try {
     return await withRetry(async () => {
+      await acquireFetchSlot();
       const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
       try {
         const res = await fetch(url, {
@@ -94,6 +125,7 @@ export async function fetchJson<T = any>(
           },
         });
         cleanup();
+        releaseFetchSlot();
         if (res.status === 429) {
           throw new Error(`HTTP 429 rate limited`);
         }
@@ -104,6 +136,7 @@ export async function fetchJson<T = any>(
         return await res.json() as T;
       } catch (err: any) {
         cleanup();
+        releaseFetchSlot();
         throw err;
       }
     }, retries, 1000, url);

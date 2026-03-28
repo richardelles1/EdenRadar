@@ -366,11 +366,13 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                     <div key={s.sessionId} className="flex items-center justify-between py-1.5 px-3 rounded-md bg-muted/30 text-xs" data-testid={`history-row-empty-${i}`}>
                       <div className="flex items-center gap-2">
                         {s.status === "pushed" ? (
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-label="Pushed to pipeline" />
                         ) : s.status === "failed" ? (
-                          <XCircle className="h-3.5 w-3.5 text-red-500" />
+                          <XCircle className="h-3.5 w-3.5 text-red-500" aria-label="Scrape failed" />
+                        ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
+                          <Clock className="h-3.5 w-3.5 text-blue-500" aria-label="Ready to push" />
                         ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Scraped 0 results — site may have been unreachable" />
                         )}
                         <span className="text-muted-foreground">{s.completedAt ? formatDate(s.completedAt) : "In progress"}</span>
                       </div>
@@ -618,11 +620,13 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {s.status === "pushed" ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" aria-label="Pushed to pipeline" />
                       ) : s.status === "failed" ? (
-                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="Scrape failed" />
+                      ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
+                        <Clock className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Ready to push" />
                       ) : (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Scraped 0 results — site may have been unreachable" />
                       )}
                       <span className="text-muted-foreground truncate">
                         {s.completedAt ? formatDate(s.completedAt) : "In progress"}
@@ -1298,7 +1302,7 @@ function DataHealth({ pw }: { pw: string }) {
                             </div>
                           </td>
                           <td className="text-center py-2 px-3">
-                            <div className="flex items-center justify-center gap-1.5">
+                            <div className="inline-flex items-center gap-1.5 min-w-[7.5rem] justify-center">
                               <HealthDot health={row.health} />
                               <HealthLabel health={row.health} />
                             </div>
