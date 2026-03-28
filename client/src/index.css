@@ -575,9 +575,9 @@
   gap: 0.5rem;
   padding: 0.625rem 1.75rem;
   border-radius: 9999px;
-  background: rgba(4, 12, 4, 0.72);
-  border: none;
-  color: white;
+  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  color: hsl(var(--foreground));
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
@@ -587,7 +587,17 @@
 }
 
 .glass-btn-inner:hover {
-  background: rgba(4, 12, 4, 0.55);
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.dark .glass-btn-inner {
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: white;
+}
+
+.dark .glass-btn-inner:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 @media (prefers-reduced-motion: reduce) {

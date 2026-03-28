@@ -762,7 +762,7 @@ export default function HowItWorks() {
           <PricingCards />
 
           <p className="text-center text-xs text-muted-foreground mt-6">
-            EdenScout includes a 3-day free trial.
+            All plans include a 3-day free trial.
           </p>
         </section>
 
