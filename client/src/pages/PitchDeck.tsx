@@ -140,6 +140,16 @@ function PitchLeftRadar({ bg }: { bg: string }) {
       }
 
       ctx.globalAlpha = 1;
+
+      // Fade rings out before they hit the canvas edge (no hard clip)
+      const fadeGrad = ctx.createRadialGradient(cx, cy, maxR * 0.60, cx, cy, maxR * 1.02);
+      fadeGrad.addColorStop(0, "rgba(0,0,0,0)");
+      fadeGrad.addColorStop(1, "rgba(0,0,0,1)");
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.fillStyle = fadeGrad;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalCompositeOperation = "source-over";
+
       angle += (Math.PI * 2) * (dt / 25000);
       animId = requestAnimationFrame(draw);
     }
@@ -154,7 +164,7 @@ function PitchLeftRadar({ bg }: { bg: string }) {
 
   return (
     <div
-      className="absolute inset-0 overflow-hidden pointer-events-none"
+      className="absolute inset-0 pointer-events-none"
       aria-hidden
       style={{ zIndex: 0 }}
     >
@@ -500,7 +510,6 @@ function CoverSlide({ colors }: { colors: Colors }) {
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-1"
     >
-      <PitchWaves bg={colors.bg} />
       <PitchLeftRadar bg={colors.bg} />
       <PitchDots color={colors.green} count={12} />
 
