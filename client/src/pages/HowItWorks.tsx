@@ -298,7 +298,7 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
       <div className="flex-1 px-7 py-5 bg-card">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
           {leftFeatures.map((feature, fi) => (
-            <div key={fi} className="flex items-start gap-2.5 text-sm">
+            <div key={`left-${fi}`} className="flex items-start gap-2.5 text-sm">
               <span
                 className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
                 style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
@@ -309,7 +309,7 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
             </div>
           ))}
           {rightFeatures.map((feature, fi) => (
-            <div key={fi} className="flex items-start gap-2.5 text-sm">
+            <div key={`right-${fi}`} className="flex items-start gap-2.5 text-sm">
               <span
                 className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
                 style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
