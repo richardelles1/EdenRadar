@@ -86,7 +86,12 @@ export default function Login() {
     setError(null);
     setGoogleLoading(true);
     const { error: err } = await signInWithGoogle();
-    if (err) { setError(err); setGoogleLoading(false); }
+    if (err) {
+      setError(err);
+      setGoogleLoading(false);
+    } else {
+      setTimeout(() => setGoogleLoading(false), 8000);
+    }
   }
 
   const panelBg  = isDark ? "hsl(222 47% 5%)"  : "#ffffff";
