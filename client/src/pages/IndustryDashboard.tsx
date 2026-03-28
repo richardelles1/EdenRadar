@@ -700,7 +700,7 @@ export default function IndustryDashboard() {
                 </div>
               )}
 
-              {(!pipelineData || pipelineData.lists.length === 0) && (
+              {pipelineData !== undefined && pipelineData.lists.length === 0 && (
                 <OrientationHint
                   hintId="dashboard-continue"
                   title="Build your pipeline."
