@@ -219,8 +219,11 @@ export default function IndustryDashboard() {
 
         {/* ── SECTION 1: WELCOME ── */}
         <div
-          className="flex flex-col sm:flex-row sm:items-start justify-between gap-4"
-          style={{ animation: "dash-fade-up 400ms ease both" }}
+          className="rounded-xl border border-primary/15 p-5 flex flex-col sm:flex-row sm:items-start justify-between gap-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
+          style={{
+            background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
+            animation: "dash-fade-up 400ms ease both",
+          }}
           data-testid="dashboard-welcome"
         >
           <div className="space-y-1">
@@ -249,8 +252,11 @@ export default function IndustryDashboard() {
 
         {/* ── SECTION 2: SINCE YOUR LAST VISIT ── */}
         <div
-          className="space-y-4"
-          style={{ animation: "dash-fade-up 400ms ease 80ms both" }}
+          className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
+          style={{
+            background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
+            animation: "dash-fade-up 400ms ease 80ms both",
+          }}
           data-testid="dashboard-since-last-visit"
         >
           <SectionHeader title="Since Your Last Visit" icon={Clock} />
@@ -289,7 +295,7 @@ export default function IndustryDashboard() {
                   recentAssets.slice(0, 6).map((asset) => (
                     <button
                       key={asset.id}
-                      onClick={() => navigate("/scout")}
+                      onClick={() => navigate(`/asset/${asset.id}`)}
                       className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
                       data-testid={`dashboard-asset-${asset.id}`}
                     >
@@ -434,7 +440,7 @@ export default function IndustryDashboard() {
                 {matchedAssets.slice(0, 6).map((asset) => (
                   <button
                     key={asset.id}
-                    onClick={() => navigate("/scout")}
+                    onClick={() => navigate(`/asset/${asset.id}`)}
                     className="text-left flex flex-col gap-1 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
                     data-testid={`dashboard-matched-asset-${asset.id}`}
                   >
@@ -456,7 +462,7 @@ export default function IndustryDashboard() {
 
         {/* ── SECTION 3: CONTINUE YOUR WORK ── */}
         <div
-          className="rounded-xl border border-primary/15 p-5 space-y-5"
+          className="rounded-xl border border-primary/15 p-5 space-y-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
           style={{
             background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
             animation: "dash-fade-up 400ms ease 160ms both",
@@ -541,16 +547,20 @@ export default function IndustryDashboard() {
                 </Link>
               )}
 
-              {/* Pipeline stats */}
-              {!pipelineLoading && (pipelineData?.totalSavedAssets ?? 0) > 0 && (
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex flex-col gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50" data-testid="pipeline-stat-saved">
-                    <span className="text-[10px] text-muted-foreground">Saved assets</span>
+              {/* Pipeline stats — 3-box centered grid */}
+              {!pipelineLoading && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
+                    <span className="text-[10px] text-muted-foreground">Saved Assets</span>
                     <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalSavedAssets ?? 0}</span>
                   </div>
-                  <div className="flex flex-col gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50" data-testid="pipeline-stat-institutions">
+                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
                     <span className="text-[10px] text-muted-foreground">Institutions</span>
                     <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
+                  </div>
+                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
+                    <span className="text-[10px] text-muted-foreground">Pipelines</span>
+                    <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
                   </div>
                 </div>
               )}
@@ -562,12 +572,14 @@ export default function IndustryDashboard() {
                 </div>
               )}
 
-              <OrientationHint
-                hintId="dashboard-continue"
-                title="Build your pipeline."
-                body="Save assets to pipelines as you discover them in Scout. Use Quick Print to generate a brief for any pipeline."
-                accent="emerald"
-              />
+              {(!pipelineData || pipelineData.lists.length === 0) && (
+                <OrientationHint
+                  hintId="dashboard-continue"
+                  title="Build your pipeline."
+                  body="Save assets to pipelines as you discover them in Scout. Use Quick Print to generate a brief for any pipeline."
+                  accent="emerald"
+                />
+              )}
 
               <Link href="/scout">
                 <Button size="sm" className="w-full gap-2 mt-1" data-testid="button-start-discovery">
@@ -581,8 +593,11 @@ export default function IndustryDashboard() {
 
         {/* ── SECTION 4: PLATFORM SNAPSHOT ── */}
         <div
-          className="space-y-4"
-          style={{ animation: "dash-fade-up 400ms ease 240ms both" }}
+          className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
+          style={{
+            background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
+            animation: "dash-fade-up 400ms ease 240ms both",
+          }}
           data-testid="dashboard-platform-snapshot"
         >
           <SectionHeader title="Network Coverage" icon={Globe} muted />
