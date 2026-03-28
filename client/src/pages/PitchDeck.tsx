@@ -78,92 +78,97 @@ const LIGHT = {
 
 type Colors = typeof DARK;
 
-/* ─── Radar background anchored to LEFT quarter ─── */
-function PitchLeftRadar({ color, opacity = 0.18 }: { color: string; opacity?: number }) {
-  const hex = Math.round(opacity * 255).toString(16).padStart(2, "0");
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
-      <div
-        style={{
-          position: "absolute",
-          left: "25%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: "min(70vw, 620px)",
-          height: "min(70vw, 620px)",
-          animation: "radar-bg-slow 22s linear infinite",
-          transformOrigin: "center center",
-          background: `conic-gradient(from 0deg, transparent 260deg, ${color}0d 310deg, ${color}${hex} 360deg)`,
-          borderRadius: "50%",
-        }}
-      />
-      {[190, 320, 440, 550].map((r, i) => (
-        <div
-          key={r}
-          style={{
-            position: "absolute",
-            left: "25%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: r,
-            height: r,
-            borderRadius: "50%",
-            border: `1px solid ${color}${Math.round((0.09 - i * 0.015) * 255).toString(16).padStart(2, "0")}`,
-          }}
-        />
-      ))}
-      <div
-        style={{
-          position: "absolute",
-          left: "25%",
-          top: "50%",
-          transform: "translate(-50%, -50%)",
-          width: 10,
-          height: 10,
-          borderRadius: "50%",
-          background: color,
-          animation: "pulse-ring 3s ease-out infinite",
-          opacity: 0,
-        }}
-      />
-    </div>
-  );
-}
+/* ─── Canvas radar anchored to left quarter ─── */
+function PitchLeftRadar({ bg }: { bg: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const dark = bg !== "#ffffff";
 
-/* ─── Centered radar ─── */
-function PitchCenterRadar({ color, opacity = 0.12 }: { color: string; opacity?: number }) {
-  const hex = Math.round(opacity * 255).toString(16).padStart(2, "0");
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let angle = 0;
+    let lastTime = performance.now();
+
+    function resize() {
+      if (!canvas) return;
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
+
+    function draw(now: number) {
+      if (!canvas || !ctx) return;
+      const dt = now - lastTime;
+      lastTime = now;
+      const W = canvas.width;
+      const H = canvas.height;
+      const cx = W / 2;
+      const cy = H / 2;
+      const maxR = Math.sqrt(cx * cx + cy * cy) * 1.05;
+      const ringCount = 7;
+      const ringSpacing = maxR / ringCount;
+      const ringAlpha = dark ? 0.08 : 0.03;
+      const sweepPeak = dark ? 0.15 : 0.05;
+      const sweepAngle = Math.PI / 2;
+      const sweepSteps = 24;
+
+      ctx.clearRect(0, 0, W, H);
+
+      ctx.strokeStyle = "#065f46";
+      ctx.lineWidth = 1;
+      for (let i = 1; i <= ringCount; i++) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringSpacing * i, 0, Math.PI * 2);
+        ctx.globalAlpha = ringAlpha;
+        ctx.stroke();
+      }
+
+      for (let i = 0; i < sweepSteps; i++) {
+        const t = (i + 1) / sweepSteps;
+        const startA = angle - sweepAngle + (i / sweepSteps) * sweepAngle;
+        const endA = angle - sweepAngle + ((i + 1) / sweepSteps) * sweepAngle;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.arc(cx, cy, maxR, startA, endA);
+        ctx.closePath();
+        ctx.fillStyle = "#065f46";
+        ctx.globalAlpha = t * sweepPeak;
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+      angle += (Math.PI * 2) * (dt / 25000);
+      animId = requestAnimationFrame(draw);
+    }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    draw(performance.now());
+
+    return () => { cancelAnimationFrame(animId); ro.disconnect(); };
+  }, [dark]);
+
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden style={{ zIndex: 0 }}>
-      <div
+    <div
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      aria-hidden
+      style={{ zIndex: 0 }}
+    >
+      <canvas
+        ref={canvasRef}
         style={{
           position: "absolute",
-          left: "50%",
+          left: "25%",
           top: "50%",
           transform: "translate(-50%, -50%)",
-          width: "min(70vw, 600px)",
-          height: "min(70vw, 600px)",
-          animation: "radar-bg-slow 22s linear infinite",
-          transformOrigin: "center center",
-          background: `conic-gradient(from 0deg, transparent 260deg, ${color}0d 310deg, ${color}${hex} 360deg)`,
-          borderRadius: "50%",
+          width: "min(70vh, 620px)",
+          height: "min(70vh, 620px)",
         }}
       />
-      {[180, 300, 420, 530].map((r, i) => (
-        <div
-          key={r}
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            width: r,
-            height: r,
-            borderRadius: "50%",
-            border: `1px solid ${color}${Math.round((0.09 - i * 0.015) * 255).toString(16).padStart(2, "0")}`,
-          }}
-        />
-      ))}
     </div>
   );
 }
@@ -199,22 +204,19 @@ function PitchDots({ color, count = 8, seed = 0 }: { color: string; count?: numb
 }
 
 /* ─── Canvas wave background ─── */
-function PitchWaves({ bg }: { bg: string }) {
+const DEFAULT_WAVE_PALETTE = ["#065f46", "#10b981", "#059669", "#34d399"];
+
+function PitchWaves({ bg, palette }: { bg: string; palette?: string[] }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const dark = bg !== "#ffffff";
+  const palRef = useRef(palette ?? DEFAULT_WAVE_PALETTE);
+  palRef.current = palette ?? DEFAULT_WAVE_PALETTE;
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-
-    const WAVES = [
-      { color: "#065f46", aDark: 0.22, aLight: 0.05, amp: 80, freq: 0.0018, spd: 0.007, yr: 0.52 },
-      { color: "#10b981", aDark: 0.16, aLight: 0.04, amp: 58, freq: 0.0026, spd: 0.012, yr: 0.65 },
-      { color: "#059669", aDark: 0.12, aLight: 0.03, amp: 42, freq: 0.0036, spd: 0.018, yr: 0.76 },
-      { color: "#34d399", aDark: 0.08, aLight: 0.03, amp: 26, freq: 0.0048, spd: 0.025, yr: 0.86 },
-    ];
 
     let animId: number;
     let frame = 0;
@@ -227,6 +229,13 @@ function PitchWaves({ bg }: { bg: string }) {
 
     function draw() {
       if (!canvas || !ctx) return;
+      const p = palRef.current;
+      const WAVES = [
+        { color: p[0], aDark: 0.22, aLight: 0.05, amp: 80, freq: 0.0018, spd: 0.007, yr: 0.52 },
+        { color: p[1], aDark: 0.16, aLight: 0.04, amp: 58, freq: 0.0026, spd: 0.012, yr: 0.65 },
+        { color: p[2], aDark: 0.12, aLight: 0.03, amp: 42, freq: 0.0036, spd: 0.018, yr: 0.76 },
+        { color: p[3], aDark: 0.08, aLight: 0.03, amp: 26, freq: 0.0048, spd: 0.025, yr: 0.86 },
+      ];
       const W = canvas.width;
       const H = canvas.height;
       ctx.fillStyle = bg;
@@ -439,9 +448,9 @@ const childVariants = {
 };
 
 function Slide({
-  index, section, accent, children, className = "", noPadding = false, colors,
+  index, section, accent, children, className = "", noPadding = false, colors, waves = false, wavePalette,
 }: {
-  index: number; section: string; accent?: string; children: ReactNode; className?: string; noPadding?: boolean; colors: Colors;
+  index: number; section: string; accent?: string; children: ReactNode; className?: string; noPadding?: boolean; colors: Colors; waves?: boolean; wavePalette?: string[];
 }) {
   const accentColor = accent || colors.green;
   const sectionRef = useRef<HTMLElement>(null);
@@ -455,6 +464,7 @@ function Slide({
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid={`pitch-slide-${index}`}
     >
+      {waves && <PitchWaves bg={colors.bg} palette={wavePalette} />}
       <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
         <span className="text-xs font-mono font-bold tracking-wider" style={{ color: accentColor }}>{String(index).padStart(2, "0")}</span>
         <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: colors.textMuted }}>{section}</span>
@@ -491,6 +501,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
       data-testid="pitch-slide-1"
     >
       <PitchWaves bg={colors.bg} />
+      <PitchLeftRadar bg={colors.bg} />
       <PitchDots color={colors.green} count={12} />
 
       <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
@@ -554,7 +565,7 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
   ];
 
   return (
-    <Slide index={2} section="Who We Are" accent={colors.green} colors={colors}>
+    <Slide index={2} section="Who We Are" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={10} />
       <div className="flex flex-col lg:flex-row gap-8 lg:gap-14 items-start lg:items-center">
 
@@ -630,6 +641,7 @@ function ProblemSlide({ colors }: { colors: Colors }) {
       style={{ minHeight: "100svh", background: colors.bg, scrollSnapAlign: "start" }}
       data-testid="pitch-slide-3"
     >
+      <PitchWaves bg={colors.bg} palette={["#7f1d1d", "#ef4444", "#dc2626", "#fca5a5"]} />
       <PitchDots color={colors.red} count={8} />
 
       <div className="absolute top-4 sm:top-6 left-4 sm:left-8 flex items-center gap-3" style={{ zIndex: 10 }}>
@@ -1069,7 +1081,7 @@ function RadarSlide({ colors }: { colors: Colors }) {
     { icon: TrendingUp, label: "Direct Lab Signals", desc: "Scored research signals from EdenLab and EdenDiscovery surface directly to industry teams" },
   ];
   return (
-    <Slide index={6} section="EdenScout" accent={colors.green} colors={colors}>
+    <Slide index={6} section="EdenScout" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={10} />
       <div className="flex items-center gap-3 mb-4">
         <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center" style={{ background: colors.greenDim }}>
@@ -1292,7 +1304,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 10 — CONTACT ═══════════════════════ */
 function ContactSlide({ colors }: { colors: Colors }) {
   return (
-    <Slide index={9} section="Contact" accent={colors.green} colors={colors}>
+    <Slide index={9} section="Contact" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
         <div className="flex flex-col items-start gap-3 mb-6">
