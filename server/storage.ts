@@ -933,17 +933,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async supersedeStagingForInstitution(institution: string): Promise<number> {
-    const result = await db
-      .update(syncStaging)
-      .set({ status: "skipped" })
-      .where(
-        and(
-          eq(syncStaging.institution, institution),
-          sql`${syncStaging.status} NOT IN ('pushed', 'skipped')`
-        )
-      )
-      .returning({ id: syncStaging.id });
-    return result.length;
+    // Only supersede staging rows from sessions that are NOT in 'enriched' state.
+    // Rows from enriched sessions are "ready to push" in the Indexing Queue and
+    // must be preserved across sync cycles. Wiping them caused the queue to never
+    // drain — every re-sync destroyed the previous run's queue items before they
+    // could be pushed. We only want to clean up stale/incomplete session rows
+    // (running, failed, stuck) not completed ones.
+    const result = await db.execute(sql`
+      UPDATE sync_staging ss
+      SET status = 'skipped'
+      FROM sync_sessions ses
+      WHERE ss.session_id = ses.session_id
+        AND ss.institution = ${institution}
+        AND ss.status NOT IN ('pushed', 'skipped')
+        AND ses.status != 'enriched'
+      RETURNING ss.id
+    `);
+    return result.rows.length;
   }
 
   async markAsIrrelevant(id: number): Promise<void> {

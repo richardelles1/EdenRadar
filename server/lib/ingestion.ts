@@ -407,12 +407,14 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     // assets already queued from a previous scan are not re-staged as "new" on this scan.
     const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
 
-    // Step 2: NOW supersede old pending staging rows for this institution.
-    // This cleans up the queue so only the current session's results are actionable,
-    // but it does NOT affect the known-fingerprint dedup since we already captured those above.
+    // Step 2: Supersede stale non-enriched staging rows for this institution.
+    // Only rows from sessions that are NOT yet in 'enriched' state are cleaned up
+    // (e.g. stuck/running/failed sessions from a previous crashed sync).
+    // Rows from completed 'enriched' sessions are the Indexing Queue — they are
+    // preserved so the user can still push them even after a subsequent sync runs.
     const superseded = await storage.supersedeStagingForInstitution(institutionName);
     if (superseded > 0) {
-      console.log(`[sync] ${institutionName}: superseded ${superseded} stale staging rows from previous sessions`);
+      console.log(`[sync] ${institutionName}: superseded ${superseded} stale incomplete-session rows`);
     }
 
     const seen = new Set<string>();
