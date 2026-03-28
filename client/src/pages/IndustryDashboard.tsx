@@ -383,7 +383,24 @@ export default function IndustryDashboard() {
           </div>
 
           {/* Matched to Your Interests */}
-          {userInterests.length > 0 && (
+          {userInterests.length === 0 ? (
+            <div
+              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border/60 bg-card"
+              data-testid="dashboard-interests-nudge"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Sparkles className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                <p className="text-xs text-muted-foreground">
+                  Add therapeutic interest areas to see assets matched to your focus.
+                </p>
+              </div>
+              <Link href="/settings">
+                <span className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0">
+                  Complete settings <ArrowRight className="w-3 h-3" />
+                </span>
+              </Link>
+            </div>
+          ) : matchedAssets.length > 0 ? (
             <div
               className="rounded-xl border border-border bg-card p-5 space-y-3"
               data-testid="dashboard-matched-interests"
@@ -412,46 +429,28 @@ export default function IndustryDashboard() {
                 </div>
               </div>
 
-              {isLoading ? (
-                <div className="flex gap-3">
-                  {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 flex-1 rounded-lg" />)}
-                </div>
-              ) : matchedAssets.length === 0 ? (
-                <div className="py-3 text-center space-y-1.5">
-                  <p className="text-xs text-muted-foreground">
-                    No recent assets match your therapeutic interest areas.
-                  </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                {matchedAssets.slice(0, 6).map((asset) => (
                   <button
-                    onClick={() => navigate(`/scout?draft=${encodeURIComponent(userInterests[0])}`)}
-                    className="text-xs text-primary hover:underline"
+                    key={asset.id}
+                    onClick={() => navigate("/scout")}
+                    className="text-left flex flex-col gap-1 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                    data-testid={`dashboard-matched-asset-${asset.id}`}
                   >
-                    Search for {userInterests[0]} in Scout
+                    <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">
+                      {asset.assetName}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">{asset.institution}</p>
+                    {asset.indication && (
+                      <span className="text-[9px] px-1 py-0.5 rounded-full bg-primary/10 text-primary capitalize w-fit">
+                        {asset.indication}
+                      </span>
+                    )}
                   </button>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {matchedAssets.slice(0, 6).map((asset) => (
-                    <button
-                      key={asset.id}
-                      onClick={() => navigate("/scout")}
-                      className="text-left flex flex-col gap-1 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                      data-testid={`dashboard-matched-asset-${asset.id}`}
-                    >
-                      <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                        {asset.assetName}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground truncate">{asset.institution}</p>
-                      {asset.indication && (
-                        <span className="text-[9px] px-1 py-0.5 rounded-full bg-primary/8 text-primary capitalize w-fit">
-                          {asset.indication}
-                        </span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
+                ))}
+              </div>
             </div>
-          )}
+          ) : null}
         </div>
 
         {/* ── SECTION 3: CONTINUE YOUR WORK ── */}
