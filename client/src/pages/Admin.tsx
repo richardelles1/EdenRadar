@@ -370,7 +370,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                         ) : s.status === "failed" ? (
                           <XCircle className="h-3.5 w-3.5 text-red-500" aria-label="Scrape failed" />
                         ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
-                          <Clock className="h-3.5 w-3.5 text-blue-500" aria-label="Ready to push" />
+                          <span className="inline-flex items-center gap-1 text-blue-500"><Clock className="h-3.5 w-3.5 shrink-0" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                         ) : (
                           <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Scraped 0 results — site may have been unreachable" />
                         )}
@@ -624,7 +624,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                       ) : s.status === "failed" ? (
                         <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="Scrape failed" />
                       ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
-                        <Clock className="h-3.5 w-3.5 text-blue-500 shrink-0" aria-label="Ready to push" />
+                        <span className="inline-flex items-center gap-1 text-blue-500 shrink-0"><Clock className="h-3.5 w-3.5" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                       ) : (
                         <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Scraped 0 results — site may have been unreachable" />
                       )}
