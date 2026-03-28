@@ -344,14 +344,14 @@
 
 /* Gradient text utility */
 .gradient-text {
-  background: linear-gradient(135deg, hsl(142 70% 58%) 0%, hsl(155 65% 54%) 50%, hsl(170 60% 52%) 100%);
+  background: linear-gradient(135deg, hsl(142 65% 52%) 0%, hsl(142 60% 48%) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
 .gradient-text-light {
-  background: linear-gradient(135deg, hsl(142 52% 34%) 0%, hsl(155 55% 38%) 50%, hsl(170 50% 36%) 100%);
+  background: linear-gradient(135deg, hsl(142 52% 34%) 0%, hsl(142 48% 30%) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -529,8 +529,8 @@
    ============================================================ */
 
 @keyframes glass-btn-rotate {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to   { transform: translate(-50%, -50%) rotate(360deg); }
 }
 
 .glass-btn,
@@ -539,21 +539,25 @@
   display: inline-flex;
   padding: 1.5px;
   border-radius: 9999px;
+  overflow: hidden;
 }
 
 .glass-btn::before,
 .glass-btn-wrap::before {
   content: '';
   position: absolute;
-  inset: 0;
-  border-radius: 9999px;
+  top: 50%;
+  left: 50%;
+  width: 300%;
+  height: 300%;
+  transform: translate(-50%, -50%) rotate(0deg);
   background: conic-gradient(
     from 0deg,
     transparent 0deg,
-    rgba(52, 211, 153, 0.85) 60deg,
-    transparent 120deg
+    rgba(52, 211, 153, 0.9) 50deg,
+    transparent 100deg
   );
-  animation: glass-btn-rotate 2.5s linear infinite;
+  animation: glass-btn-rotate 3s linear infinite;
   animation-play-state: paused;
   z-index: 0;
 }
@@ -571,20 +575,19 @@
   gap: 0.5rem;
   padding: 0.625rem 1.75rem;
   border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(4, 12, 4, 0.72);
+  border: none;
   color: white;
   font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
+  transition: background 0.2s ease;
   white-space: nowrap;
   min-height: 48px;
 }
 
 .glass-btn-inner:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.22);
+  background: rgba(4, 12, 4, 0.55);
 }
 
 @media (prefers-reduced-motion: reduce) {

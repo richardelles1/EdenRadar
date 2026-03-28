@@ -14,6 +14,10 @@ import {
   ChevronRight,
   Dna,
   Shield,
+  Globe,
+  Bell,
+  FileText,
+  GitMerge,
 } from "lucide-react";
 
 function useReveal(threshold = 0.15) {
@@ -58,10 +62,10 @@ function PageBackground() {
 const YEARLY_DISCOUNT = 0.95;
 
 function derivedYearly(monthlyUsd: number): { yearlyPrice: string; yearlySavings: string } {
-  const discounted = monthlyUsd * YEARLY_DISCOUNT;
+  const discounted = Math.floor(monthlyUsd * YEARLY_DISCOUNT);
   const savedPerYear = Math.round(monthlyUsd * 12 * (1 - YEARLY_DISCOUNT));
   return {
-    yearlyPrice: `$${discounted.toFixed(2)}`,
+    yearlyPrice: `$${discounted}`,
     yearlySavings: `$${savedPerYear}`,
   };
 }
@@ -83,7 +87,7 @@ const TIERS = [
     popular: false,
     features: [
       "Submit early-stage concepts before research begins",
-      "EDEN credibility scoring for concepts (0-100 scale)",
+      "EDEN credibility scoring for concepts",
       "Browse the public concept community feed",
       "Save concepts to a personal watchlist",
       "Surface your concepts to industry collaborators",
@@ -206,51 +210,53 @@ function FreeTierCard({ tier }: { tier: typeof TIERS[0] }) {
 
 const SCOUT = TIERS[2];
 
+const SCOUT_CATEGORIES = [
+  {
+    icon: Globe,
+    label: "World-class intelligence database",
+    items: [
+      "EDEN natural language queries across 300+ TTOs",
+      "Institution intelligence and TTO profiles",
+      "Therapy area, stage, and modality filters",
+    ],
+  },
+  {
+    icon: Bell,
+    label: "Custom email alerts for up-to-the-minute knowledge",
+    items: [
+      "Custom push alerts via email",
+    ],
+  },
+  {
+    icon: FileText,
+    label: "AI-enriched Dossiers",
+    items: [
+      "Enriched asset dossiers with competitive cross-reference",
+      "EDEN readiness scoring per asset",
+      "Researcher contact information",
+    ],
+  },
+  {
+    icon: GitMerge,
+    label: "Pipeline Builder",
+    items: [
+      "Saved asset lists and pipeline tracking",
+      "PDF and CSV pipeline export",
+    ],
+  },
+];
+
 function ScoutCard({ isYearly }: { isYearly: boolean }) {
   const [, navigate] = useLocation();
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0 });
-
-  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
-    const card = cardRef.current;
-    if (!card) return;
-    const rect = card.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    const dx = (e.clientX - cx) / (rect.width / 2);
-    const dy = (e.clientY - cy) / (rect.height / 2);
-    setTilt({ x: dy * -5, y: dx * 5 });
-  }
-
-  function handleMouseLeave() {
-    setTilt({ x: 0, y: 0 });
-  }
-
-  const mid = Math.ceil(SCOUT.features.length / 2);
-  const leftFeatures = SCOUT.features.slice(0, mid);
-  const rightFeatures = SCOUT.features.slice(mid);
 
   return (
     <div
-      ref={cardRef}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
       className="rounded-2xl flex flex-col overflow-hidden relative h-full"
       style={{
         border: `1px solid ${SCOUT.borderColor}`,
-        borderTop: `3px solid ${SCOUT.color}`,
-        transform: `perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
-        transition: tilt.x === 0 && tilt.y === 0 ? "transform 0.5s ease" : "transform 0.1s ease",
-        willChange: "transform",
+        borderTop: `3px solid ${SCOUT.headerBg}`,
       }}
     >
-      <div
-        className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full z-10"
-        style={{ background: SCOUT.color.replace(")", " / 0.15)"), color: SCOUT.color }}
-      >
-        Most Popular
-      </div>
-
       <div className="px-7 py-6" style={{ background: SCOUT.headerBg }}>
         <div className="flex items-start justify-between gap-6">
           <div className="flex items-center gap-3">
@@ -261,7 +267,12 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
               <SCOUT.icon className="w-5 h-5 text-white" />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{SCOUT.tier}</p>
+              <div className="flex items-center gap-2 mb-0.5">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{SCOUT.tier}</p>
+                <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full bg-white/20 text-white">
+                  Most Popular
+                </span>
+              </div>
               <h3 className="text-lg font-bold text-white leading-tight">{SCOUT.name}</h3>
               <p className="text-xs text-white/70 mt-0.5">{SCOUT.tagline}</p>
             </div>
@@ -295,31 +306,28 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
         </div>
       </div>
 
-      <div className="flex-1 px-7 py-5 bg-card">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
-          {leftFeatures.map((feature, fi) => (
-            <div key={`left-${fi}`} className="flex items-start gap-2.5 text-sm">
-              <span
-                className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
+      <div className="flex-1 px-7 py-5 bg-card grid grid-cols-1 sm:grid-cols-2 gap-5">
+        {SCOUT_CATEGORIES.map((cat) => (
+          <div key={cat.label}>
+            <div className="flex items-center gap-2 mb-2.5">
+              <div
+                className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0"
+                style={{ background: SCOUT.colorDim }}
               >
-                <Check className="w-2.5 h-2.5" style={{ color: SCOUT.color }} />
-              </span>
-              <span className="text-foreground">{feature}</span>
+                <cat.icon className="w-3.5 h-3.5" style={{ color: SCOUT.headerBg }} />
+              </div>
+              <p className="text-xs font-semibold text-foreground leading-snug">{cat.label}</p>
             </div>
-          ))}
-          {rightFeatures.map((feature, fi) => (
-            <div key={`right-${fi}`} className="flex items-start gap-2.5 text-sm">
-              <span
-                className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
-              >
-                <Check className="w-2.5 h-2.5" style={{ color: SCOUT.color }} />
-              </span>
-              <span className="text-foreground">{feature}</span>
-            </div>
-          ))}
-        </div>
+            <ul className="space-y-1.5 pl-8">
+              {cat.items.map((item, i) => (
+                <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
+                  <Check className="w-3 h-3 flex-shrink-0 mt-0.5" style={{ color: SCOUT.headerBg }} />
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
       </div>
 
       <div className="px-7 py-5 bg-card border-t border-border">
@@ -327,7 +335,7 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
           className="w-full font-semibold h-11 text-base"
           onClick={() => navigate("/login")}
           data-testid="pricing-cta-tier3"
-          style={{ background: SCOUT.color, color: "white", border: "none" }}
+          style={{ background: SCOUT.headerBg, color: "white", border: "none" }}
           variant="default"
         >
           Get Started with EdenScout
@@ -754,7 +762,7 @@ export default function HowItWorks() {
           <PricingCards />
 
           <p className="text-center text-xs text-muted-foreground mt-6">
-            All plans include a 14-day free trial. No credit card required to start.
+            EdenScout includes a 3-day free trial.
           </p>
         </section>
 

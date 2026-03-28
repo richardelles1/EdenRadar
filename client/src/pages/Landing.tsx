@@ -43,10 +43,10 @@ function useReveal(threshold = 0.18) {
 /* ─────────────────────────── WavyBackground ──────────────────── */
 
 const HERO_WAVES = [
-  { color: "#065f46", alpha: 0.28, amp: 80, freq: 0.0018, spd: 0.008, yr: 0.55 },
-  { color: "#10b981", alpha: 0.20, amp: 58, freq: 0.0026, spd: 0.014, yr: 0.68 },
-  { color: "#059669", alpha: 0.15, amp: 42, freq: 0.0036, spd: 0.020, yr: 0.78 },
-  { color: "#34d399", alpha: 0.10, amp: 26, freq: 0.0048, spd: 0.028, yr: 0.87 },
+  { color: "#065f46", alphaDark: 0.28, alphaLight: 0.05, amp: 80, freq: 0.0018, spd: 0.008, yr: 0.55 },
+  { color: "#10b981", alphaDark: 0.20, alphaLight: 0.04, amp: 58, freq: 0.0026, spd: 0.014, yr: 0.68 },
+  { color: "#059669", alphaDark: 0.15, alphaLight: 0.03, amp: 42, freq: 0.0036, spd: 0.020, yr: 0.78 },
+  { color: "#34d399", alphaDark: 0.10, alphaLight: 0.03, amp: 26, freq: 0.0048, spd: 0.028, yr: 0.87 },
 ];
 
 function WavyBackground() {
@@ -60,6 +60,12 @@ function WavyBackground() {
 
     let animId: number;
     let frame = 0;
+    let isDark = document.documentElement.classList.contains("dark");
+
+    const mo = new MutationObserver(() => {
+      isDark = document.documentElement.classList.contains("dark");
+    });
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
 
     function resize() {
       if (!canvas) return;
@@ -72,7 +78,7 @@ function WavyBackground() {
       const W = canvas.width;
       const H = canvas.height;
 
-      ctx.fillStyle = "#060a06";
+      ctx.fillStyle = isDark ? "#060a06" : "#f3fef6";
       ctx.fillRect(0, 0, W, H);
 
       for (const wave of HERO_WAVES) {
@@ -88,7 +94,7 @@ function WavyBackground() {
         ctx.lineTo(W, H);
         ctx.lineTo(0, H);
         ctx.closePath();
-        ctx.globalAlpha = wave.alpha;
+        ctx.globalAlpha = isDark ? wave.alphaDark : wave.alphaLight;
         ctx.fillStyle = wave.color;
         ctx.fill();
       }
@@ -106,6 +112,7 @@ function WavyBackground() {
     return () => {
       cancelAnimationFrame(animId);
       ro.disconnect();
+      mo.disconnect();
     };
   }, []);
 
@@ -442,7 +449,7 @@ export default function Landing() {
           <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center"
             style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem" }}>
 
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl text-white">
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl text-foreground dark:text-white">
               Where Biotech Research
               <br />
               <span className="gradient-text">
@@ -450,7 +457,7 @@ export default function Landing() {
               </span>
             </h1>
 
-            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.72)" }}>
+            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10 text-foreground/70 dark:text-white/72">
               EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
             </p>
 
@@ -499,7 +506,7 @@ export default function Landing() {
                   <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
                     {s.value}
                   </div>
-                  <div className="text-xs tracking-wide" style={{ color: "rgba(255,255,255,0.55)" }}>{s.label}</div>
+                  <div className="text-xs tracking-wide text-foreground/50 dark:text-white/55">{s.label}</div>
                 </div>
               ))}
             </div>
