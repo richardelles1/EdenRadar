@@ -635,7 +635,7 @@ export default function IndustrySettings() {
           <div className="rounded-xl border border-card-border bg-card p-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold text-foreground">EdenScout plan</p>
-              <p className="text-xs text-muted-foreground mt-0.5">$299 / month</p>
+              <p className="text-xs text-muted-foreground mt-0.5">$799 / month</p>
             </div>
             <div className="flex items-center gap-2">
               <Badge variant="secondary"

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -41,214 +40,81 @@ function useReveal(threshold = 0.18) {
   return ref;
 }
 
-/* ─────────────────────────── RadarBackground ─────────────────── */
+/* ─────────────────────────── WavyBackground ──────────────────── */
 
-function RadarBackground() {
+const HERO_WAVES = [
+  { color: "#065f46", alpha: 0.28, amp: 80, freq: 0.0018, spd: 0.008, yr: 0.55 },
+  { color: "#10b981", alpha: 0.20, amp: 58, freq: 0.0026, spd: 0.014, yr: 0.68 },
+  { color: "#059669", alpha: 0.15, amp: 42, freq: 0.0036, spd: 0.020, yr: 0.78 },
+  { color: "#34d399", alpha: 0.10, amp: 26, freq: 0.0048, spd: 0.028, yr: 0.87 },
+];
+
+function WavyBackground() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let animId: number;
+    let frame = 0;
+
+    function resize() {
+      if (!canvas) return;
+      canvas.width = canvas.offsetWidth;
+      canvas.height = canvas.offsetHeight;
+    }
+
+    function draw() {
+      if (!canvas || !ctx) return;
+      const W = canvas.width;
+      const H = canvas.height;
+
+      ctx.fillStyle = "#060a06";
+      ctx.fillRect(0, 0, W, H);
+
+      for (const wave of HERO_WAVES) {
+        ctx.beginPath();
+        for (let x = 0; x <= W; x += 2) {
+          const y =
+            wave.yr * H +
+            Math.sin(x * wave.freq + frame * wave.spd) * wave.amp +
+            Math.sin(x * wave.freq * 1.8 + frame * wave.spd * 0.65) * wave.amp * 0.3;
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.lineTo(W, H);
+        ctx.lineTo(0, H);
+        ctx.closePath();
+        ctx.globalAlpha = wave.alpha;
+        ctx.fillStyle = wave.color;
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+
+      frame++;
+      animId = requestAnimationFrame(draw);
+    }
+
+    resize();
+    const ro = new ResizeObserver(resize);
+    ro.observe(canvas);
+    draw();
+
+    return () => {
+      cancelAnimationFrame(animId);
+      ro.disconnect();
+    };
+  }, []);
+
   return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      <div
-        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
-        style={{
-          width: "min(75vw, 700px)",
-          height: "min(75vw, 700px)",
-          animation: "radar-bg-slow 18s linear infinite",
-          transformOrigin: "center center",
-          background:
-            "conic-gradient(from 0deg, transparent 260deg, hsl(142 65% 48% / 0.05) 310deg, hsl(142 65% 48% / 0.22) 360deg)",
-          borderRadius: "50%",
-        }}
-      />
-      {[220, 360, 480, 600].map((r, i) => (
-        <div
-          key={r}
-          className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-          style={{
-            width: r,
-            height: r,
-            borderColor: `hsl(142 55% 45% / ${0.08 - i * 0.012})`,
-          }}
-        />
-      ))}
-      <div
-        className="absolute left-1/2 top-1/2 w-3 h-3 -translate-x-1/2 -translate-y-1/2 rounded-full"
-        style={{ background: "hsl(142 65% 55%)", animation: "pulse-ring 3s ease-out infinite", opacity: 0 }}
-      />
-    </div>
-  );
-}
-
-/* ────────────── Mycelium Network — radiates from radar center ─── */
-
-const MYC_INIT = 1.2;
-const MYC_P_DUR = 4;
-const MYC_P_GAP = 0.9;
-const MYC_S_DUR = 2.5;
-const MYC_T_DUR = 1.8;
-const MYC_COLOR = "hsl(142 60% 48%)";
-
-function pDel(i: number) { return MYC_INIT + i * MYC_P_GAP; }
-function sDel(pi: number) { return pDel(pi) + MYC_P_DUR * 0.6; }
-function tDel(pi: number) { return sDel(pi) + MYC_S_DUR * 0.6; }
-
-const PRIMARY_PATHS = [
-  "M 500 300 C 470 330, 420 380, 360 420 C 310 450, 250 485, 180 520",
-  "M 500 300 C 496 350, 490 400, 484 445 C 480 475, 476 520, 470 565",
-  "M 500 300 C 535 330, 585 375, 640 415 C 680 440, 725 468, 775 495",
-  "M 500 300 C 460 293, 400 280, 340 264 C 290 252, 240 238, 185 225",
-  "M 500 300 C 470 278, 430 250, 390 218 C 360 196, 330 172, 295 148",
-  "M 500 300 C 545 296, 600 285, 660 272 C 710 262, 760 252, 815 242",
-];
-
-const SECONDARY_PATHS: [string, string][] = [
-  ["M 360 420 C 340 438, 315 458, 290 478", "M 360 420 C 378 442, 392 468, 402 495"],
-  ["M 484 445 C 462 462, 438 482, 418 502", "M 484 445 C 506 465, 528 488, 545 512"],
-  ["M 640 415 C 632 440, 622 468, 615 495", "M 640 415 C 665 432, 695 448, 722 465"],
-  ["M 340 264 C 325 245, 308 224, 292 205", "M 340 264 C 328 280, 314 298, 302 315"],
-  ["M 390 218 C 372 205, 352 188, 335 172", "M 390 218 C 382 235, 370 255, 362 272"],
-  ["M 660 272 C 675 255, 692 235, 708 218", "M 660 272 C 675 288, 692 308, 708 325"],
-];
-
-const TERTIARY_PATHS: [string, string][] = [
-  ["M 315 458 C 300 470, 285 485, 272 498", "M 392 468 C 402 480, 412 495, 418 508"],
-  ["M 438 482 C 422 495, 408 510, 395 524", "M 528 488 C 540 500, 555 515, 565 528"],
-  ["M 622 468 C 612 482, 605 498, 598 512", "M 695 448 C 708 460, 722 475, 732 488"],
-  ["M 308 224 C 296 214, 282 200, 272 190", "M 314 298 C 302 308, 290 322, 280 335"],
-  ["M 352 188 C 340 178, 326 165, 315 155", "M 370 255 C 362 266, 352 280, 345 292"],
-  ["M 692 235 C 702 225, 715 212, 725 202", "M 692 308 C 702 318, 715 332, 725 342"],
-];
-
-const SEC_TIPS: [number, number][][] = [
-  [[290,478],[402,495]], [[418,502],[545,512]], [[615,495],[722,465]],
-  [[292,205],[302,315]], [[335,172],[362,272]], [[708,218],[708,325]],
-];
-const TER_TIPS: [number, number][][] = [
-  [[272,498],[418,508]], [[395,524],[565,528]], [[598,512],[732,488]],
-  [[272,190],[280,335]], [[315,155],[345,292]], [[725,202],[725,342]],
-];
-
-interface MycStrand { d: string; sw: number; so: number; delay: number; dur: number }
-interface MycNode { cx: number; cy: number; r: number; delay: number }
-
-function buildMycelium() {
-  const strands: MycStrand[] = [];
-  const nodes: MycNode[] = [];
-
-  PRIMARY_PATHS.forEach((d, i) => {
-    strands.push({ d, sw: 1.4, so: 0.22, delay: pDel(i), dur: MYC_P_DUR });
-  });
-
-  SECONDARY_PATHS.forEach((pair, pi) => {
-    pair.forEach((d) => {
-      strands.push({ d, sw: 0.9, so: 0.15, delay: sDel(pi), dur: MYC_S_DUR });
-    });
-  });
-
-  TERTIARY_PATHS.forEach((pair, pi) => {
-    pair.forEach((d) => {
-      strands.push({ d, sw: 0.6, so: 0.10, delay: tDel(pi), dur: MYC_T_DUR });
-    });
-  });
-
-  SEC_TIPS.forEach((pair, pi) => {
-    pair.forEach(([cx, cy]) => {
-      nodes.push({ cx, cy, r: 2.0, delay: sDel(pi) + MYC_S_DUR + 0.15 });
-    });
-  });
-
-  TER_TIPS.forEach((pair, pi) => {
-    pair.forEach(([cx, cy]) => {
-      nodes.push({ cx, cy, r: 1.6, delay: tDel(pi) + MYC_T_DUR + 0.15 });
-    });
-  });
-
-  return { strands, nodes };
-}
-
-const { strands: MYC_STRANDS, nodes: MYC_NODES } = buildMycelium();
-
-function HeroVine() {
-  return (
-    <div
-      className="absolute inset-0 pointer-events-none select-none hidden sm:block"
-      style={{ zIndex: 1 }}
+    <canvas
+      ref={canvasRef}
+      className="absolute inset-0 w-full h-full block"
       aria-hidden
-    >
-      <svg
-        viewBox="0 0 1000 600"
-        preserveAspectRatio="xMidYMid slice"
-        className="w-full h-full"
-      >
-        {MYC_STRANDS.map((s, i) => (
-          <motion.path
-            key={`ms-${i}`}
-            d={s.d}
-            fill="none"
-            stroke={MYC_COLOR}
-            strokeWidth={s.sw}
-            strokeOpacity={s.so}
-            strokeLinecap="round"
-            initial={{ pathLength: 0 }}
-            animate={{ pathLength: 1 }}
-            transition={{ delay: s.delay, duration: s.dur, ease: "easeInOut" }}
-          />
-        ))}
-
-        {MYC_NODES.map((n, i) => (
-          <motion.circle
-            key={`mn-${i}`}
-            cx={n.cx}
-            cy={n.cy}
-            r={n.r}
-            fill="hsl(142 65% 55%)"
-            fillOpacity={0.35}
-            style={{ transformBox: "fill-box", transformOrigin: "center" }}
-            initial={{ scale: 0, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{
-              delay: n.delay,
-              duration: 0.5,
-              type: "spring",
-              stiffness: 160,
-              damping: 18,
-            }}
-          />
-        ))}
-      </svg>
-    </div>
-  );
-}
-
-/* ─────────────────────────── FloatingParticles ───────────────── */
-
-const PARTICLES = [
-  { x: "12%", y: "18%", size: 3, delay: "0s",    dur: "6s" },
-  { x: "78%", y: "12%", size: 2, delay: "1.4s",  dur: "7.5s" },
-  { x: "88%", y: "55%", size: 2.5, delay: "2.8s", dur: "5.5s" },
-  { x: "65%", y: "82%", size: 2, delay: "0.7s",  dur: "8s" },
-  { x: "22%", y: "72%", size: 3, delay: "3.2s",  dur: "6.5s" },
-  { x: "48%", y: "8%",  size: 2, delay: "1.8s",  dur: "7s" },
-  { x: "92%", y: "28%", size: 1.5, delay: "4s",  dur: "9s" },
-  { x: "35%", y: "90%", size: 2.5, delay: "2s",  dur: "6s" },
-];
-
-function FloatingParticles() {
-  return (
-    <div className="absolute inset-0 overflow-hidden pointer-events-none" aria-hidden>
-      {PARTICLES.map((p, i) => (
-        <div
-          key={i}
-          className="absolute rounded-full"
-          style={{
-            left: p.x,
-            top: p.y,
-            width: p.size * 2,
-            height: p.size * 2,
-            background: "hsl(142 65% 55%)",
-            animation: `particle-drift ${p.dur} ease-in-out ${p.delay} infinite`,
-          }}
-        />
-      ))}
-    </div>
+    />
   );
 }
 
@@ -574,86 +440,58 @@ export default function Landing() {
       <main className="flex-1">
         {/* ── Hero ── */}
         <section className="relative overflow-hidden" style={{ minHeight: "92vh" }}>
-          <RadarBackground />
-          <FloatingParticles />
-          <HeroVine />
-
-          <div
-            className="absolute inset-0 pointer-events-none"
-            aria-hidden
-            style={{
-              background:
-                "radial-gradient(ellipse at 70% 0%, hsl(142 52% 36% / 0.06) 0%, transparent 55%)",
-            }}
-          />
+          <WavyBackground />
 
           <div className="relative z-10 max-w-screen-xl mx-auto px-4 sm:px-6 flex flex-col items-center justify-center text-center"
             style={{ minHeight: "92vh", paddingTop: "6rem", paddingBottom: "5rem" }}>
 
-            <div
-              className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-primary/30 bg-primary/5 mb-8"
-            >
-              <Zap className="w-3.5 h-3.5 text-primary" />
-              <span className="text-xs font-semibold text-primary tracking-widest uppercase">
-                Biotech Asset Discovery Platform
-              </span>
-            </div>
-
-            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl">
-              <span className="text-foreground">Where Biotech Research</span>
+            <h1 className="text-4xl sm:text-5xl lg:text-7xl font-bold tracking-tight leading-[1.06] mb-6 max-w-4xl text-white">
+              Where Biotech Research
               <br />
-              <span className="gradient-text dark:gradient-text gradient-text-light">
+              <span className="gradient-text">
                 Meets Industry Intelligence.
               </span>
             </h1>
 
-            <p className="text-base sm:text-lg lg:text-xl text-muted-foreground max-w-2xl leading-relaxed mb-10">
+            <p className="text-base sm:text-lg lg:text-xl max-w-2xl leading-relaxed mb-10" style={{ color: "rgba(255,255,255,0.72)" }}>
               EdenRadar connects world-class university innovations with the industry teams building tomorrow's therapies, powered by EDEN, the intelligence engine that reads the science so you don't have to.
             </p>
 
             <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full max-w-sm sm:max-w-none sm:w-auto">
-              <Button
-                size="lg"
-                onClick={handleLogin}
-                data-testid="button-cta-discovery"
-                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 shadow-lg"
-                style={{
-                  background: "hsl(38 92% 50%)",
-                  color: "white",
-                  border: "none",
-                }}
-              >
-                <Lightbulb className="w-4 h-4" />
-                For Discovery
-                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={handleLogin}
-                data-testid="button-cta-research"
-                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-primary/40 hover:border-primary/70 hover:bg-primary/5 text-primary"
-              >
-                <FlaskConical className="w-4 h-4" />
-                For Researchers
-                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                onClick={handleLogin}
-                data-testid="button-cta-industry"
-                className="w-full sm:w-auto h-12 px-7 text-base font-semibold gap-2 border-primary/40 hover:border-primary/70 hover:bg-primary/5 text-primary"
-              >
-                <Building2 className="w-4 h-4" />
-                For Industry
-                <ArrowRight className="w-3.5 h-3.5 opacity-70" />
-              </Button>
+              <div className="glass-btn-wrap w-full sm:w-auto">
+                <button
+                  onClick={handleLogin}
+                  data-testid="button-cta-discovery"
+                  className="glass-btn-inner w-full sm:w-auto"
+                >
+                  <Lightbulb className="w-4 h-4" />
+                  For Discovery
+                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+                </button>
+              </div>
+              <div className="glass-btn-wrap w-full sm:w-auto">
+                <button
+                  onClick={handleLogin}
+                  data-testid="button-cta-research"
+                  className="glass-btn-inner w-full sm:w-auto"
+                >
+                  <FlaskConical className="w-4 h-4" />
+                  For Researchers
+                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+                </button>
+              </div>
+              <div className="glass-btn-wrap w-full sm:w-auto">
+                <button
+                  onClick={handleLogin}
+                  data-testid="button-cta-industry"
+                  className="glass-btn-inner w-full sm:w-auto"
+                >
+                  <Building2 className="w-4 h-4" />
+                  For Industry
+                  <ArrowRight className="w-3.5 h-3.5 opacity-70" />
+                </button>
+              </div>
             </div>
-
-            <p className="mt-4 text-xs text-muted-foreground">
-              All portals share the same secure login. Choose your path once you're in.
-            </p>
 
             <div
               ref={statsRef}
@@ -661,10 +499,10 @@ export default function Landing() {
             >
               {STATS.map((s) => (
                 <div key={s.label} className="text-center" data-testid={`stat-${s.label.replace(/\s+/g, "-").toLowerCase()}`}>
-                  <div className="text-2xl sm:text-3xl font-bold gradient-text dark:gradient-text gradient-text-light mb-1">
+                  <div className="text-2xl sm:text-3xl font-bold gradient-text mb-1">
                     {s.value}
                   </div>
-                  <div className="text-xs text-muted-foreground tracking-wide">{s.label}</div>
+                  <div className="text-xs tracking-wide" style={{ color: "rgba(255,255,255,0.55)" }}>{s.label}</div>
                 </div>
               ))}
             </div>

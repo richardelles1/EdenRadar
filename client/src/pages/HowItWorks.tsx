@@ -102,7 +102,7 @@ const TIERS = [
     yearlySavings: "",
     period: "",
     tagline: "For research teams and active deal flow exploration",
-    popular: true,
+    popular: false,
     features: [
       "Everything in EdenDiscovery",
       "11-section structured research project canvas",
@@ -120,29 +120,227 @@ const TIERS = [
     colorDim: "hsl(142 65% 48% / 0.08)",
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
-    price: "$299",
-    ...derivedYearly(299),
+    price: "$799",
+    ...derivedYearly(799),
     period: "/mo",
     tagline: "Full platform access for serious BD teams",
-    popular: false,
+    popular: true,
     features: [
-      "Everything in EdenLab",
-      "EDEN natural language queries across 300+ TTO database",
-      "EDEN-enriched asset dossiers with competitive cross-reference",
+      "EDEN natural language queries across 300+ TTOs",
+      "Enriched asset dossiers with competitive cross-reference",
       "Therapy area, stage, and modality filters",
+      "EDEN readiness scoring per asset (0-100)",
       "Institution intelligence and TTO profiles",
       "Saved asset lists and pipeline tracking",
-      "EDEN readiness scoring per asset (0-100)",
+      "Custom push alerts via email for up-to-the-minute knowledge",
       "Researcher contact information",
-      "Custom alerts for new matching assets",
       "PDF and CSV pipeline export",
     ],
   },
 ];
 
-function PricingCards() {
+function FreeTierCard({ tier }: { tier: typeof TIERS[0] }) {
   const [, navigate] = useLocation();
+  return (
+    <div
+      className="rounded-2xl flex flex-col overflow-hidden"
+      style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
+    >
+      <div className="px-5 py-4" style={{ background: tier.headerBg }}>
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2.5">
+            <div
+              className="w-8 h-8 rounded-lg flex items-center justify-center"
+              style={{ background: "rgba(255,255,255,0.2)" }}
+            >
+              <tier.icon className="w-3.5 h-3.5 text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{tier.tier}</p>
+              <h3 className="text-sm font-bold text-white leading-tight">{tier.name}</h3>
+            </div>
+          </div>
+          <span className="text-xl font-black text-white">Free</span>
+        </div>
+        <p className="text-[11px] text-white/70 leading-snug">{tier.tagline}</p>
+      </div>
+
+      <div className="flex-1 px-5 py-3 bg-card">
+        <ul className="space-y-2">
+          {tier.features.slice(0, 4).map((feature, fi) => {
+            const isEscalator = feature.startsWith("Everything in");
+            return (
+              <li key={fi} className="flex items-start gap-2 text-xs">
+                <span
+                  className="flex-shrink-0 w-3.5 h-3.5 rounded-full flex items-center justify-center mt-0.5"
+                  style={{ background: isEscalator ? "hsl(var(--muted))" : tier.color.replace(")", " / 0.15)") }}
+                >
+                  {isEscalator
+                    ? <ChevronRight className="w-2 h-2 text-muted-foreground" />
+                    : <Check className="w-2 h-2" style={{ color: tier.color }} />}
+                </span>
+                <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
+                  {feature}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+
+      <div className="px-5 py-4 bg-card border-t border-border">
+        <Button
+          className="w-full font-semibold h-9 text-sm"
+          onClick={() => navigate("/login")}
+          data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
+          style={{ background: tier.color, color: "white", border: "none" }}
+          variant="default"
+        >
+          Start Free
+          <ChevronRight className="w-3.5 h-3.5 ml-1" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+const SCOUT = TIERS[2];
+
+function ScoutCard({ isYearly }: { isYearly: boolean }) {
+  const [, navigate] = useLocation();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [tilt, setTilt] = useState({ x: 0, y: 0 });
+
+  function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
+    const card = cardRef.current;
+    if (!card) return;
+    const rect = card.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dx = (e.clientX - cx) / (rect.width / 2);
+    const dy = (e.clientY - cy) / (rect.height / 2);
+    setTilt({ x: dy * -5, y: dx * 5 });
+  }
+
+  function handleMouseLeave() {
+    setTilt({ x: 0, y: 0 });
+  }
+
+  const mid = Math.ceil(SCOUT.features.length / 2);
+  const leftFeatures = SCOUT.features.slice(0, mid);
+  const rightFeatures = SCOUT.features.slice(mid);
+
+  return (
+    <div
+      ref={cardRef}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="rounded-2xl flex flex-col overflow-hidden relative"
+      style={{
+        border: `1px solid ${SCOUT.borderColor}`,
+        borderTop: `3px solid ${SCOUT.color}`,
+        transform: `perspective(800px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`,
+        transition: tilt.x === 0 && tilt.y === 0 ? "transform 0.5s ease" : "transform 0.1s ease",
+        willChange: "transform",
+      }}
+    >
+      <div
+        className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full z-10"
+        style={{ background: SCOUT.color.replace(")", " / 0.15)"), color: SCOUT.color }}
+      >
+        Most Popular
+      </div>
+
+      <div className="px-7 py-6" style={{ background: SCOUT.headerBg }}>
+        <div className="flex items-start justify-between gap-6">
+          <div className="flex items-center gap-3">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
+              style={{ background: "rgba(255,255,255,0.2)" }}
+            >
+              <SCOUT.icon className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">{SCOUT.tier}</p>
+              <h3 className="text-lg font-bold text-white leading-tight">{SCOUT.name}</h3>
+              <p className="text-xs text-white/70 mt-0.5">{SCOUT.tagline}</p>
+            </div>
+          </div>
+
+          <div className="text-right flex-shrink-0">
+            {isYearly ? (
+              <>
+                <div className="flex items-baseline gap-1.5 justify-end">
+                  <span className="text-4xl font-black text-white">{SCOUT.yearlyPrice}</span>
+                  <span className="text-sm text-white/70">/mo</span>
+                  <span className="text-sm text-white/50 line-through">{SCOUT.price}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-1.5 justify-end">
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                    style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
+                  >
+                    Save {SCOUT.yearlySavings}/yr
+                  </span>
+                  <span className="text-[10px] text-white/60">billed annually</span>
+                </div>
+              </>
+            ) : (
+              <div className="flex items-baseline gap-1 justify-end">
+                <span className="text-4xl font-black text-white">{SCOUT.price}</span>
+                <span className="text-sm text-white/70">{SCOUT.period}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 px-7 py-5 bg-card">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2.5">
+          {leftFeatures.map((feature, fi) => (
+            <div key={fi} className="flex items-start gap-2.5 text-sm">
+              <span
+                className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
+                style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
+              >
+                <Check className="w-2.5 h-2.5" style={{ color: SCOUT.color }} />
+              </span>
+              <span className="text-foreground">{feature}</span>
+            </div>
+          ))}
+          {rightFeatures.map((feature, fi) => (
+            <div key={fi} className="flex items-start gap-2.5 text-sm">
+              <span
+                className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
+                style={{ background: SCOUT.color.replace(")", " / 0.15)") }}
+              >
+                <Check className="w-2.5 h-2.5" style={{ color: SCOUT.color }} />
+              </span>
+              <span className="text-foreground">{feature}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-7 py-5 bg-card border-t border-border">
+        <Button
+          className="w-full font-semibold h-11 text-base"
+          onClick={() => navigate("/login")}
+          data-testid="pricing-cta-tier3"
+          style={{ background: SCOUT.color, color: "white", border: "none" }}
+          variant="default"
+        >
+          Get Started with EdenScout
+          <ChevronRight className="w-4 h-4 ml-1.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function PricingCards() {
   const [isYearly, setIsYearly] = useState(false);
+  const freeTiers = TIERS.slice(0, 2);
 
   return (
     <div className="mt-12">
@@ -182,122 +380,13 @@ function PricingCards() {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        {TIERS.map((tier) => (
-          <div
-            key={tier.name}
-            className="rounded-2xl flex flex-col overflow-hidden relative"
-            style={{ border: `1px solid ${tier.borderColor}`, borderTop: `3px solid ${tier.color}` }}
-          >
-            {tier.popular && (
-              <div
-                className="absolute top-3 right-3 text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
-                style={{ background: tier.color.replace(")", " / 0.15)"), color: tier.color }}
-              >
-                Most Popular
-              </div>
-            )}
-
-            {/* Colored header */}
-            <div
-              className="px-6 py-5"
-              style={{ background: tier.headerBg }}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div
-                  className="w-9 h-9 rounded-lg flex items-center justify-center"
-                  style={{ background: "rgba(255,255,255,0.2)" }}
-                >
-                  <tier.icon className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-                    {tier.tier}
-                  </p>
-                  <h3 className="text-base font-bold text-white leading-tight">{tier.name}</h3>
-                </div>
-              </div>
-
-              {/* Price block */}
-              <div className="mb-1">
-                {tier.price === "Free" ? (
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-white">Free</span>
-                  </div>
-                ) : isYearly ? (
-                  <>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-black text-white">{tier.yearlyPrice}</span>
-                      <span className="text-sm text-white/70">/mo</span>
-                      <span className="text-sm text-white/50 line-through">{tier.price}</span>
-                    </div>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <span
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
-                        style={{ background: "rgba(255,255,255,0.2)", color: "white" }}
-                      >
-                        Save {tier.yearlySavings}/yr
-                      </span>
-                      <span className="text-[10px] text-white/60">billed annually</span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-3xl font-black text-white">{tier.price}</span>
-                    <span className="text-sm text-white/70">{tier.period}</span>
-                  </div>
-                )}
-              </div>
-
-              <p className="text-xs text-white/75 leading-snug mt-1">{tier.tagline}</p>
-            </div>
-
-            {/* Per-tier feature checklist */}
-            <div className="flex-1 px-6 py-4 bg-card">
-              <ul className="space-y-2.5">
-                {tier.features.map((feature, fi) => {
-                  const isEscalator = feature.startsWith("Everything in");
-                  return (
-                    <li key={fi} className="flex items-start gap-2.5 text-xs">
-                      <span
-                        className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                        style={{
-                          background: isEscalator
-                            ? "hsl(var(--muted))"
-                            : tier.color.replace(")", " / 0.15)"),
-                        }}
-                      >
-                        {isEscalator ? (
-                          <ChevronRight className="w-2.5 h-2.5 text-muted-foreground" />
-                        ) : (
-                          <Check className="w-2.5 h-2.5" style={{ color: tier.color }} />
-                        )}
-                      </span>
-                      <span className={isEscalator ? "text-muted-foreground font-medium italic" : "text-foreground"}>
-                        {feature}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
-
-            {/* CTA */}
-            <div className="px-6 py-5 bg-card border-t border-border">
-              <Button
-                className="w-full font-semibold h-10 text-sm"
-                onClick={() => navigate("/login")}
-                data-testid={`pricing-cta-${tier.tier.toLowerCase().replace(" ", "")}`}
-                style={{ background: tier.color, color: "white", border: "none" }}
-                variant="default"
-              >
-                Get Started
-                <ChevronRight className="w-3.5 h-3.5 ml-1" />
-              </Button>
-            </div>
-          </div>
+      {/* Bento grid: free tiers on top, Scout full-width below */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-5">
+        {freeTiers.map((tier) => (
+          <FreeTierCard key={tier.name} tier={tier} />
         ))}
       </div>
+      <ScoutCard isYearly={isYearly} />
     </div>
   );
 }

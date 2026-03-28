@@ -523,3 +523,69 @@
     background: #0d1117 !important;
   }
 }
+
+/* ============================================================
+   GLASS PILL BUTTONS — hero CTAs with hover-only rotating border
+   ============================================================ */
+
+@keyframes glass-btn-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.glass-btn-wrap {
+  position: relative;
+  display: inline-flex;
+  padding: 1.5px;
+  border-radius: 9999px;
+}
+
+.glass-btn-wrap::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(52, 211, 153, 0.85) 60deg,
+    transparent 120deg
+  );
+  animation: glass-btn-rotate 2.5s linear infinite;
+  animation-play-state: paused;
+  z-index: 0;
+}
+
+.glass-btn-wrap:hover::before {
+  animation-play-state: running;
+}
+
+.glass-btn-inner {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.75rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: white;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  white-space: nowrap;
+  min-height: 48px;
+}
+
+.glass-btn-inner:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-btn-wrap::before {
+    animation: none !important;
+  }
+}

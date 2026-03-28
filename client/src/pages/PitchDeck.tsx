@@ -1183,7 +1183,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
   const tiers = [
     { name: "EdenDiscovery", price: "Free", period: "", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
     { name: "EdenLab", price: "Free", period: "", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
-    { name: "EdenScout", price: "$299", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Full-access industry intelligence platform — 300+ TTOs, EDEN dossiers, convergence signals, deal flow alerts, and pipeline export" },
+    { name: "EdenScout", price: "$799", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Full-access industry intelligence platform — 300+ TTOs, EDEN dossiers, convergence signals, deal flow alerts, and pipeline export" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
