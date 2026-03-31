@@ -5762,10 +5762,11 @@ export const uwiScraper: InstitutionScraper = {
       const $ = await fetchHtml(UWI_LISTING);
       if (!$) return [];
 
-      // Extract relative node hrefs from the page body; skip anchor and admin links
+      // Extract relative node hrefs from the page body; skip anchor and admin links.
+      // Regex is permissive: tolerates trailing slashes and query strings.
       const nodeIds = new Set<string>();
       $("a[href]").each((_, el) => {
-        const href = $(el).attr("href") ?? "";
+        const href = ($(el).attr("href") ?? "").split("?")[0].replace(/\/$/, "");
         const m = href.match(/^(?:https?:\/\/sta\.uwi\.edu\/stacie)?\/stacie\/(node\/\d+)$/) ||
                   href.match(/^(node\/\d+)$/);
         if (m) nodeIds.add(m[1]);
@@ -5789,6 +5790,9 @@ export const uwiScraper: InstitutionScraper = {
         }
       }
 
+      if (results.length === 0) {
+        console.warn(`[scraper] ${inst}: 0 listings returned — site may have changed structure`);
+      }
       console.log(`[scraper] ${inst}: ${results.length} listings`);
       return results;
     } catch (err: any) {
@@ -5831,6 +5835,9 @@ export const bathScraper: InstitutionScraper = {
         results.push({ title, description: "", url, institution: inst });
       });
 
+      if (results.length === 0) {
+        console.warn(`[scraper] ${inst}: 0 listings returned — site may have changed structure`);
+      }
       console.log(`[scraper] ${inst}: ${results.length} listings`);
       return results;
     } catch (err: any) {
@@ -5889,6 +5896,9 @@ export const llnlScraper: InstitutionScraper = {
         }
       }
 
+      if (results.length === 0) {
+        console.warn(`[scraper] ${inst}: 0 listings returned — site may have changed structure`);
+      }
       console.log(`[scraper] ${inst}: ${results.length} listings across ${categories.size} categories`);
       return results;
     } catch (err: any) {
