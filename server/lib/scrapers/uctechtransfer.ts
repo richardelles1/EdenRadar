@@ -17,7 +17,7 @@ function extractListings(html: string, institution: string): ScrapedListing[] {
     const ncdId = $(row).find("span[id$='_lblNCDId']").text().trim();
     if (!ncdId) return;
 
-    const url = `${BASE}/NCD/Detail?NCDId=${ncdId}`;
+    const url = `${BASE}/NCD/${ncdId}.html`;
     const description = $(row).find(".tech-info p").first().text().trim();
     results.push({ title, description, url, institution });
   });
