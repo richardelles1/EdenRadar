@@ -9,12 +9,17 @@ const DEFAULT_MAX_PAGES = 60;
 function extractListings(html: string, institution: string): ScrapedListing[] {
   const $ = cheerio.load(html);
   const results: ScrapedListing[] = [];
-  $("a.tech-link[href*='NCD/']").each((_, el) => {
-    const href = $(el).attr("href") ?? "";
-    const title = $(el).text().trim();
+  $(".technology-row").each((_, row) => {
+    const title = $(row).find("a.tech-link").text().trim();
     if (!title || title.length < 5) return;
-    const url = href.startsWith("http") ? href : `${BASE}${href}`;
-    results.push({ title, description: "", url, institution });
+
+    // NCDId is in a span whose id ends with _lblNCDId
+    const ncdId = $(row).find("span[id$='_lblNCDId']").text().trim();
+    if (!ncdId) return;
+
+    const url = `${BASE}/NCD/Detail?NCDId=${ncdId}`;
+    const description = $(row).find(".tech-info p").first().text().trim();
+    results.push({ title, description, url, institution });
   });
   return results;
 }
@@ -34,6 +39,17 @@ function extractTotalPages(html: string, maxPages: number): number {
   return m ? Math.min(parseInt(m[1], 10), maxPages) : 1;
 }
 
+function extractCookies(response: Response): string {
+  const cookies: string[] = [];
+  response.headers.forEach((value, key) => {
+    if (key.toLowerCase() === "set-cookie") {
+      const nameVal = value.split(";")[0];
+      if (nameVal) cookies.push(nameVal);
+    }
+  });
+  return cookies.join("; ");
+}
+
 export function createUCTechTransferScraper(
   campusCode: string,
   institution: string,
@@ -51,6 +67,9 @@ export function createUCTechTransferScraper(
           signal: AbortSignal.timeout(20_000),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        // Carry ASP.NET session cookie across paginated POSTs
+        const sessionCookie = extractCookies(res);
         let html = await res.text();
 
         const seen = new Set<string>();
@@ -85,9 +104,16 @@ export function createUCTechTransferScraper(
           if (viewState.__EVENTVALIDATION) body.set("__EVENTVALIDATION", viewState.__EVENTVALIDATION);
 
           try {
+            const headers: Record<string, string> = {
+              "User-Agent": UA,
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Referer": listUrl,
+            };
+            if (sessionCookie) headers["Cookie"] = sessionCookie;
+
             const postRes = await fetch(listUrl, {
               method: "POST",
-              headers: { "User-Agent": UA, "Content-Type": "application/x-www-form-urlencoded" },
+              headers,
               body: body.toString(),
               signal: AbortSignal.timeout(20_000),
             });
