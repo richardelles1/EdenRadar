@@ -8,7 +8,6 @@ import {
   ArrowRight,
   Package,
   FlaskConical,
-  Sparkles,
   Plus,
   BookOpen,
   Bell,
@@ -16,6 +15,8 @@ import {
   Newspaper,
   Globe,
   Compass,
+  Radar,
+  TrendingUp,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -124,6 +125,20 @@ function stripEmDashes(str: string): string {
   return str.replace(/\u2014|\u2013/g, "-").replace(/\s+-\s+/g, " - ");
 }
 
+function getDominantLabel(assets: BrowseAsset[]): string | null {
+  const counts: Record<string, number> = {};
+  for (const a of assets) {
+    const label =
+      (a.categories?.[0] ?? null) ||
+      (a.modality && a.modality.toLowerCase() !== "unknown" ? a.modality : null);
+    if (label) counts[label] = (counts[label] ?? 0) + 1;
+  }
+  const entries = Object.entries(counts);
+  if (!entries.length) return null;
+  entries.sort((a, b) => b[1] - a[1]);
+  return entries[0][0];
+}
+
 function KpiCard({
   icon: Icon,
   label,
@@ -222,7 +237,15 @@ export default function IndustryDashboard() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [newAssetsWindow, setNewAssetsWindow] = useState<"7d" | "30d">("7d");
+  const [showWelcome, setShowWelcome] = useState(true);
+
+  const [explorePage, setExplorePage] = useState(0);
+  const [exploreFade, setExploreFade] = useState(true);
+  const [newAssetsPage, setNewAssetsPage] = useState(0);
+  const [newAssetsFade, setNewAssetsFade] = useState(true);
+
+  const sharedTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const swapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard/stats"],
@@ -257,13 +280,9 @@ export default function IndustryDashboard() {
   });
 
   const { data: newArrivalsData, isLoading: newArrivalsLoading } = useQuery<NewArrivalsResponse>({
-    queryKey: [`/api/browse/new-arrivals?window=${newAssetsWindow}&limit=8`],
+    queryKey: ["/api/browse/new-arrivals?window=7d&limit=12"],
     staleTime: 5 * 60 * 1000,
   });
-
-  const [explorePage, setExplorePage] = useState(0);
-  const [exploreFade, setExploreFade] = useState(true);
-  const exploreTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
     queryKey: ["/api/browse/assets?limit=24&sortBy=completeness"],
@@ -293,28 +312,61 @@ export default function IndustryDashboard() {
     statusMutation.mutate({ id: asset.id, status: next });
   }
 
-  const stats = data?.stats;
-  const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
+  const EXPLORE_PAGE_SIZE = 6;
+
+  const allNewArrivals = newArrivalsData?.assets ?? [];
+  const totalNewAssetsPages = Math.max(1, Math.ceil(allNewArrivals.length / EXPLORE_PAGE_SIZE));
+  const visibleNewArrivals = allNewArrivals.slice(
+    newAssetsPage * EXPLORE_PAGE_SIZE,
+    (newAssetsPage + 1) * EXPLORE_PAGE_SIZE
+  );
 
   const allExploreAssets = exploreData?.assets ?? [];
-  const EXPLORE_PAGE_SIZE = 6;
   const totalExplorePages = Math.max(1, Math.ceil(allExploreAssets.length / EXPLORE_PAGE_SIZE));
-  const visibleExploreAssets = allExploreAssets.slice(explorePage * EXPLORE_PAGE_SIZE, (explorePage + 1) * EXPLORE_PAGE_SIZE);
+  const visibleExploreAssets = allExploreAssets.slice(
+    explorePage * EXPLORE_PAGE_SIZE,
+    (explorePage + 1) * EXPLORE_PAGE_SIZE
+  );
+
+  const exploreCategory = getDominantLabel(visibleExploreAssets);
+
+  const newestFirstSeenAt = allNewArrivals[0]?.firstSeenAt ?? null;
+  const freshnessText = newestFirstSeenAt ? timeAgo(newestFirstSeenAt) : null;
 
   useEffect(() => {
-    if (allExploreAssets.length <= EXPLORE_PAGE_SIZE) return;
-    exploreTimerRef.current = setInterval(() => {
-      setExploreFade(false);
-      setTimeout(() => {
-        setExplorePage((p) => (p + 1) % totalExplorePages);
-        setExploreFade(true);
-      }, 300);
-    }, 6000);
-    return () => {
-      if (exploreTimerRef.current) clearInterval(exploreTimerRef.current);
-    };
-  }, [allExploreAssets.length, totalExplorePages]);
+    const t = setTimeout(() => setShowWelcome(false), 1800);
+    return () => clearTimeout(t);
+  }, []);
 
+  useEffect(() => {
+    const hasEnoughNew = allNewArrivals.length > EXPLORE_PAGE_SIZE;
+    const hasEnoughExplore = allExploreAssets.length > EXPLORE_PAGE_SIZE;
+    if (!hasEnoughNew && !hasEnoughExplore) return;
+
+    sharedTimerRef.current = setInterval(() => {
+      setExploreFade(false);
+      setNewAssetsFade(false);
+      swapTimerRef.current = setTimeout(() => {
+        if (hasEnoughExplore) {
+          setExplorePage(Math.floor(Math.random() * totalExplorePages));
+        }
+        if (hasEnoughNew) {
+          setNewAssetsPage((p) => (p + 1) % totalNewAssetsPages);
+        }
+        setExploreFade(true);
+        setNewAssetsFade(true);
+      }, 600);
+    }, 6000);
+
+    return () => {
+      if (sharedTimerRef.current) clearInterval(sharedTimerRef.current);
+      if (swapTimerRef.current) clearTimeout(swapTimerRef.current);
+    };
+  }, [allNewArrivals.length, allExploreAssets.length, totalNewAssetsPages, totalExplorePages]);
+
+  const stats = data?.stats;
+  const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
+  const weeklyNew = data?.weeklyNew ?? 0;
   const topAreas = topAreasData?.areas ?? [];
 
   const greeting = (() => {
@@ -333,7 +385,6 @@ export default function IndustryDashboard() {
     : (profile.companyName || "Your TTO asset intelligence dashboard");
   const dynamicSubtitle = stripEmDashes(rawSubtitle);
 
-  const newArrivals = newArrivalsData?.assets ?? [];
   const recentSaved = (recentSavedData?.assets ?? []).slice(0, 5) as SavedAssetRow[];
 
   return (
@@ -343,7 +394,37 @@ export default function IndustryDashboard() {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
+        @keyframes welcome-hold-exit {
+          0%   { opacity: 0; }
+          12%  { opacity: 1; }
+          68%  { opacity: 1; }
+          100% { opacity: 0; transform: scale(1.015); }
+        }
       `}</style>
+
+      {/* ── WELCOME ANIMATION OVERLAY ── */}
+      {showWelcome && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 pointer-events-none"
+          style={{
+            animation: "welcome-hold-exit 1.8s ease-out forwards",
+            background: "color-mix(in srgb, hsl(var(--background)) 97%, hsl(var(--primary)))",
+          }}
+          data-testid="dashboard-welcome-overlay"
+        >
+          <div className="flex flex-col items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg">
+              <Radar className="w-7 h-7 text-white" />
+            </div>
+            <div className="text-center space-y-1">
+              <p className="text-xl font-bold text-foreground tracking-tight">
+                Eden<span className="text-emerald-500">Radar</span>
+              </p>
+              <p className="text-sm text-muted-foreground">Preparing your intelligence...</p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
@@ -389,56 +470,48 @@ export default function IndustryDashboard() {
           }}
           data-testid="dashboard-signal-row"
         >
-          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-stretch">
 
             {/* ── Left: New Assets (60%) ── */}
-            <div className="lg:col-span-3 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-new-assets">
-              <div className="flex items-center justify-between">
+            <div className="lg:col-span-3 rounded-xl border border-border bg-card p-5 flex flex-col gap-3" data-testid="dashboard-new-assets">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Newspaper className="w-4 h-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">New Assets</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
-                    <button
-                      onClick={() => setNewAssetsWindow("7d")}
-                      className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${newAssetsWindow === "7d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-                      data-testid="toggle-7d"
-                    >
-                      7d
-                    </button>
-                    <button
-                      onClick={() => setNewAssetsWindow("30d")}
-                      className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${newAssetsWindow === "30d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
-                      data-testid="toggle-30d"
-                    >
-                      30d
-                    </button>
-                  </div>
-                  <Link href="/industry/new-arrivals">
-                    <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                      See all new arrivals <ArrowRight className="w-3 h-3" />
+                  {freshnessText && (
+                    <span className="text-[10px] text-muted-foreground/50 tabular-nums hidden sm:inline">
+                      {freshnessText}
                     </span>
-                  </Link>
+                  )}
                 </div>
+                <Link href="/industry/new-arrivals">
+                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap">
+                    See all <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
               </div>
 
-              <div className="space-y-1.5">
+              {/* Cycling list */}
+              <div
+                className="space-y-1.5 flex-1"
+                style={{ opacity: newAssetsFade ? 1 : 0, transition: "opacity 600ms ease-in-out" }}
+              >
                 {newArrivalsLoading ? (
-                  [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-11 rounded-lg" />)
-                ) : newArrivals.length === 0 ? (
+                  [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
+                ) : visibleNewArrivals.length === 0 ? (
                   <div className="py-6 text-center space-y-2">
-                    <p className="text-xs text-muted-foreground">No new assets in the last {newAssetsWindow === "7d" ? "7 days" : "30 days"}.</p>
+                    <p className="text-xs text-muted-foreground">No new assets in the last 7 days.</p>
                     <Link href="/industry/new-arrivals">
                       <span className="text-xs text-primary hover:underline cursor-pointer">View all arrivals</span>
                     </Link>
                   </div>
                 ) : (
-                  newArrivals.map((asset) => (
+                  visibleNewArrivals.map((asset) => (
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
                       data-testid={`dashboard-new-asset-${asset.id}`}
                     >
                       <div className="min-w-0 flex-1">
@@ -462,11 +535,11 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!newArrivalsLoading && newArrivalsData && newArrivalsData.total > 8 && (
+              {!newArrivalsLoading && newArrivalsData && newArrivalsData.total > 12 && (
                 <div className="pt-1 border-t border-border/50">
                   <Link href="/industry/new-arrivals">
                     <span className="text-[10px] text-primary hover:underline cursor-pointer">
-                      See all new arrivals ({newArrivalsData.total})
+                      {newArrivalsData.total.toLocaleString()} total new arrivals
                     </span>
                   </Link>
                 </div>
@@ -474,22 +547,31 @@ export default function IndustryDashboard() {
             </div>
 
             {/* ── Right: Explore (40%) ── */}
-            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-explore">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
+            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 flex flex-col gap-3" data-testid="dashboard-explore">
+              {/* Three-column header */}
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <Compass className="w-4 h-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">Explore</span>
                 </div>
+                <div className="flex-1 flex justify-center">
+                  {exploreCategory && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium">
+                      {exploreCategory}
+                    </span>
+                  )}
+                </div>
                 <Link href="/scout">
-                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer shrink-0">
                     Scout <ArrowRight className="w-3 h-3" />
                   </span>
                 </Link>
               </div>
 
+              {/* Cycling list */}
               <div
-                className="space-y-1.5"
-                style={{ opacity: exploreFade ? 1 : 0, transition: "opacity 300ms ease" }}
+                className="space-y-1.5 flex-1"
+                style={{ opacity: exploreFade ? 1 : 0, transition: "opacity 600ms ease-in-out" }}
               >
                 {exploreLoading ? (
                   [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
@@ -502,7 +584,7 @@ export default function IndustryDashboard() {
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
+                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
                       data-testid={`dashboard-explore-asset-${asset.id}`}
                     >
                       <div className="min-w-0 flex-1">
@@ -520,15 +602,6 @@ export default function IndustryDashboard() {
                   ))
                 )}
               </div>
-
-              {allExploreAssets.length > EXPLORE_PAGE_SIZE && (
-                <div className="pt-1 border-t border-border/50 flex items-center justify-between">
-                  <span className="text-[10px] text-muted-foreground tabular-nums">
-                    {explorePage + 1} / {totalExplorePages}
-                  </span>
-                  <Sparkles className="w-3 h-3 text-muted-foreground/30 animate-pulse" />
-                </div>
-              )}
             </div>
 
           </div>
@@ -606,7 +679,7 @@ export default function IndustryDashboard() {
               {!deltaLoading && deltaTotal > 0 && (
                 <Link href="/alerts">
                   <div
-                    className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-primary/20 bg-primary/5 hover:border-primary/35 hover:bg-primary/8 transition-all cursor-pointer group"
+                    className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-primary/20 bg-primary/5 hover:border-primary/35 hover:bg-primary/10 transition-all cursor-pointer group"
                     data-testid="dashboard-alerts-chip"
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -696,11 +769,11 @@ export default function IndustryDashboard() {
           <SectionHeader title="Network Coverage" icon={Globe} muted />
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="dashboard-kpi-row">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="dashboard-kpi-row">
               <KpiCard
                 icon={Package}
                 label="TTO Assets"
@@ -717,6 +790,15 @@ export default function IndustryDashboard() {
                 iconColor="text-blue-500"
                 bgColor="bg-blue-500/10"
                 href="/institutions"
+              />
+              <KpiCard
+                icon={TrendingUp}
+                label="New This Week"
+                value={weeklyNew}
+                sub="assets added recently"
+                iconColor="text-emerald-500"
+                bgColor="bg-emerald-500/10"
+                href="/industry/new-arrivals"
               />
             </div>
           )}
