@@ -271,7 +271,7 @@ export default function IndustryDashboard() {
   });
 
   const { data: topAreasData } = useQuery<{ areas: { name: string; count: number }[] }>({
-    queryKey: ["/api/dashboard/top-therapy-areas?limit=8"],
+    queryKey: ["/api/dashboard/top-therapy-areas?limit=6"],
     staleTime: 10 * 60 * 1000,
   });
 
@@ -730,7 +730,7 @@ export default function IndustryDashboard() {
                 {topAreas.map((a) => (
                   <button
                     key={a.name}
-                    onClick={() => navigate(`/scout?q=${encodeURIComponent(a.name)}`)}
+                    onClick={() => navigate(`/browse?therapyArea=${encodeURIComponent(a.name)}`)}
                     className="text-[10px] px-2.5 py-1 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
                     data-testid={`dashboard-area-${a.name}`}
                   >

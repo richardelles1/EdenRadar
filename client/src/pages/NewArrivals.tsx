@@ -213,7 +213,7 @@ export default function NewArrivals() {
 
         {/* Institution summary */}
         {!isLoading && institutions.length > 0 && (
-          <p className="text-[11px] text-muted-foreground" data-testid="institution-summary">
+          <p className="text-[11px] text-muted-foreground truncate whitespace-nowrap overflow-hidden" data-testid="institution-summary">
             From {institutions.length.toLocaleString()} institution{institutions.length !== 1 ? "s" : ""}{institutions.length > 0 && (
               <> — {institutions.slice(0, 3).map((i) => i.institution).join(", ")}{institutions.length > 3 ? " and more" : ""}</>
             )}

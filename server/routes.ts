@@ -504,7 +504,7 @@ export async function registerRoutes(
 
   app.get("/api/dashboard/stats", async (_req, res) => {
     try {
-      const [stats, recentSearches, recentAssets, therapyAreaCountResult, institutionCountResult, reviewCount, weeklyNewResult] = await Promise.all([
+      const [stats, recentSearches, recentAssets, institutionCountResult, reviewCount, weeklyNewResult] = await Promise.all([
         fetchPortfolioStats(),
         storage.getSearchHistory(8),
         db.select({
@@ -519,16 +519,14 @@ export async function registerRoutes(
         .from(ingestedAssets)
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM therapy_area_taxonomy WHERE asset_count > 0`),
         db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE institution IS NOT NULL AND institution != ''`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
       ]);
-      const therapyAreaCount = Number((therapyAreaCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const assetsInReview = Number((reviewCount.rows[0] as Record<string, unknown>)?.n ?? 0);
       const weeklyNew = Number((weeklyNewResult.rows[0] as Record<string, unknown>)?.n ?? 0);
-      return res.json({ stats, recentSearches, recentAssets, therapyAreaCount, institutionCount, assetsInReview, weeklyNew });
+      return res.json({ stats, recentSearches, recentAssets, institutionCount, assetsInReview, weeklyNew });
     } catch (err: any) {
       console.error("[dashboard/stats] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load stats" });

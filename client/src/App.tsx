@@ -108,6 +108,13 @@ function Router() {
       <Route path="/pipeline">
         <Redirect to="/assets" />
       </Route>
+      <Route path="/browse">
+        {() => {
+          const params = new URLSearchParams(window.location.search);
+          const area = params.get("therapyArea");
+          return <Redirect to={area ? `/scout?q=${encodeURIComponent(area)}` : "/scout"} />;
+        }}
+      </Route>
 
       <Route path="/industry/dashboard">
         <DashboardLayout>
