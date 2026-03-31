@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
+import { useToast } from "@/hooks/use-toast";
 import {
   Newspaper,
   Building2,
@@ -121,6 +122,7 @@ export default function NewArrivals() {
   const [window, setWindow] = useState<"7d" | "30d">("7d");
   const [accumulated, setAccumulated] = useState<NewArrivalsAsset[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
+  const { toast } = useToast();
 
   const { data, isLoading } = useQuery<NewArrivalsResponse>({
     queryKey: [`/api/browse/new-arrivals?window=${window}&limit=${PAGE_SIZE}&offset=0`],
@@ -150,7 +152,7 @@ export default function NewArrivals() {
       const combined = [...allAssets, ...json.assets];
       setAccumulated(combined);
     } catch (_) {
-      // silently ignore
+      toast({ title: "Failed to load more assets", variant: "destructive" });
     } finally {
       setLoadingMore(false);
     }
