@@ -4324,8 +4324,35 @@ If a field cannot be determined, use "N/A".`
   app.get("/api/browse/new-arrivals", async (req, res) => {
     try {
       const windowParam = (req.query.window as string) || "7d";
-      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 2000);
+      const offset = parseInt(req.query.offset as string) || 0;
       const interval = windowParam === "30d" ? "30 days" : "7 days";
+      const windowCondition = and(
+        eq(ingestedAssets.relevant, true),
+        sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '${sql.raw(interval)}'`
+      );
+
+      // Full-window count and institution grouping (no limit)
+      const [countResult, instRows] = await Promise.all([
+        db
+          .select({ n: sql<number>`count(*)::int` })
+          .from(ingestedAssets)
+          .where(windowCondition),
+        db.execute(sql`
+          SELECT institution, COUNT(*)::int AS count
+          FROM ingested_assets
+          WHERE relevant = true
+            AND first_seen_at >= NOW() - INTERVAL ${sql.raw(`'${interval}'`)}
+          GROUP BY institution
+          ORDER BY count DESC
+        `),
+      ]);
+
+      const total = countResult[0]?.n ?? 0;
+      const institutions = (instRows.rows as { institution: string; count: number }[])
+        .map((r) => ({ institution: r.institution || "Unknown", count: r.count }));
+
+      // Paginated asset list
       const assets = await db
         .select({
           id: ingestedAssets.id,
@@ -4337,26 +4364,12 @@ If a field cannot be determined, use "N/A".`
           firstSeenAt: ingestedAssets.firstSeenAt,
         })
         .from(ingestedAssets)
-        .where(
-          and(
-            eq(ingestedAssets.relevant, true),
-            sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '${sql.raw(interval)}'`
-          )
-        )
+        .where(windowCondition)
         .orderBy(desc(ingestedAssets.firstSeenAt))
-        .limit(limit);
+        .limit(limit)
+        .offset(offset);
 
-      const byInstitution: Record<string, { count: number }> = {};
-      for (const a of assets) {
-        const key = a.institution || "Unknown";
-        if (!byInstitution[key]) byInstitution[key] = { count: 0 };
-        byInstitution[key].count++;
-      }
-      const institutions = Object.entries(byInstitution)
-        .map(([institution, d]) => ({ institution, count: d.count }))
-        .sort((a, b) => b.count - a.count);
-
-      res.json({ assets, institutions, total: assets.length, window: windowParam });
+      res.json({ assets, institutions, total, window: windowParam, hasMore: offset + assets.length < total });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

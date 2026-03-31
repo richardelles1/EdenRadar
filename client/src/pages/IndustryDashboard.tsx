@@ -271,7 +271,7 @@ export default function IndustryDashboard() {
   }, []); // intentionally empty: pick once per mount
 
   const exploreUrl = featuredInterest
-    ? `/api/browse/assets?limit=8&sortBy=completeness&therapyAreas[]=${encodeURIComponent(featuredInterest)}`
+    ? `/api/browse/assets?limit=8&sortBy=completeness&therapyArea=${encodeURIComponent(featuredInterest)}`
     : "/api/browse/assets?limit=8&sortBy=completeness";
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
@@ -470,7 +470,7 @@ export default function IndustryDashboard() {
                   <span className="text-sm font-semibold text-foreground">Recommended</span>
                 </div>
                 {featuredInterest && (
-                  <Link href={`/scout?draft=${encodeURIComponent(featuredInterest)}`}>
+                  <Link href={`/scout?q=${encodeURIComponent(featuredInterest)}`}>
                     <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
                       Scout <ArrowRight className="w-3 h-3" />
                     </span>
@@ -751,7 +751,7 @@ export default function IndustryDashboard() {
                 {categoryAreas.slice(0, 12).map((a) => (
                   <button
                     key={a.area}
-                    onClick={() => navigate(`/scout?draft=${encodeURIComponent(a.area)}`)}
+                    onClick={() => navigate(`/scout?q=${encodeURIComponent(a.area)}`)}
                     className="text-[10px] px-2.5 py-1 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
                     data-testid={`dashboard-area-${a.area}`}
                   >

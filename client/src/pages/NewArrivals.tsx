@@ -118,11 +118,12 @@ export default function NewArrivals() {
   const [window, setWindow] = useState<"7d" | "30d">("7d");
 
   const { data, isLoading } = useQuery<NewArrivalsResponse>({
-    queryKey: [`/api/browse/new-arrivals?window=${window}&limit=200`],
+    queryKey: [`/api/browse/new-arrivals?window=${window}&limit=1000`],
     staleTime: 5 * 60 * 1000,
   });
 
   const assets = data?.assets ?? [];
+  // Use server-provided institution list (full-window counts, not limited subset)
   const institutions = data?.institutions ?? [];
 
   const byInstitution: Record<string, NewArrivalsAsset[]> = {};
