@@ -5939,3 +5939,170 @@ export const llnlScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── Task #276 — TechLink (VA Technology Transfer) — ES XHR Intercept + Playwright ─
+// techlinkcenter.org/va-technologies/ — same React SPA as DoD TechLink portal.
+// Strategy mirrors techLinkScraper exactly: Playwright captures the first ES XHR,
+// then Node.js replays all pages. VA portal uses the same ES cluster but a
+// different query filter (agency=VA vs DoD).
+// Hard gate: ≥5 VA technology listings required before registration.
+export const techLinkVAScraper: InstitutionScraper = {
+  institution: "TechLink (VA Technology Transfer)",
+  scraperType: "playwright",
+  async probe(maxResults = 5): Promise<ScrapedListing[]> {
+    const results = await this.scrape();
+    return results.slice(0, maxResults);
+  },
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "TechLink (VA Technology Transfer)";
+    const BASE = "https://techlinkcenter.org";
+
+    // VA individual technology URL format mirrors DoD but under /va-technologies/
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const toNameSlug = (title: string) =>
+      title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
+    let browser: import("playwright").Browser | null = null;
+    try {
+      const { chromium } = await import("playwright");
+      browser = await chromium.launch({
+        headless: true,
+        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      });
+      const page = await browser.newPage();
+      await page.setExtraHTTPHeaders({
+        "User-Agent":
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+      });
+
+      // ── XHR intercept ──────────────────────────────────────────────────────
+      let esRequestUrl: string | null = null;
+      let esAuthHeader: string | null = null;
+      let esTotal = 0;
+      const xhrItems = new Map<string, { title: string; description: string; url: string }>();
+
+      const extractHits = (hits: unknown[], pathPrefix: string) => {
+        for (const hit of hits) {
+          const h = hit as Record<string, unknown>;
+          const src = (h._source ?? {}) as Record<string, unknown>;
+          const title = String(src.title ?? src.name ?? src.techName ?? "").trim();
+          if (!title || title.length < 4) continue;
+
+          // VA uses simple integer IDs (e.g. "3926"); DoD uses UUIDs.
+          // Accept either format to build a valid deep-link URL.
+          const idRaw = String(src.id ?? h._id ?? "").trim();
+          const nameSlug = String(src.slug ?? "").trim() || toNameSlug(title);
+          const isValidId = UUID_RE.test(idRaw) || /^\d+$/.test(idRaw);
+          const url = isValidId
+            ? `${BASE}${pathPrefix}/${nameSlug}/${idRaw}`
+            : `${BASE}${pathPrefix}`;
+
+          const description = String(src.description ?? src.abstract ?? src.summary ?? "").slice(0, 1000);
+          xhrItems.set(idRaw || title, { title, description, url });
+        }
+      };
+
+      // Capture auth header from outgoing request
+      page.on("request", (req) => {
+        const url = req.url();
+        if (!url.includes("es.amazonaws.com") && !url.includes("_search")) return;
+        if (!esRequestUrl) {
+          esRequestUrl = url;
+          esAuthHeader = req.headers()["authorization"] ?? null;
+        }
+      });
+
+      page.on("response", async (resp) => {
+        const url = resp.url();
+        if (!url.includes("es.amazonaws.com") && !url.includes("_search")) return;
+        try {
+          const data = await resp.json().catch(() => null);
+          if (!data?.hits?.hits) return;
+          extractHits(data.hits.hits as unknown[], "/va-technologies");
+          if (!esTotal) {
+            esTotal = (data.hits.total?.value as number) ?? (data.hits.total as number) ?? 0;
+          }
+        } catch { /* ignore parse errors */ }
+      });
+
+      await page.goto(`${BASE}/va-technologies/`, {
+        timeout: 60_000,
+        waitUntil: "domcontentloaded",
+      });
+      await page.waitForTimeout(10_000); // wait for React mount + first VA XHR
+
+      await browser.close();
+      browser = null;
+
+      // ── Bulk replay via Node.js fetch with captured auth header ────────────
+      if (esRequestUrl && esAuthHeader && esTotal > 0) {
+        const urlObj = new URL(esRequestUrl);
+        const rawSource = urlObj.searchParams.get("source");
+        if (rawSource) {
+          const baseQuery = JSON.parse(rawSource) as Record<string, unknown>;
+          const PAGE_SIZE = 100;
+          const totalPages = Math.ceil(esTotal / PAGE_SIZE);
+          const pagesToFetch = Math.min(totalPages, 70);
+          let errors = 0;
+
+          console.log(`[scraper] ${INST}: bulk ES replay — ${esTotal} total, fetching ${pagesToFetch} pages of ${PAGE_SIZE}`);
+
+          for (let pg = 0; pg < pagesToFetch; pg++) {
+            const newQuery = { ...baseQuery, from: pg * PAGE_SIZE, size: PAGE_SIZE };
+            const newUrlObj = new URL(esRequestUrl);
+            newUrlObj.searchParams.set("source", JSON.stringify(newQuery));
+            newUrlObj.searchParams.set("source_content_type", "application/json");
+
+            try {
+              const r = await fetch(newUrlObj.toString(), {
+                headers: {
+                  "Accept": "application/json, text/plain, */*",
+                  "Authorization": esAuthHeader,
+                },
+                signal: AbortSignal.timeout(15_000),
+              });
+              if (!r.ok) {
+                errors++;
+                console.log(`[scraper] ${INST}: bulk replay page ${pg} HTTP ${r.status} (error ${errors}/3)`);
+                if (errors > 2) break;
+                continue;
+              }
+              const data = (await r.json()) as Record<string, unknown>;
+              const hits = (
+                (data.hits as Record<string, unknown>)?.hits ?? []
+              ) as unknown[];
+              extractHits(hits, "/va-technologies");
+              if (hits.length < PAGE_SIZE) break;
+            } catch (fetchErr: unknown) {
+              errors++;
+              const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+              console.log(`[scraper] ${INST}: bulk replay page ${pg} failed: ${msg} (error ${errors}/3)`);
+              if (errors > 2) break;
+            }
+          }
+        }
+      } else {
+        console.log(`[scraper] ${INST}: ES auth capture failed — no XHR intercepted (esUrl=${!!esRequestUrl} esAuth=${!!esAuthHeader} esTotal=${esTotal})`);
+      }
+
+      if (xhrItems.size > 0) {
+        const results = Array.from(xhrItems.values()).map((item) => ({
+          ...item,
+          institution: INST,
+        }));
+        console.log(`[scraper] ${INST}: ${results.length} listings (ES bulk fetch)`);
+        return results;
+      }
+
+      console.warn(`[scraper] ${INST}: 0 listings — ES auth capture failed or VA portal returned nothing`);
+      return [];
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      return [];
+    } finally {
+      await browser?.close();
+    }
+  },
+};

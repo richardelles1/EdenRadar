@@ -309,6 +309,8 @@ import {
   uwiScraper,
   bathScraper,
   llnlScraper,
+  // Task #276 — TechLink VA
+  techLinkVAScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -793,6 +795,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   uwiScraper,                     // UWI St. Augustine STACIE — Drupal nodes — 3 patents
   bathScraper,                    // University of Bath — 4 PDF tech sheets confirmed live
   llnlScraper,                    // Lawrence Livermore National Laboratory — ~340 static HTML techs across 8 categories
+  // ── Task #276 — TechLink VA ────────────────────────────────────────────────
+  techLinkVAScraper,              // TechLink (VA Technology Transfer) — ES XHR intercept Playwright — confirmed live
 ];
 
 // Stamp the tier field on every scraper object at startup so that
