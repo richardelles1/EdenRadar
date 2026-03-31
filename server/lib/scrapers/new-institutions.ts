@@ -6424,8 +6424,7 @@ export const mgbScraper: InstitutionScraper = {
               p.length > 60 &&
               !p.includes("cookie") &&
               !p.includes("©") &&
-              !p.includes("Mass General Brigham is an equal") &&
-              !p.includes("Oregon Health")
+              !p.includes("Mass General Brigham is an equal")
             );
           const description = paras.slice(0, 3).join(" ").slice(0, 800);
 
