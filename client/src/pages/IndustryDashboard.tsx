@@ -238,8 +238,12 @@ export default function IndustryDashboard() {
   const { toast } = useToast();
 
   const [showWelcome, setShowWelcome] = useState(true);
+  const [welcomeVisible, setWelcomeVisible] = useState(true);
+  const minTimePassedRef = useRef(false);
+  const loadingDoneRef = useRef(false);
+  const dismissCalledRef = useRef(false);
 
-  const [explorePage, setExplorePage] = useState(0);
+  const [exploreOffset, setExploreOffset] = useState(0);
   const [exploreFade, setExploreFade] = useState(true);
   const [newAssetsPage, setNewAssetsPage] = useState(0);
   const [newAssetsFade, setNewAssetsFade] = useState(true);
@@ -322,21 +326,39 @@ export default function IndustryDashboard() {
   );
 
   const allExploreAssets = exploreData?.assets ?? [];
-  const totalExplorePages = Math.max(1, Math.ceil(allExploreAssets.length / EXPLORE_PAGE_SIZE));
-  const visibleExploreAssets = allExploreAssets.slice(
-    explorePage * EXPLORE_PAGE_SIZE,
-    (explorePage + 1) * EXPLORE_PAGE_SIZE
-  );
+  const visibleExploreAssets = allExploreAssets.length > 0
+    ? Array.from(
+        { length: Math.min(EXPLORE_PAGE_SIZE, allExploreAssets.length) },
+        (_, i) => allExploreAssets[(exploreOffset + i) % allExploreAssets.length]
+      )
+    : [];
 
   const exploreCategory = getDominantLabel(visibleExploreAssets);
 
   const newestFirstSeenAt = allNewArrivals[0]?.firstSeenAt ?? null;
   const freshnessText = newestFirstSeenAt ? timeAgo(newestFirstSeenAt) : null;
 
+  function triggerWelcomeDismiss() {
+    if (dismissCalledRef.current) return;
+    dismissCalledRef.current = true;
+    setWelcomeVisible(false);
+    setTimeout(() => setShowWelcome(false), 800);
+  }
+
   useEffect(() => {
-    const t = setTimeout(() => setShowWelcome(false), 1800);
-    return () => clearTimeout(t);
+    const minTimer = setTimeout(() => {
+      minTimePassedRef.current = true;
+      if (loadingDoneRef.current) triggerWelcomeDismiss();
+    }, 900);
+    return () => clearTimeout(minTimer);
   }, []);
+
+  useEffect(() => {
+    if (!isLoading) {
+      loadingDoneRef.current = true;
+      if (minTimePassedRef.current) triggerWelcomeDismiss();
+    }
+  }, [isLoading]);
 
   useEffect(() => {
     const hasEnoughNew = allNewArrivals.length > EXPLORE_PAGE_SIZE;
@@ -348,21 +370,21 @@ export default function IndustryDashboard() {
       setNewAssetsFade(false);
       swapTimerRef.current = setTimeout(() => {
         if (hasEnoughExplore) {
-          setExplorePage(Math.floor(Math.random() * totalExplorePages));
+          setExploreOffset(Math.floor(Math.random() * allExploreAssets.length));
         }
         if (hasEnoughNew) {
           setNewAssetsPage((p) => (p + 1) % totalNewAssetsPages);
         }
         setExploreFade(true);
         setNewAssetsFade(true);
-      }, 600);
+      }, 700);
     }, 6000);
 
     return () => {
       if (sharedTimerRef.current) clearInterval(sharedTimerRef.current);
       if (swapTimerRef.current) clearTimeout(swapTimerRef.current);
     };
-  }, [allNewArrivals.length, allExploreAssets.length, totalNewAssetsPages, totalExplorePages]);
+  }, [allNewArrivals.length, allExploreAssets.length, totalNewAssetsPages]);
 
   const stats = data?.stats;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
@@ -394,12 +416,6 @@ export default function IndustryDashboard() {
           from { opacity: 0; transform: translateY(8px); }
           to   { opacity: 1; transform: translateY(0); }
         }
-        @keyframes welcome-hold-exit {
-          0%   { opacity: 0; }
-          12%  { opacity: 1; }
-          68%  { opacity: 1; }
-          100% { opacity: 0; transform: scale(1.015); }
-        }
       `}</style>
 
       {/* ── WELCOME ANIMATION OVERLAY ── */}
@@ -407,7 +423,8 @@ export default function IndustryDashboard() {
         <div
           className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 pointer-events-none"
           style={{
-            animation: "welcome-hold-exit 1.8s ease-out forwards",
+            opacity: welcomeVisible ? 1 : 0,
+            transition: "opacity 700ms ease-in-out",
             background: "color-mix(in srgb, hsl(var(--background)) 97%, hsl(var(--primary)))",
           }}
           data-testid="dashboard-welcome-overlay"
@@ -495,7 +512,7 @@ export default function IndustryDashboard() {
               {/* Cycling list */}
               <div
                 className="space-y-1.5 flex-1"
-                style={{ opacity: newAssetsFade ? 1 : 0, transition: "opacity 600ms ease-in-out" }}
+                style={{ opacity: newAssetsFade ? 1 : 0, transition: "opacity 700ms ease-in-out" }}
               >
                 {newArrivalsLoading ? (
                   [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
@@ -571,7 +588,7 @@ export default function IndustryDashboard() {
               {/* Cycling list */}
               <div
                 className="space-y-1.5 flex-1"
-                style={{ opacity: exploreFade ? 1 : 0, transition: "opacity 600ms ease-in-out" }}
+                style={{ opacity: exploreFade ? 1 : 0, transition: "opacity 700ms ease-in-out" }}
               >
                 {exploreLoading ? (
                   [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
