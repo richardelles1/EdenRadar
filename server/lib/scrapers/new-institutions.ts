@@ -5746,3 +5746,154 @@ export const wehiScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── Task #275 — UWI, Bath, LLNL (plain HTTP) ──────────────────────────────────
+
+const UWI_BASE = "https://sta.uwi.edu";
+const UWI_LISTING = `${UWI_BASE}/stacie/licensingavailable-technologies`;
+
+export const uwiScraper: InstitutionScraper = {
+  institution: "University of the West Indies, St. Augustine",
+  scraperType: "http",
+  async scrape(): Promise<ScrapedListing[]> {
+    const inst = "University of the West Indies, St. Augustine";
+    console.log(`[scraper] ${inst}: fetching STACIE listing page...`);
+    try {
+      const $ = await fetchHtml(UWI_LISTING);
+      if (!$) return [];
+
+      // Extract relative node hrefs from the page body; skip anchor and admin links
+      const nodeIds = new Set<string>();
+      $("a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const m = href.match(/^(?:https?:\/\/sta\.uwi\.edu\/stacie)?\/stacie\/(node\/\d+)$/) ||
+                  href.match(/^(node\/\d+)$/);
+        if (m) nodeIds.add(m[1]);
+      });
+
+      const results: ScrapedListing[] = [];
+      for (const nodeId of nodeIds) {
+        const url = `${UWI_BASE}/stacie/${nodeId}`;
+        try {
+          const $node = await fetchHtml(url);
+          if (!$node) continue;
+          const title = cleanText($node("h1").first().text());
+          if (!title || title.length < 5) continue;
+          // Grab body description from the Drupal field-item content
+          const description = cleanText(
+            $node(".field-item").first().text()
+          ).slice(0, 600);
+          results.push({ title, description, url, institution: inst });
+        } catch (err: any) {
+          console.warn(`[scraper] ${inst}: failed to fetch ${url} — ${err?.message}`);
+        }
+      }
+
+      console.log(`[scraper] ${inst}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${inst} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+const BATH_BASE = "https://www.bath.ac.uk";
+const BATH_LISTING = `${BATH_BASE}/publications/technologies-available-for-licensing/`;
+
+export const bathScraper: InstitutionScraper = {
+  institution: "University of Bath",
+  scraperType: "http",
+  async scrape(): Promise<ScrapedListing[]> {
+    const inst = "University of Bath";
+    console.log(`[scraper] ${inst}: fetching technology listing...`);
+    try {
+      const $ = await fetchHtml(BATH_LISTING);
+      if (!$) return [];
+
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+
+      $("a[href$='.pdf']").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const url = href.startsWith("http") ? href : `${BATH_BASE}${href}`;
+        if (seen.has(url)) return;
+        seen.add(url);
+
+        // Build title from the PDF slug: strip path prefix, remove .pdf, hyphens → spaces, title-case
+        const slug = url.split("/").pop()?.replace(/\.pdf$/i, "") ?? "";
+        const title = slug
+          .split("-")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+
+        if (!title || title.length < 3) return;
+        results.push({ title, description: "", url, institution: inst });
+      });
+
+      console.log(`[scraper] ${inst}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${inst} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+const LLNL_BASE = "https://ipo.llnl.gov";
+const LLNL_ROOT = `${LLNL_BASE}/ipo-technologies`;
+
+export const llnlScraper: InstitutionScraper = {
+  institution: "Lawrence Livermore National Laboratory",
+  scraperType: "http",
+  async scrape(): Promise<ScrapedListing[]> {
+    const inst = "Lawrence Livermore National Laboratory";
+    console.log(`[scraper] ${inst}: fetching category index...`);
+    try {
+      const $root = await fetchHtml(LLNL_ROOT);
+      if (!$root) return [];
+
+      // Collect category-level links (/ipo-technologies/{category})
+      const categories = new Set<string>();
+      $root("a[href^='/ipo-technologies/']").each((_, el) => {
+        const href = $root(el).attr("href") ?? "";
+        const parts = href.split("/").filter(Boolean);
+        // Exactly 2 parts = category page (not a tech page)
+        if (parts.length === 2) categories.add(href);
+      });
+      console.log(`[scraper] ${inst}: ${categories.size} categories found`);
+
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+
+      for (const cat of categories) {
+        try {
+          const $cat = await fetchHtml(`${LLNL_BASE}${cat}`);
+          if (!$cat) continue;
+
+          $cat("a[href^='/ipo-technologies/']").each((_, el) => {
+            const href = $cat(el).attr("href") ?? "";
+            const parts = href.split("/").filter(Boolean);
+            // Must be depth 3 (category/slug) — skip category-root links
+            if (parts.length !== 3) return;
+            if (seen.has(href)) return;
+            seen.add(href);
+
+            const title = cleanText($cat(el).text());
+            if (!title || title.length < 5) return;
+            const url = `${LLNL_BASE}${href}`;
+            results.push({ title, description: "", url, institution: inst });
+          });
+        } catch (err: any) {
+          console.warn(`[scraper] ${inst}: failed to fetch category ${cat} — ${err?.message}`);
+        }
+      }
+
+      console.log(`[scraper] ${inst}: ${results.length} listings across ${categories.size} categories`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${inst} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};

@@ -305,6 +305,10 @@ import {
   wistarScraper,
   vcuScraper,
   wehiScraper,
+  // Task #275 — UWI, Bath, LLNL
+  uwiScraper,
+  bathScraper,
+  llnlScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -785,6 +789,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   wistarScraper,                  // Wistar Institute — stub (no public IP listing portal found)
   vcuScraper,                     // Virginia Commonwealth University — Flintbox orgId=174 — 146 techs confirmed
   wehiScraper,                    // Walter and Eliza Hall Institute — Algolia prod_sod_technology — 13 techs
+  // ── Task #275 — UWI, Bath, LLNL ────────────────────────────────────────────
+  uwiScraper,                     // UWI St. Augustine STACIE — Drupal nodes — 3 patents
+  bathScraper,                    // University of Bath — 4 PDF tech sheets confirmed live
+  llnlScraper,                    // Lawrence Livermore National Laboratory — ~340 static HTML techs across 8 categories
 ];
 
 // Stamp the tier field on every scraper object at startup so that
