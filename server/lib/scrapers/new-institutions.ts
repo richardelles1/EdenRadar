@@ -5680,7 +5680,7 @@ const WEHI_ALGOLIA_API_KEY = "2155b09c7da64e1f3037fd8dd75ff0be";
 const WEHI_ALGOLIA_INDEX = "prod_sod_technology";
 const WEHI_BASE = "https://www.wehi.edu.au";
 
-export const wehiScraper: import("./types").InstitutionScraper = {
+export const wehiScraper: InstitutionScraper = {
   institution: "Walter and Eliza Hall Institute of Medical Research",
   scraperType: "api",
   async scrape(): Promise<ScrapedListing[]> {
@@ -5700,21 +5700,48 @@ export const wehiScraper: import("./types").InstitutionScraper = {
           signal: AbortSignal.timeout(15_000),
         }
       );
-      if (!res.ok) throw new Error(`Algolia HTTP ${res.status}`);
-      const json = await res.json() as { hits?: Array<{ title?: string; url?: string }>; nbHits?: number };
-      const hits = json.hits ?? [];
-      const results: ScrapedListing[] = hits
-        .filter((h) => h.title && h.url)
-        .map((h) => ({
-          title: h.title!,
-          description: "",
-          url: h.url!.startsWith("http") ? h.url! : `${WEHI_BASE}${h.url}`,
-          institution: inst,
-        }));
-      console.log(`[scraper] ${inst}: ${results.length} listings via Algolia`);
+      if (res.ok) {
+        const json = await res.json() as { hits?: Array<{ title?: string; url?: string }> };
+        const hits = json.hits ?? [];
+        const results: ScrapedListing[] = hits
+          .filter((h) => h.title && h.url)
+          .map((h) => ({
+            title: h.title!,
+            description: "",
+            url: h.url!.startsWith("http") ? h.url! : `${WEHI_BASE}${h.url}`,
+            institution: inst,
+          }));
+        if (results.length > 0) {
+          console.log(`[scraper] ${inst}: ${results.length} listings via Algolia`);
+          return results;
+        }
+        console.warn(`[scraper] ${inst}: Algolia returned 0 hits, falling back to HTML`);
+      } else {
+        console.warn(`[scraper] ${inst}: Algolia HTTP ${res.status}, falling back to HTML`);
+      }
+    } catch (err: any) {
+      console.warn(`[scraper] ${inst}: Algolia failed (${err?.message}), falling back to HTML`);
+    }
+
+    // HTML fallback: scrape the technologies listing page directly
+    try {
+      const $ = await fetchHtml(`${WEHI_BASE}/research/technologies/`);
+      if (!$) return [];
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      $("a[href*='/research/technologies/']").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const title = cleanText($(el).text());
+        if (!title || title.length < 5) return;
+        const url = href.startsWith("http") ? href : `${WEHI_BASE}${href}`;
+        if (seen.has(url) || url === `${WEHI_BASE}/research/technologies/`) return;
+        seen.add(url);
+        results.push({ title, description: "", url, institution: inst });
+      });
+      console.log(`[scraper] ${inst}: ${results.length} listings via HTML fallback`);
       return results;
     } catch (err: any) {
-      console.error(`[scraper] ${inst} failed: ${err?.message}`);
+      console.error(`[scraper] ${inst} HTML fallback failed: ${err?.message}`);
       return [];
     }
   },
