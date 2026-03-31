@@ -39,19 +39,24 @@ function extractTotalPages(html: string, maxPages: number): number {
   return m ? Math.min(parseInt(m[1], 10), maxPages) : 1;
 }
 
+// Node 18+ / undici 5.x exposes getSetCookie() which returns each Set-Cookie
+// header as a separate string[], avoiding the collapse that happens when
+// headers.forEach() receives pre-joined comma-separated values.
+// The property is optional here so the else-branch stays typed as Headers.
+type HeadersExt = Headers & { getSetCookie?: () => string[] };
+
 function extractCookies(response: Response): string {
-  // Prefer getSetCookie() (Node 18+ / undici 5.x) — returns string[] so each
-  // Set-Cookie header is preserved individually without collapsing.
-  if (typeof (response.headers as any).getSetCookie === "function") {
-    return (response.headers as any)
+  const h = response.headers as HeadersExt;
+  if (typeof h.getSetCookie === "function") {
+    return h
       .getSetCookie()
-      .map((c: string) => c.split(";")[0])
+      .map((c) => c.split(";")[0])
       .filter(Boolean)
       .join("; ");
   }
-  // Fallback: headers.forEach still works when undici doesn't collapse headers.
+  // Fallback: headers.forEach works when Set-Cookie headers are not collapsed.
   const cookies: string[] = [];
-  response.headers.forEach((value, key) => {
+  h.forEach((value, key) => {
     if (key.toLowerCase() === "set-cookie") {
       const nameVal = value.split(";")[0];
       if (nameVal) cookies.push(nameVal);
