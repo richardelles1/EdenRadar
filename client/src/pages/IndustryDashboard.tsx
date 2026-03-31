@@ -337,7 +337,11 @@ export default function IndustryDashboard() {
 
   const exploreCategory = getDominantLabel(visibleExploreAssets);
 
-  const newestFirstSeenAt = allNewArrivals[0]?.firstSeenAt ?? null;
+  const newestFirstSeenAt = allNewArrivals.reduce<string | null>((best, a) => {
+    if (!a.firstSeenAt) return best;
+    if (!best) return a.firstSeenAt;
+    return new Date(a.firstSeenAt) > new Date(best) ? a.firstSeenAt : best;
+  }, null);
   const freshnessText = newestFirstSeenAt ? timeAgo(newestFirstSeenAt) : null;
 
   function triggerWelcomeDismiss() {

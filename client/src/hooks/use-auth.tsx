@@ -68,6 +68,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function signOut() {
+    sessionStorage.removeItem("edenradar_welcomed");
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
