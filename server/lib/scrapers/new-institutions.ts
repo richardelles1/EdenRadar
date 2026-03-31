@@ -5650,3 +5650,72 @@ export const pnnlScraper: InstitutionScraper = {
     return results;
   },
 };
+
+// ── Task #273 — Wistar, VCU, WEHI ────────────────────────────────────────────
+
+// Wistar Institute: No enumerable public IP listing found.
+// Investigated: wistar.org/research/technology-transfer/available-technologies/
+// (only shows research support facilities, not licensable IP),
+// techtransfer.wistar.org (does not resolve),
+// Inpart subdomains "wistar" and "wistarinst" (not found).
+export const wistarScraper = createStubScraper(
+  "Wistar Institute",
+  "no enumerable public IP listing — not on Inpart/Tradespace/Flintbox; wistar.org tech-transfer page lists research facilities only"
+);
+
+// Virginia Commonwealth University: Flintbox — 146 technologies confirmed live.
+// innovation.vcu.edu/technologies/ returns 404 (site restructure).
+// Credentials discovered from vcu.flintbox.com page HTML.
+export const vcuScraper = createFlintboxScraper(
+  { slug: "vcu", orgId: 174, accessKey: "c8d7f02b-71bc-464c-b7f6-850767d61ff7" },
+  "Virginia Commonwealth University"
+);
+
+// Walter and Eliza Hall Institute (WEHI): Algolia index prod_sod_technology.
+// 13 technology platform pages confirmed live via Algolia public key.
+// No WP REST API; no individual patent listing page found.
+// Technology pages represent WEHI's licensable research platforms.
+const WEHI_ALGOLIA_APP_ID = "PRDZZ8SO1U";
+const WEHI_ALGOLIA_API_KEY = "2155b09c7da64e1f3037fd8dd75ff0be";
+const WEHI_ALGOLIA_INDEX = "prod_sod_technology";
+const WEHI_BASE = "https://www.wehi.edu.au";
+
+export const wehiScraper: import("./types").InstitutionScraper = {
+  institution: "Walter and Eliza Hall Institute of Medical Research",
+  scraperType: "api",
+  async scrape(): Promise<ScrapedListing[]> {
+    const inst = "Walter and Eliza Hall Institute of Medical Research";
+    console.log(`[scraper] ${inst}: fetching via Algolia prod_sod_technology...`);
+    try {
+      const res = await fetch(
+        `https://${WEHI_ALGOLIA_APP_ID}-dsn.algolia.net/1/indexes/${WEHI_ALGOLIA_INDEX}/query`,
+        {
+          method: "POST",
+          headers: {
+            "X-Algolia-Application-Id": WEHI_ALGOLIA_APP_ID,
+            "X-Algolia-API-Key": WEHI_ALGOLIA_API_KEY,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ params: "query=&hitsPerPage=100&attributesToRetrieve=title,url" }),
+          signal: AbortSignal.timeout(15_000),
+        }
+      );
+      if (!res.ok) throw new Error(`Algolia HTTP ${res.status}`);
+      const json = await res.json() as { hits?: Array<{ title?: string; url?: string }>; nbHits?: number };
+      const hits = json.hits ?? [];
+      const results: ScrapedListing[] = hits
+        .filter((h) => h.title && h.url)
+        .map((h) => ({
+          title: h.title!,
+          description: "",
+          url: h.url!.startsWith("http") ? h.url! : `${WEHI_BASE}${h.url}`,
+          institution: inst,
+        }));
+      console.log(`[scraper] ${inst}: ${results.length} listings via Algolia`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${inst} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};

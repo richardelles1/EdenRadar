@@ -301,6 +301,10 @@ import {
   salfordScraper,
   // Task #271 — Ljubljana
   ljubljanaScraper,
+  // Task #273 — Wistar, VCU, WEHI
+  wistarScraper,
+  vcuScraper,
+  wehiScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -777,6 +781,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   utepScraper,                    // University of Texas El Paso — Tradespace Playwright — confirmed live
   // ── International — Central/Eastern Europe (this session) ─────────────────
   ljubljanaScraper,               // University of Ljubljana — in-part "ljubljana" — confirmed live
+  // ── Task #273 — Wistar, VCU, WEHI ─────────────────────────────────────────
+  wistarScraper,                  // Wistar Institute — stub (no public IP listing portal found)
+  vcuScraper,                     // Virginia Commonwealth University — Flintbox orgId=174 — 146 techs confirmed
+  wehiScraper,                    // Walter and Eliza Hall Institute — Algolia prod_sod_technology — 13 techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that
