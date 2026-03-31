@@ -369,8 +369,8 @@ export default function IndustryDashboard() {
     if (!hasEnoughNew && !hasEnoughExplore) return;
 
     sharedTimerRef.current = setInterval(() => {
-      setExploreFade(false);
-      setNewAssetsFade(false);
+      if (hasEnoughExplore) setExploreFade(false);
+      if (hasEnoughNew) setNewAssetsFade(false);
       swapTimerRef.current = setTimeout(() => {
         if (hasEnoughExplore) {
           let next = Math.floor(Math.random() * allExploreAssets.length);
@@ -379,12 +379,12 @@ export default function IndustryDashboard() {
           }
           prevExploreOffsetRef.current = next;
           setExploreOffset(next);
+          setExploreFade(true);
         }
         if (hasEnoughNew) {
           setNewAssetsPage((p) => (p + 1) % totalNewAssetsPages);
+          setNewAssetsFade(true);
         }
-        setExploreFade(true);
-        setNewAssetsFade(true);
       }, 700);
     }, 6000);
 
