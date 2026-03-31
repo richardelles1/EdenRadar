@@ -1258,6 +1258,7 @@ export const technionScraper = createStubScraper("Technion – Israel Institute 
 // ── International: Ireland ───────────────────────────────────────────────
 export const tcdScraper = createInPartScraper("tcd", "Trinity College Dublin");
 export const ulbScraper = createInPartScraper("ulb", "Université Libre de Bruxelles");
+export const ljubljanaScraper = createInPartScraper("ljubljana", "University of Ljubljana");
 
 // ── International: Canada ────────────────────────────────────────────────
 export const utorontoScraper = createInPartScraper("toronto", "University of Toronto");
@@ -1438,10 +1439,8 @@ export const ufScraper = createTechPublisherScraper(
   { selector: "a[href*='/tech/']", maxPg: 80 }
 );
 
-export const utepScraper = createStubScraper(
-  "University of Texas El Paso",
-  "tradespacemarket.com (subdomain: utep) — can be upgraded to createTradescapeScraper('utep', ...) when needed"
-);
+// utepScraper superseded — now live via createTradescapeScraper("utep", ...) in tradespace.ts
+// Kept here as a named export reference; the ALL_SCRAPERS-registered version is in index.ts
 
 // ── New platform-based scrapers (Task #100, March 2026) ─────────────────────
 

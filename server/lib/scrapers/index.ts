@@ -39,7 +39,7 @@ import { ucoloradoScraper } from "./ucolorado";
 import { emoryScraper } from "./emory";
 import { mayoScraper } from "./mayo";
 import { osuScraper } from "./osu";
-import { gladstoneScraper } from "./tradespace";
+import { gladstoneScraper, utepScraper } from "./tradespace";
 import {
   unswScraper,
   loughboroughScraper,
@@ -299,6 +299,8 @@ import {
   hokkaidoScraper,
   stAndrewsScraper,
   salfordScraper,
+  // Task #271 — Ljubljana
+  ljubljanaScraper,
 } from "./new-institutions";
 
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
@@ -770,8 +772,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ornlScraper,                    // Oak Ridge National Laboratory — proxy-routed — ~120+ techs
   argonneScraper,                 // Argonne National Laboratory — proxy-routed — ~200+ techs
   pnnlScraper,                    // Pacific Northwest National Laboratory — proxy-routed — ~150+ techs
-  // ── Tradespace (Task #271) ─────────────────────────────────────────────────
+  // ── Tradespace (Tasks #271, this session) ─────────────────────────────────
   gladstoneScraper,               // Gladstone Institutes — Tradespace Playwright — ~60+ techs
+  utepScraper,                    // University of Texas El Paso — Tradespace Playwright — confirmed live
+  // ── International — Central/Eastern Europe (this session) ─────────────────
+  ljubljanaScraper,               // University of Ljubljana — in-part "ljubljana" — confirmed live
 ];
 
 // Stamp the tier field on every scraper object at startup so that

@@ -238,3 +238,8 @@ export const gladstoneScraper = createTradescapeScraper(
   "gladstone",
   "Gladstone Institutes"
 );
+
+export const utepScraper = createTradescapeScraper(
+  "utep",
+  "University of Texas El Paso"
+);
