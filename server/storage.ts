@@ -432,15 +432,15 @@ export class DatabaseStorage implements IStorage {
     const total = listings.length;
     const allFingerprints = listings.map((l) => l.fingerprint);
 
-    // 1. Find which fingerprints already exist (chunked SELECT) — also grab contentHash for change detection
-    const existingSet = new Map<string, { id: number; contentHash: string | null }>(); 
+    // 1. Find which fingerprints already exist (chunked SELECT) — also grab contentHash and sourceUrl for change detection
+    const existingSet = new Map<string, { id: number; contentHash: string | null; sourceUrl: string | null }>(); 
     for (let i = 0; i < allFingerprints.length; i += CHUNK) {
       const chunk = allFingerprints.slice(i, i + CHUNK);
       const rows = await db
-        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, contentHash: ingestedAssets.contentHash })
+        .select({ id: ingestedAssets.id, fingerprint: ingestedAssets.fingerprint, contentHash: ingestedAssets.contentHash, sourceUrl: ingestedAssets.sourceUrl })
         .from(ingestedAssets)
         .where(inArray(ingestedAssets.fingerprint, chunk));
-      for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash });
+      for (const row of rows) existingSet.set(row.fingerprint, { id: row.id, contentHash: row.contentHash, sourceUrl: row.sourceUrl });
     }
 
     const fingerprintNewListings = listings.filter((l) => !existingSet.has(l.fingerprint));
@@ -528,18 +528,24 @@ export class DatabaseStorage implements IStorage {
 
     // 3. Bulk UPDATE existing listings — update lastSeenAt + runId, detect content changes
     const changedFps: string[] = [];
+    // Unchanged but needs sourceUrl healed (stored null, incoming has real URL)
+    const unchangedNeedsUrlFps: string[] = [];
     const unchangedFps: string[] = [];
     for (const listing of existingListings) {
       const existing = existingSet.get(listing.fingerprint);
+      const needsUrlHeal = !existing?.sourceUrl && !!listing.sourceUrl;
       // Treat as changed when: incoming hash exists AND differs from stored hash
       // (includes null stored hash = first-time hash population on a legacy row)
       if (existing && listing.contentHash && listing.contentHash !== existing.contentHash) {
         changedFps.push(listing.fingerprint);
+      } else if (needsUrlHeal) {
+        unchangedNeedsUrlFps.push(listing.fingerprint);
       } else {
         unchangedFps.push(listing.fingerprint);
       }
     }
 
+    // Bulk update truly unchanged listings (no content change, no URL to heal)
     for (let i = 0; i < unchangedFps.length; i += CHUNK) {
       const chunk = unchangedFps.slice(i, i + CHUNK);
       await db
@@ -548,10 +554,23 @@ export class DatabaseStorage implements IStorage {
         .where(inArray(ingestedAssets.fingerprint, chunk));
     }
 
+    // Per-row update for listings that need their sourceUrl healed (were null, now have a real URL)
+    if (unchangedNeedsUrlFps.length > 0) {
+      console.log(`[storage] Healing sourceUrl for ${unchangedNeedsUrlFps.length} assets that previously had no URL`);
+      const urlHealListings = existingListings.filter((l) => unchangedNeedsUrlFps.includes(l.fingerprint));
+      for (const listing of urlHealListings) {
+        await db
+          .update(ingestedAssets)
+          .set({ lastSeenAt: now, runId, sourceUrl: listing.sourceUrl })
+          .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
+      }
+    }
+
     for (let i = 0; i < changedFps.length; i += CHUNK) {
       const chunk = changedFps.slice(i, i + CHUNK);
       const chunkListings = existingListings.filter((l) => chunk.includes(l.fingerprint));
       for (const listing of chunkListings) {
+        const existing = existingSet.get(listing.fingerprint);
         await db
           .update(ingestedAssets)
           .set({
@@ -561,6 +580,8 @@ export class DatabaseStorage implements IStorage {
             lastContentChangeAt: now,
             summary: listing.summary || undefined,
             abstract: listing.abstract || undefined,
+            // Heal sourceUrl if it was previously null and we now have a real URL
+            ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
             // Reset enrichedAt so the asset gets re-enriched with improved content
             enrichedAt: null,
           })

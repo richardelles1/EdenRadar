@@ -40,6 +40,16 @@ function extractTotalPages(html: string, maxPages: number): number {
 }
 
 function extractCookies(response: Response): string {
+  // Prefer getSetCookie() (Node 18+ / undici 5.x) — returns string[] so each
+  // Set-Cookie header is preserved individually without collapsing.
+  if (typeof (response.headers as any).getSetCookie === "function") {
+    return (response.headers as any)
+      .getSetCookie()
+      .map((c: string) => c.split(";")[0])
+      .filter(Boolean)
+      .join("; ");
+  }
+  // Fallback: headers.forEach still works when undici doesn't collapse headers.
   const cookies: string[] = [];
   response.headers.forEach((value, key) => {
     if (key.toLowerCase() === "set-cookie") {
