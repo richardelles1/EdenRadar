@@ -1,0 +1,287 @@
+You’re very close. What you outlined is already good product thinking—it just needs to be tightened into a clear story + hierarchy so it doesn’t feel like a feed.
+
+Right now, you’re describing sections.
+
+What you actually need is:
+
+a decision-oriented command center
+
+
+⸻
+
+🧠 First — the story your dashboard should tell
+
+When an industry user logs in, the feeling should be:
+
+“I immediately know what matters, what’s new, and what I should act on.”
+
+Not:
+
+“Here’s a bunch of stuff.”
+
+
+⸻
+
+🔥 The correct structure (top → bottom)
+
+1. Header = situational awareness (don’t skip this)
+
+This is what you’re missing.
+
+Good morning, [Name]
+
+12 new assets since your last session  
+4 high-match opportunities  
+2 pipeline updates
+
+This anchors the entire experience.
+
+👉 This is high value and currently missing from your plan.
+
+⸻
+
+2. Priority Feed (NOT just a carousel)
+
+You said:
+
+rotating carousel of last 7 days
+
+Close, but upgrade it:
+
+Call it:
+
+Priority Signals
+
+And make it:
+	•	horizontally scrollable (fine)
+	•	BUT ranked, not just recent
+
+Criteria:
+	•	recency
+	•	match score
+	•	signal score
+
+So it becomes:
+
+“Here’s what you should care about”
+
+
+⸻
+
+3. Explore (you got this right)
+
+Rename it slightly:
+
+Recommended for You
+
+Key:
+	•	interest-based
+	•	high signal only
+
+This is your AI flex zone
+
+⸻
+
+4. Pipeline (this is critical)
+
+You said:
+
+pick up where you left off
+
+Good—but sharpen it:
+
+Your Active Pipeline
+
+Show:
+	•	last viewed assets
+	•	recently added
+	•	assets needing action
+
+Add micro-status:
+
+Viewed · Contacted · Evaluating
+
+This turns it from storage → workflow.
+
+⸻
+
+5. New from the Ecosystem (this is strong)
+
+You mentioned:
+
+concepts + research portals
+
+Yes—this is a differentiator.
+
+Call it:
+
+Emerging Opportunities
+
+This is:
+	•	Discovery → Research → flowing upward
+
+This reinforces your ecosystem story
+
+⸻
+
+6. Search CTA (but make it intentional)
+
+Instead of:
+
+“Go search”
+
+Make it:
+
+Find something specific
+
+With:
+	•	prefilled suggestions
+	•	trending queries
+
+⸻
+
+🧠 What you are missing (important)
+
+These are the real upgrades:
+
+⸻
+
+🔥 1. “Why this matters” layer
+
+Every section should subtly answer:
+
+Why am I seeing this?
+
+Example:
+
+Matched to your interest in RNA therapeutics
+
+
+⸻
+
+🔥 2. Activity / momentum indicators
+
+Show:
+	•	rising assets
+	•	frequently viewed
+	•	recently contacted
+
+This creates:
+
+market intelligence feel
+
+
+⸻
+
+🔥 3. Lightweight alerts (NOT notifications tab)
+
+Inline:
+
+New asset added from MIT in your focus area
+
+
+⸻
+
+🔥 4. Saved filters / quick views
+
+Let users jump into:
+
+My Oncology Pipeline  
+RNA Assets (New)  
+Preclinical Only
+
+This is huge for repeat usage.
+
+⸻
+
+🔥 5. “Time since last seen” logic (you were close)
+
+Instead of relying purely on:
+
+last 7 days
+
+Also use:
+
+new since last visit
+
+Even if imperfect, it feels personalized.
+
+⸻
+
+🎯 Final structure (clean version)
+
+If I rewrite your dashboard:
+
+⸻
+
+Header
+	•	greeting
+	•	key stats
+
+⸻
+
+Priority Signals
+
+(high-impact, ranked)
+
+⸻
+
+Recommended for You
+
+(personalized AI feed)
+
+⸻
+
+Your Active Pipeline
+
+(workflow continuation)
+
+⸻
+
+Emerging Opportunities
+
+(discovery + research inflow)
+
+⸻
+
+Explore / Search
+
+(intentional action)
+
+⸻
+
+🧠 One important pushback
+
+You said:
+
+rotating carousel
+
+Be careful.
+
+Carousels often:
+
+hide information instead of surfacing it
+
+If you use one:
+	•	keep it slow
+	•	allow manual scroll
+	•	don’t auto-spin aggressively
+
+⸻
+
+💬 Bottom line
+
+You’re not missing much—but the shift is:
+
+From:
+
+sections of content
+
+To:
+
+ranked, contextual intelligence layers
+
+
+⸻
+
+If you want next step, I’ll map this into an actual wireframe (like exact layout blocks) so you can hand it straight to Replit.
