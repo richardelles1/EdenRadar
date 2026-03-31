@@ -1434,6 +1434,11 @@ export const dalhousieScraper = createFlintboxScraper(
   "Dalhousie University"
 );
 
+export const kaustScraper = createFlintboxScraper(
+  { slug: "kaust", orgId: 92, accessKey: "c0aa0494-0b5b-43bd-806b-4a3bf086eb3d" },
+  "King Abdullah University of Science and Technology"
+);
+
 export const ufScraper = createTechPublisherScraper(
   "ufinnovate",
   "University of Florida",

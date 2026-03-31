@@ -320,6 +320,8 @@ import {
   einsteinScraper,
   ohsuScraper,
   mgbScraper,
+  // KAUST — Flintbox (kaust.flintbox.com, orgId 92)
+  kaustScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -695,6 +697,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   utsaScraper,
   ncsuScraper,
   dalhousieScraper,
+  kaustScraper,
   ufScraper,
   // ── New platform-based scrapers (Task #100, March 2026) ───────────────────
   ucMercedScraper,
