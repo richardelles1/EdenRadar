@@ -5755,6 +5755,10 @@ const UWI_LISTING = `${UWI_BASE}/stacie/licensingavailable-technologies`;
 export const uwiScraper: InstitutionScraper = {
   institution: "University of the West Indies, St. Augustine",
   scraperType: "http",
+  async probe(maxResults = 2): Promise<ScrapedListing[]> {
+    const results = await this.scrape();
+    return results.slice(0, maxResults);
+  },
   async scrape(): Promise<ScrapedListing[]> {
     const inst = "University of the West Indies, St. Augustine";
     console.log(`[scraper] ${inst}: fetching STACIE listing page...`);
@@ -5808,6 +5812,10 @@ const BATH_LISTING = `${BATH_BASE}/publications/technologies-available-for-licen
 export const bathScraper: InstitutionScraper = {
   institution: "University of Bath",
   scraperType: "http",
+  async probe(maxResults = 2): Promise<ScrapedListing[]> {
+    const results = await this.scrape();
+    return results.slice(0, maxResults);
+  },
   async scrape(): Promise<ScrapedListing[]> {
     const inst = "University of Bath";
     console.log(`[scraper] ${inst}: fetching technology listing...`);
@@ -5853,6 +5861,30 @@ const LLNL_ROOT = `${LLNL_BASE}/ipo-technologies`;
 export const llnlScraper: InstitutionScraper = {
   institution: "Lawrence Livermore National Laboratory",
   scraperType: "http",
+  async probe(maxResults = 5): Promise<ScrapedListing[]> {
+    // Validate by checking just the life-sciences category — fast single HTTP request
+    const inst = "Lawrence Livermore National Laboratory";
+    try {
+      const $cat = await fetchHtml(`${LLNL_BASE}/ipo-technologies/life-sciences-biotech-and-healthcare`);
+      if (!$cat) return [];
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      $cat("a[href^='/ipo-technologies/']").each((_, el) => {
+        if (results.length >= maxResults) return;
+        const href = $cat(el).attr("href") ?? "";
+        const parts = href.split("/").filter(Boolean);
+        if (parts.length !== 3 || seen.has(href)) return;
+        seen.add(href);
+        const title = cleanText($cat(el).text());
+        if (!title || title.length < 5) return;
+        results.push({ title, description: "", url: `${LLNL_BASE}${href}`, institution: inst });
+      });
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${inst} probe failed: ${err?.message}`);
+      return [];
+    }
+  },
   async scrape(): Promise<ScrapedListing[]> {
     const inst = "Lawrence Livermore National Laboratory";
     console.log(`[scraper] ${inst}: fetching category index...`);
