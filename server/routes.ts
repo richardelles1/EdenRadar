@@ -519,7 +519,7 @@ export async function registerRoutes(
         .from(ingestedAssets)
         .orderBy(desc(ingestedAssets.firstSeenAt))
         .limit(8),
-        db.execute(sql`SELECT COUNT(DISTINCT LOWER(indication))::int AS n FROM ingested_assets WHERE indication IS NOT NULL AND indication != '' AND indication != 'unknown'`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM therapy_area_taxonomy WHERE asset_count > 0`),
         db.execute(sql`SELECT COUNT(DISTINCT institution)::int AS n FROM ingested_assets WHERE institution IS NOT NULL AND institution != ''`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM review_queue WHERE status = 'pending'`),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM ingested_assets WHERE first_seen_at >= NOW() - INTERVAL '7 days'`),
@@ -874,6 +874,20 @@ export async function registerRoutes(
       res.json({ asset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to update pipeline" });
+    }
+  });
+
+  app.patch("/api/saved-assets/:id/status", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const VALID_STATUSES = ["viewing", "evaluating", "contacted"] as const;
+      const { status } = z.object({ status: z.enum(VALID_STATUSES).nullable() }).parse(req.body);
+      const asset = await storage.updateSavedAssetStatus(id, status);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      res.json({ asset });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to update status" });
     }
   });
 
@@ -4307,12 +4321,55 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.get("/api/browse/new-arrivals", async (req, res) => {
+    try {
+      const windowParam = (req.query.window as string) || "7d";
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const interval = windowParam === "30d" ? "30 days" : "7 days";
+      const assets = await db
+        .select({
+          id: ingestedAssets.id,
+          assetName: ingestedAssets.assetName,
+          institution: ingestedAssets.institution,
+          modality: ingestedAssets.modality,
+          indication: ingestedAssets.indication,
+          completenessScore: ingestedAssets.completenessScore,
+          firstSeenAt: ingestedAssets.firstSeenAt,
+        })
+        .from(ingestedAssets)
+        .where(
+          and(
+            eq(ingestedAssets.relevant, true),
+            sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '${sql.raw(interval)}'`
+          )
+        )
+        .orderBy(desc(ingestedAssets.firstSeenAt))
+        .limit(limit);
+
+      const byInstitution: Record<string, { count: number }> = {};
+      for (const a of assets) {
+        const key = a.institution || "Unknown";
+        if (!byInstitution[key]) byInstitution[key] = { count: 0 };
+        byInstitution[key].count++;
+      }
+      const institutions = Object.entries(byInstitution)
+        .map(([institution, d]) => ({ institution, count: d.count }))
+        .sort((a, b) => b.count - a.count);
+
+      res.json({ assets, institutions, total: assets.length, window: windowParam });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/browse/assets", async (req, res) => {
     try {
       const therapyArea = req.query.therapyArea as string | undefined;
       const institution = req.query.institution as string | undefined;
       const modality = req.query.modality as string | undefined;
       const stage = req.query.stage as string | undefined;
+      const sortBy = req.query.sortBy as string | undefined;
+      const minCompleteness = req.query.minCompleteness ? parseFloat(req.query.minCompleteness as string) : undefined;
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const offset = parseInt(req.query.offset as string) || 0;
 
@@ -4336,6 +4393,13 @@ If a field cannot be determined, use "N/A".`
       if (stage && stage !== "all") {
         conditions.push(eq(ingestedAssets.developmentStage, stage));
       }
+      if (minCompleteness !== undefined && !isNaN(minCompleteness)) {
+        conditions.push(sql`${ingestedAssets.completenessScore} >= ${minCompleteness}`);
+      }
+
+      const orderClause = sortBy === "completeness"
+        ? sql`${ingestedAssets.completenessScore} DESC NULLS LAST, ${ingestedAssets.firstSeenAt} DESC`
+        : sql`${ingestedAssets.firstSeenAt} desc`;
 
       const results = await db
         .select({
@@ -4359,7 +4423,7 @@ If a field cannot be determined, use "N/A".`
         .where(and(...conditions))
         .limit(limit)
         .offset(offset)
-        .orderBy(sql`${ingestedAssets.firstSeenAt} desc`);
+        .orderBy(orderClause);
 
       res.json({ assets: results, hasMore: results.length === limit });
     } catch (err: any) {

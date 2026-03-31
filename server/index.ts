@@ -128,6 +128,14 @@ app.use((req, res, next) => {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Startup migrations: saved_assets status column ───────────────────────
+  try {
+    await db.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
+    log("[startup] saved_assets status column ready", "startup");
+  } catch (err: any) {
+    log(`[startup] saved_assets status column migration failed: ${err?.message}`, "startup");
+  }
+
   // ── Startup migrations: near-duplicate detection columns ─────────────────
   try {
     // Column additions are fast — always done synchronously

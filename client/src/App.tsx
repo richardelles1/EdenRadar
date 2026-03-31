@@ -45,6 +45,7 @@ import IndustrySettings, { SimplifiedSettings } from "@/pages/IndustrySettings";
 import IndustryEden from "@/pages/IndustryEden";
 import Dashboard from "@/pages/Dashboard";
 import IndustryDashboard from "@/pages/IndustryDashboard";
+import NewArrivals from "@/pages/NewArrivals";
 import { DashboardLayout } from "@/layouts/DashboardLayout";
 import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
@@ -111,6 +112,11 @@ function Router() {
       <Route path="/industry/dashboard">
         <DashboardLayout>
           <IndustryDashboard />
+        </DashboardLayout>
+      </Route>
+      <Route path="/industry/new-arrivals">
+        <DashboardLayout>
+          <NewArrivals />
         </DashboardLayout>
       </Route>
       <Route path="/dashboard">

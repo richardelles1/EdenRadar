@@ -61,6 +61,7 @@ export interface IStorage {
   getSavedAsset(id: number): Promise<SavedAsset | undefined>;
   createSavedAsset(asset: InsertSavedAsset): Promise<SavedAsset>;
   updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
+  updateSavedAssetStatus(id: number, status: string | null): Promise<SavedAsset | undefined>;
   deleteSavedAsset(id: number): Promise<void>;
 
   getPipelineLists(): Promise<PipelineList[]>;
@@ -355,6 +356,11 @@ export class DatabaseStorage implements IStorage {
 
   async updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined> {
     const [row] = await db.update(savedAssets).set({ pipelineListId }).where(eq(savedAssets.id, id)).returning();
+    return row;
+  }
+
+  async updateSavedAssetStatus(id: number, status: string | null): Promise<SavedAsset | undefined> {
+    const [row] = await db.update(savedAssets).set({ status }).where(eq(savedAssets.id, id)).returning();
     return row;
   }
 

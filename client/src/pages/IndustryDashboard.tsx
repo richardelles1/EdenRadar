@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { OrientationHint } from "@/components/OrientationHint";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import {
   Search,
@@ -15,19 +15,17 @@ import {
   BookOpen,
   Bell,
   Settings,
-  Clock,
+  Newspaper,
   Globe,
   Compass,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getIndustryProfile } from "@/hooks/use-industry";
-import { slugifyInstitutionName } from "@/lib/institutions";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
-const TICKER_WINDOW = 4;
-const TICKER_MS = 6000;
-const TICKER_FADE_MS = 350;
 
 type PortfolioStats = {
   total: number;
@@ -55,6 +53,23 @@ type PipelineSummaryData = {
   institutionCount: number;
 };
 
+type NewArrivalsAsset = {
+  id: number;
+  assetName: string;
+  institution: string;
+  modality: string | null;
+  indication: string | null;
+  completenessScore: number | null;
+  firstSeenAt: string;
+};
+
+type NewArrivalsResponse = {
+  assets: NewArrivalsAsset[];
+  institutions: { institution: string; count: number }[];
+  total: number;
+  window: string;
+};
+
 type BrowseAsset = {
   id: number;
   assetName: string;
@@ -67,20 +82,33 @@ type BrowseAsset = {
   firstSeenAt: string;
 };
 
-interface DeltaInstitution {
-  institution: string;
-  count: number;
-  sampleAssets: Array<{ id: number; name: string } | string>;
-}
+type SavedAssetRow = {
+  id: number;
+  assetName: string;
+  pipelineListId: number | null;
+  status: string | null;
+  savedAt: string;
+};
 
-interface AlertDeltaResponse {
-  newAssets: {
-    total: number;
-    byInstitution: DeltaInstitution[];
-  };
+type AlertDeltaResponse = {
+  newAssets: { total: number; byInstitution: Array<{ institution: string; count: number }> };
   windowHours: number;
   since?: string;
-}
+};
+
+const STATUS_CYCLE: Array<string | null> = [null, "viewing", "evaluating", "contacted"];
+
+const STATUS_LABELS: Record<string, string> = {
+  viewing: "Viewing",
+  evaluating: "Evaluating",
+  contacted: "Contacted",
+};
+
+const STATUS_COLORS: Record<string, string> = {
+  viewing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  evaluating: "bg-amber-500/10 text-amber-600 border-amber-500/20",
+  contacted: "bg-green-500/10 text-green-600 border-green-500/20",
+};
 
 function timeAgo(dateStr: string): string {
   const ms = Date.now() - new Date(dateStr).getTime();
@@ -94,34 +122,8 @@ function timeAgo(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function useWindowTicker<T>(items: T[], size = TICKER_WINDOW, ms = TICKER_MS) {
-  const [page, setPage] = useState(0);
-  const [faded, setFaded] = useState(false);
-  const pages = Math.max(1, Math.ceil(items.length / size));
-
-  useEffect(() => {
-    setPage(0);
-    setFaded(false);
-  }, [items.length]);
-
-  useEffect(() => {
-    if (pages <= 1) return;
-    let fadeTimeout: ReturnType<typeof setTimeout>;
-    const timer = setInterval(() => {
-      setFaded(true);
-      fadeTimeout = setTimeout(() => {
-        setPage((p) => (p + 1) % pages);
-        setFaded(false);
-      }, TICKER_FADE_MS);
-    }, ms);
-    return () => {
-      clearInterval(timer);
-      clearTimeout(fadeTimeout);
-    };
-  }, [pages, ms]);
-
-  const slice = items.slice(page * size, (page + 1) * size);
-  return { slice, faded, page, pages };
+function stripEmDashes(str: string): string {
+  return str.replace(/\u2014|\u2013/g, "-").replace(/\s+-\s+/g, " - ");
 }
 
 function KpiCard({
@@ -131,6 +133,7 @@ function KpiCard({
   sub,
   iconColor = "text-primary",
   bgColor = "bg-primary/10",
+  href,
 }: {
   icon: React.ElementType;
   label: string;
@@ -138,9 +141,13 @@ function KpiCard({
   sub?: string;
   iconColor?: string;
   bgColor?: string;
+  href?: string;
 }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4 flex items-start gap-3" data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}>
+  const inner = (
+    <div
+      className={`rounded-xl border border-border bg-card p-4 flex items-start gap-3${href ? " hover:border-primary/30 hover:bg-primary/5 transition-all cursor-pointer" : ""}`}
+      data-testid={`kpi-${label.toLowerCase().replace(/\s+/g, "-")}`}
+    >
       <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${bgColor}`}>
         <Icon className={`w-4 h-4 ${iconColor}`} />
       </div>
@@ -153,6 +160,8 @@ function KpiCard({
       </div>
     </div>
   );
+  if (href) return <Link href={href}>{inner}</Link>;
+  return inner;
 }
 
 function SectionHeader({
@@ -185,9 +194,37 @@ function SectionHeader({
   );
 }
 
+function StatusBadge({ status, onCycle }: { status: string | null; onCycle: () => void }) {
+  if (!status) {
+    return (
+      <button
+        onClick={(e) => { e.stopPropagation(); onCycle(); }}
+        className="text-[9px] px-1.5 py-0.5 rounded-full border border-border/60 text-muted-foreground/50 hover:border-primary/30 hover:text-primary transition-colors"
+        data-testid="status-badge-unset"
+      >
+        + status
+      </button>
+    );
+  }
+  return (
+    <button
+      onClick={(e) => { e.stopPropagation(); onCycle(); }}
+      className={`text-[9px] px-1.5 py-0.5 rounded-full border capitalize font-medium ${STATUS_COLORS[status] ?? "bg-muted text-muted-foreground border-border"}`}
+      data-testid={`status-badge-${status}`}
+      title="Click to change status"
+    >
+      {STATUS_LABELS[status] ?? status}
+    </button>
+  );
+}
+
 export default function IndustryDashboard() {
   const [, navigate] = useLocation();
   const profile = getIndustryProfile();
+  const qc = useQueryClient();
+  const { toast } = useToast();
+
+  const [newAssetsWindow, setNewAssetsWindow] = useState<"7d" | "30d">("7d");
 
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["/api/dashboard/stats"],
@@ -204,6 +241,11 @@ export default function IndustryDashboard() {
     staleTime: 10 * 60 * 1000,
   });
 
+  const { data: recentSavedData, isLoading: recentSavedLoading } = useQuery<{ assets: SavedAssetRow[] }>({
+    queryKey: ["/api/saved-assets"],
+    staleTime: 2 * 60 * 1000,
+  });
+
   const sinceParam = typeof window !== "undefined"
     ? (localStorage.getItem(STORAGE_KEY) ?? "")
     : "";
@@ -216,28 +258,52 @@ export default function IndustryDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: newArrivalsData, isLoading: newArrivalsLoading } = useQuery<NewArrivalsResponse>({
+    queryKey: [`/api/browse/new-arrivals?window=${newAssetsWindow}&limit=8`],
+    staleTime: 5 * 60 * 1000,
+  });
+
   const userInterests = profile.therapeuticAreas ?? [];
-  const exploreUrl = userInterests.length > 0
-    ? `/api/browse/assets?limit=16&${userInterests.map(a => `therapyAreas[]=${encodeURIComponent(a)}`).join("&")}`
-    : "/api/browse/assets?limit=16";
+
+  const featuredInterest = useMemo(() => {
+    if (userInterests.length === 0) return null;
+    return userInterests[Math.floor(Math.random() * userInterests.length)];
+  }, []); // intentionally empty: pick once per mount
+
+  const exploreUrl = featuredInterest
+    ? `/api/browse/assets?limit=8&sortBy=completeness&therapyAreas[]=${encodeURIComponent(featuredInterest)}`
+    : "/api/browse/assets?limit=8&sortBy=completeness";
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
     queryKey: [exploreUrl],
     staleTime: 10 * 60 * 1000,
   });
 
+  const statusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string | null }) => {
+      await apiRequest("PATCH", `/api/saved-assets/${id}/status`, { status });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: () => {
+      toast({ title: "Failed to update status", variant: "destructive" });
+    },
+  });
+
+  function cycleStatus(asset: SavedAssetRow) {
+    const idx = STATUS_CYCLE.indexOf(asset.status ?? null);
+    const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length] ?? null;
+    statusMutation.mutate({ id: asset.id, status: next });
+  }
+
   const stats = data?.stats;
   const therapyAreaCount = data?.therapyAreaCount ?? 0;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
-  const weeklyNew = data?.weeklyNew ?? 0;
-  const recentAssets = data?.recentAssets ?? [];
-  const deltaTotal = deltaData?.newAssets.total ?? 0;
-  const deltaInstitutions = deltaData?.newAssets.byInstitution ?? [];
-  const exploreAssets = exploreData?.assets ?? [];
 
   const categoryAreas = (stats?.byTherapyArea && stats.byTherapyArea.length > 0)
     ? stats.byTherapyArea
-    : (stats?.byModality ?? []).map((m) => ({ area: m.modality, count: m.count }));
+    : [];
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -248,24 +314,16 @@ export default function IndustryDashboard() {
 
   const firstName = profile.userName?.trim().split(/\s+/)[0] ?? "";
 
-  const dynamicSubtitle = !deltaLoading && deltaTotal > 0
+  const deltaTotal = deltaData?.newAssets.total ?? 0;
+
+  const rawSubtitle = deltaTotal > 0
     ? `${deltaTotal.toLocaleString()} new asset${deltaTotal !== 1 ? "s" : ""} since your last visit`
     : (profile.companyName || "Your TTO asset intelligence dashboard");
+  const dynamicSubtitle = stripEmDashes(rawSubtitle);
 
-  const matchedAssets = userInterests.length > 0
-    ? recentAssets.filter((a) => {
-        const ind = (a.indication ?? "").toLowerCase();
-        const cats = Array.isArray(a.categories) ? a.categories.join(" ").toLowerCase() : "";
-        return userInterests.some((interest) => {
-          const lc = interest.toLowerCase();
-          return ind.includes(lc) || cats.includes(lc);
-        });
-      })
-    : [];
-
-  const { slice: assetWindow, faded: assetsFaded } = useWindowTicker(recentAssets, TICKER_WINDOW, TICKER_MS);
-  const { slice: instWindow, faded: instsFaded } = useWindowTicker(deltaInstitutions, TICKER_WINDOW, TICKER_MS);
-  const { slice: exploreWindow, faded: exploreFaded } = useWindowTicker(exploreAssets, TICKER_WINDOW, TICKER_MS);
+  const newArrivals = newArrivalsData?.assets ?? [];
+  const exploreAssets = exploreData?.assets ?? [];
+  const recentSaved = (recentSavedData?.assets ?? []).slice(0, 5) as SavedAssetRow[];
 
   return (
     <div className="min-h-full relative overflow-hidden">
@@ -294,7 +352,7 @@ export default function IndustryDashboard() {
               ) : "!"}
             </h1>
             <p className="text-sm text-muted-foreground" data-testid="dashboard-subtitle">
-              {deltaLoading ? (profile.companyName || "Your TTO asset intelligence dashboard") : dynamicSubtitle}
+              {deltaLoading ? stripEmDashes(profile.companyName || "Your TTO asset intelligence dashboard") : dynamicSubtitle}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -311,53 +369,66 @@ export default function IndustryDashboard() {
           </div>
         </div>
 
-        {/* ── SECTION 2: SINCE YOUR LAST VISIT ── */}
+        {/* ── SECTION 2: SIGNAL ROW ── */}
         <div
           className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
           style={{
             background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
             animation: "dash-fade-up 400ms ease 80ms both",
           }}
-          data-testid="dashboard-since-last-visit"
+          data-testid="dashboard-signal-row"
         >
-          <SectionHeader title="Since Your Last Visit" icon={Clock} />
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-            {/* ── New Assets panel ── */}
-            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recent-assets">
+            {/* ── Left: New Assets (60%) ── */}
+            <div className="lg:col-span-3 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-new-assets">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
+                  <Newspaper className="w-4 h-4 text-primary" />
                   <span className="text-sm font-semibold text-foreground">New Assets</span>
                 </div>
-                <Link href="/scout">
-                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                    Explore all <ArrowRight className="w-3 h-3" />
-                  </span>
-                </Link>
-              </div>
-
-              <div
-                className="space-y-1.5"
-                style={{ opacity: assetsFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
-              >
-                {isLoading ? (
-                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)
-                ) : recentAssets.length === 0 ? (
-                  <div className="py-6 text-center space-y-2">
-                    <p className="text-xs text-muted-foreground">No assets indexed yet.</p>
-                    <button onClick={() => navigate("/scout")} className="text-xs text-primary hover:underline">
-                      Search in Scout
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+                    <button
+                      onClick={() => setNewAssetsWindow("7d")}
+                      className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${newAssetsWindow === "7d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-7d"
+                    >
+                      7d
+                    </button>
+                    <button
+                      onClick={() => setNewAssetsWindow("30d")}
+                      className={`text-[10px] px-2 py-0.5 rounded-md transition-colors ${newAssetsWindow === "30d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid="toggle-30d"
+                    >
+                      30d
                     </button>
                   </div>
+                  <Link href="/industry/new-arrivals">
+                    <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                      See all <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                {newArrivalsLoading ? (
+                  [1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-11 rounded-lg" />)
+                ) : newArrivals.length === 0 ? (
+                  <div className="py-6 text-center space-y-2">
+                    <p className="text-xs text-muted-foreground">No new assets in the last {newAssetsWindow === "7d" ? "7 days" : "30 days"}.</p>
+                    <Link href="/industry/new-arrivals">
+                      <span className="text-xs text-primary hover:underline cursor-pointer">View all arrivals</span>
+                    </Link>
+                  </div>
                 ) : (
-                  assetWindow.map((asset) => (
+                  newArrivals.map((asset) => (
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
                       className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                      data-testid={`dashboard-asset-${asset.id}`}
+                      data-testid={`dashboard-new-asset-${asset.id}`}
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
@@ -380,108 +451,47 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!isLoading && recentAssets.length > TICKER_WINDOW && (
+              {!newArrivalsLoading && newArrivalsData && newArrivalsData.total > 8 && (
                 <div className="pt-1 border-t border-border/50">
-                  <span className="text-[10px] text-muted-foreground">
-                    {recentAssets.length} recent assets — cycling every 6s
-                  </span>
+                  <Link href="/industry/new-arrivals">
+                    <span className="text-[10px] text-primary hover:underline cursor-pointer">
+                      View all {newArrivalsData.total} new assets
+                    </span>
+                  </Link>
                 </div>
               )}
             </div>
 
-            {/* ── By Institution panel ── */}
-            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-by-institution">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">By Institution</span>
-                </div>
-                <Link href="/alerts">
-                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                    Alerts <ArrowRight className="w-3 h-3" />
-                  </span>
-                </Link>
-              </div>
-
-              <div
-                className="space-y-1.5"
-                style={{ opacity: instsFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
-              >
-                {deltaLoading ? (
-                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
-                ) : deltaInstitutions.length === 0 ? (
-                  <div className="py-4 text-center space-y-2">
-                    <p className="text-xs text-muted-foreground">No new institutional activity since your last visit.</p>
-                    <Link href="/alerts">
-                      <span className="text-xs text-primary hover:underline cursor-pointer">Set up alerts</span>
-                    </Link>
-                  </div>
-                ) : (
-                  instWindow.map((inst, i) => (
-                    <button
-                      key={`${inst.institution}-${i}`}
-                      onClick={() => navigate(`/institutions/${slugifyInstitutionName(inst.institution)}`)}
-                      className="w-full text-left flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                      data-testid={`dashboard-inst-card-${i}`}
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <div className="w-5 h-5 rounded bg-primary/10 flex items-center justify-center shrink-0">
-                          <Building2 className="w-3 h-3 text-primary" />
-                        </div>
-                        <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
-                          {inst.institution}
-                        </span>
-                      </div>
-                      <span className="text-[10px] text-primary font-semibold shrink-0 tabular-nums">
-                        +{inst.count}
-                      </span>
-                    </button>
-                  ))
-                )}
-              </div>
-
-              {!deltaLoading && deltaInstitutions.length > TICKER_WINDOW && (
-                <div className="pt-1 border-t border-border/50">
-                  <span className="text-[10px] text-muted-foreground">
-                    {deltaInstitutions.length} active institutions — cycling
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* ── Explore for You panel ── */}
-            <div className="rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-explore-for-you">
+            {/* ── Right: Recommended for You (40%) ── */}
+            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recommended">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Compass className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Explore for You</span>
+                  <span className="text-sm font-semibold text-foreground">Recommended</span>
                 </div>
-                <Link href="/scout">
-                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                    Scout <ArrowRight className="w-3 h-3" />
-                  </span>
-                </Link>
+                {featuredInterest && (
+                  <Link href={`/scout?draft=${encodeURIComponent(featuredInterest)}`}>
+                    <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                      Scout <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </Link>
+                )}
               </div>
 
-              {userInterests.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {userInterests.slice(0, 3).map((area) => (
-                    <span key={area} className="text-[9px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize">
-                      {area}
-                    </span>
-                  ))}
-                  {userInterests.length > 3 && (
-                    <span className="text-[9px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border capitalize">
-                      +{userInterests.length - 3}
-                    </span>
-                  )}
+              {featuredInterest ? (
+                <div className="flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3 text-primary/60" />
+                  <span className="text-[10px] text-muted-foreground">
+                    Featuring: <span className="text-primary font-medium capitalize">{featuredInterest}</span>
+                  </span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground">High-quality assets from the library</span>
                 </div>
               )}
 
-              <div
-                className="space-y-1.5"
-                style={{ opacity: exploreFaded ? 0 : 1, transition: `opacity ${TICKER_FADE_MS}ms ease` }}
-              >
+              <div className="space-y-1.5">
                 {exploreLoading ? (
                   [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
                 ) : exploreAssets.length === 0 ? (
@@ -496,7 +506,7 @@ export default function IndustryDashboard() {
                     )}
                   </div>
                 ) : (
-                  exploreWindow.map((asset) => (
+                  exploreAssets.map((asset) => (
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
@@ -509,9 +519,9 @@ export default function IndustryDashboard() {
                         </p>
                         <p className="text-[10px] text-muted-foreground truncate mt-0.5">{asset.institution}</p>
                       </div>
-                      {asset.modality && asset.modality !== "unknown" && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/15 capitalize shrink-0 hidden sm:inline-block">
-                          {asset.modality}
+                      {asset.completenessScore !== null && asset.completenessScore > 0 && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 tabular-nums shrink-0 hidden sm:inline-block">
+                          {Math.round(asset.completenessScore * 100)}%
                         </span>
                       )}
                     </button>
@@ -519,76 +529,18 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {!exploreLoading && exploreAssets.length > TICKER_WINDOW && (
+              {userInterests.length === 0 && (
                 <div className="pt-1 border-t border-border/50">
-                  <span className="text-[10px] text-muted-foreground">
-                    {exploreAssets.length} assets — cycling every 6s
-                  </span>
+                  <Link href="/industry/profile">
+                    <span className="text-[10px] text-primary hover:underline cursor-pointer">
+                      Add interests to personalize
+                    </span>
+                  </Link>
                 </div>
               )}
             </div>
 
           </div>
-
-          {/* Matched to Your Interests */}
-          {userInterests.length === 0 ? (
-            <div
-              className="flex items-center justify-between gap-3 px-4 py-3 rounded-xl border border-border/60 bg-card"
-              data-testid="dashboard-interests-nudge"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Sparkles className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-                <p className="text-xs text-muted-foreground">
-                  Add therapeutic interest areas to see assets matched to your focus.
-                </p>
-              </div>
-              <Link href="/industry/profile">
-                <span className="text-[11px] text-primary hover:underline flex items-center gap-1 cursor-pointer shrink-0">
-                  Set interests <ArrowRight className="w-3 h-3" />
-                </span>
-              </Link>
-            </div>
-          ) : matchedAssets.length > 0 ? (
-            <div
-              className="rounded-xl border border-border bg-card p-5 space-y-3"
-              data-testid="dashboard-matched-interests"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Matched to Your Interests</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Link href="/industry/profile">
-                    <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer ml-1">
-                      Edit <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </Link>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                {matchedAssets.slice(0, 6).map((asset) => (
-                  <button
-                    key={asset.id}
-                    onClick={() => navigate(`/asset/${asset.id}`)}
-                    className="text-left flex flex-col gap-1 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50 hover:border-primary/30 hover:bg-primary/5 transition-all group"
-                    data-testid={`dashboard-matched-asset-${asset.id}`}
-                  >
-                    <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors line-clamp-1">
-                      {asset.assetName}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground truncate">{asset.institution}</p>
-                    {asset.indication && (
-                      <span className="text-[9px] px-1 py-0.5 rounded-full bg-primary/10 text-primary capitalize w-fit">
-                        {asset.indication}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
 
         {/* ── SECTION 3: CONTINUE YOUR WORK ── */}
@@ -660,7 +612,6 @@ export default function IndustryDashboard() {
             <div className="space-y-3">
               <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground mb-2">Actions</p>
 
-              {/* Delta alert chip */}
               {!deltaLoading && deltaTotal > 0 && (
                 <Link href="/alerts">
                   <div
@@ -678,7 +629,6 @@ export default function IndustryDashboard() {
                 </Link>
               )}
 
-              {/* Pipeline stats — 3-box centered grid */}
               {!pipelineLoading && (
                 <div className="grid grid-cols-3 gap-2">
                   <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
@@ -693,13 +643,6 @@ export default function IndustryDashboard() {
                     <span className="text-[10px] text-muted-foreground">Pipelines</span>
                     <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
                   </div>
-                </div>
-              )}
-
-              {weeklyNew > 0 && weeklyNew < (stats?.total ?? 1) * 0.8 && (
-                <div className="flex items-center justify-between px-3 py-2 rounded-lg border border-primary/20 bg-primary/5" data-testid="pipeline-stat-weekly">
-                  <span className="text-xs text-primary font-medium">New this week</span>
-                  <span className="text-sm font-bold text-primary tabular-nums">+{weeklyNew}</span>
                 </div>
               )}
 
@@ -720,9 +663,43 @@ export default function IndustryDashboard() {
               </Link>
             </div>
           </div>
+
+          {/* Recently Saved Assets with Status */}
+          {!recentSavedLoading && recentSaved.length > 0 && (
+            <div className="pt-4 border-t border-border/50 space-y-2" data-testid="dashboard-recent-saved">
+              <div className="flex items-center justify-between">
+                <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground">Recently Saved</p>
+                <Link href="/assets">
+                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                    All assets <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
+              </div>
+              <div className="space-y-1.5">
+                {recentSaved.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="flex items-center justify-between gap-3 px-3 py-2 rounded-lg border border-border/60 bg-background/50"
+                    data-testid={`recent-saved-${asset.id}`}
+                  >
+                    <button
+                      onClick={() => navigate(`/asset/${asset.id}`)}
+                      className="min-w-0 flex-1 text-left group"
+                    >
+                      <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                        {asset.assetName}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/60 mt-0.5">{timeAgo(asset.savedAt)}</p>
+                    </button>
+                    <StatusBadge status={asset.status ?? null} onCycle={() => cycleStatus(asset)} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* ── SECTION 4: PLATFORM SNAPSHOT ── */}
+        {/* ── SECTION 4: NETWORK COVERAGE ── */}
         <div
           className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
           style={{
@@ -751,15 +728,16 @@ export default function IndustryDashboard() {
                 icon={Building2}
                 label="Institutions"
                 value={institutionCount}
-                sub="universities & TTOs"
+                sub="universities and TTOs"
                 iconColor="text-blue-500"
                 bgColor="bg-blue-500/10"
+                href="/institutions"
               />
               <KpiCard
                 icon={FlaskConical}
                 label="Therapy Areas"
-                value={therapyAreaCount > 0 ? therapyAreaCount : (categoryAreas.length || 0)}
-                sub="indications covered"
+                value={therapyAreaCount}
+                sub="across taxonomy"
                 iconColor="text-violet-500"
                 bgColor="bg-violet-500/10"
               />

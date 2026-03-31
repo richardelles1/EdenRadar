@@ -89,6 +89,7 @@ export const savedAssets = pgTable("saved_assets", {
   sourceName: text("source_name").notNull().default("pubmed"),
   sourceUrl: text("source_url"),
   pmid: text("pmid"),
+  status: text("status"),
   savedAt: timestamp("saved_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
