@@ -74,7 +74,8 @@ function getInstitutionQueue(): string[] {
 
 function getScraperType(institution: string): "playwright" | "http" | "api" {
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
-  return scraper?.scraperType ?? "http";
+  const t = scraper?.scraperType ?? "http";
+  return (t === "stub" ? "http" : t) as "playwright" | "http" | "api";
 }
 
 function isInBackoff(institution: string): boolean {

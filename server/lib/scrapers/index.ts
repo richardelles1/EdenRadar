@@ -315,6 +315,11 @@ import {
   uoguelphScraper,
   ontarioTechScraper,
   versitiScraper,
+  // Task #280 — Institut Curie, Einstein, OHSU, MGB
+  institutCurieScraper,
+  einsteinScraper,
+  ohsuScraper,
+  mgbScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -438,6 +443,9 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "University of Salford",
   // Task #279 in-part API
   "University of Guelph",
+  // Task #280 in-part API
+  "Institut Curie",
+  "Albert Einstein College of Medicine",
   // Task #120/#134 Flintbox
   "University of Birmingham",
   "University of Dundee",
@@ -825,6 +833,11 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   uoguelphScraper,                // University of Guelph — In-Part "uoguelph" — 26 techs confirmed
   ontarioTechScraper,             // Ontario Tech University — HTML accordion — 13 techs confirmed
   versitiScraper,                 // Versiti Blood Research Institute — stub (landing page, no enumerable catalog)
+  // ── Task #280 — Institut Curie, Albert Einstein, OHSU, MGB ────────────────
+  institutCurieScraper,           // Institut Curie — In-Part "institutcurie" — 42 techs confirmed
+  einsteinScraper,                // Albert Einstein College of Medicine — In-Part "einsteinmed" — 96 techs confirmed
+  ohsuScraper,                    // OHSU — Drupal 9 bespoke 2-level HTTP scraper — 47 categories
+  mgbScraper,                     // Mass General Brigham — AEM site, 10 featured-licensing pages
   // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────
   // Pure-HTTP SRS API: POST /SRS/Sessions/AuthenticateGuest + DataAdapters/Query + Results/Values
   // Probe validated 2026-03-31: all 11 labs confirmed ≥1 result via live direct API call.

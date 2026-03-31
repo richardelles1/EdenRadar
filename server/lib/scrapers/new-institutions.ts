@@ -8,6 +8,7 @@ import type { InstitutionScraper, ScrapedListing } from "./types";
 function createStubScraper(institution: string, reason = "no public TTO listing portal"): InstitutionScraper {
   return {
     institution,
+    scraperType: "stub",
     async scrape(): Promise<ScrapedListing[]> {
       console.log(`[scraper] ${institution}: skipped — ${reason}`);
       return [];
@@ -6197,3 +6198,249 @@ export const versitiScraper = createStubScraper(
   "Versiti Blood Research Institute",
   "TTO landing page only — no enumerable catalog; contact techtransfer@versiti.org for portfolio"
 );
+
+// ── Task #280 — Institut Curie, Albert Einstein, OHSU, Mass General Brigham ──
+
+// ── 1. Institut Curie — In-Part "institutcurie" — 42 technologies ─────────────
+// Probe validated 2026-03-31: In-Part API pagination.last=9, 42 listings confirmed.
+// Strong oncology, structural biology, cell biology portfolio.
+export const institutCurieScraper = createInPartScraper("institutcurie", "Institut Curie");
+
+// ── 2. Albert Einstein College of Medicine — In-Part "einsteinmed" — 96 technologies ──
+// Probe validated 2026-03-31: In-Part API pagination.last=20, 96 listings confirmed.
+// Strong immunotherapy, oncology, IBD, cardiovascular, infectious disease portfolio.
+export const einsteinScraper = createInPartScraper("einsteinmed", "Albert Einstein College of Medicine");
+
+// ── 3. OHSU (Oregon Health & Science University) ─────────────────────────────
+// Probe validated 2026-03-31: apps.ohsu.edu/research/tech-portal — Drupal 9 portal
+// 47 categories, each category page links to /technology/view/{id} detail pages.
+// Title extraction: <h5>OHSU # {id} &#8212; {actual title}</h5> (em-dash delimiter)
+// Description: paragraphs between "Technology Overview" h2 and "Inventors:" h4.
+// Plain-HTTP scraper, no Playwright needed.
+
+async function fetchOhsuTechDetail(
+  id: string,
+  institution: string
+): Promise<ScrapedListing | null> {
+  const url = `https://apps.ohsu.edu/research/tech-portal/technology/view/${id}`;
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+
+    // Title is in an <h4> with format: OHSU # 2808-A &#8212; Actual Title Here
+    const h4match = html.match(/<h4[^>]*>([\s\S]+?)<\/h4>/i);
+    if (!h4match) return null;
+    const rawH4 = h4match[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+    // Split on em-dash variants: &#8212; — –
+    const parts = rawH4.split(/&#8212;|&#x2014;|—|–/);
+    const title = (parts.length >= 2 ? parts.slice(1).join(" — ") : rawH4).trim();
+    if (!title || title.length < 3) return null;
+
+    // Description: text between "Technology Overview" and "Inventors:"
+    const overviewMatch = html.match(/Technology Overview[\s\S]*?(<p[\s\S]+?)(?:<h4|<div\s+class="field--label)/i);
+    let description = "";
+    if (overviewMatch) {
+      const paraMatches = [...overviewMatch[1].matchAll(/<p[^>]*>([\s\S]+?)<\/p>/gi)];
+      const paras = paraMatches
+        .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").trim())
+        .filter((p) => p.length > 30 && !p.includes("@") && !/^\s*&nbsp;\s*$/.test(p));
+      description = paras.slice(0, 3).join(" ").slice(0, 800);
+    }
+
+    return { title, description, url, institution };
+  } catch {
+    return null;
+  }
+}
+
+export const ohsuScraper: InstitutionScraper = {
+  institution: "OHSU",
+  scraperType: "http",
+
+  async probe(maxResults = 3): Promise<ScrapedListing[]> {
+    const BASE = "https://apps.ohsu.edu/research/tech-portal";
+    try {
+      const catRes = await fetch(`${BASE}/category`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!catRes.ok) return [];
+      const catHtml = await catRes.text();
+      const catMatch = catHtml.match(/href="https?:\/\/apps\.ohsu\.edu\/research\/tech-portal\/technology\/category\/(\d+)"/);
+      if (!catMatch) return [];
+      const techRes = await fetch(`${BASE}/technology/category/${catMatch[1]}`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!techRes.ok) return [];
+      const techHtml = await techRes.text();
+      const viewRe = /href="https?:\/\/apps\.ohsu\.edu\/research\/tech-portal\/technology\/view\/(\d+)"/g;
+      const ids: string[] = [];
+      let m: RegExpExecArray | null;
+      while ((m = viewRe.exec(techHtml)) !== null) {
+        if (!ids.includes(m[1])) ids.push(m[1]);
+        if (ids.length >= maxResults * 2) break;
+      }
+      const results: ScrapedListing[] = [];
+      for (const id of ids) {
+        if (results.length >= maxResults) break;
+        const r = await fetchOhsuTechDetail(id, "OHSU");
+        if (r) results.push(r);
+      }
+      return results;
+    } catch {
+      return [];
+    }
+  },
+
+  async scrape(): Promise<ScrapedListing[]> {
+    const BASE = "https://apps.ohsu.edu/research/tech-portal";
+    const INST = "OHSU";
+    try {
+      // Step 1: collect all category IDs
+      const catRes = await fetch(`${BASE}/category`, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!catRes.ok) {
+        console.warn(`[scraper] ${INST}: category listing HTTP ${catRes.status}`);
+        return [];
+      }
+      const catHtml = await catRes.text();
+      const catRe = /href="https?:\/\/apps\.ohsu\.edu\/research\/tech-portal\/technology\/category\/(\d+)"/g;
+      const categoryIds: string[] = [];
+      let cm: RegExpExecArray | null;
+      while ((cm = catRe.exec(catHtml)) !== null) {
+        if (!categoryIds.includes(cm[1])) categoryIds.push(cm[1]);
+      }
+      console.log(`[scraper] ${INST}: found ${categoryIds.length} categories`);
+
+      // Step 2: collect unique tech view IDs across all categories
+      const techIds = new Set<string>();
+      for (const catId of categoryIds) {
+        try {
+          const pgRes = await fetch(`${BASE}/technology/category/${catId}`, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!pgRes.ok) continue;
+          const pgHtml = await pgRes.text();
+          const viewRe = /href="https?:\/\/apps\.ohsu\.edu\/research\/tech-portal\/technology\/view\/(\d+)"/g;
+          let vm: RegExpExecArray | null;
+          while ((vm = viewRe.exec(pgHtml)) !== null) {
+            techIds.add(vm[1]);
+          }
+        } catch {
+          continue;
+        }
+      }
+      console.log(`[scraper] ${INST}: found ${techIds.size} unique tech pages across ${categoryIds.length} categories`);
+
+      // Step 3: fetch each unique tech detail page with concurrency 5
+      const idArray = Array.from(techIds);
+      const results: ScrapedListing[] = [];
+      const CONCURRENCY = 5;
+      let idx = 0;
+
+      async function worker() {
+        while (idx < idArray.length) {
+          const id = idArray[idx++];
+          const r = await fetchOhsuTechDetail(id, INST);
+          if (r) results.push(r);
+        }
+      }
+
+      const workers = Array.from({ length: Math.min(CONCURRENCY, idArray.length) }, worker);
+      await Promise.all(workers);
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (${idArray.length} pages fetched)`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
+      return [];
+    }
+  },
+};
+
+// ── 4. Mass General Brigham Innovation — Featured Licensing ──────────────────
+// Probe validated 2026-03-31: 10 technologies on /for-industry/featured-licensing
+// AEM site; each tech has a rich detail page with title (h1) and description paragraphs.
+// "Featured Licensing" is a curated selection (not a full catalog) from MGH + BWH + others.
+export const mgbScraper: InstitutionScraper = {
+  institution: "Mass General Brigham",
+  scraperType: "http",
+
+  async scrape(): Promise<ScrapedListing[]> {
+    const BASE = "https://www.massgeneralbrigham.org";
+    const LISTING = `${BASE}/en/research-and-innovation/innovation/for-industry/featured-licensing`;
+    const INST = "Mass General Brigham";
+    try {
+      // Step 1: fetch listing page and extract slug hrefs
+      const listRes = await fetch(LISTING, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!listRes.ok) {
+        console.warn(`[scraper] ${INST}: listing page HTTP ${listRes.status}`);
+        return [];
+      }
+      const listHtml = await listRes.text();
+      const slugRe = /href="(\/en\/research-and-innovation\/innovation\/for-industry\/featured-licensing\/[^"]+)"/g;
+      const slugs: string[] = [];
+      let sm: RegExpExecArray | null;
+      while ((sm = slugRe.exec(listHtml)) !== null) {
+        if (!slugs.includes(sm[1])) slugs.push(sm[1]);
+      }
+      console.log(`[scraper] ${INST}: found ${slugs.length} featured technology slugs`);
+
+      // Step 2: fetch each detail page for title and description
+      const results: ScrapedListing[] = [];
+      for (const slug of slugs) {
+        try {
+          const url = `${BASE}${slug}`;
+          const detailRes = await fetch(url, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+            signal: AbortSignal.timeout(15_000),
+          });
+          if (!detailRes.ok) continue;
+          const html = await detailRes.text();
+
+          // Title: first <h1> on the page (the technology name)
+          const h1match = html.match(/<h1[^>]*>([\s\S]+?)<\/h1>/i);
+          if (!h1match) continue;
+          const title = h1match[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+          if (!title || title.length < 5) continue;
+
+          // Description: first substantive paragraphs (skip nav/footer boilerplate)
+          const paraMatches = [...html.matchAll(/<p[^>]*>([\s\S]+?)<\/p>/gi)];
+          const paras = paraMatches
+            .map((m) => m[1].replace(/<[^>]+>/g, "").replace(/\s+/g, " ").replace(/&amp;/g, "&").replace(/&nbsp;/g, " ").trim())
+            .filter((p) =>
+              p.length > 60 &&
+              !p.includes("cookie") &&
+              !p.includes("©") &&
+              !p.includes("Mass General Brigham is an equal") &&
+              !p.includes("Oregon Health")
+            );
+          const description = paras.slice(0, 3).join(" ").slice(0, 800);
+
+          results.push({ title, description, url, institution: INST });
+        } catch {
+          continue;
+        }
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (featured-licensing detail pages)`);
+      return results;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
+      return [];
+    }
+  },
+};

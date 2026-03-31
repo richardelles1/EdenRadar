@@ -344,7 +344,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
   const scraper = ALL_SCRAPERS.find((s) => s.institution === institutionName);
   if (!scraper) throw new Error(`No scraper found for institution: ${institutionName}`);
 
-  const scraperType = scraper.scraperType ?? "http";
+  const scraperType = (scraper.scraperType === "stub" ? "http" : (scraper.scraperType ?? "http")) as "playwright" | "http" | "api";
 
   if (!alreadyLocked) {
     if (!tryAcquireSyncLock(institutionName, scraperType)) {

@@ -1305,7 +1305,7 @@ export async function registerRoutes(
       const pw = req.query.pw ?? req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const allInstitutionNames = ALL_SCRAPERS.map((s) => s.institution);
+      const allInstitutionNames = ALL_SCRAPERS.filter((s) => s.scraperType !== "stub").map((s) => s.institution);
 
       const [healthData, scraperHealthMap] = await Promise.all([
         storage.getCollectorHealthData(),
@@ -1608,7 +1608,7 @@ export async function registerRoutes(
       const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
       if (!scraper) return res.status(404).json({ error: `No scraper found for: ${institution}` });
 
-      const scraperType = scraper.scraperType ?? "http";
+      const scraperType = (scraper.scraperType === "stub" ? "http" : (scraper.scraperType ?? "http")) as "playwright" | "http" | "api";
       if (!tryAcquireSyncLock(institution, scraperType)) {
         return res.status(409).json({ error: `Sync already running or lock unavailable for ${getSyncRunningFor()}` });
       }
