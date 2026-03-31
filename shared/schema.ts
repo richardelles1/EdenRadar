@@ -93,9 +93,13 @@ export const savedAssets = pgTable("saved_assets", {
   savedAt: timestamp("saved_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
+const SAVED_ASSET_STATUSES = ["viewing", "evaluating", "contacted"] as const;
+export const savedAssetStatusEnum = z.enum(SAVED_ASSET_STATUSES).nullable().optional();
 export const insertSavedAssetSchema = createInsertSchema(savedAssets).omit({
   id: true,
   savedAt: true,
+}).extend({
+  status: z.enum(SAVED_ASSET_STATUSES).nullable().optional(),
 });
 export type InsertSavedAsset = z.infer<typeof insertSavedAssetSchema>;
 export type SavedAsset = typeof savedAssets.$inferSelect;

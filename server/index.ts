@@ -131,6 +131,11 @@ app.use((req, res, next) => {
   // ── Startup migrations: saved_assets status column ───────────────────────
   try {
     await db.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
+    await db.execute(sql`
+      ALTER TABLE saved_assets
+      ADD CONSTRAINT IF NOT EXISTS saved_assets_status_check
+      CHECK (status IS NULL OR status IN ('viewing', 'evaluating', 'contacted'))
+    `);
     log("[startup] saved_assets status column ready", "startup");
   } catch (err: any) {
     log(`[startup] saved_assets status column migration failed: ${err?.message}`, "startup");

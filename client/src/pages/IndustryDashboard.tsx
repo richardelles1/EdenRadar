@@ -406,7 +406,7 @@ export default function IndustryDashboard() {
                   </div>
                   <Link href="/industry/new-arrivals">
                     <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                      See all <ArrowRight className="w-3 h-3" />
+                      See all new arrivals <ArrowRight className="w-3 h-3" />
                     </span>
                   </Link>
                 </div>
@@ -455,7 +455,7 @@ export default function IndustryDashboard() {
                 <div className="pt-1 border-t border-border/50">
                   <Link href="/industry/new-arrivals">
                     <span className="text-[10px] text-primary hover:underline cursor-pointer">
-                      View all {newArrivalsData.total} new assets
+                      See all new arrivals ({newArrivalsData.total})
                     </span>
                   </Link>
                 </div>
