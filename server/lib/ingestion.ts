@@ -459,7 +459,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     let relevantCount = 0;
 
     if (newCount > 0) {
-      const toEnrich = newRows.map((r, i) => ({ id: i, assetName: r.assetName }));
+      const toEnrich = newRows.map((r, i) => ({ id: i, assetName: r.assetName, summary: r.summary }));
       const enrichResults = await enrichBatch(toEnrich, 30);
 
       const enrichUpdates: Array<{ fingerprint: string; enrichment: { biotechRelevant: boolean; target: string; modality: string; indication: string; developmentStage: string } }> = [];

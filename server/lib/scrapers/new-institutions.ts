@@ -334,7 +334,7 @@ export const sluScraper = createTechPublisherScraper(
 
 export const ucDavisScraper = createUCTechTransferScraper("D", "UC Davis");
 export const ucIrvineScraper = createUCTechTransferScraper("I", "UC Irvine");
-export const ucRiversideScraper = createUCTechTransferScraper("R", "UC Riverside");
+export const ucRiversideScraper = createUCTechTransferScraper("RV", "UC Riverside");
 export const ucSantaBarbaraScraper = createUCTechTransferScraper("SB", "UC Santa Barbara");
 export const ucSantaCruzScraper = createUCTechTransferScraper("SC", "UC Santa Cruz");
 
