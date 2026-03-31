@@ -929,6 +929,7 @@ export const tamuScraper = createFlintboxScraper(
   "Texas A&M University"
 );
 export const riceScraper = createInPartScraper("rice", "Rice University");
+export const jeffersonScraper = createInPartScraper("jefferson", "Thomas Jefferson University");
 export const uhoustonScraper: InstitutionScraper = {
   institution: "University of Houston",
   async scrape(): Promise<ScrapedListing[]> {
@@ -1437,7 +1438,10 @@ export const ufScraper = createTechPublisherScraper(
   { selector: "a[href*='/tech/']", maxPg: 80 }
 );
 
-export const utepScraper = createStubScraper("University of Texas El Paso", "tradespacemarket.com — React SPA, no public API found");
+export const utepScraper = createStubScraper(
+  "University of Texas El Paso",
+  "tradespacemarket.com (subdomain: utep) — can be upgraded to createTradescapeScraper('utep', ...) when needed"
+);
 
 // ── New platform-based scrapers (Task #100, March 2026) ─────────────────────
 

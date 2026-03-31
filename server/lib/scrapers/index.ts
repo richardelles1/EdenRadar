@@ -39,6 +39,7 @@ import { ucoloradoScraper } from "./ucolorado";
 import { emoryScraper } from "./emory";
 import { mayoScraper } from "./mayo";
 import { osuScraper } from "./osu";
+import { gladstoneScraper } from "./tradespace";
 import {
   unswScraper,
   loughboroughScraper,
@@ -148,6 +149,7 @@ import {
   ucfScraper,
   fiuScraper,
   riceScraper,
+  jeffersonScraper,
   baylorScraper,
   usuScraper,
   auburnScraper,
@@ -590,6 +592,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ucfScraper,
   fiuScraper,
   riceScraper,
+  jeffersonScraper,               // Thomas Jefferson University — in-part API "jefferson"
   // baylorScraper replaced by explicit bcmScraper in Task #112 section below — same InPart "bcm" subdomain
   usuScraper,
   auburnScraper,
@@ -767,6 +770,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ornlScraper,                    // Oak Ridge National Laboratory — proxy-routed — ~120+ techs
   argonneScraper,                 // Argonne National Laboratory — proxy-routed — ~200+ techs
   pnnlScraper,                    // Pacific Northwest National Laboratory — proxy-routed — ~150+ techs
+  // ── Tradespace (Task #271) ─────────────────────────────────────────────────
+  gladstoneScraper,               // Gladstone Institutes — Tradespace Playwright — ~60+ techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that
