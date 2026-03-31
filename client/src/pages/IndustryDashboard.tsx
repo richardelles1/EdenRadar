@@ -429,7 +429,10 @@ export default function IndustryDashboard() {
           }}
           data-testid="dashboard-welcome-overlay"
         >
-          <div className="flex flex-col items-center gap-4">
+          <div
+            className="flex flex-col items-center gap-4"
+            style={{ animation: "dash-fade-up 0.4s ease-out both" }}
+          >
             <div className="w-14 h-14 rounded-2xl bg-emerald-600 flex items-center justify-center shadow-lg">
               <Radar className="w-7 h-7 text-white" />
             </div>
@@ -498,7 +501,7 @@ export default function IndustryDashboard() {
                   <span className="text-sm font-semibold text-foreground">New Assets</span>
                   {freshnessText && (
                     <span className="text-[10px] text-muted-foreground/50 tabular-nums hidden sm:inline">
-                      {freshnessText}
+                      Updated {freshnessText}
                     </span>
                   )}
                 </div>
