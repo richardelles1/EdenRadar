@@ -237,13 +237,15 @@ export default function IndustryDashboard() {
   const qc = useQueryClient();
   const { toast } = useToast();
 
-  const [showWelcome, setShowWelcome] = useState(true);
-  const [welcomeVisible, setWelcomeVisible] = useState(true);
+  const firstVisitThisSession = typeof window !== "undefined" && !sessionStorage.getItem("edenradar_welcomed");
+  const [showWelcome, setShowWelcome] = useState(firstVisitThisSession);
+  const [welcomeVisible, setWelcomeVisible] = useState(firstVisitThisSession);
   const minTimePassedRef = useRef(false);
   const loadingDoneRef = useRef(false);
   const dismissCalledRef = useRef(false);
 
   const [exploreOffset, setExploreOffset] = useState(0);
+  const prevExploreOffsetRef = useRef(0);
   const [exploreFade, setExploreFade] = useState(true);
   const [newAssetsPage, setNewAssetsPage] = useState(0);
   const [newAssetsFade, setNewAssetsFade] = useState(true);
@@ -341,6 +343,7 @@ export default function IndustryDashboard() {
   function triggerWelcomeDismiss() {
     if (dismissCalledRef.current) return;
     dismissCalledRef.current = true;
+    sessionStorage.setItem("edenradar_welcomed", "1");
     setWelcomeVisible(false);
     setTimeout(() => setShowWelcome(false), 800);
   }
@@ -370,7 +373,12 @@ export default function IndustryDashboard() {
       setNewAssetsFade(false);
       swapTimerRef.current = setTimeout(() => {
         if (hasEnoughExplore) {
-          setExploreOffset(Math.floor(Math.random() * allExploreAssets.length));
+          let next = Math.floor(Math.random() * allExploreAssets.length);
+          if (next === prevExploreOffsetRef.current && allExploreAssets.length > EXPLORE_PAGE_SIZE) {
+            next = (next + EXPLORE_PAGE_SIZE) % allExploreAssets.length;
+          }
+          prevExploreOffsetRef.current = next;
+          setExploreOffset(next);
         }
         if (hasEnoughNew) {
           setNewAssetsPage((p) => (p + 1) % totalNewAssetsPages);
