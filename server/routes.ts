@@ -537,9 +537,13 @@ export async function registerRoutes(
     try {
       const limit = Math.min(Math.max(1, parseInt(String(req.query.limit ?? "8"), 10) || 8), 20);
       const rows = await db.execute(sql`
-        SELECT unnest(categories) AS area, COUNT(*)::int AS n
-        FROM ingested_assets
-        WHERE categories IS NOT NULL AND array_length(categories, 1) > 0
+        SELECT area, COUNT(*)::int AS n
+        FROM (
+          SELECT unnest(categories) AS area
+          FROM ingested_assets
+          WHERE categories IS NOT NULL AND array_length(categories, 1) > 0
+        ) sub
+        WHERE area IS NOT NULL AND area != 'unknown' AND length(trim(area)) > 1
         GROUP BY area
         ORDER BY n DESC
         LIMIT ${limit}
@@ -547,7 +551,7 @@ export async function registerRoutes(
       const areas = (rows.rows as Record<string, unknown>[]).map((r) => ({
         name: String(r.area ?? ""),
         count: Number(r.n ?? 0),
-      })).filter((a) => a.name && a.name !== "unknown" && a.name.length > 1);
+      }));
       return res.json({ areas });
     } catch (err: any) {
       console.error("[dashboard/top-therapy-areas] Error:", err);

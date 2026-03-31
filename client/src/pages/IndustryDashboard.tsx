@@ -270,7 +270,7 @@ export default function IndustryDashboard() {
     staleTime: 10 * 60 * 1000,
   });
 
-  const { data: topAreasData } = useQuery<{ areas: { name: string; count: number }[] }>({
+  const { data: topAreasData, isLoading: topAreasLoading } = useQuery<{ areas: { name: string; count: number }[] }>({
     queryKey: ["/api/dashboard/top-therapy-areas?limit=6"],
     staleTime: 10 * 60 * 1000,
   });
@@ -723,7 +723,11 @@ export default function IndustryDashboard() {
 
           <div className="rounded-xl border border-border bg-card p-5" data-testid="dashboard-therapy-areas">
             <SectionHeader title="Top Therapy Areas" icon={FlaskConical} href="/scout" linkLabel="Search all" />
-            {topAreas.length === 0 ? (
+            {topAreasLoading ? (
+              <div className="flex flex-wrap gap-1.5">
+                {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
+              </div>
+            ) : topAreas.length === 0 ? (
               <p className="text-[11px] text-muted-foreground/60 italic">Categorization pending — enrich assets in Admin to populate.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
