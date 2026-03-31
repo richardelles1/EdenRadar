@@ -796,7 +796,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   bathScraper,                    // University of Bath — 4 PDF tech sheets confirmed live
   llnlScraper,                    // Lawrence Livermore National Laboratory — ~340 static HTML techs across 8 categories
   // ── Task #276 — TechLink VA ────────────────────────────────────────────────
-  techLinkVAScraper,              // TechLink (VA Technology Transfer) — ES XHR intercept Playwright — confirmed live
+  // Probe validated 2026-03-31: 1,400 VA technologies confirmed via live Playwright run.
+  // ES cluster: search-techlinkopensearch-4cwxptyr7jbbeo3btshilrp4ka.us-west-2.es.amazonaws.com
+  // If ES auth ever stops working, scraper logs warning and returns [] explicitly.
+  techLinkVAScraper,              // TechLink (VA Technology Transfer) — ES XHR intercept Playwright — 1,400 VA techs
 ];
 
 // Stamp the tier field on every scraper object at startup so that

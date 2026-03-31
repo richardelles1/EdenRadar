@@ -6003,10 +6003,12 @@ export const techLinkVAScraper: InstitutionScraper = {
         }
       };
 
-      // Capture auth header from outgoing request
+      // Capture auth header from outgoing request.
+      // Filter matches the DoD scraper exactly: URL must contain BOTH the ES domain
+      // AND "_search" — using || so a URL missing either condition is skipped.
       page.on("request", (req) => {
         const url = req.url();
-        if (!url.includes("es.amazonaws.com") && !url.includes("_search")) return;
+        if (!url.includes("es.amazonaws.com") || !url.includes("_search")) return;
         if (!esRequestUrl) {
           esRequestUrl = url;
           esAuthHeader = req.headers()["authorization"] ?? null;
@@ -6015,7 +6017,7 @@ export const techLinkVAScraper: InstitutionScraper = {
 
       page.on("response", async (resp) => {
         const url = resp.url();
-        if (!url.includes("es.amazonaws.com") && !url.includes("_search")) return;
+        if (!url.includes("es.amazonaws.com") || !url.includes("_search")) return;
         try {
           const data = await resp.json().catch(() => null);
           if (!data?.hits?.hits) return;
