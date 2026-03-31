@@ -313,6 +313,21 @@ import {
   techLinkVAScraper,
 } from "./new-institutions";
 
+// ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
+import {
+  nrelVipsScraper,
+  kcnscVipsScraper,
+  slacVipsScraper,
+  netlVipsScraper,
+  savannahRiverVipsScraper,
+  fermiVipsScraper,
+  amesLabVipsScraper,
+  jlabVipsScraper,
+  y12VipsScraper,
+  ppplVipsScraper,
+  nevadaNSSVipsScraper,
+} from "./vips";
+
 // ── Tier 2 Investigation Results (March 2026) ─────────────────────────────────
 // Institutions fully investigated — no enumerable public tech listing found:
 //
@@ -800,6 +815,21 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ES cluster: search-techlinkopensearch-4cwxptyr7jbbeo3btshilrp4ka.us-west-2.es.amazonaws.com
   // If ES auth ever stops working, scraper logs warning and returns [] explicitly.
   techLinkVAScraper,              // TechLink (VA Technology Transfer) — ES XHR intercept Playwright — 1,400 VA techs
+  // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────
+  // Pure-HTTP SRS API: POST /SRS/Sessions/AuthenticateGuest + DataAdapters/Query + Results/Values
+  // Probe validated 2026-03-31: all 11 labs confirmed ≥1 result via live direct API call.
+  // Skipped (already covered): Sandia, LLNL (ipo.llnl.gov), ORNL, LBL, PNNL, LANL, ANL, INL, BNL.
+  nrelVipsScraper,                // National Renewable Energy Laboratory — 1,535 VIPS records
+  kcnscVipsScraper,               // Kansas City National Security Campus — 392 VIPS records
+  slacVipsScraper,                // SLAC National Accelerator Laboratory — 271 VIPS records
+  netlVipsScraper,                // National Energy Technology Laboratory — 268 VIPS records
+  savannahRiverVipsScraper,       // Savannah River National Laboratory — 261+20 VIPS records
+  fermiVipsScraper,               // Fermi National Accelerator Laboratory — 185 VIPS records
+  amesLabVipsScraper,             // Ames Laboratory — 180 VIPS records
+  jlabVipsScraper,                // Thomas Jefferson National Accelerator Facility — 157 VIPS records
+  y12VipsScraper,                 // Y-12 National Security Complex — 143 VIPS records
+  ppplVipsScraper,                // Princeton Plasma Physics Laboratory — 52 VIPS records
+  nevadaNSSVipsScraper,           // Nevada National Security Site — 39 VIPS records
 ];
 
 // Stamp the tier field on every scraper object at startup so that
