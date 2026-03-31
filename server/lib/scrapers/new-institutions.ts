@@ -6166,15 +6166,23 @@ export const ontarioTechScraper: InstitutionScraper = {
         if (title.length < 3) continue;
 
         const pdfMatch = chunk.match(/href="([^"]+\.pdf)"/i);
-        const url = pdfMatch ? pdfMatch[1] : LISTING_URL;
+        let url = LISTING_URL;
+        if (pdfMatch) {
+          try {
+            url = new URL(pdfMatch[1], LISTING_URL).href;
+          } catch {
+            url = pdfMatch[1];
+          }
+        }
 
         results.push({ title, description: "", url, institution: INST });
       }
 
       console.log(`[scraper] ${INST}: ${results.length} listings (HTML accordion)`);
       return results;
-    } catch (err: any) {
-      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scraper] ${INST} failed: ${msg}`);
       return [];
     }
   },
