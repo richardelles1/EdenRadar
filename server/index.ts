@@ -132,9 +132,12 @@ app.use((req, res, next) => {
   try {
     await db.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
     await db.execute(sql`
-      ALTER TABLE saved_assets
-      ADD CONSTRAINT IF NOT EXISTS saved_assets_status_check
-      CHECK (status IS NULL OR status IN ('viewing', 'evaluating', 'contacted'))
+      DO $$ BEGIN
+        ALTER TABLE saved_assets
+        ADD CONSTRAINT saved_assets_status_check
+        CHECK (status IS NULL OR status IN ('viewing', 'evaluating', 'contacted'));
+      EXCEPTION WHEN duplicate_object THEN NULL;
+      END $$
     `);
     log("[startup] saved_assets status column ready", "startup");
   } catch (err: any) {

@@ -4326,10 +4326,16 @@ If a field cannot be determined, use "N/A".`
       const windowParam = (req.query.window as string) || "7d";
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 2000);
       const offset = parseInt(req.query.offset as string) || 0;
-      const interval = windowParam === "30d" ? "30 days" : "7 days";
+      const is30d = windowParam === "30d";
+      const intervalSql = is30d
+        ? sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '30 days'`
+        : sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '7 days'`;
+      const intervalRawSql = is30d
+        ? sql`first_seen_at >= NOW() - INTERVAL '30 days'`
+        : sql`first_seen_at >= NOW() - INTERVAL '7 days'`;
       const windowCondition = and(
         eq(ingestedAssets.relevant, true),
-        sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '${sql.raw(interval)}'`
+        intervalSql
       );
 
       // Full-window count and institution grouping (no limit)
@@ -4342,7 +4348,7 @@ If a field cannot be determined, use "N/A".`
           SELECT institution, COUNT(*)::int AS count
           FROM ingested_assets
           WHERE relevant = true
-            AND first_seen_at >= NOW() - INTERVAL ${sql.raw(`'${interval}'`)}
+            AND ${intervalRawSql}
           GROUP BY institution
           ORDER BY count DESC
         `),
