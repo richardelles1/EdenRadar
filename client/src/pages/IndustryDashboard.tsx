@@ -84,6 +84,7 @@ type BrowseAsset = {
 
 type SavedAssetRow = {
   id: number;
+  ingestedAssetId: number | null;
   assetName: string;
   pipelineListId: number | null;
   status: string | null;
@@ -683,7 +684,7 @@ export default function IndustryDashboard() {
                     data-testid={`recent-saved-${asset.id}`}
                   >
                     <button
-                      onClick={() => navigate(`/asset/${asset.id}`)}
+                      onClick={() => navigate(`/asset/${asset.ingestedAssetId ?? asset.id}`)}
                       className="min-w-0 flex-1 text-left group"
                     >
                       <p className="text-xs font-medium text-foreground group-hover:text-primary transition-colors truncate">

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import {
@@ -26,6 +26,7 @@ type NewArrivalsResponse = {
   institutions: { institution: string; count: number }[];
   total: number;
   window: string;
+  hasMore: boolean;
 };
 
 function timeAgo(dateStr: string): string {
@@ -114,20 +115,49 @@ function InstitutionGroup({
   );
 }
 
+const PAGE_SIZE = 500;
+
 export default function NewArrivals() {
   const [window, setWindow] = useState<"7d" | "30d">("7d");
+  const [accumulated, setAccumulated] = useState<NewArrivalsAsset[]>([]);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const { data, isLoading } = useQuery<NewArrivalsResponse>({
-    queryKey: [`/api/browse/new-arrivals?window=${window}&limit=1000`],
+    queryKey: [`/api/browse/new-arrivals?window=${window}&limit=${PAGE_SIZE}&offset=0`],
     staleTime: 5 * 60 * 1000,
   });
 
-  const assets = data?.assets ?? [];
-  // Use server-provided institution list (full-window counts, not limited subset)
+  // Reset accumulated assets when window changes
+  const handleWindowChange = useCallback((w: "7d" | "30d") => {
+    setWindow(w);
+    setAccumulated([]);
+  }, []);
+
+  const baseAssets = data?.assets ?? [];
   const institutions = data?.institutions ?? [];
+  const total = data?.total ?? 0;
+
+  // Combine base page with any additionally loaded pages
+  const allAssets = accumulated.length > 0 ? accumulated : baseAssets;
+  const hasMore = allAssets.length < total;
+
+  const loadMore = useCallback(async () => {
+    setLoadingMore(true);
+    const nextOffset = allAssets.length;
+    try {
+      const resp = await fetch(`/api/browse/new-arrivals?window=${window}&limit=${PAGE_SIZE}&offset=${nextOffset}`);
+      const json: NewArrivalsResponse = await resp.json();
+      const combined = [...allAssets, ...json.assets];
+      setAccumulated(combined);
+    } catch (_) {
+      // silently ignore
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [window, allAssets]);
 
   const byInstitution: Record<string, NewArrivalsAsset[]> = {};
-  for (const asset of assets) {
+  for (const asset of allAssets) {
     const key = asset.institution || "Unknown";
     if (!byInstitution[key]) byInstitution[key] = [];
     byInstitution[key].push(asset);
@@ -162,14 +192,14 @@ export default function NewArrivals() {
 
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
               <button
-                onClick={() => setWindow("7d")}
+                onClick={() => handleWindowChange("7d")}
                 className={`text-[11px] px-3 py-1 rounded-md transition-colors ${window === "7d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
                 data-testid="toggle-7d"
               >
                 Last 7 days
               </button>
               <button
-                onClick={() => setWindow("30d")}
+                onClick={() => handleWindowChange("30d")}
                 className={`text-[11px] px-3 py-1 rounded-md transition-colors ${window === "30d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
                 data-testid="toggle-30d"
               >
@@ -209,7 +239,7 @@ export default function NewArrivals() {
               </div>
             ))}
           </div>
-        ) : assets.length === 0 ? (
+        ) : allAssets.length === 0 ? (
           <div className="rounded-xl border border-border bg-card p-10 text-center space-y-3">
             <Newspaper className="w-8 h-8 text-muted-foreground/40 mx-auto" />
             <div className="space-y-1">
@@ -233,6 +263,19 @@ export default function NewArrivals() {
                 />
               );
             })}
+
+            {hasMore && (
+              <div className="pt-2 text-center">
+                <button
+                  onClick={loadMore}
+                  disabled={loadingMore}
+                  className="text-xs px-5 py-2 rounded-lg border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                  data-testid="button-load-more"
+                >
+                  {loadingMore ? "Loading..." : `Load more (${total - allAssets.length} remaining)`}
+                </button>
+              </div>
+            )}
           </div>
         )}
 
