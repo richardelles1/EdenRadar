@@ -4672,9 +4672,15 @@ export const edinburghInnovationsScraper: InstitutionScraper = {
 //   TCP connection refused from all Replit egress IPs (132.66.x.x GeoIP block).
 //   Stub kept for future VPN/residential-proxy implementation.
 //
-// Technion T3 (t3.technion.ac.il)
-//   TCP connection refused; no response on any path.
-//   Stub kept for future VPN implementation.
+// Technion – Israel Institute of Technology
+//   All portals probed — all blocked from Replit egress IPs (GeoIP / firewall):
+//     t3.technion.ac.il            — TCP 000 (connection refused on all paths)
+//     tto.technion.ac.il           — TCP 000
+//     t3research.technion.ac.il    — TCP 000
+//     technion.flintbox.com        — TCP 000 (same block as all flintbox from Replit)
+//     In-Part (subdomain "technion", "il-technion") — no portal found (404 API)
+//   Hard rule: 0 results → keep as stub. Implement if Replit egress IPs change or
+//   a residential proxy / VPN layer is added to the scraper infrastructure.
 //
 // Karolinska Institutet Innovations (ki-innovations.se)
 //   Connection refused from Replit IPs; ki.se innovation pages return 404.
