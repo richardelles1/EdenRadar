@@ -1,9 +1,8 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { OrientationHint } from "@/components/OrientationHint";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation, Link } from "wouter";
 import {
-  Search,
   Building2,
   Layers,
   ArrowRight,
@@ -11,7 +10,6 @@ import {
   FlaskConical,
   Sparkles,
   Plus,
-  BarChart3,
   BookOpen,
   Bell,
   Settings,
@@ -40,7 +38,6 @@ type DashboardData = {
   stats: PortfolioStats;
   recentSearches: Array<{ id: number; query: string; resultCount: number; searchedAt: string }>;
   recentAssets: Array<{ id: number; assetName: string; institution: string; modality: string; indication: string; categories: string[] | null; firstSeenAt: string }>;
-  therapyAreaCount: number;
   institutionCount: number;
   assetsInReview: number;
   weeklyNew: number;
@@ -264,19 +261,17 @@ export default function IndustryDashboard() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const userInterests = profile.therapeuticAreas ?? [];
-
-  const featuredInterest = useMemo(() => {
-    if (userInterests.length === 0) return null;
-    return userInterests[Math.floor(Math.random() * userInterests.length)];
-  }, []); // intentionally empty: pick once per mount
-
-  const exploreUrl = featuredInterest
-    ? `/api/browse/assets?limit=8&sortBy=completeness&therapyArea=${encodeURIComponent(featuredInterest)}`
-    : "/api/browse/assets?limit=8&sortBy=completeness";
+  const [explorePage, setExplorePage] = useState(0);
+  const [exploreFade, setExploreFade] = useState(true);
+  const exploreTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
-    queryKey: [exploreUrl],
+    queryKey: ["/api/browse/assets?limit=24&sortBy=completeness"],
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const { data: topAreasData } = useQuery<{ areas: { name: string; count: number }[] }>({
+    queryKey: ["/api/dashboard/top-therapy-areas?limit=8"],
     staleTime: 10 * 60 * 1000,
   });
 
@@ -299,12 +294,28 @@ export default function IndustryDashboard() {
   }
 
   const stats = data?.stats;
-  const therapyAreaCount = data?.therapyAreaCount ?? 0;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
 
-  const categoryAreas = (stats?.byTherapyArea && stats.byTherapyArea.length > 0)
-    ? stats.byTherapyArea
-    : [];
+  const allExploreAssets = exploreData?.assets ?? [];
+  const EXPLORE_PAGE_SIZE = 6;
+  const totalExplorePages = Math.max(1, Math.ceil(allExploreAssets.length / EXPLORE_PAGE_SIZE));
+  const visibleExploreAssets = allExploreAssets.slice(explorePage * EXPLORE_PAGE_SIZE, (explorePage + 1) * EXPLORE_PAGE_SIZE);
+
+  useEffect(() => {
+    if (allExploreAssets.length <= EXPLORE_PAGE_SIZE) return;
+    exploreTimerRef.current = setInterval(() => {
+      setExploreFade(false);
+      setTimeout(() => {
+        setExplorePage((p) => (p + 1) % totalExplorePages);
+        setExploreFade(true);
+      }, 300);
+    }, 6000);
+    return () => {
+      if (exploreTimerRef.current) clearInterval(exploreTimerRef.current);
+    };
+  }, [allExploreAssets.length, totalExplorePages]);
+
+  const topAreas = topAreasData?.areas ?? [];
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -323,7 +334,6 @@ export default function IndustryDashboard() {
   const dynamicSubtitle = stripEmDashes(rawSubtitle);
 
   const newArrivals = newArrivalsData?.assets ?? [];
-  const exploreAssets = exploreData?.assets ?? [];
   const recentSaved = (recentSavedData?.assets ?? []).slice(0, 5) as SavedAssetRow[];
 
   return (
@@ -463,51 +473,32 @@ export default function IndustryDashboard() {
               )}
             </div>
 
-            {/* ── Right: Recommended for You (40%) ── */}
-            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-recommended">
+            {/* ── Right: Explore (40%) ── */}
+            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 space-y-3" data-testid="dashboard-explore">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Compass className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Recommended</span>
+                  <span className="text-sm font-semibold text-foreground">Explore</span>
                 </div>
-                {featuredInterest && (
-                  <Link href={`/scout?q=${encodeURIComponent(featuredInterest)}`}>
-                    <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
-                      Scout <ArrowRight className="w-3 h-3" />
-                    </span>
-                  </Link>
-                )}
+                <Link href="/scout">
+                  <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer">
+                    Scout <ArrowRight className="w-3 h-3" />
+                  </span>
+                </Link>
               </div>
 
-              {featuredInterest ? (
-                <div className="flex items-center gap-1.5">
-                  <Sparkles className="w-3 h-3 text-primary/60" />
-                  <span className="text-[10px] text-muted-foreground">
-                    Featuring: <span className="text-primary font-medium capitalize">{featuredInterest}</span>
-                  </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-muted-foreground">High-quality assets from the library</span>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
+              <div
+                className="space-y-1.5"
+                style={{ opacity: exploreFade ? 1 : 0, transition: "opacity 300ms ease" }}
+              >
                 {exploreLoading ? (
-                  [1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
-                ) : exploreAssets.length === 0 ? (
-                  <div className="py-4 text-center space-y-2">
-                    <p className="text-xs text-muted-foreground">
-                      {userInterests.length > 0 ? "No matching assets indexed yet." : "No assets indexed yet."}
-                    </p>
-                    {userInterests.length === 0 && (
-                      <Link href="/industry/profile">
-                        <span className="text-xs text-primary hover:underline cursor-pointer">Set your interests</span>
-                      </Link>
-                    )}
+                  [1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-10 rounded-lg" />)
+                ) : visibleExploreAssets.length === 0 ? (
+                  <div className="py-4 text-center">
+                    <p className="text-xs text-muted-foreground">No assets indexed yet.</p>
                   </div>
                 ) : (
-                  exploreAssets.map((asset) => (
+                  visibleExploreAssets.map((asset) => (
                     <button
                       key={asset.id}
                       onClick={() => navigate(`/asset/${asset.id}`)}
@@ -522,7 +513,7 @@ export default function IndustryDashboard() {
                       </div>
                       {asset.completenessScore !== null && asset.completenessScore > 0 && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 tabular-nums shrink-0 hidden sm:inline-block">
-                          {Math.round(asset.completenessScore * 100)}%
+                          {Math.round(asset.completenessScore)}%
                         </span>
                       )}
                     </button>
@@ -530,13 +521,12 @@ export default function IndustryDashboard() {
                 )}
               </div>
 
-              {userInterests.length === 0 && (
-                <div className="pt-1 border-t border-border/50">
-                  <Link href="/industry/profile">
-                    <span className="text-[10px] text-primary hover:underline cursor-pointer">
-                      Add interests to personalize
-                    </span>
-                  </Link>
+              {allExploreAssets.length > EXPLORE_PAGE_SIZE && (
+                <div className="pt-1 border-t border-border/50 flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground tabular-nums">
+                    {explorePage + 1} / {totalExplorePages}
+                  </span>
+                  <Sparkles className="w-3 h-3 text-muted-foreground/30 animate-pulse" />
                 </div>
               )}
             </div>
@@ -656,12 +646,6 @@ export default function IndustryDashboard() {
                 />
               )}
 
-              <Link href="/scout">
-                <Button size="sm" className="w-full gap-2 mt-1" data-testid="button-start-discovery">
-                  <Search className="w-3.5 h-3.5" />
-                  Search Assets in Scout
-                </Button>
-              </Link>
             </div>
           </div>
 
@@ -712,11 +696,11 @@ export default function IndustryDashboard() {
           <SectionHeader title="Network Coverage" icon={Globe} muted />
 
           {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="dashboard-kpi-row">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-testid="dashboard-kpi-row">
               <KpiCard
                 icon={Package}
                 label="TTO Assets"
@@ -734,34 +718,28 @@ export default function IndustryDashboard() {
                 bgColor="bg-blue-500/10"
                 href="/institutions"
               />
-              <KpiCard
-                icon={FlaskConical}
-                label="Therapy Areas"
-                value={therapyAreaCount}
-                sub="across taxonomy"
-                iconColor="text-violet-500"
-                bgColor="bg-violet-500/10"
-              />
             </div>
           )}
 
-          {categoryAreas.length > 0 && (
-            <div className="rounded-xl border border-border bg-card p-5" data-testid="dashboard-therapy-areas">
-              <SectionHeader title="Browse by Therapy Area" icon={BarChart3} href="/scout" linkLabel="All areas" />
+          <div className="rounded-xl border border-border bg-card p-5" data-testid="dashboard-therapy-areas">
+            <SectionHeader title="Top Therapy Areas" icon={FlaskConical} href="/scout" linkLabel="Search all" />
+            {topAreas.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground/60 italic">Categorization pending — enrich assets in Admin to populate.</p>
+            ) : (
               <div className="flex flex-wrap gap-1.5">
-                {categoryAreas.slice(0, 12).map((a) => (
+                {topAreas.map((a) => (
                   <button
-                    key={a.area}
-                    onClick={() => navigate(`/scout?q=${encodeURIComponent(a.area)}`)}
+                    key={a.name}
+                    onClick={() => navigate(`/scout?q=${encodeURIComponent(a.name)}`)}
                     className="text-[10px] px-2.5 py-1 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
-                    data-testid={`dashboard-area-${a.area}`}
+                    data-testid={`dashboard-area-${a.name}`}
                   >
-                    {a.area} <span className="text-muted-foreground/50">{a.count}</span>
+                    {a.name} <span className="text-muted-foreground/50 tabular-nums">{a.count.toLocaleString()}</span>
                   </button>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
       </div>

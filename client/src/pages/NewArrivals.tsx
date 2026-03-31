@@ -102,7 +102,7 @@ function InstitutionGroup({
                 )}
                 {asset.completenessScore !== null && asset.completenessScore > 0 && (
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-600 border border-green-500/20 tabular-nums hidden sm:inline-block">
-                    {Math.round(asset.completenessScore * 100)}%
+                    {Math.round(asset.completenessScore)}%
                   </span>
                 )}
                 <span className="text-[10px] text-muted-foreground/60 tabular-nums">{timeAgo(asset.firstSeenAt)}</span>
@@ -211,23 +211,13 @@ export default function NewArrivals() {
           </div>
         </div>
 
-        {/* Institution breakdown chips */}
+        {/* Institution summary */}
         {!isLoading && institutions.length > 0 && (
-          <div className="flex flex-wrap gap-1.5" data-testid="institution-chips">
-            {institutions.slice(0, 10).map((inst) => (
-              <span
-                key={inst.institution}
-                className="text-[10px] px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground"
-              >
-                {inst.institution} <span className="text-primary font-medium">+{inst.count}</span>
-              </span>
-            ))}
-            {institutions.length > 10 && (
-              <span className="text-[10px] px-2.5 py-1 rounded-full border border-border bg-card text-muted-foreground">
-                +{institutions.length - 10} more institutions
-              </span>
+          <p className="text-[11px] text-muted-foreground" data-testid="institution-summary">
+            From {institutions.length.toLocaleString()} institution{institutions.length !== 1 ? "s" : ""}{institutions.length > 0 && (
+              <> — {institutions.slice(0, 3).map((i) => i.institution).join(", ")}{institutions.length > 3 ? " and more" : ""}</>
             )}
-          </div>
+          </p>
         )}
 
         {/* Asset groups by institution */}
