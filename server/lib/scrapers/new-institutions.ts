@@ -6116,3 +6116,76 @@ export const techLinkVAScraper: InstitutionScraper = {
     }
   },
 };
+
+// ── Task #279 — University of Guelph + Ontario Tech University ────────────────
+
+// ── 1. University of Guelph — In-Part "uoguelph" — 26 live techs ─────────────
+// Probe validated 2026-03-31: In-Part API pagination.last=6, 26 listings confirmed.
+// Categories: Engineering Science, Animal Science, Health Science, Plant Science,
+// Food Science, Molecular & Cellular Biology, Computer Science.
+export const uoguelphScraper = createInPartScraper("uoguelph", "University of Guelph");
+
+// ── 2. Ontario Tech University — HTML accordion parser ────────────────────────
+// Probe validated 2026-03-31: 13 technologies in an HTML accordion at
+// research.ontariotechu.ca/.../inventions-for-licence.php
+// Descriptions exist only as linked PDFs; PDF href used as sourceUrl.
+// Title from class="accordion-title" element; content scraped entirely server-side (plain HTTP).
+export const ontarioTechScraper: InstitutionScraper = {
+  institution: "Ontario Tech University",
+  scraperType: "http",
+  async scrape(): Promise<ScrapedListing[]> {
+    const LISTING_URL =
+      "https://research.ontariotechu.ca/partnerships/inventions-and-commercialization/inventions-for-licence.php";
+    const INST = "Ontario Tech University";
+    try {
+      const res = await fetch(LISTING_URL, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        console.warn(`[scraper] ${INST}: HTTP ${res.status}`);
+        return [];
+      }
+      const html = await res.text();
+
+      // Each technology is a Foundation accordion item:
+      //   <li class="accordion-item ..." data-accordion-item="">
+      //     <a class="accordion-title" ...>TITLE</a>
+      //     <div class="accordion-content" ...>
+      //       <p><a href="https://shared.ontariotechu.ca/.../tech.pdf">...</a></p>
+      //     </div>
+      //   </li>
+      // Split on accordion-item boundary and parse each chunk independently.
+      const chunks = html.split('class="accordion-item');
+      const results: ScrapedListing[] = [];
+
+      for (const chunk of chunks.slice(1)) {
+        const titleMatch = chunk.match(/class="accordion-title"[^>]*>([^<]+)</);
+        if (!titleMatch) continue;
+        const title = titleMatch[1].trim().replace(/\s+/g, " ");
+        if (title.length < 3) continue;
+
+        const pdfMatch = chunk.match(/href="([^"]+\.pdf)"/i);
+        const url = pdfMatch ? pdfMatch[1] : LISTING_URL;
+
+        results.push({ title, description: "", url, institution: INST });
+      }
+
+      console.log(`[scraper] ${INST}: ${results.length} listings (HTML accordion)`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── 3. Versiti Blood Research Institute ──────────────────────────────────────
+// Probed 2026-03-31: versiti.org/versiti-blood-research-institute/core-facilities-services/technology-transfer-office
+// The page is a TTO landing page — describes services, one technology named inline
+// ("CAR-T cells ReACT to solid tumors"), no enumerable technology catalog.
+// Contact: techtransfer@versiti.org — patents/antibodies/mice available but not listed publicly.
+export const versitiScraper = createStubScraper(
+  "Versiti Blood Research Institute",
+  "TTO landing page only — no enumerable catalog; contact techtransfer@versiti.org for portfolio"
+);

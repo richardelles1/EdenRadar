@@ -311,6 +311,10 @@ import {
   llnlScraper,
   // Task #276 — TechLink VA
   techLinkVAScraper,
+  // Task #279 — University of Guelph + Ontario Tech
+  uoguelphScraper,
+  ontarioTechScraper,
+  versitiScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -432,6 +436,8 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "Hokkaido University",
   "University of St Andrews",
   "University of Salford",
+  // Task #279 in-part API
+  "University of Guelph",
   // Task #120/#134 Flintbox
   "University of Birmingham",
   "University of Dundee",
@@ -815,6 +821,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ES cluster: search-techlinkopensearch-4cwxptyr7jbbeo3btshilrp4ka.us-west-2.es.amazonaws.com
   // If ES auth ever stops working, scraper logs warning and returns [] explicitly.
   techLinkVAScraper,              // TechLink (VA Technology Transfer) — ES XHR intercept Playwright — 1,400 VA techs
+  // ── Task #279 — University of Guelph + Ontario Tech ───────────────────────
+  uoguelphScraper,                // University of Guelph — In-Part "uoguelph" — 26 techs confirmed
+  ontarioTechScraper,             // Ontario Tech University — HTML accordion — 13 techs confirmed
+  versitiScraper,                 // Versiti Blood Research Institute — stub (landing page, no enumerable catalog)
   // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────
   // Pure-HTTP SRS API: POST /SRS/Sessions/AuthenticateGuest + DataAdapters/Query + Results/Values
   // Probe validated 2026-03-31: all 11 labs confirmed ≥1 result via live direct API call.
