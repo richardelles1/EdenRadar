@@ -4,7 +4,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import {
-  ArrowLeft, Printer, Key, ExternalLink, BookOpen,
+  ArrowLeft, Printer, Upload, Key, ExternalLink, BookOpen,
   Lightbulb, Sparkles, FlaskConical, Beaker, GraduationCap, Swords,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
@@ -199,8 +199,8 @@ export default function DossierPrint() {
               color: "#fff", fontSize: 13, fontWeight: 600,
             }}
           >
-            <Printer style={{ width: 14, height: 14 }} />
-            Download PDF
+            <Upload style={{ width: 14, height: 14 }} />
+            Export Dossier
           </button>
         </div>
 
