@@ -459,19 +459,20 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     // ── Anomaly guard ──────────────────────────────────────────────────────────
     // Detect false-new floods caused by URL-format churn or fingerprint drift
     // (e.g., UC campus NCD URL changes on 2025-03-31). Triggered when an
-    // established institution (≥50 known assets) shows new_count > 60% of its
-    // existing fingerprint set — almost certainly a dedup failure rather than
-    // real new assets.
-    const ANOMALY_MIN_ESTABLISHED = 50;
+    // established institution (>100 indexed assets) shows new_count > 60% of its
+    // currently-indexed asset count — almost certainly a dedup failure rather than
+    // real new assets. Uses ingested_assets count (not staging) as the baseline so
+    // the threshold is anchored to committed data, not transient staging rows.
+    const ANOMALY_MIN_ESTABLISHED = 100;
     const ANOMALY_NEW_RATIO = 0.60;
-    const establishedCount = existingFps.size;
+    const indexedCount = await storage.getInstitutionIndexedCount(institutionName);
     const isAnomaly =
-      establishedCount >= ANOMALY_MIN_ESTABLISHED &&
-      newCount > Math.round(establishedCount * ANOMALY_NEW_RATIO);
+      indexedCount >= ANOMALY_MIN_ESTABLISHED &&
+      newCount > indexedCount * ANOMALY_NEW_RATIO;
 
     if (isAnomaly) {
-      const pct = Math.round((newCount / establishedCount) * 100);
-      const msg = `Anomaly: ${newCount} new assets = ${pct}% of ${establishedCount} established fingerprints — suspected dedup failure. All new rows quarantined.`;
+      const pct = Math.round((newCount / indexedCount) * 100);
+      const msg = `Anomaly: ${newCount} new assets = ${pct}% of ${indexedCount} indexed assets — suspected dedup failure. All new rows quarantined.`;
       console.warn(`[sync] ${institutionName}: ANOMALY DETECTED — ${msg}`);
       await storage.quarantineSessionNewRows(sessionId);
       await storage.updateSyncSession(sessionId, {

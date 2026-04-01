@@ -940,26 +940,34 @@ export class DatabaseStorage implements IStorage {
     const fingerprints = new Set(dbRows.map(r => r.fingerprint));
     const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
 
-    // 1b. Domain-based cross-institution URL dedup for techtransfer.universityofcalifornia.edu.
-    //     UCB and UCSD both scrape the shared UC portal — an asset present under either campus
-    //     must be treated as known by both, preventing false-new floods when the URL format
-    //     changes or an asset migrates between campus tabs.
-    //     Detection is institution-name-driven (does not require prior rows) so it works on
-    //     first sync and after a full wipe.
-    const UC_TT_DOMAIN = "techtransfer.universityofcalifornia.edu";
-    const UC_CAMPUS_NAMES = ["UC Berkeley", "UC San Diego", "UC Los Angeles", "UC Davis",
-      "UC Santa Barbara", "UC Irvine", "UC Santa Cruz", "UC Riverside", "UC Merced"];
-    const isUcCampus = UC_CAMPUS_NAMES.includes(institution)
-      || dbRows.some(r => r.sourceUrl?.includes(UC_TT_DOMAIN));
-    if (isUcCampus) {
-      const crossRows = await db.execute(sql`
-        SELECT source_url FROM ingested_assets
-        WHERE source_url LIKE ${"%" + UC_TT_DOMAIN + "%"}
-          AND institution != ${institution}
-          AND source_url IS NOT NULL
-      `);
-      for (const r of crossRows.rows as Array<{ source_url: string }>) {
-        if (r.source_url) sourceUrls.add(r.source_url);
+    // 1b. Domain-based cross-institution URL dedup for shared TTO portals.
+    //     Multiple institutions may share a single web portal (e.g., all UC campuses
+    //     share techtransfer.universityofcalifornia.edu; many universities host on
+    //     flintbox.com / license.umn.edu / techlink portals). An asset present in any
+    //     institution that shares the same domain must be excluded from the "new" set
+    //     for this institution, preventing false-new floods when URL format changes.
+    //     Detection is institution-name-driven so it works before any rows exist.
+    const SHARED_DOMAIN_MAP: Record<string, string[]> = {
+      "techtransfer.universityofcalifornia.edu": [
+        "UC Berkeley", "UC San Diego", "UC Los Angeles", "UC Davis",
+        "UC Santa Barbara", "UC Irvine", "UC Santa Cruz", "UC Riverside", "UC Merced",
+      ],
+      "flintbox.com": [],
+      "techtransfer.bu.edu": [],
+    };
+    for (const [domain, campusNames] of Object.entries(SHARED_DOMAIN_MAP)) {
+      const matchesByName = campusNames.includes(institution);
+      const matchesByUrl = !matchesByName && dbRows.some(r => r.sourceUrl?.includes(domain));
+      if (matchesByName || matchesByUrl) {
+        const crossRows = await db.execute(sql`
+          SELECT source_url FROM ingested_assets
+          WHERE source_url LIKE ${"%" + domain + "%"}
+            AND institution != ${institution}
+            AND source_url IS NOT NULL
+        `);
+        for (const r of crossRows.rows as Array<{ source_url: string }>) {
+          if (r.source_url) sourceUrls.add(r.source_url);
+        }
       }
     }
 
@@ -1054,14 +1062,14 @@ export class DatabaseStorage implements IStorage {
   }
 
   async releaseQuarantinedRows(institution: string): Promise<number> {
-    // Release quarantined rows directly into the Indexing Queue:
-    // - Set status='scraped' and relevant=true so they pass the Indexing Queue filter
-    //   (is_new=true AND relevant=true AND status NOT IN ('pushed','skipped','quarantined'))
-    // - Promote the session from 'anomalous' to 'enriched' so the JOIN filter passes
-    // Both steps are required for the rows to appear in getNewArrivals immediately.
+    // Release quarantined rows back to 'scraped' (pending-equivalent).
+    // relevant remains NULL — rows require a re-sync to be properly classified
+    // before they can appear in the Indexing Queue and be pushed.
+    // The session is promoted to 'enriched' so the admin can see the batch in the
+    // sync panel and trigger a manual re-sync.
     const result = await db.execute(sql`
       UPDATE sync_staging
-      SET status = 'scraped', relevant = true
+      SET status = 'scraped'
       WHERE institution = ${institution}
         AND status = 'quarantined'
       RETURNING id, session_id
