@@ -327,7 +327,7 @@ export default function AssetDossier() {
             )}
 
             {!dossier && (
-              <div className="mt-5 pt-5 border-t border-card-border" data-testid="dossier-gate">
+              <div className="mt-4 pt-5 border-t border-card-border" data-testid="dossier-gate">
                 <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
                   Generate the complete intelligence brief for this asset — full commercial narrative, innovation analysis, competitive landscape, and supporting literature.
                 </p>
