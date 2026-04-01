@@ -456,6 +456,34 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     const newRows = stagingRows.filter((r) => r.isNew);
     const newCount = newRows.length;
 
+    // ── Anomaly guard ──────────────────────────────────────────────────────────
+    // Detect false-new floods caused by URL-format churn or fingerprint drift
+    // (e.g., UC campus NCD URL changes on 2025-03-31). Triggered when an
+    // established institution (≥50 known assets) shows new_count > 60% of its
+    // existing fingerprint set — almost certainly a dedup failure rather than
+    // real new assets.
+    const ANOMALY_MIN_ESTABLISHED = 50;
+    const ANOMALY_NEW_RATIO = 0.60;
+    const establishedCount = existingFps.size;
+    const isAnomaly =
+      establishedCount >= ANOMALY_MIN_ESTABLISHED &&
+      newCount > Math.round(establishedCount * ANOMALY_NEW_RATIO);
+
+    if (isAnomaly) {
+      const pct = Math.round((newCount / establishedCount) * 100);
+      const msg = `Anomaly: ${newCount} new assets = ${pct}% of ${establishedCount} established fingerprints — suspected dedup failure. All new rows quarantined.`;
+      console.warn(`[sync] ${institutionName}: ANOMALY DETECTED — ${msg}`);
+      await storage.quarantineSessionNewRows(sessionId);
+      await storage.updateSyncSession(sessionId, {
+        status: "anomalous",
+        phase: "done",
+        completedAt: new Date(),
+        errorMessage: msg,
+      });
+      return { sessionId, rawCount, newCount: 0, relevantCount: 0 };
+    }
+    // ── End anomaly guard ──────────────────────────────────────────────────────
+
     await storage.updateSyncSession(sessionId, {
       newCount,
       phase: "enriching",

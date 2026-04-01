@@ -3549,6 +3549,25 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
   });
 
   const [confirmWipe, setConfirmWipe] = useState(false);
+  const [quarantineInstitution, setQuarantineInstitution] = useState("");
+  const [quarantineResult, setQuarantineResult] = useState<number | null>(null);
+
+  const quarantineMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch("/api/admin/staging/quarantine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ institution }),
+      });
+      if (!res.ok) throw new Error("Failed to quarantine");
+      return res.json() as Promise<{ ok: boolean; institution: string; quarantined: number }>;
+    },
+    onSuccess: (data) => {
+      setQuarantineResult(data.quarantined);
+      toast({ title: "Quarantined", description: `${data.quarantined} false-new row(s) quarantined for ${data.institution}.` });
+    },
+    onError: () => toast({ title: "Error", description: "Quarantine failed.", variant: "destructive" }),
+  });
 
   const items = data?.items ?? [];
 
@@ -3588,6 +3607,45 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
             ))}
           </div>
         )}
+      </div>
+
+      <div className="border border-amber-500/30 rounded-xl bg-card p-5">
+        <div className="flex items-center gap-3 mb-3">
+          <div>
+            <h3 className="text-lg font-semibold text-foreground">Quarantine False-New Rows</h3>
+            <p className="text-sm text-muted-foreground">
+              When a dedup failure floods the staging queue (e.g., URL-format churn), quarantine marks
+              all unpushed <code className="text-xs bg-muted px-1 py-0.5 rounded">is_new=true</code> rows
+              for the institution as skipped so they cannot be pushed. Future syncs for the same institution
+              will re-detect assets correctly via the updated URL format.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 mt-3">
+          <input
+            type="text"
+            className="flex-1 max-w-xs border border-border rounded-md px-3 py-1.5 text-sm bg-background text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-amber-500/50"
+            placeholder="e.g. UC Berkeley"
+            value={quarantineInstitution}
+            onChange={(e) => { setQuarantineInstitution(e.target.value); setQuarantineResult(null); }}
+            data-testid="input-quarantine-institution"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => quarantineMutation.mutate(quarantineInstitution.trim())}
+            disabled={quarantineMutation.isPending || !quarantineInstitution.trim()}
+            data-testid="button-quarantine-submit"
+            className="border-amber-500/50 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10"
+          >
+            {quarantineMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Quarantine"}
+          </Button>
+          {quarantineResult !== null && (
+            <span className="text-sm text-muted-foreground" data-testid="text-quarantine-result">
+              {quarantineResult === 0 ? "No rows to quarantine" : `${quarantineResult} row(s) quarantined`}
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="border border-destructive/30 rounded-xl bg-card p-5">

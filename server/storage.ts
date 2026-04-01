@@ -120,6 +120,8 @@ export interface IStorage {
   updateSyncStagingStatus(sessionId: string, status: string, filterIsNew?: boolean, filterRelevant?: boolean): Promise<number>;
   getExistingFingerprints(institution: string): Promise<{ fingerprints: Set<string>; sourceUrls: Set<string> }>;
   supersedeStagingForInstitution(institution: string): Promise<number>;
+  quarantineNewStagingRows(institution: string): Promise<number>;
+  quarantineSessionNewRows(sessionId: string): Promise<number>;
   getInstitutionIndexedCount(institution: string): Promise<number>;
 
   getEnrichmentStats(): Promise<{
@@ -993,6 +995,35 @@ export class DatabaseStorage implements IStorage {
     `);
 
     return staleResult.rows.length;
+  }
+
+  async quarantineNewStagingRows(institution: string): Promise<number> {
+    // Mark all is_new=true staging rows for the institution as 'skipped' so they
+    // cannot be pushed. Used to quarantine false-new floods caused by URL/dedup churn
+    // (e.g., UC campus URL format changes) and by the anomaly guard in runInstitutionSync.
+    const result = await db.execute(sql`
+      UPDATE sync_staging
+      SET status = 'skipped'
+      WHERE institution = ${institution}
+        AND is_new = true
+        AND status NOT IN ('pushed', 'skipped')
+      RETURNING id
+    `);
+    return result.rows.length;
+  }
+
+  async quarantineSessionNewRows(sessionId: string): Promise<number> {
+    // Session-scoped variant used by the anomaly guard in runInstitutionSync.
+    // Only touches rows from the current (bad) session rather than all institution rows.
+    const result = await db.execute(sql`
+      UPDATE sync_staging
+      SET status = 'skipped'
+      WHERE session_id = ${sessionId}
+        AND is_new = true
+        AND status NOT IN ('pushed', 'skipped')
+      RETURNING id
+    `);
+    return result.rows.length;
   }
 
   async markAsIrrelevant(id: number): Promise<void> {

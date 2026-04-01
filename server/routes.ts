@@ -3457,6 +3457,23 @@ export async function registerRoutes(
     }
   });
 
+  // Quarantine all unpushed is_new=true staging rows for a specific institution.
+  // Used to resolve false-new floods from URL/dedup churn before they reach the push step.
+  app.post("/api/admin/staging/quarantine", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { institution } = req.body as { institution?: string };
+    if (!institution || typeof institution !== "string" || !institution.trim()) {
+      return res.status(400).json({ error: "institution is required" });
+    }
+    try {
+      const quarantined = await storage.quarantineNewStagingRows(institution.trim());
+      res.json({ ok: true, institution: institution.trim(), quarantined });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/review-queue", async (req, res) => {
     const pw = req.headers["x-admin-password"] as string;
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
