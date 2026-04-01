@@ -2562,7 +2562,10 @@ export async function registerRoutes(
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
   });
 
-  (async () => {
+  // In production, delay 30 s so the scheduler's restoration queries finish
+  // before we hit the pool with startup enrichment-job checks.
+  const edenStartupDelay = process.env.NODE_ENV === "production" ? 30_000 : 0;
+  setTimeout(async () => {
     try {
       const staleDeepJob = await storage.getRunningDeepEnrichmentJob();
       if (staleDeepJob) {
@@ -2628,7 +2631,7 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[EDEN] Failed to check for resumable deep enrichment jobs:", e);
     }
-  })();
+  }, edenStartupDelay);
 
   // ── EDEN embedding routes ────────────────────────────────────────────────
 

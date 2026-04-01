@@ -90,6 +90,12 @@ async function runStartupMigrations() {
     connectionString: process.env.SUPABASE_DATABASE_URL,
     ssl: { rejectUnauthorized: false },
   });
+  // Prevent pg.Client errors (e.g. Supabase FATAL mid-migration) from
+  // propagating as uncaught exceptions. Errors mid-migration are already
+  // caught by each individual try/catch block below.
+  client.on("error", (err) => {
+    log(`[startup] Migration client error (handled): ${err?.message}`, "startup");
+  });
   try {
     await client.connect();
   } catch (err: any) {
