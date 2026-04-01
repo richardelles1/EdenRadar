@@ -6,11 +6,21 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { existsSync } from "fs";
-import { execSync, spawn } from "child_process";
+import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler } from "./lib/scheduler";
 
 const app = express();
 const httpServer = createServer(app);
+
+// ── Global safety net: prevent unhandled DB pool errors from crashing ─────────
+// pg's connection pool emits 'error' on terminated connections. Without a handler
+// this kills the process. We log and continue — the pool recovers automatically.
+process.on("uncaughtException", (err: Error) => {
+  console.error(`[fatal] Uncaught exception (process kept alive): ${err.message}`);
+});
+process.on("unhandledRejection", (reason: unknown) => {
+  console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
+});
 
 declare module "http" {
   interface IncomingMessage {
@@ -66,33 +76,9 @@ app.use((req, res, next) => {
   next();
 });
 
-(async () => {
-  // ── Ensure Playwright Chromium browser binary is present ─────────────────
-  // The binary lives in .cache/ms-playwright inside the workspace. If it ever
-  // disappears (container rebuild, first boot) scrapers silently return 0
-  // results. We detect and auto-recover here so the problem is always visible
-  // in the startup log rather than discovered mid-scrape.
-  try {
-    const { chromium } = await import("playwright");
-    const executablePath = chromium.executablePath();
-    if (!existsSync(executablePath)) {
-      log("[startup] Playwright Chromium binary missing — installing in background…", "startup");
-      const child = spawn("npx", ["playwright", "install", "chromium"], {
-        stdio: "inherit",
-        detached: false,
-      });
-      child.on("close", (code) => {
-        if (code === 0) log("[startup] Playwright Chromium installed OK", "startup");
-        else log(`[startup] Playwright Chromium install exited with code ${code}`, "startup");
-      });
-    } else {
-      log("[startup] Playwright Chromium binary present ✓", "startup");
-    }
-  } catch (err: any) {
-    log(`[startup] Playwright check failed: ${err?.message}`, "startup");
-  }
-
-  // ── Startup migrations: ensure pgvector + embedding column ───────────────
+// ── All startup migrations in one place, run after port opens ─────────────────
+async function runStartupMigrations() {
+  // ── pgvector + source_name column ─────────────────────────────────────────
   try {
     await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
     await db.execute(sql`
@@ -108,7 +94,7 @@ app.use((req, res, next) => {
     log(`[startup] pgvector migration skipped or failed: ${err?.message}`, "startup");
   }
 
-  // ── Startup migrations: add enrichment columns to ingested_assets ─────────
+  // ── Enrichment columns ────────────────────────────────────────────────────
   try {
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS categories JSONB`);
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS category_confidence REAL`);
@@ -134,7 +120,7 @@ app.use((req, res, next) => {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Startup migrations: saved_assets status column ───────────────────────
+  // ── saved_assets status column ────────────────────────────────────────────
   try {
     await db.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
     await db.execute(sql`
@@ -150,9 +136,8 @@ app.use((req, res, next) => {
     log(`[startup] saved_assets status column migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Startup migrations: near-duplicate detection columns ─────────────────
+  // ── Near-duplicate detection columns ─────────────────────────────────────
   try {
-    // Column additions are fast — always done synchronously
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_of_id INTEGER`);
     await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_embedding JSONB`);
@@ -163,18 +148,10 @@ app.use((req, res, next) => {
       WHERE duplicate_flag = true
     `);
     log("[startup] near-duplicate detection columns ready", "startup");
-    // Dedup + unique index creation is deferred to background — may be slow on large datasets
-    // Retried up to 3 times with exponential backoff to guarantee DB-level enforcement
     setImmediate(async () => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
-          // Step 0: Normalize existing source_urls — strip query params and hash fragments.
-          // Many TTO sites embed session tokens (?session=abc) or tracking params that
-          // change on each scrape. Before dedup reconciliation, collapse these so that
-          // /asset?session=1 and /asset?session=2 are treated as the same URL.
-          // Two-step: first null out non-canonical rows within each normalized-URL group
-          // (to avoid unique-index conflicts), then update survivors to the clean URL.
           await db.execute(sql`
             UPDATE ingested_assets a
             SET source_url = NULL
@@ -199,13 +176,6 @@ app.use((req, res, next) => {
             WHERE source_url IS NOT NULL
               AND source_url ~ '[?#]'
           `);
-
-          // Reconcile duplicate source_urls before creating the unique index.
-          // Strategy: for each URL group with duplicates, select the canonical row
-          // (highest completeness_score; tie-break by lowest id = oldest/first ingested)
-          // and set source_url=NULL on all non-canonical rows. The canonical row retains
-          // the URL and will be updated-in-place by future URL-dedup upserts. Non-canonical
-          // rows keep all their other fields and remain searchable by fingerprint.
           const reconcileResult = await db.execute(sql`
             UPDATE ingested_assets a
             SET source_url = NULL
@@ -232,7 +202,6 @@ app.use((req, res, next) => {
             ON ingested_assets (source_url)
             WHERE source_url IS NOT NULL
           `);
-          // Verify the index exists
           const verify = await db.execute(sql`
             SELECT 1 FROM pg_indexes
             WHERE tablename = 'ingested_assets'
@@ -259,14 +228,14 @@ app.use((req, res, next) => {
     log(`[startup] near-duplicate detection migration failed: ${err?.message}`, "startup");
   }
 
-  // ── industry_profiles column migrations ──────────────────────────────────
+  // ── industry_profiles column ──────────────────────────────────────────────
   try {
     await db.execute(sql`ALTER TABLE industry_profiles ADD COLUMN IF NOT EXISTS notification_prefs JSONB DEFAULT '{}'`);
   } catch (err: any) {
     log(`[startup] industry_profiles migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure eden_sessions table exists ────────────────────────────────────
+  // ── eden_sessions ─────────────────────────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS eden_sessions (
@@ -296,7 +265,7 @@ app.use((req, res, next) => {
     log(`[startup] eden_sessions migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure eden_message_feedback table exists ─────────────────────────────
+  // ── eden_message_feedback ─────────────────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS eden_message_feedback (
@@ -316,7 +285,7 @@ app.use((req, res, next) => {
     log(`[startup] eden_message_feedback migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure T007 taxonomy + convergence tables exist ──────────────────────
+  // ── taxonomy + convergence tables ────────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS therapy_area_taxonomy (
@@ -346,7 +315,7 @@ app.use((req, res, next) => {
     log(`[startup] taxonomy migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure review_queue table exists ─────────────────────────────────────
+  // ── review_queue ──────────────────────────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS review_queue (
@@ -363,7 +332,7 @@ app.use((req, res, next) => {
     log(`[startup] review_queue migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure concept_cards + concept_interests tables exist ─────────────────
+  // ── concept_cards + concept_interests ─────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS concept_cards (
@@ -406,6 +375,7 @@ app.use((req, res, next) => {
     log(`[startup] concept_cards migration failed: ${err?.message}`, "startup");
   }
 
+  // ── manual_institutions ───────────────────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS manual_institutions (
@@ -420,7 +390,7 @@ app.use((req, res, next) => {
     log(`[startup] manual_institutions migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure scheduler_state + scraper_health tables exist ─────────────────
+  // ── scheduler_state + scraper_health ─────────────────────────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS scheduler_state (
@@ -454,7 +424,7 @@ app.use((req, res, next) => {
     log(`[startup] scheduler_state/scraper_health migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Ensure research_projects + related tables exist ───────────────────────
+  // ── research_projects + saved_grants + saved_references ──────────────────
   try {
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS research_projects (
@@ -554,12 +524,7 @@ app.use((req, res, next) => {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
 
-  await registerRoutes(httpServer, app);
-
-  // ── Restore scheduler state from DB ──────────────────────────────────────
-  // Only auto-resume if the scheduler was actively running when the server last
-  // shut down (crash recovery). If it was paused — or there is no saved state —
-  // leave it paused so the admin has full control.
+  // ── Scheduler restore ─────────────────────────────────────────────────────
   try {
     const wasRunning = await loadAndRestoreScheduler();
     if (wasRunning) {
@@ -576,8 +541,7 @@ app.use((req, res, next) => {
     log(`[startup] Scheduler restore failed: ${err?.message}`, "startup");
   }
 
-  // On startup, mark any orphaned "running" ingestion runs as "failed"
-  // so the UI never shows a permanent stuck spinner after a server restart
+  // ── Clear orphaned ingestion runs ─────────────────────────────────────────
   try {
     const lastRun = await storage.getLastIngestionRun();
     if (lastRun && lastRun.status === "running") {
@@ -590,7 +554,34 @@ app.use((req, res, next) => {
   } catch (err: any) {
     log(`[startup] Could not clear orphaned runs: ${err?.message}`, "startup");
   }
+}
 
+(async () => {
+  // ── Playwright Chromium binary: install in background if missing ───────────
+  try {
+    const { chromium } = await import("playwright");
+    const executablePath = chromium.executablePath();
+    if (!existsSync(executablePath)) {
+      log("[startup] Playwright Chromium binary missing — installing in background…", "startup");
+      const child = spawn("npx", ["playwright", "install", "chromium"], {
+        stdio: "inherit",
+        detached: false,
+      });
+      child.on("close", (code) => {
+        if (code === 0) log("[startup] Playwright Chromium installed OK", "startup");
+        else log(`[startup] Playwright Chromium install exited with code ${code}`, "startup");
+      });
+    } else {
+      log("[startup] Playwright Chromium binary present ✓", "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Playwright check failed: ${err?.message}`, "startup");
+  }
+
+  // ── Register API routes ───────────────────────────────────────────────────
+  await registerRoutes(httpServer, app);
+
+  // ── Error handler middleware ──────────────────────────────────────────────
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -604,9 +595,7 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
+  // ── Static serving (production) or Vite dev server ───────────────────────
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -614,10 +603,7 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
+  // ── Open port FIRST so the health check passes immediately ───────────────
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
@@ -627,6 +613,10 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      // ── Run all DB migrations in background after port is open ─────────
+      runStartupMigrations().catch((err: any) => {
+        log(`[startup] Background migrations failed: ${err?.message}`, "startup");
+      });
     },
   );
 })();
