@@ -5,9 +5,11 @@ import { createServer } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler } from "./lib/scheduler";
+import pg from "pg";
 
 const app = express();
 const httpServer = createServer(app);
@@ -77,15 +79,29 @@ app.use((req, res, next) => {
 });
 
 // ── All startup migrations in one place, run after port opens ─────────────────
+// Uses a DEDICATED pg.Client that is completely separate from the API connection
+// pool. This ensures migrations never compete with API requests for pool slots.
 async function runStartupMigrations() {
+  const client = new pg.Client({
+    connectionString: process.env.SUPABASE_DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+  try {
+    await client.connect();
+  } catch (err: any) {
+    log(`[startup] Migration client failed to connect: ${err?.message} — skipping migrations`, "startup");
+    return;
+  }
+  const mdb = drizzle(client);
+
   // ── pgvector + source_name column ─────────────────────────────────────────
   try {
-    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
-    await db.execute(sql`
+    await mdb.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
+    await mdb.execute(sql`
       ALTER TABLE ingested_assets
       ADD COLUMN IF NOT EXISTS embedding vector(1536)
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       ALTER TABLE ingested_assets
       ADD COLUMN IF NOT EXISTS source_name TEXT NOT NULL DEFAULT 'tech_transfer'
     `);
@@ -96,25 +112,25 @@ async function runStartupMigrations() {
 
   // ── Enrichment columns ────────────────────────────────────────────────────
   try {
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS categories JSONB`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS category_confidence REAL`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS available BOOLEAN`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS content_hash TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS completeness_score REAL`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS last_content_change_at TIMESTAMP`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS innovation_claim TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS mechanism_of_action TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS ip_type TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS unmet_need TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS comparable_drugs TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS licensing_readiness TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS patent_status TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS licensing_status TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS inventors JSONB`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS contact_email TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS technology_id TEXT`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS abstract TEXT`);
-    await db.execute(sql`ALTER TABLE ingestion_runs ADD COLUMN IF NOT EXISTS relevant_new_count INTEGER NOT NULL DEFAULT 0`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS categories JSONB`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS category_confidence REAL`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS available BOOLEAN`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS content_hash TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS completeness_score REAL`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS last_content_change_at TIMESTAMP`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS innovation_claim TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS mechanism_of_action TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS ip_type TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS unmet_need TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS comparable_drugs TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS licensing_readiness TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS patent_status TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS licensing_status TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS inventors JSONB`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS contact_email TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS technology_id TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS abstract TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingestion_runs ADD COLUMN IF NOT EXISTS relevant_new_count INTEGER NOT NULL DEFAULT 0`);
     log("[startup] ingested_assets enrichment columns ready", "startup");
   } catch (err: any) {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
@@ -122,8 +138,8 @@ async function runStartupMigrations() {
 
   // ── saved_assets status column ────────────────────────────────────────────
   try {
-    await db.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
-    await db.execute(sql`
+    await mdb.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
+    await mdb.execute(sql`
       DO $$ BEGIN
         ALTER TABLE saved_assets
         ADD CONSTRAINT saved_assets_status_check
@@ -138,17 +154,19 @@ async function runStartupMigrations() {
 
   // ── Near-duplicate detection columns ─────────────────────────────────────
   try {
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_of_id INTEGER`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_embedding JSONB`);
-    await db.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_similarity REAL`);
-    await db.execute(sql`
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_of_id INTEGER`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_embedding JSONB`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS dedupe_similarity REAL`);
+    await mdb.execute(sql`
       CREATE INDEX IF NOT EXISTS idx_ingested_assets_duplicate_flag
       ON ingested_assets (duplicate_flag)
       WHERE duplicate_flag = true
     `);
     log("[startup] near-duplicate detection columns ready", "startup");
-    setImmediate(async () => {
+    // Heavy dedup queries deferred 60 s so they don't compete with API traffic at startup.
+    // They use the shared pool (db) since the dedicated migration client is closed by then.
+    setTimeout(async () => {
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
@@ -223,21 +241,21 @@ async function runStartupMigrations() {
           }
         }
       }
-    });
+    }, 60_000);
   } catch (err: any) {
     log(`[startup] near-duplicate detection migration failed: ${err?.message}`, "startup");
   }
 
   // ── industry_profiles column ──────────────────────────────────────────────
   try {
-    await db.execute(sql`ALTER TABLE industry_profiles ADD COLUMN IF NOT EXISTS notification_prefs JSONB DEFAULT '{}'`);
+    await mdb.execute(sql`ALTER TABLE industry_profiles ADD COLUMN IF NOT EXISTS notification_prefs JSONB DEFAULT '{}'`);
   } catch (err: any) {
     log(`[startup] industry_profiles migration failed: ${err?.message}`, "startup");
   }
 
   // ── eden_sessions ─────────────────────────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS eden_sessions (
         id serial PRIMARY KEY,
         session_id text NOT NULL UNIQUE,
@@ -246,7 +264,7 @@ async function runStartupMigrations() {
         updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       DO $$
       BEGIN
         IF EXISTS (
@@ -257,7 +275,7 @@ async function runStartupMigrations() {
         END IF;
       END $$
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       ALTER TABLE eden_sessions ADD COLUMN IF NOT EXISTS focus_context jsonb
     `);
     log("[startup] eden_sessions table ready", "startup");
@@ -267,7 +285,7 @@ async function runStartupMigrations() {
 
   // ── eden_message_feedback ─────────────────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS eden_message_feedback (
         id serial PRIMARY KEY,
         session_id text NOT NULL,
@@ -276,7 +294,7 @@ async function runStartupMigrations() {
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE UNIQUE INDEX IF NOT EXISTS eden_message_feedback_session_msg_uidx
       ON eden_message_feedback(session_id, message_index)
     `);
@@ -287,7 +305,7 @@ async function runStartupMigrations() {
 
   // ── taxonomy + convergence tables ────────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS therapy_area_taxonomy (
         id serial PRIMARY KEY,
         name text NOT NULL UNIQUE,
@@ -297,7 +315,7 @@ async function runStartupMigrations() {
         last_updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS convergence_signals (
         id serial PRIMARY KEY,
         therapy_area text NOT NULL,
@@ -317,7 +335,7 @@ async function runStartupMigrations() {
 
   // ── review_queue ──────────────────────────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS review_queue (
         id serial PRIMARY KEY,
         asset_id integer NOT NULL,
@@ -334,7 +352,7 @@ async function runStartupMigrations() {
 
   // ── concept_cards + concept_interests ─────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS concept_cards (
         id serial PRIMARY KEY,
         user_id text NOT NULL,
@@ -361,7 +379,7 @@ async function runStartupMigrations() {
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS concept_interests (
         id serial PRIMARY KEY,
         concept_id integer NOT NULL,
@@ -377,7 +395,7 @@ async function runStartupMigrations() {
 
   // ── manual_institutions ───────────────────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS manual_institutions (
         id serial PRIMARY KEY,
         name text NOT NULL UNIQUE,
@@ -392,7 +410,7 @@ async function runStartupMigrations() {
 
   // ── scheduler_state + scraper_health ─────────────────────────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS scheduler_state (
         id INTEGER PRIMARY KEY DEFAULT 1,
         queue_index INTEGER NOT NULL DEFAULT 0,
@@ -405,8 +423,8 @@ async function runStartupMigrations() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS scheduler_running BOOLEAN NOT NULL DEFAULT false`);
-    await db.execute(sql`
+    await mdb.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS scheduler_running BOOLEAN NOT NULL DEFAULT false`);
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS scraper_health (
         institution TEXT PRIMARY KEY,
         consecutive_failures INTEGER NOT NULL DEFAULT 0,
@@ -418,7 +436,7 @@ async function runStartupMigrations() {
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_new_count INTEGER`);
+    await mdb.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_new_count INTEGER`);
     log("[startup] scheduler_state + scraper_health tables ready", "startup");
   } catch (err: any) {
     log(`[startup] scheduler_state/scraper_health migration failed: ${err?.message}`, "startup");
@@ -426,7 +444,7 @@ async function runStartupMigrations() {
 
   // ── research_projects + saved_grants + saved_references ──────────────────
   try {
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS research_projects (
         id serial PRIMARY KEY,
         researcher_id text NOT NULL,
@@ -490,7 +508,7 @@ async function runStartupMigrations() {
         protocol_checklist jsonb
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS saved_grants (
         id serial PRIMARY KEY,
         user_id text NOT NULL,
@@ -505,7 +523,7 @@ async function runStartupMigrations() {
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
-    await db.execute(sql`
+    await mdb.execute(sql`
       CREATE TABLE IF NOT EXISTS saved_references (
         id serial PRIMARY KEY,
         user_id text NOT NULL,
@@ -523,6 +541,9 @@ async function runStartupMigrations() {
   } catch (err: any) {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
+
+  // ── Close dedicated migration client (frees the connection back to Supabase) ──
+  await client.end().catch(() => {});
 
   // ── Scheduler restore ─────────────────────────────────────────────────────
   try {
