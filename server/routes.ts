@@ -1411,7 +1411,7 @@ export async function registerRoutes(
           biotechRelevant,
           lastSyncAt: session?.completedAt ?? session?.createdAt ?? null,
           lastSyncStatus: session?.status ?? null,
-          lastSyncError: session?.errorMessage ?? null,
+          lastSyncError: consecutiveFailures === 0 ? null : (session?.errorMessage ?? null),
           rawCount: session?.rawCount ?? 0,
           newCount: session?.newCount ?? 0,
           relevantCount: session?.relevantCount ?? 0,

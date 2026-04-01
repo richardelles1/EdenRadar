@@ -1370,12 +1370,8 @@ function DataHealth({ pw }: { pw: string }) {
                                   />
                                 </div>
                               </div>
-                            ) : row.lastSyncError && row.consecutiveFailures > 0 ? (
+                            ) : row.lastSyncError ? (
                               <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
-                                {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
-                              </span>
-                            ) : row.lastSyncError && row.consecutiveFailures === 0 ? (
-                              <span className="text-xs text-muted-foreground/50 truncate block max-w-[200px]" title={row.lastSyncError}>
                                 {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
                               </span>
                             ) : (
