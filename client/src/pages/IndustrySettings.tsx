@@ -310,7 +310,7 @@ export default function IndustrySettings() {
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Company Profile & Interests</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Therapeutic areas, modalities, deal stages — drives alerts and dashboard</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Therapeutic areas, modalities, deal stages: drives alerts and dashboard</p>
             </div>
           </div>
           <div className="flex items-center gap-1.5 shrink-0">

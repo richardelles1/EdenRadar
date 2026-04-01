@@ -171,7 +171,7 @@ export default function ResearchAlerts() {
           <OrientationHint
             hintId="alerts-topic-guide"
             title="Keyword strategy."
-            body="Be specific — try your target protein name, a modality + disease combination like 'CAR-T lymphoma', or a technique like 'base editing'."
+            body="Be specific: try your target protein name, a modality + disease combination like 'CAR-T lymphoma', or a technique like 'base editing'."
             accent="amber"
           />
         </div>
@@ -639,7 +639,7 @@ function DiscoveryTimelineCard({ card }: { card: DiscoveryCard }) {
   if (card.adminStatus === "approved") {
     steps.push({
       icon: <ShieldCheck className="w-3.5 h-3.5" />,
-      label: "Approved — Now Live to Industry",
+      label: "Approved: Now Live to Industry",
       active: true,
       color: "text-emerald-500",
     });

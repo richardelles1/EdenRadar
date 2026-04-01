@@ -790,7 +790,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   {
     role: "eden",
     delay: 500,
-    text: "Welcome. I'm EDEN — EdenRadar's research intelligence engine. I monitor, classify, and enrich biotech assets across 300+ tech transfer offices in real time. I also surface signals directly from active research labs before they reach the patent stage. What would you like to explore?",
+    text: "Welcome. I'm EDEN, EdenRadar's research intelligence engine. I monitor, classify, and enrich biotech assets across 300+ tech transfer offices in real time. I also surface signals directly from active research labs before they reach the patent stage. What would you like to explore?",
   },
   {
     role: "user",
@@ -800,18 +800,18 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   {
     role: "eden",
     delay: 7500,
-    text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days — particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
+    text: "Solid tumor immunotherapy is showing the highest new-listing velocity in the past 30 days, particularly next-generation PD-1/PD-L1 combinations and bispecific antibody platforms. I'm detecting convergence signals across 14 institutions. Here are the top-ranked new listings:",
     showCards: true,
   },
   {
     role: "user",
     delay: 17000,
-    text: "Show me CRISPR-based assets targeting rare disease — any university stage.",
+    text: "Show me CRISPR-based assets targeting rare disease, any university stage.",
   },
   {
     role: "eden",
     delay: 19000,
-    text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies — 6 institutions active, no approved competitors. Here are the top results:",
+    text: "Found 52 CRISPR-related rare disease assets across the monitored TTO network. The highest-scored cluster is ex vivo HSC editing for hemoglobinopathies (6 institutions active, no approved competitors). Here are the top results:",
     showCrisprCards: true,
   },
   {
@@ -822,7 +822,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   {
     role: "eden",
     delay: 32000,
-    text: "Commercial HDAC inhibitors — Vorinostat, Romidepsin, Panobinostat — are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
+    text: "Commercial HDAC inhibitors (Vorinostat, Romidepsin, Panobinostat) are approved only in hematologic malignancies. In solid tumor microenvironments, no approved agent exists. The Johns Hopkins HDAC platform targets this gap directly. No direct commercial competition. EDEN readiness score: 85. White space: confirmed.",
   },
   {
     role: "user",
@@ -832,7 +832,7 @@ const PITCH_CHAT_MESSAGES: PitchChatMessage[] = [
   {
     role: "eden",
     delay: 47000,
-    text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders — 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets — activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
+    text: "Three rising signals worth your attention: (1) RNA-targeted platforms for CNS disorders, 8 new TTO listings in 60 days. (2) Microbiome-oncology crossover assets, activity spiking at 5 major research universities. (3) A pre-patent concept in EdenDiscovery for a novel kinase inhibitor just crossed 90 on the EDEN credibility scale. The pipeline never stops moving.",
   },
 ];
 
@@ -876,7 +876,7 @@ const PITCH_CRISPR_ASSETS: PitchAssetCard[] = [
   {
     id: 4,
     title: "Ex Vivo HSC Editing for Sickle Cell Disease via Base Editing",
-    institution: "MIT — Koch Institute",
+    institution: "MIT, Koch Institute",
     area: "Rare Disease",
     stage: "Preclinical",
     score: 94,
@@ -1273,7 +1273,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
   const tiers = [
     { name: "EdenDiscovery", price: "Free", period: "", color: colors.amber, dim: colors.amberDim, icon: Lightbulb, desc: "Concept community access, EDEN AI scoring, landscape intelligence" },
     { name: "EdenLab", price: "Free", period: "", color: colors.violet, dim: colors.violetDim, icon: FlaskConical, desc: "Full research workspace, 40+ sources, intuitive project workflow, grants" },
-    { name: "EdenScout", price: "$799", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Full-access industry intelligence platform — 300+ TTOs, EDEN dossiers, convergence signals, deal flow alerts, and pipeline export" },
+    { name: "EdenScout", price: "$799", period: "/mo", color: colors.green, dim: colors.greenDim, icon: Sprout, desc: "Full-access industry intelligence platform: 300+ TTOs, EDEN dossiers, convergence signals, deal flow alerts, and pipeline export" },
   ];
   return (
     <Slide index={8} section="What We've Built" accent={colors.green} colors={colors}>
