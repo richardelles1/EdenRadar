@@ -6,7 +6,7 @@ import { classifyBatch, type AssetClassification } from "./pipeline/classifyAsse
 import { computeContentHash, computeCompletenessScore, normalizeLicensingStatus, normalizePatentStatus } from "./pipeline/contentHash";
 import { syncStaging, type SyncStagingRow } from "@shared/schema";
 import { db } from "../db";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 
 export function normalizeTitle(title: string): string {
   let t = title.toLowerCase().trim();
@@ -486,20 +486,26 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         if (enrichment.biotechRelevant) relevantCount++;
       }
 
-      for (const { fingerprint, enrichment: e } of enrichUpdates) {
-        await db
-          .update(syncStaging)
-          .set({
-            relevant: e.biotechRelevant,
-            target: e.target,
-            modality: e.modality,
-            indication: e.indication,
-            developmentStage: e.developmentStage,
-          })
-          .where(and(
-            eq(syncStaging.sessionId, sessionId),
-            eq(syncStaging.fingerprint, fingerprint)
-          ));
+      if (enrichUpdates.length > 0) {
+        const valueRows = sql.join(
+          enrichUpdates.map(u =>
+            sql`(${u.fingerprint}, ${u.enrichment.biotechRelevant}, ${u.enrichment.target}, ${u.enrichment.modality}, ${u.enrichment.indication}, ${u.enrichment.developmentStage})`
+          ),
+          sql`, `
+        );
+        await db.execute(sql`
+          UPDATE sync_staging AS ss
+          SET
+            relevant  = v.relevant::boolean,
+            target    = v.target,
+            modality  = v.modality,
+            indication = v.indication,
+            development_stage = v.development_stage
+          FROM (VALUES ${valueRows})
+            AS v(fingerprint, relevant, target, modality, indication, development_stage)
+          WHERE ss.session_id = ${sessionId}
+            AND ss.fingerprint = v.fingerprint
+        `);
       }
     }
 

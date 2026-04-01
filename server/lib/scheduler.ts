@@ -61,6 +61,10 @@ let runGeneration = 0;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
+/** Timestamp of the last successful persistState DB write — used to throttle non-critical saves. */
+let _lastPersistAt = 0;
+const PERSIST_THROTTLE_MS = 60_000;
+
 /** Returns the in-memory scraper health cache — no DB hit required. */
 export function getScraperHealthCache(): Map<string, ScraperHealthRow> {
   return scraperHealthCache;
@@ -117,7 +121,13 @@ function getMinRunningTier(): 1 | 2 | 3 | 4 | null {
   );
 }
 
-function persistState(): void {
+function persistState(immediate = false): void {
+  const now = Date.now();
+  // Throttle routine per-institution saves to at most once per 60 seconds.
+  // State-critical events (start, pause, cycle complete) always pass immediate=true.
+  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return;
+  _lastPersistAt = now;
+
   // Save checkpoint rolled back by any in-flight institutions so they are retried on restart.
   const safeCheckpoint = Math.max(0, queueIndex - currentInstitutions.length);
   saveSchedulerState({
@@ -235,7 +245,7 @@ export function startScheduler(): { ok: boolean; message: string } {
     return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
   }
   schedulerState = "running";
-  persistState();
+  persistState(true);
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
     console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
@@ -277,7 +287,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   cycleCount++;
   priorityQueue = [];
   schedulerState = "running";
-  persistState();
+  persistState(true);
   console.log(`[scheduler] Reset (gen=${runGeneration}) — starting fresh cycle #${cycleCount} from position 0/${tieredQueue.length}`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   scheduleNext();
@@ -293,7 +303,7 @@ export function pauseScheduler(): { ok: boolean; message: string } {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
   }
-  persistState();
+  persistState(true);
   console.log(`[scheduler] Paused at position ${queueIndex}/${getInstitutionQueue().length}`);
   return { ok: true, message: "Scheduler paused" };
 }
@@ -505,7 +515,7 @@ function scheduleNext(): void {
     );
     lastCycleCompletedAt = new Date();
     schedulerState = "idle";
-    persistState();
+    persistState(true);
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   }

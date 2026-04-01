@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -245,7 +245,11 @@ export const syncStaging = pgTable("sync_staging", {
   developmentStage: text("development_stage").notNull().default("unknown"),
   status: text("status").notNull().default("scraped"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, (t) => [
+  index("sync_staging_institution_status_created_idx").on(t.institution, t.status, t.createdAt),
+  index("sync_staging_session_fingerprint_idx").on(t.sessionId, t.fingerprint),
+  index("sync_staging_session_status_idx").on(t.sessionId, t.status),
+]);
 
 export type SyncStagingRow = typeof syncStaging.$inferSelect;
 

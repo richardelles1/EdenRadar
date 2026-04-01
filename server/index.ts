@@ -78,6 +78,51 @@ app.use((req, res, next) => {
   next();
 });
 
+// ── Ensure sync_staging indexes exist ────────────────────────────────────────
+// CREATE INDEX IF NOT EXISTS is idempotent — no-op when the index already exists.
+// Retries with exponential backoff so it self-heals once the staging cleanup
+// (which runs during each institution sync) has shrunk the table enough.
+async function ensureStagingIndexes(attempt = 1): Promise<void> {
+  const RETRY_DELAYS = [5 * 60_000, 15 * 60_000, 60 * 60_000]; // 5m, 15m, 1h
+
+  const indexes = [
+    {
+      name: "sync_staging_institution_status_created_idx",
+      ddl: `CREATE INDEX IF NOT EXISTS sync_staging_institution_status_created_idx
+            ON sync_staging (institution, status, created_at)`,
+    },
+    {
+      name: "sync_staging_session_fingerprint_idx",
+      ddl: `CREATE INDEX IF NOT EXISTS sync_staging_session_fingerprint_idx
+            ON sync_staging (session_id, fingerprint)`,
+    },
+    {
+      name: "sync_staging_session_status_idx",
+      ddl: `CREATE INDEX IF NOT EXISTS sync_staging_session_status_idx
+            ON sync_staging (session_id, status)`,
+    },
+  ];
+
+  let allOk = true;
+  for (const { name, ddl } of indexes) {
+    try {
+      await db.execute(sql.raw(ddl));
+      log(`[startup] Index ready: ${name}`, "startup");
+    } catch (err: any) {
+      log(`[startup] Index skipped (${name}): ${err?.message}`, "startup");
+      allOk = false;
+    }
+  }
+
+  if (!allOk && attempt <= RETRY_DELAYS.length) {
+    const delay = RETRY_DELAYS[attempt - 1];
+    log(`[startup] Will retry indexes in ${Math.round(delay / 60000)}m (attempt ${attempt + 1})`, "startup");
+    setTimeout(() => {
+      ensureStagingIndexes(attempt + 1).catch(() => {});
+    }, delay);
+  }
+}
+
 // ── All startup migrations in one place, run after port opens ─────────────────
 // Uses a DEDICATED pg.Client that is completely separate from the API connection
 // pool. This ensures migrations never compete with API requests for pool slots.
@@ -651,6 +696,13 @@ async function runStartupMigrations() {
       runStartupMigrations().catch((err: any) => {
         log(`[startup] Background migrations failed: ${err?.message}`, "startup");
       });
+      // ── Ensure sync_staging indexes exist (idempotent, safe in all envs) ─
+      // Delayed 45s so startup DB traffic settles before we run DDL.
+      setTimeout(() => {
+        ensureStagingIndexes().catch((err: any) => {
+          log(`[startup] ensureStagingIndexes failed: ${err?.message}`, "startup");
+        });
+      }, 45_000);
     },
   );
 })();

@@ -960,13 +960,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async supersedeStagingForInstitution(institution: string): Promise<number> {
-    // Only supersede staging rows from sessions that are NOT in 'enriched' state.
-    // Rows from enriched sessions are "ready to push" in the Indexing Queue and
-    // must be preserved across sync cycles. Wiping them caused the queue to never
-    // drain — every re-sync destroyed the previous run's queue items before they
-    // could be pushed. We only want to clean up stale/incomplete session rows
-    // (running, failed, stuck) not completed ones.
-    const result = await db.execute(sql`
+    // Supersede stale/incomplete session rows (running, failed, stuck).
+    // Rows from enriched sessions are preserved (they are the Indexing Queue).
+    const staleResult = await db.execute(sql`
       UPDATE sync_staging ss
       SET status = 'skipped'
       FROM sync_sessions ses
@@ -976,7 +972,20 @@ export class DatabaseStorage implements IStorage {
         AND ses.status != 'enriched'
       RETURNING ss.id
     `);
-    return result.rows.length;
+
+    // Also expire enriched-session rows older than 14 days. These are either
+    // already pushed (and reflected in ingested_assets) or abandoned — keeping
+    // them forever causes sync_staging to grow unbounded and turns every
+    // getExistingFingerprints query into a full table scan.
+    await db.execute(sql`
+      UPDATE sync_staging
+      SET status = 'skipped'
+      WHERE institution = ${institution}
+        AND status NOT IN ('pushed', 'skipped')
+        AND created_at < NOW() - INTERVAL '14 days'
+    `);
+
+    return staleResult.rows.length;
   }
 
   async markAsIrrelevant(id: number): Promise<void> {
