@@ -2,7 +2,6 @@ import type { InstitutionScraper, ScrapedListing } from "./types";
 import { stanfordScraper } from "./stanford";
 import { mitScraper } from "./mit";
 import { harvardScraper } from "./harvard";
-import { ucsfScraper } from "./ucsf";
 import { jhuScraper } from "./jhu";
 import { dukeScraper } from "./duke";
 import { columbiaScraper } from "./columbia";
@@ -88,6 +87,8 @@ import {
   ucRiversideScraper,
   ucSantaBarbaraScraper,
   ucSantaCruzScraper,
+  ucsfScraper,
+  ucmScraper,
   utahScraper,
   uvaScraper,
   uOregonScraper,
@@ -578,6 +579,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ucSantaCruzScraper,
   utahScraper,
   uvaScraper,
+  ucmScraper,
   uOregonScraper,
   gwuScraper,
   czBiohubScraper,

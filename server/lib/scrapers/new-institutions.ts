@@ -337,6 +337,7 @@ export const ucIrvineScraper = createUCTechTransferScraper("I", "UC Irvine");
 export const ucRiversideScraper = createUCTechTransferScraper("RV", "UC Riverside");
 export const ucSantaBarbaraScraper = createUCTechTransferScraper("SB", "UC Santa Barbara");
 export const ucSantaCruzScraper = createUCTechTransferScraper("SC", "UC Santa Cruz");
+export const ucsfScraper = createUCTechTransferScraper("SF", "UC San Francisco");
 
 export const utahScraper = createTechPublisherScraper(
   "utah",
@@ -6446,5 +6447,66 @@ export const mgbScraper: InstitutionScraper = {
       console.error(`[scraper] ${INST} failed: ${msg}`);
       return [];
     }
+  },
+};
+
+// ── Universidad Complutense de Madrid (UCM / Complutransfer) ─────────────────
+// Category pages: https://www.ucm.es/otrien/complutransfer-{category}
+// Each page lists tech links as ALL-CAPS anchor text — category nav links are Title Case.
+// Detail pages use <p style="text-align: justify;"> for the main description.
+export const ucmScraper: InstitutionScraper = {
+  institution: "Universidad Complutense de Madrid",
+  async scrape(): Promise<ScrapedListing[]> {
+    const BASE = "https://www.ucm.es/otrien";
+    const INST = "Universidad Complutense de Madrid";
+    const CATEGORIES = ["health-sciences", "biology", "chemistry", "pharmacy", "medicine"];
+    const seen = new Set<string>();
+    const results: ScrapedListing[] = [];
+
+    for (const cat of CATEGORIES) {
+      const catUrl = `${BASE}/complutransfer-${cat}`;
+      try {
+        const $ = await fetchHtml(catUrl, 15_000);
+        if (!$) continue;
+
+        $("a[href]").each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          if (!href.includes("/otrien/complutransfer-")) return;
+          const fullUrl = href.startsWith("http") ? href : `https://www.ucm.es${href}`;
+          if (seen.has(fullUrl)) return;
+
+          const title = cleanText($(el).text());
+          if (!title || title.length < 8) return;
+
+          // Category nav links use Title Case; real tech titles are ALL CAPS.
+          const letters = title.replace(/[^A-Za-z]/g, "");
+          if (letters.length === 0) return;
+          const uppercaseRatio = (letters.match(/[A-Z]/g) ?? []).length / letters.length;
+          if (uppercaseRatio < 0.8) return;
+
+          seen.add(fullUrl);
+          results.push({ title, description: title, url: fullUrl, institution: INST });
+        });
+
+        console.log(`[scraper] ${INST}: ${results.length} listings after category "${cat}"`);
+      } catch (err: any) {
+        console.warn(`[scraper] ${INST}: category "${cat}" failed — ${err?.message}`);
+      }
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} total listings, fetching detail pages...`);
+
+    await enrichWithDetailPages(results, {
+      description: [
+        "p[style*='justify']",
+        "p[style*='text-align']",
+        "article p",
+        "main p",
+        ".description p",
+      ],
+    });
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+    return results;
   },
 };

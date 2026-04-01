@@ -1123,7 +1123,7 @@ export async function registerRoutes(
         mit: "MIT",
         harvard: "Harvard University",
         jhu: "Johns Hopkins University",
-        ucsf: "University of California San Francisco",
+        ucsf: "UC San Francisco",
         duke: "Duke University",
         columbia: "Columbia University",
         upenn: "University of Pennsylvania",
@@ -1313,6 +1313,7 @@ export async function registerRoutes(
         nus: "National University of Singapore",
         hkust: "Hong Kong University of Science and Technology",
         hku: "University of Hong Kong",
+        ucm: "Universidad Complutense de Madrid",
       };
       const name = SLUG_TO_NAME[req.params.slug]
         ?? req.params.slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
