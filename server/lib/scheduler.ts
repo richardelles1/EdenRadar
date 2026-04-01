@@ -61,6 +61,11 @@ let runGeneration = 0;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
+/** Returns the in-memory scraper health cache — no DB hit required. */
+export function getScraperHealthCache(): Map<string, ScraperHealthRow> {
+  return scraperHealthCache;
+}
+
 function buildTieredQueue(): string[] {
   const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
   for (const s of ALL_SCRAPERS) {

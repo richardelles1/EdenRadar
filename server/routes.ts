@@ -22,8 +22,8 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent } from "./lib/scheduler";
-import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth, loadAllScraperHealth } from "./lib/scraperState";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache } from "./lib/scheduler";
+import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
@@ -1346,10 +1346,8 @@ export async function registerRoutes(
 
       const allInstitutionNames = ALL_SCRAPERS.filter((s) => s.scraperType !== "stub").map((s) => s.institution);
 
-      const [healthData, scraperHealthMap] = await Promise.all([
-        storage.getCollectorHealthData(),
-        loadAllScraperHealth(),
-      ]);
+      const healthData = await storage.getCollectorHealthData();
+      const scraperHealthMap = getScraperHealthCache();
       const { institutions: instRows, syncSessions: sessions } = healthData;
 
       const instMap = new Map(instRows.map((r) => [r.institution, r]));
