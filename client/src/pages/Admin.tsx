@@ -428,9 +428,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 <div>
                   <p className="text-sm font-medium text-orange-700 dark:text-orange-400">Anomaly detected — sync halted</p>
                   <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">
-                    {session.lastRefreshedAt
-                      ? `Too many new assets relative to the existing index — suspected dedup failure. All new rows quarantined. Review them in the Indexing Queue.`
-                      : "Suspected dedup failure. All new rows quarantined. Review them in the Indexing Queue."}
+                    Too many new assets relative to the existing index — suspected dedup failure. New rows quarantined. Go to the Indexing Queue to release (then re-sync to classify) or discard them.
                   </p>
                 </div>
               </div>
@@ -4513,7 +4511,7 @@ function QuarantinePanel({ pw }: { pw: string }) {
       return res.json() as Promise<{ released: number; institution: string }>;
     },
     onSuccess: (d) => {
-      toast({ title: "Released", description: `${d.released} row(s) returned to the enrichment pipeline for ${d.institution}.` });
+      toast({ title: "Released", description: `${d.released} row(s) released for ${d.institution}. Trigger a manual re-sync to classify and push these assets.` });
       refetch();
       queryClient.invalidateQueries({ queryKey: ["/api/admin/new-arrivals"] });
     },

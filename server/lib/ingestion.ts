@@ -467,7 +467,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     const ANOMALY_NEW_RATIO = 0.60;
     const indexedCount = await storage.getInstitutionIndexedCount(institutionName);
     const isAnomaly =
-      indexedCount >= ANOMALY_MIN_ESTABLISHED &&
+      indexedCount > ANOMALY_MIN_ESTABLISHED &&
       newCount > indexedCount * ANOMALY_NEW_RATIO;
 
     if (isAnomaly) {
