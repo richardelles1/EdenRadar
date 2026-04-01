@@ -6,7 +6,7 @@ import { storage } from "./storage";
 import { db } from "./db";
 import { sql } from "drizzle-orm";
 import { existsSync } from "fs";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler } from "./lib/scheduler";
 
 const app = express();
@@ -76,9 +76,15 @@ app.use((req, res, next) => {
     const { chromium } = await import("playwright");
     const executablePath = chromium.executablePath();
     if (!existsSync(executablePath)) {
-      log("[startup] Playwright Chromium binary missing — installing…", "startup");
-      execSync("npx playwright install chromium", { stdio: "inherit", timeout: 120_000 });
-      log("[startup] Playwright Chromium installed OK", "startup");
+      log("[startup] Playwright Chromium binary missing — installing in background…", "startup");
+      const child = spawn("npx", ["playwright", "install", "chromium"], {
+        stdio: "inherit",
+        detached: false,
+      });
+      child.on("close", (code) => {
+        if (code === 0) log("[startup] Playwright Chromium installed OK", "startup");
+        else log(`[startup] Playwright Chromium install exited with code ${code}`, "startup");
+      });
     } else {
       log("[startup] Playwright Chromium binary present ✓", "startup");
     }
