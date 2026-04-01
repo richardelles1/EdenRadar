@@ -7,7 +7,6 @@ import {
   Layers,
   ArrowRight,
   Package,
-  FlaskConical,
   Plus,
   BookOpen,
   Bell,
@@ -194,7 +193,7 @@ function SectionHeader({
     <div className="flex items-center justify-between mb-4">
       <div className="flex items-center gap-2">
         <Icon className={`w-4 h-4 ${muted ? "text-muted-foreground/60" : "text-muted-foreground"}`} />
-        <h2 className={`text-sm font-semibold ${muted ? "text-muted-foreground" : "text-foreground"}`}>{title}</h2>
+        <h2 className={`text-sm font-bold ${muted ? "text-muted-foreground" : "text-foreground"}`}>{title}</h2>
       </div>
       {href && linkLabel && (
         <Link href={href}>
@@ -292,11 +291,6 @@ export default function IndustryDashboard() {
 
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
     queryKey: ["/api/browse/assets?limit=24&sortBy=completeness"],
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const { data: topAreasData, isLoading: topAreasLoading } = useQuery<{ areas: { name: string; count: number }[] }>({
-    queryKey: ["/api/dashboard/top-therapy-areas?limit=6"],
     staleTime: 10 * 60 * 1000,
   });
 
@@ -401,8 +395,6 @@ export default function IndustryDashboard() {
   const stats = data?.stats;
   const institutionCount = data?.institutionCount ?? institutionsData?.total ?? stats?.topInstitutions.length ?? 0;
   const weeklyNew = data?.weeklyNew ?? 0;
-  const topAreas = topAreasData?.areas ?? [];
-
   const greeting = (() => {
     const h = new Date().getHours();
     if (h < 12) return "Good morning";
@@ -422,7 +414,7 @@ export default function IndustryDashboard() {
   const recentSaved = (recentSavedData?.assets ?? []).slice(0, 5) as SavedAssetRow[];
 
   return (
-    <div className="min-h-full relative overflow-hidden">
+    <div className="min-h-full relative overflow-hidden" style={{ background: "linear-gradient(180deg, hsl(210 30% 96%) 0%, hsl(var(--background)) 40%)" }}>
       <style>{`
         @keyframes dash-fade-up {
           from { opacity: 0; transform: translateY(8px); }
@@ -470,7 +462,7 @@ export default function IndustryDashboard() {
           data-testid="dashboard-welcome"
         >
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold text-foreground" data-testid="dashboard-greeting">
+            <h1 className="text-3xl font-bold text-foreground tracking-tight" data-testid="dashboard-greeting">
               {greeting}{firstName ? (
                 <>{", "}<span className="gradient-text">{firstName}</span>!</>
               ) : "!"}
@@ -493,6 +485,54 @@ export default function IndustryDashboard() {
           </div>
         </div>
 
+        {/* ── SECTION 1.5: NETWORK COVERAGE ── */}
+        <div
+          className="rounded-xl border border-primary/15 p-4"
+          style={{
+            background: "color-mix(in srgb, hsl(var(--primary)) 2%, hsl(var(--background)))",
+            animation: "dash-fade-up 400ms ease 50ms both",
+          }}
+          data-testid="dashboard-platform-snapshot"
+        >
+          <SectionHeader title="Network Coverage" icon={Globe} muted />
+
+          {isLoading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="dashboard-kpi-row">
+              <KpiCard
+                icon={Package}
+                label="TTO Assets"
+                value={stats?.total ?? 0}
+                sub="indexed across network"
+                iconColor="text-primary"
+                bgColor="bg-primary/10"
+                href="/scout"
+              />
+              <KpiCard
+                icon={Building2}
+                label="Institutions"
+                value={institutionCount}
+                sub="universities and TTOs"
+                iconColor="text-blue-500"
+                bgColor="bg-blue-500/10"
+                href="/institutions"
+              />
+              <KpiCard
+                icon={TrendingUp}
+                label="New This Week"
+                value={weeklyNew}
+                sub="assets added recently"
+                iconColor="text-emerald-500"
+                bgColor="bg-emerald-500/10"
+                href="/industry/new-arrivals"
+              />
+            </div>
+          )}
+        </div>
+
         {/* ── SECTION 2: SIGNAL ROW ── */}
         <div
           className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
@@ -510,7 +550,7 @@ export default function IndustryDashboard() {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <Newspaper className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">New Assets</span>
+                  <span className="text-sm font-bold text-foreground">New Assets</span>
                   {freshnessText && (
                     <span className="text-[10px] text-muted-foreground/50 tabular-nums hidden sm:inline">
                       Updated {freshnessText}
@@ -568,30 +608,28 @@ export default function IndustryDashboard() {
               </div>
 
               {!newArrivalsLoading && newArrivalsData && newArrivalsData.total > 12 && (
-                <div className="pt-1 border-t border-border/50">
+                <div className="pt-1 border-t border-border/50 flex items-center justify-between gap-2">
                   <Link href="/industry/new-arrivals">
                     <span className="text-[10px] text-primary hover:underline cursor-pointer">
                       {newArrivalsData.total.toLocaleString()} total new arrivals
                     </span>
                   </Link>
+                  {exploreCategory && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium shrink-0">
+                      {exploreCategory}
+                    </span>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* ── Right: Explore (40%) ── */}
-            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 flex flex-col gap-3" data-testid="dashboard-explore">
-              {/* Three-column header */}
-              <div className="flex items-center gap-2">
+            {/* ── Right: Recommended for You (40%) ── */}
+            <div className="lg:col-span-2 rounded-xl border border-border bg-card p-5 flex flex-col gap-3" data-testid="dashboard-recommended">
+              {/* Header */}
+              <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 shrink-0">
                   <Compass className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold text-foreground">Explore</span>
-                </div>
-                <div className="flex-1 flex justify-center">
-                  {exploreCategory && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium">
-                      {exploreCategory}
-                    </span>
-                  )}
+                  <span className="text-sm font-bold text-foreground">Recommended for You</span>
                 </div>
                 <Link href="/scout">
                   <span className="text-[11px] text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors cursor-pointer shrink-0">
@@ -787,77 +825,6 @@ export default function IndustryDashboard() {
               </div>
             </div>
           )}
-        </div>
-
-        {/* ── SECTION 4: NETWORK COVERAGE ── */}
-        <div
-          className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-          style={{
-            background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
-            animation: "dash-fade-up 400ms ease 240ms both",
-          }}
-          data-testid="dashboard-platform-snapshot"
-        >
-          <SectionHeader title="Network Coverage" icon={Globe} muted />
-
-          {isLoading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" data-testid="dashboard-kpi-row">
-              <KpiCard
-                icon={Package}
-                label="TTO Assets"
-                value={stats?.total ?? 0}
-                sub="indexed across network"
-                iconColor="text-primary"
-                bgColor="bg-primary/10"
-              />
-              <KpiCard
-                icon={Building2}
-                label="Institutions"
-                value={institutionCount}
-                sub="universities and TTOs"
-                iconColor="text-blue-500"
-                bgColor="bg-blue-500/10"
-                href="/institutions"
-              />
-              <KpiCard
-                icon={TrendingUp}
-                label="New This Week"
-                value={weeklyNew}
-                sub="assets added recently"
-                iconColor="text-emerald-500"
-                bgColor="bg-emerald-500/10"
-                href="/industry/new-arrivals"
-              />
-            </div>
-          )}
-
-          <div className="rounded-xl border border-border bg-card p-5" data-testid="dashboard-therapy-areas">
-            <SectionHeader title="Top Therapy Areas" icon={FlaskConical} href="/scout" linkLabel="Search all" />
-            {topAreasLoading ? (
-              <div className="flex flex-wrap gap-1.5">
-                {[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
-              </div>
-            ) : topAreas.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground/60 italic">Categorization pending — enrich assets in Admin to populate.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {topAreas.map((a) => (
-                  <button
-                    key={a.name}
-                    onClick={() => navigate(`/browse?therapyArea=${encodeURIComponent(a.name)}`)}
-                    className="text-[10px] px-2.5 py-1 rounded-full border border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-foreground transition-colors capitalize"
-                    data-testid={`dashboard-area-${a.name}`}
-                  >
-                    {a.name} <span className="text-muted-foreground/50 tabular-nums">{a.count.toLocaleString()}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
 
       </div>
