@@ -4665,6 +4665,24 @@ function NewArrivals({ pw }: { pw: string }) {
     },
   });
 
+  const quarantineInstitutionMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch("/api/admin/indexing-queue/quarantine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ institution }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Quarantine failed");
+      return res.json() as Promise<{ quarantined: number; institution: string }>;
+    },
+    onSuccess: (d) => {
+      toast({ title: "Quarantined", description: `${d.quarantined} row(s) quarantined for ${d.institution}. Review in the Quarantined Batches panel.` });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/new-arrivals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/indexing-queue/quarantine-summary"] });
+    },
+    onError: (err: Error) => toast({ title: "Quarantine failed", description: err.message, variant: "destructive" }),
+  });
+
   const toggleExpand = (institution: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -4750,15 +4768,26 @@ function NewArrivals({ pw }: { pw: string }) {
                       <Building2 className="h-4 w-4 text-muted-foreground shrink-0" />
                       <span className="font-medium text-sm text-foreground truncate">{group.institution}</span>
                     </button>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
                       <span className="text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400 rounded-full px-2 py-0.5" data-testid={`badge-unindexed-${group.institution}`}>
                         {group.count} pending
                       </span>
                       <Button
                         size="sm"
+                        variant="ghost"
+                        onClick={() => quarantineInstitutionMutation.mutate(group.institution)}
+                        disabled={quarantineInstitutionMutation.isPending || pushMutation.isPending}
+                        className="h-7 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30"
+                        title="Hold all pending rows for this institution — prevents push until reviewed"
+                        data-testid={`button-quarantine-institution-${group.institution}`}
+                      >
+                        {quarantineInstitutionMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Hold"}
+                      </Button>
+                      <Button
+                        size="sm"
                         variant="outline"
                         onClick={() => pushMutation.mutate({ institution: group.institution })}
-                        disabled={pushMutation.isPending}
+                        disabled={pushMutation.isPending || quarantineInstitutionMutation.isPending}
                         className="h-7 text-xs"
                         data-testid={`button-push-${group.institution}`}
                       >

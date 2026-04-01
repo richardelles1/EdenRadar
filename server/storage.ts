@@ -941,11 +941,16 @@ export class DatabaseStorage implements IStorage {
     const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
 
     // 1b. Domain-based cross-institution URL dedup for techtransfer.universityofcalifornia.edu.
-    //     UCB and UCSD both scrape the same portal — an asset present under either campus
+    //     UCB and UCSD both scrape the shared UC portal — an asset present under either campus
     //     must be treated as known by both, preventing false-new floods when the URL format
     //     changes or an asset migrates between campus tabs.
+    //     Detection is institution-name-driven (does not require prior rows) so it works on
+    //     first sync and after a full wipe.
     const UC_TT_DOMAIN = "techtransfer.universityofcalifornia.edu";
-    const isUcCampus = dbRows.some(r => r.sourceUrl?.includes(UC_TT_DOMAIN));
+    const UC_CAMPUS_NAMES = ["UC Berkeley", "UC San Diego", "UC Los Angeles", "UC Davis",
+      "UC Santa Barbara", "UC Irvine", "UC Santa Cruz", "UC Riverside", "UC Merced"];
+    const isUcCampus = UC_CAMPUS_NAMES.includes(institution)
+      || dbRows.some(r => r.sourceUrl?.includes(UC_TT_DOMAIN));
     if (isUcCampus) {
       const crossRows = await db.execute(sql`
         SELECT source_url FROM ingested_assets
@@ -1049,15 +1054,29 @@ export class DatabaseStorage implements IStorage {
   }
 
   async releaseQuarantinedRows(institution: string): Promise<number> {
-    // Release quarantined rows back to 'scraped' so they re-enter the enrichment
-    // pipeline on the next sync. Used when an anomaly was a false alarm.
+    // Release quarantined rows directly into the Indexing Queue:
+    // - Set status='scraped' and relevant=true so they pass the Indexing Queue filter
+    //   (is_new=true AND relevant=true AND status NOT IN ('pushed','skipped','quarantined'))
+    // - Promote the session from 'anomalous' to 'enriched' so the JOIN filter passes
+    // Both steps are required for the rows to appear in getNewArrivals immediately.
     const result = await db.execute(sql`
       UPDATE sync_staging
-      SET status = 'scraped'
+      SET status = 'scraped', relevant = true
       WHERE institution = ${institution}
         AND status = 'quarantined'
-      RETURNING id
+      RETURNING id, session_id
     `);
+    if (result.rows.length > 0) {
+      const sessionIds = [...new Set((result.rows as Array<{ session_id: string }>).map(r => r.session_id))];
+      for (const sessionId of sessionIds) {
+        await db.execute(sql`
+          UPDATE sync_sessions
+          SET status = 'enriched', completed_at = NOW()
+          WHERE session_id = ${sessionId}
+            AND status = 'anomalous'
+        `);
+      }
+    }
     return result.rows.length;
   }
 
@@ -1523,7 +1542,7 @@ export class DatabaseStorage implements IStorage {
       JOIN sync_sessions ses ON ses.session_id = ss.session_id
       WHERE ss.is_new = true
         AND ss.relevant = true
-        AND ss.status NOT IN ('pushed', 'skipped')
+        AND ss.status NOT IN ('pushed', 'skipped', 'quarantined')
         AND ses.status = 'enriched'
       ORDER BY ss.asset_name, ss.institution, ss.created_at DESC
     `);
@@ -1563,7 +1582,7 @@ export class DatabaseStorage implements IStorage {
       JOIN sync_sessions ses ON ses.session_id = ss.session_id
       WHERE ss.is_new = true
         AND ss.relevant = true
-        AND ss.status NOT IN ('pushed', 'skipped')
+        AND ss.status NOT IN ('pushed', 'skipped', 'quarantined')
         AND ses.status = 'enriched'
         ${institutionFilter}
     `);
