@@ -16,10 +16,10 @@ const THERAPY_AREAS = [
 
 const STAGE_OPTIONS = [
   { value: "all", label: "All Stages" },
-  { value: "1", label: "Stage 1 — Concept Idea" },
-  { value: "2", label: "Stage 2 — Literature Review" },
-  { value: "3", label: "Stage 3 — Preliminary Data" },
-  { value: "4", label: "Stage 4 — Proof of Concept" },
+  { value: "1", label: "Stage 1: Concept Idea" },
+  { value: "2", label: "Stage 2: Literature Review" },
+  { value: "3", label: "Stage 3: Preliminary Data" },
+  { value: "4", label: "Stage 4: Proof of Concept" },
 ];
 
 const STAGE_LABEL: Record<number, string> = {

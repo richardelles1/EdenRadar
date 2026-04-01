@@ -234,7 +234,7 @@ const RESEARCH_TIPS = [
   "Check grants databases alongside literature to spot funded research trends.",
   "Export your synthesis results to share with collaborators.",
   "Use MeSH terms (e.g. 'Neoplasms' instead of 'cancer') for precise PubMed results.",
-  "Add NOT to exclude noise — e.g. 'CRISPR NOT review' filters out review articles.",
+  "Add NOT to exclude noise. e.g. 'CRISPR NOT review' filters out review articles.",
   "Filter ClinicalTrials results by trial phase to find late-stage assets closer to market.",
   "Search patents alongside literature to spot IP filings before publications appear.",
   "Scan abstracts for novelty claims, mechanism details, and translational potential.",
@@ -242,10 +242,10 @@ const RESEARCH_TIPS = [
   "Search by NIH grant number in the Grants source to find funded research programs.",
   "'Best match' ranks by relevance to your query; 'Most recent' shows newest first.",
   "Combine bioRxiv with PubMed to catch preprints before peer-reviewed publication.",
-  "AI Synthesis analyzes up to 10 of your top results — select the most relevant ones.",
+  "AI Synthesis analyzes up to 10 of your top results. Select the most relevant ones.",
   "Use Library folders to track different topics over time and revisit key findings.",
   "Export synthesis reports as shareable summaries for grant applications.",
-  "Add quotes around multi-word phrases for exact match — e.g. 'gene therapy'.",
+  "Add quotes around multi-word phrases for exact match. e.g. 'gene therapy'.",
   "Enable all sources for broad landscape scans, then narrow by source for deep dives.",
   "Look for convergence: multiple groups publishing on the same target signals opportunity.",
   "Cross-reference TTO listings with publications to find assets backed by strong data.",
@@ -254,14 +254,14 @@ const RESEARCH_TIPS = [
 const PLATFORM_FACTS = [
   "EdenRadar aggregates data from 30+ academic and patent databases worldwide.",
   "AI Synthesis analyzes up to 10 of your strongest results in a single pass.",
-  "Your Library persists across sessions — save now, review anytime.",
+  "Your Library persists across sessions. Save now, review anytime.",
   "Each source is queried in parallel for faster, more comprehensive results.",
   "EdenLab connects your research projects to real-time literature and grant data.",
   "Discovery Cards let researchers showcase work directly to industry scouts.",
   "PubMed searches now return up to 50 results per query for deeper coverage.",
   "The platform checks for new TTO listings across 30+ universities daily.",
   "Grants data covers NIH, NSF, and international funding agencies.",
-  "Search tips rotate with each query — watch for new strategies as you search.",
+  "Search tips rotate with each query. Watch for new strategies as you search.",
 ];
 
 type InsightCard = { type: "tip"; text: string } | { type: "fact"; text: string };
@@ -746,7 +746,7 @@ export default function ResearchDataSources() {
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground font-medium" data-testid="result-count">
                 {totalResults} result{totalResults !== 1 ? "s" : ""} for "{activeQuery}"
-                {totalPages > 1 && ` — Page ${clampedPage} of ${totalPages}`}
+                {totalPages > 1 && ` · Page ${clampedPage} of ${totalPages}`}
               </p>
               <Button
                 size="sm"

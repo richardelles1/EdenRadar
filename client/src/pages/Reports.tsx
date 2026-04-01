@@ -6,7 +6,7 @@ import { FileText, Download, Plus, Search } from "lucide-react";
 const MOCK_REPORTS = [
   {
     id: "r1",
-    title: "CAR-T Solid Tumor Opportunities — Q1 2026",
+    title: "CAR-T Solid Tumor Opportunities, Q1 2026",
     assetCount: 8,
     generatedAt: "3 days ago",
     institutions: ["Stanford University", "MD Anderson Cancer Center", "UCSF"],

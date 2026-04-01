@@ -732,7 +732,7 @@ export default function ResearchGrants() {
                 <p className="text-sm">No grants found{rawResults.length > 0 ? " matching your filters" : ` for "${builtQuery}"`}</p>
                 <p className="text-xs mt-1">
                   {rawResults.length > 0
-                    ? `${rawResults.length} result${rawResults.length !== 1 ? "s" : ""} hidden by filters — try adjusting them`
+                    ? `${rawResults.length} result${rawResults.length !== 1 ? "s" : ""} hidden by filters. Try adjusting them`
                     : "Try a broader keyword or different filters"}
                 </p>
               </div>

@@ -14,7 +14,7 @@ export function EdenNXBadge() {
         textDecoration: "none",
         opacity: 0.7,
       }}
-      title="EdenNX — Parent Company"
+      title="EdenNX: Parent Company"
     >
       <img
         src={edenNxLogo}

@@ -642,7 +642,7 @@ function ConceptsSection({ data }: { data: IndustryDeltaResponse["newConcepts"] 
               {data.total > data.items.length && (
                 <Link href="/industry/concepts">
                   <p className="text-xs text-primary hover:underline cursor-pointer">
-                    +{data.total - data.items.length} more — view all concepts
+                    +{data.total - data.items.length} more, view all concepts
                   </p>
                 </Link>
               )}
@@ -684,7 +684,7 @@ function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] 
               {data.total > data.items.length && (
                 <Link href="/industry/projects">
                   <p className="text-xs text-primary hover:underline cursor-pointer">
-                    +{data.total - data.items.length} more — view all projects
+                    +{data.total - data.items.length} more, view all projects
                   </p>
                 </Link>
               )}

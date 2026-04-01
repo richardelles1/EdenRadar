@@ -197,7 +197,7 @@ export default function IndustryEden() {
         body: JSON.stringify({ sessionId, messageIndex: msgIndex, sentiment }),
       });
       if (!res.ok) throw new Error("server error");
-      toast({ title: "Feedback noted — thanks!", duration: 2000 });
+      toast({ title: "Feedback noted, thanks!", duration: 2000 });
     } catch {
       setMessageFeedback((prev) => { const n = { ...prev }; delete n[msgIndex]; return n; });
       toast({ title: "Couldn't save feedback", variant: "destructive" });
@@ -419,7 +419,7 @@ export default function IndustryEden() {
                 <OrientationHint
                   hintId="eden-thesis-matching"
                   title="Thesis matching."
-                  body="Describe your deal criteria — modality, stage, indication, deal structure — and EDEN will cross-reference the entire network against your requirements."
+                  body="Describe your deal criteria (modality, stage, indication, deal structure) and EDEN will cross-reference the entire network against your requirements."
                   accent="emerald"
                 />
               </div>

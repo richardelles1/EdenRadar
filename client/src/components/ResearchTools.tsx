@@ -727,10 +727,10 @@ export function PicoHelper({ project, onSave, saving }: ResearchToolsProps) {
   }, [project.pico]);
 
   const fields: Array<{ key: keyof PicoData; label: string; placeholder: string }> = [
-    { key: "population", label: "P — Population", placeholder: "Who is being studied? (e.g., adults with type 2 diabetes)" },
-    { key: "intervention", label: "I — Intervention", placeholder: "What is the treatment or exposure? (e.g., GLP-1 agonist)" },
-    { key: "comparison", label: "C — Comparison", placeholder: "What is the alternative? (e.g., placebo or standard care)" },
-    { key: "outcome", label: "O — Outcome", placeholder: "What is measured? (e.g., HbA1c reduction at 12 weeks)" },
+    { key: "population", label: "P: Population", placeholder: "Who is being studied? (e.g., adults with type 2 diabetes)" },
+    { key: "intervention", label: "I: Intervention", placeholder: "What is the treatment or exposure? (e.g., GLP-1 agonist)" },
+    { key: "comparison", label: "C: Comparison", placeholder: "What is the alternative? (e.g., placebo or standard care)" },
+    { key: "outcome", label: "O: Outcome", placeholder: "What is measured? (e.g., HbA1c reduction at 12 weeks)" },
   ];
 
   return (
@@ -774,7 +774,7 @@ export function ProtocolChecklist({ project, onSave, saving }: ResearchToolsProp
     <div className="space-y-3" data-testid="protocol-checklist">
       <div className="flex items-center justify-between">
         <p className="text-xs text-muted-foreground">
-          Research quality checklist — track protocol completeness.
+          Research quality checklist: track protocol completeness.
         </p>
         <Badge variant="secondary" className="text-[10px]" data-testid="text-protocol-progress">
           {completedCount} / {PROTOCOL_ITEMS.length}

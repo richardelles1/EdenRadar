@@ -697,7 +697,7 @@ export default function Assets() {
             <div className="flex items-center justify-between gap-3">
               <DialogTitle className="flex items-center gap-2 text-base">
                 <FileText className="w-4 h-4 text-primary" />
-                {briefModal?.pipelineName} — Pipeline Brief
+                {briefModal?.pipelineName}: Pipeline Brief
               </DialogTitle>
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs text-muted-foreground">

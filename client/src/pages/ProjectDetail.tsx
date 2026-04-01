@@ -527,7 +527,7 @@ export default function ProjectDetail() {
               <SelectField value={local.fundingStatus ?? ""} onChange={(v) => setField("fundingStatus", v)} options={FUNDING_STATUS_OPTIONS} placeholder="Select funding status" testId="select-funding-status" />
             </FieldGroup>
             <FieldGroup label="Funding Sources">
-              <TagInput tags={local.fundingSources ?? []} onChange={(t) => setField("fundingSources", t)} placeholder="e.g. NIH, NSF — press Enter" testId="input-funding-sources" />
+              <TagInput tags={local.fundingSources ?? []} onChange={(t) => setField("fundingSources", t)} placeholder="e.g. NIH, NSF (press Enter)" testId="input-funding-sources" />
             </FieldGroup>
             <FieldGroup label="Estimated Budget (USD)">
               <Input

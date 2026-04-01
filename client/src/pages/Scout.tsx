@@ -81,7 +81,7 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "clinicaltrials",   label: "ClinicalTrials.gov",   desc: "Active trials" },
   { key: "patents",          label: "Patents",               desc: "Patent databases" },
   { key: "nih_reporter",     label: "NIH Reporter",         desc: "Federal grants" },
-  { key: "harvard",          label: "Harvard LibraryCloud", desc: "Harvard Library catalog — theses, journals, datasets" },
+  { key: "harvard",          label: "Harvard LibraryCloud", desc: "Harvard Library catalog: theses, journals, datasets" },
   { key: "openalex",         label: "OpenAlex",             desc: "Academic publications" },
   { key: "semantic_scholar", label: "Semantic Scholar",     desc: "Research papers" },
   { key: "europepmc",        label: "Europe PMC",           desc: "European biomedical literature" },
@@ -531,7 +531,7 @@ export default function Scout() {
                 <OrientationHint
                   hintId="scout-cross-source"
                   title="TTO asset discovery."
-                  body="Search across 300+ TTO disclosures — scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) using the Sources selector below."
+                  body="Search across 300+ TTO disclosures, scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) using the Sources selector below."
                   accent="emerald"
                 />
               </div>
@@ -619,7 +619,7 @@ export default function Scout() {
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-card-border text-xs text-muted-foreground" data-testid="research-error-banner">
                 <Radio className="w-3 h-3 shrink-0 opacity-40" />
-                <span>Research signals unavailable — showing TTO results only.</span>
+                <span>Research signals unavailable. Showing TTO results only.</span>
               </div>
             </div>
           )}

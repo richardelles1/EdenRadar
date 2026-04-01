@@ -361,7 +361,7 @@ export default function Discover() {
                 </span>
               </h1>
               <p className="text-muted-foreground text-sm max-w-xl mx-auto">
-                Multi-source biotech intelligence — scored, ranked, and matched to your buyer thesis.
+                Multi-source biotech intelligence: scored, ranked, and matched to your buyer thesis.
               </p>
             </div>
 

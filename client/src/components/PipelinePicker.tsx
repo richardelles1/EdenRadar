@@ -221,7 +221,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
             }`}
             disabled={isPending}
             data-testid={`button-save-asset-${effectivePayload?.pmid ?? effectivePayload?.asset_name}`}
-            title={isSaved ? "Saved — click to save to another pipeline" : "Save to pipeline"}
+            title={isSaved ? "Saved. Click to save to another pipeline" : "Save to pipeline"}
           >
             {isPending ? (
               <Loader2 className={iconClassName ? "w-4 h-4 animate-spin" : "w-3.5 h-3.5 animate-spin"} />

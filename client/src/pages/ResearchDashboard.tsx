@@ -114,7 +114,7 @@ export default function ResearchDashboard() {
           </h1>
           {(profile.institution || profile.careerStage) && (
             <p className="text-sm text-muted-foreground mt-0.5" data-testid="text-profile-subtitle">
-              {profile.careerStage ? `${profile.careerStage} · ` : ""}{profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}{profile.researchAreas?.length > 0 ? ` — ${profile.researchAreas.slice(0, 2).join(", ")}` : ""}
+              {profile.careerStage ? `${profile.careerStage} · ` : ""}{profile.institution}{profile.lab ? ` · ${profile.lab}` : ""}{profile.researchAreas?.length > 0 ? ` · ${profile.researchAreas.slice(0, 2).join(", ")}` : ""}
             </p>
           )}
         </div>
@@ -337,7 +337,7 @@ export default function ResearchDashboard() {
           </div>
         ) : (
           <div className="border border-border rounded-lg p-4 text-sm text-muted-foreground text-center">
-            No open funding found for your research areas — try{" "}
+            No open funding found for your research areas. Try{" "}
             <button
               className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
               onClick={() => navigate("/research/grants")}
@@ -385,7 +385,7 @@ export default function ResearchDashboard() {
           </div>
         ) : (
           <div className="border border-border rounded-lg p-4 text-sm text-muted-foreground text-center">
-            No alert — set a research area in your{" "}
+            No alert yet. Set a research area in your{" "}
             <button
               className="text-violet-500 underline underline-offset-2 hover:text-violet-400"
               onClick={() => navigate("/research/profile")}
