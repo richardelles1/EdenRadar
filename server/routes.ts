@@ -1540,7 +1540,7 @@ export async function registerRoutes(
   app.post("/api/ingest/scheduler/pause", async (req, res) => {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    const result = pauseScheduler();
+    const result = await pauseScheduler();
     res.json(result);
   });
 

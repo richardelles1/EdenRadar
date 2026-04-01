@@ -122,21 +122,21 @@ function getMinRunningTier(): 1 | 2 | 3 | 4 | null {
 }
 
 /** Flush scheduler state to DB immediately, bypassing the 60-second throttle.
- * Called on SIGTERM / SIGINT so in-flight queue progress is not lost. */
-export function flushSchedulerState(): void {
-  persistState(true);
+ * Returns the save Promise so callers (SIGTERM handler, pause route) can await it. */
+export function flushSchedulerState(): Promise<void> {
+  return persistState(true);
 }
 
-function persistState(immediate = false): void {
+function persistState(immediate = false): Promise<void> {
   const now = Date.now();
   // Throttle routine per-institution saves to at most once per 60 seconds.
   // State-critical events (start, pause, cycle complete) always pass immediate=true.
-  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return;
+  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return Promise.resolve();
   _lastPersistAt = now;
 
   // Save checkpoint rolled back by any in-flight institutions so they are retried on restart.
   const safeCheckpoint = Math.max(0, queueIndex - currentInstitutions.length);
-  saveSchedulerState({
+  return saveSchedulerState({
     queueIndex: safeCheckpoint,
     cycleCount,
     cycleStartedAt,
@@ -300,7 +300,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   return { ok: true, message: `Started fresh cycle #${cycleCount}` };
 }
 
-export function pauseScheduler(): { ok: boolean; message: string } {
+export async function pauseScheduler(): Promise<{ ok: boolean; message: string }> {
   if (schedulerState !== "running") {
     return { ok: false, message: "Scheduler is not running" };
   }
@@ -309,7 +309,11 @@ export function pauseScheduler(): { ok: boolean; message: string } {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
   }
-  persistState(true);
+  // Await the DB write before returning so callers (HTTP route handler) only
+  // respond with 200 after the paused state is durably committed to Supabase.
+  // This prevents auto-resume on any server restart that happens immediately
+  // after the HTTP response is sent.
+  await persistState(true);
   console.log(`[scheduler] Paused at position ${queueIndex}/${getInstitutionQueue().length}`);
   return { ok: true, message: "Scheduler paused" };
 }

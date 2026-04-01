@@ -26,14 +26,18 @@ process.on("unhandledRejection", (reason: unknown) => {
 
 // Flush scheduler queue-position to DB before the process exits so a restart
 // resumes from the correct institution rather than repeating the full cycle.
-function onShutdownSignal(signal: string) {
+async function onShutdownSignal(signal: string) {
   console.log(`[scheduler] ${signal} received — flushing state before exit`);
-  flushSchedulerState();
-  // Brief pause so the async DB write can be enqueued, then exit normally.
-  setTimeout(() => process.exit(0), 500);
+  // Await the DB write so the pause/running state is durable before the process exits.
+  // 2500ms safety-net covers Supabase PgBouncer latency under load.
+  await Promise.race([
+    flushSchedulerState(),
+    new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+  ]);
+  process.exit(0);
 }
-process.on("SIGTERM", () => onShutdownSignal("SIGTERM"));
-process.on("SIGINT", () => onShutdownSignal("SIGINT"));
+process.on("SIGTERM", () => { onShutdownSignal("SIGTERM"); });
+process.on("SIGINT", () => { onShutdownSignal("SIGINT"); });
 
 declare module "http" {
   interface IncomingMessage {
