@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key, Shield,
   Activity, Sparkles, BookOpen, Printer, Swords, GraduationCap,
-  Beaker, Tag, FlaskConical, Lightbulb, Lock, ChevronRight,
+  Beaker, Tag, FlaskConical, Lightbulb,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
 
@@ -318,34 +318,35 @@ export default function AssetDossier() {
                 )}
               </div>
             )}
+
+            {asset.why_it_matters && (
+              <div className="mt-4 pt-4 border-t border-card-border flex items-start gap-2">
+                <Sparkles className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <p className="text-sm text-foreground/80 leading-relaxed italic">"{asset.why_it_matters}"</p>
+              </div>
+            )}
+
+            {!dossier && (
+              <div className="mt-5 pt-5 border-t border-card-border" data-testid="dossier-gate">
+                <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                  Generate the complete intelligence brief for this asset — full commercial narrative, innovation analysis, competitive landscape, and supporting literature.
+                </p>
+                <Button
+                  onClick={() => asset && dossierMutation.mutate(asset)}
+                  disabled={dossierMutation.isPending}
+                  size="lg"
+                  className="gap-2 w-full"
+                  data-testid="button-generate-dossier"
+                >
+                  <FileText className="w-4 h-4" />
+                  {dossierMutation.isPending ? "Generating..." : "Generate Full Intelligence Brief"}
+                </Button>
+              </div>
+            )}
           </div>
 
           <div className="grid sm:grid-cols-3 gap-6">
             <div className="sm:col-span-2 space-y-6">
-              {asset.why_it_matters && (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sparkles className="w-4 h-4 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">Commercial Opportunity Signal</h2>
-                  </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed italic">"{asset.why_it_matters}"</p>
-                </div>
-              )}
-
-              {(enriched?.abstract || (!isTrivialSummary(asset.summary, asset.asset_name) && asset.summary)) && (
-                <div className="rounded-xl border border-card-border bg-card p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <BookOpen className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold text-foreground">
-                      {enriched?.abstract ? "Abstract" : "Summary"}
-                    </h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {enriched?.abstract ?? asset.summary}
-                  </p>
-                </div>
-              )}
-
               {intelLoading && (
                 <div className="space-y-3" data-testid="intelligence-loading">
                   <Skeleton className="h-32 w-full rounded-xl" />
@@ -359,44 +360,7 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              {!dossier ? (
-                <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-7" data-testid="dossier-gate">
-                  <div className="flex items-start gap-5">
-                    <div className="rounded-xl bg-primary/15 w-10 h-10 flex items-center justify-center shrink-0 mt-0.5">
-                      <Lock className="w-6 h-6 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-xl font-bold text-foreground mb-2">Unlock the Full Intelligence Brief</h3>
-                      <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
-                        Run a complete commercial diligence analysis on this licensable asset — covering innovation, unmet need, competitive context, and a full investment-grade narrative.
-                      </p>
-                      <ul className="space-y-2 mb-6">
-                        {[
-                          "Innovation claim and unmet need analysis",
-                          "Comparable drugs and competitive landscape",
-                          "Supporting literature",
-                          "Full commercial narrative",
-                        ].map((item) => (
-                          <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
-                            <ChevronRight className="w-3.5 h-3.5 text-primary shrink-0" />
-                            {item}
-                          </li>
-                        ))}
-                      </ul>
-                      <Button
-                        onClick={() => asset && dossierMutation.mutate(asset)}
-                        disabled={dossierMutation.isPending}
-                        size="lg"
-                        className="gap-2 w-full"
-                        data-testid="button-generate-dossier"
-                      >
-                        <FileText className="w-4 h-4" />
-                        {dossierMutation.isPending ? "Generating..." : "Generate Full Intelligence Brief"}
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              ) : (
+              {dossier && (
                 <>
                   <div className="rounded-xl border border-card-border bg-card p-5" data-testid="dossier-narrative-panel">
                     <div className="flex items-center gap-2 mb-4">
@@ -408,6 +372,20 @@ export default function AssetDossier() {
                     </div>
                     <NarrativeSection narrative={dossier.narrative} />
                   </div>
+
+                  {(enriched?.abstract || (!isTrivialSummary(asset.summary, asset.asset_name) && asset.summary)) && (
+                    <div className="rounded-xl border border-card-border bg-card p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <BookOpen className="w-4 h-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold text-foreground">
+                          {enriched?.abstract ? "Abstract" : "Summary"}
+                        </h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {enriched?.abstract ?? asset.summary}
+                      </p>
+                    </div>
+                  )}
 
                   {enriched?.innovationClaim && enriched.innovationClaim.length > 30 && (
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
