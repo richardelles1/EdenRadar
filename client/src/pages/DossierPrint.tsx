@@ -4,7 +4,7 @@ import { useParams, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import {
-  ArrowLeft, Printer, Upload, Key, ExternalLink, BookOpen,
+  ArrowLeft, Upload, Key, ExternalLink, BookOpen,
   Lightbulb, Sparkles, FlaskConical, Beaker, GraduationCap, Swords,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
