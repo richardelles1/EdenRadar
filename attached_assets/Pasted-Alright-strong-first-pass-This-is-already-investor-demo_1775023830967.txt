@@ -1,0 +1,265 @@
+Alright — strong first pass. This is already *investor-demoable*. Let’s tighten it into something that feels inevitable.
+
+---
+
+# 🧠 High-Level Read (CEO view)
+
+**You’ve got the right bones:**
+
+* Clear entry → “what’s new”
+* Mid → “what should I do”
+* Bottom → “system scale / credibility”
+
+That’s correct.
+
+**But right now it feels like:**
+
+> A clean database viewer
+> not
+> A decision engine
+
+We need to shift from *information display → guided action*.
+
+---
+
+# 🔥 1. Above-the-Fold = Biggest Miss
+
+### What you have:
+
+“Good evening, Rich — 3,550 new assets”
+
+### Problem:
+
+That number is **overwhelming, not helpful**
+
+### Fix (high impact, fast):
+
+Turn this into a **decision prompt**
+
+👉 Replace with:
+
+* “12 high-priority assets match your focus”
+* “3 assets need review today”
+* “2 pipelines updated since last visit”
+
+**Goal:** reduce cognitive load immediately
+
+---
+
+# ⚡ 2. “New Assets” vs “Explore” → Too Similar
+
+Right now:
+
+* Left = New Assets
+* Right = Explore
+
+They visually and functionally blur together.
+
+### Fix:
+
+Create **clear intent separation**
+
+#### New Assets → rename:
+
+👉 **“Since You Last Logged In”**
+
+* chronological
+* passive
+
+#### Explore → upgrade to:
+
+👉 **“Recommended for You”**
+
+* personalized
+* scored
+* explain *why*
+
+Add small line:
+
+> “Based on GLP-1 + Oncology focus”
+
+---
+
+# 🧭 3. Missing: Priority Layer (CRITICAL)
+
+You don’t tell the user:
+
+> “What actually matters right now”
+
+This is the #1 gap.
+
+### Add a new section (above everything else):
+
+👉 **“Your Focus Today”**
+
+3–5 cards max:
+
+* “2 assets ready for review”
+* “1 asset needs decision”
+* “Pipeline ‘GLP-1’ gaining traction”
+
+This becomes the **daily driver**
+
+---
+
+# 🧩 4. “Continue Your Work” = Strong but Underpowered
+
+This is GOOD. Keep it.
+
+But:
+
+* It’s passive
+* No urgency
+* No narrative
+
+### Upgrade:
+
+Turn pipelines into **living signals**
+
+Instead of:
+
+* GLP-1 (4 assets)
+
+👉 Make it:
+
+* GLP-1 → “+2 new this week”
+* CAR-T → “1 high-scoring asset added”
+
+Now it feels alive.
+
+---
+
+# 🧠 5. Cognitive Load: Slightly Too Flat
+
+Everything has equal visual weight.
+
+### Result:
+
+Nothing stands out as “important”
+
+### Fix hierarchy:
+
+* **Bold cards:** Priority / Focus
+* **Medium:** Pipelines / Actions
+* **Light:** Network stats
+
+Right now it’s all medium.
+
+---
+
+# 📊 6. Bottom Section (Network Coverage)
+
+This is good for:
+✔ credibility
+❌ not for daily use
+
+### Fix:
+
+Compress it or make it expandable
+
+It should feel like:
+
+> “Oh nice, this is big”
+
+Not:
+
+> “I should look at this”
+
+---
+
+# 🧪 7. Missing: “Why should I trust this?”
+
+You have scores (100%), but no context.
+
+### Add micro-explanations:
+
+* “High relevance”
+* “Recently cited”
+* “Matches your filters”
+
+This is HUGE for BD users.
+
+---
+
+# ⚙️ 8. One Surgical Add = Massive Upgrade
+
+Add a **single CTA per card**
+
+Right now:
+
+* Everything is read-only feeling
+
+Add:
+
+* “Review”
+* “Save”
+* “Add to pipeline”
+
+Make the dashboard **interactive, not observational**
+
+---
+
+# 🧭 What You’re Missing (Strategically)
+
+You’re 80% there.
+
+The last 20% is:
+
+### 👉 This needs to feel like:
+
+“A Bloomberg Terminal for biotech discovery”
+
+Not:
+“A list of assets”
+
+---
+
+# 🧱 If we lock the ideal structure:
+
+### Final Layout (clean + powerful)
+
+1. **Hero**
+
+   * “You have 3 priority items today”
+
+2. **Focus Today (NEW)**
+
+   * actionable cards
+
+3. **Since Last Visit**
+
+   * chronological feed
+
+4. **Recommended**
+
+   * personalized discovery
+
+5. **Pipelines**
+
+   * active work
+
+6. **Recently Saved**
+
+7. **Network Stats (collapsed/light)**
+
+---
+
+# 🧠 Final CTO Take
+
+You nailed:
+
+* Structure
+* Cleanliness
+* Domain clarity
+
+Now we evolve it into:
+👉 **A decision surface, not a data surface**
+
+---
+
+If we do one thing next:
+**We build “Focus Today” and rewrite the hero.**
+
+That alone 2x’s perceived intelligence of the product.
+
+Let’s tighten that next.
