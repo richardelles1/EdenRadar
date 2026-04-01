@@ -109,22 +109,6 @@ function InfoRow({ label, value, accent }: { label: string; value: string; accen
   );
 }
 
-function CompletenessBar({ score }: { score: number }) {
-  const pct = Math.min(100, Math.max(0, Math.round(score)));
-  const color = pct >= 70 ? "bg-emerald-500" : pct >= 40 ? "bg-amber-500" : "bg-red-500";
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-[10px]">
-        <span className="text-muted-foreground font-semibold uppercase tracking-wide">Data Completeness</span>
-        <span className="font-semibold text-foreground">{pct}%</span>
-      </div>
-      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className={`h-full rounded-full ${color} transition-all duration-500`} style={{ width: `${pct}%` }} />
-      </div>
-    </div>
-  );
-}
-
 function isTrivialSummary(summary: string, assetName: string): boolean {
   if (!summary || summary.trim().length === 0) return true;
   const s = summary.trim().toLowerCase();
@@ -244,21 +228,6 @@ export default function AssetDossier() {
     : asset.score >= 70
     ? { label: "Moderate Signal", color: "text-amber-600 dark:text-amber-400" }
     : { label: "Early Stage", color: "text-muted-foreground" };
-
-  const KEY_FIELDS = ["target", "modality", "indication", "development_stage", "patent_status", "licensing_status"] as const;
-  const UNKNOWN_LIKE = /^(unknown|n\/a|none|not available|tbd|tba|-)$/i;
-  const unknownCount = KEY_FIELDS.filter((f) => {
-    const v = (asset[f as keyof typeof asset] as string | undefined)?.trim() ?? "";
-    return !v || UNKNOWN_LIKE.test(v);
-  }).length;
-  const trivialSummary = isTrivialSummary(asset.summary, asset.asset_name);
-  const qualityPenaltyCount = unknownCount + (trivialSummary ? 1 : 0);
-  const adjustedCompleteness = (raw: number) => {
-    if (qualityPenaltyCount >= 5) return Math.min(raw, 40);
-    if (qualityPenaltyCount >= 4) return Math.min(raw, 50);
-    if (qualityPenaltyCount >= 2 && trivialSummary) return Math.min(raw, 70);
-    return raw;
-  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 w-full" data-testid="print-target">
