@@ -1,5 +1,6 @@
 import { ALL_SCRAPERS, getScraperTier } from "./scrapers/index";
-import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs, MAX_HTTP_CONCURRENT } from "./ingestion";
+import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs, getMaxHttpConcurrent, setConcurrency } from "./ingestion";
+export { setConcurrency, getMaxHttpConcurrent };
 import {
   saveSchedulerState,
   loadSchedulerState,
@@ -32,6 +33,7 @@ export interface SchedulerStatus {
   estimatedRemainingMs: number | null;
   lastCycleCompletedAt: string | null;
   concurrentSyncs: number;
+  maxConcurrency: number;
   currentTier: 1 | 2 | 3 | 4 | null;
 }
 
@@ -131,7 +133,7 @@ export function getSchedulerStatus(): SchedulerStatus {
   const avgMs = syncDurations.length > 0
     ? Math.round(syncDurations.reduce((a, b) => a + b, 0) / syncDurations.length)
     : null;
-  const slots = Math.min(MAX_HTTP_CONCURRENT, Math.max(1, activeSyncs.length || 1));
+  const slots = Math.min(getMaxHttpConcurrent(), Math.max(1, activeSyncs.length || 1));
   const estimatedRemainingMs = avgMs && remaining > 0
     ? Math.ceil(remaining / slots) * avgMs
     : null;
@@ -171,6 +173,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     estimatedRemainingMs,
     lastCycleCompletedAt: lastCycleCompletedAt?.toISOString() ?? null,
     concurrentSyncs: activeSyncs.length,
+    maxConcurrency: getMaxHttpConcurrent(),
     currentTier,
   };
 }
@@ -240,7 +243,7 @@ export function startScheduler(): { ok: boolean; message: string } {
     freshSkippedThisCycle = 0;
     cycleStartedAt = new Date();
     cycleCount++;
-    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3→T4 order, up to ${MAX_HTTP_CONCURRENT} concurrent per tier)`);
+    console.log(`[scheduler] Started cycle #${cycleCount} — ${tieredQueue.length} institutions (T1→T2→T3→T4 order, up to ${getMaxHttpConcurrent()} concurrent per tier)`);
   }
 
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
@@ -384,7 +387,7 @@ function scheduleNext(): void {
     const liveCount = getActiveSyncs().length;
 
     if (scraperType === "playwright" && liveCount > 0) break;
-    if (scraperType !== "playwright" && liveCount >= MAX_HTTP_CONCURRENT) break;
+    if (scraperType !== "playwright" && liveCount >= getMaxHttpConcurrent()) break;
 
     // Respect tier boundary: don't dispatch a higher-tier priority item while
     // a lower-tier batch is still running.
@@ -454,7 +457,7 @@ function scheduleNext(): void {
     }
 
     // ── Concurrent limit for HTTP/API scrapers ────────────────────────────────
-    if (liveCount >= MAX_HTTP_CONCURRENT) break;
+    if (liveCount >= getMaxHttpConcurrent()) break;
 
     // ── Staleness gate ────────────────────────────────────────────────────────
     if (isFresh(institution)) {
@@ -540,8 +543,36 @@ async function runOne(institution: string, gen: number): Promise<void> {
     return;
   }
 
+  // Inner helper — runs the sync once and returns the result or throws.
+  const attemptSync = () => runInstitutionSync(institution);
+
+  let result: Awaited<ReturnType<typeof runInstitutionSync>> | null = null;
+  let finalErr: any = null;
+
   try {
-    const result = await runInstitutionSync(institution);
+    result = await attemptSync();
+  } catch (firstErr: any) {
+    const firstMsg = firstErr?.message ?? "";
+    // Auto-retry once after a short pause. This handles transient failures:
+    // server restart mid-sync, momentary network blip, or load-induced timeout.
+    console.log(`[scheduler] ${institution} failed on first attempt (${firstMsg}) — retrying in 15s...`);
+    await new Promise((r) => setTimeout(r, 15_000));
+    // Only retry if we are still in the same scheduler generation.
+    if (runGeneration === gen) {
+      try {
+        result = await attemptSync();
+        console.log(`[scheduler] ${institution} retry succeeded`);
+      } catch (retryErr: any) {
+        finalErr = retryErr;
+      }
+    } else {
+      // Generation changed during the retry wait — abandon quietly.
+      return;
+    }
+  }
+
+  if (result !== null) {
+    // ── Success path ────────────────────────────────────────────────────────
     if (runGeneration === gen) {
       completedThisCycle++;
       if (result.rawCount === 0) {
@@ -560,24 +591,22 @@ async function runOne(institution: string, gen: number): Promise<void> {
       backoffUntil: null,
       lastSuccessNewCount: result.newCount,
     });
-  } catch (err: any) {
-    const msg = err?.message ?? "";
+  } else if (finalErr !== null) {
+    // ── Failure path (both attempts failed) ─────────────────────────────────
+    const msg = finalErr?.message ?? "";
     const transient = isTransientDbError(msg);
 
     if (runGeneration === gen) {
       if (transient) {
-        // Log as infrastructure blip — do not count as a scraper failure
         console.log(`[scheduler] ${institution} skipped (DB connection blip, not a scraper fault): ${msg}`);
-        // Put back in queue at front so it retries next cycle slot
         if (!priorityQueue.includes(institution)) priorityQueue.push(institution);
       } else {
         failedThisCycle++;
-        console.log(`[scheduler] ${institution} failed: ${msg}`);
+        console.log(`[scheduler] ${institution} failed after retry: ${msg}`);
       }
     }
 
     if (!transient) {
-      // Only write failure to health DB when the error is a real scraper problem
       await updateScraperHealth(institution, false, msg);
       const current = scraperHealthCache.get(institution);
       const newFailures = (current?.consecutiveFailures ?? 0) + 1;
@@ -595,9 +624,8 @@ async function runOne(institution: string, gen: number): Promise<void> {
         lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
       });
     }
-  } finally {
-    if (runGeneration === gen) {
-      persistState();
-    }
+  }
+  if (runGeneration === gen) {
+    persistState();
   }
 }

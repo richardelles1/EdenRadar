@@ -246,11 +246,19 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 // ── Concurrent sync lock ──────────────────────────────────────────────────────
 // Tracks all currently active institution syncs.
 // Playwright scrapers require full exclusivity (activeSyncs.size === 0).
-// HTTP/API scrapers allow up to MAX_HTTP_CONCURRENT concurrent instances.
+// HTTP/API scrapers allow up to maxHttpConcurrent concurrent instances.
 
-/** Maximum number of concurrent HTTP/API syncs. Used by both the lock here and
- * the scheduler's dispatch loop — export ensures a single source of truth. */
-export const MAX_HTTP_CONCURRENT = 2;
+/** Current concurrency cap for HTTP/API syncs (1 = reliable serial, 2 = faster).
+ * Default is 1 — matches the "manual trigger" environment where scrapers are
+ * proven to complete reliably. Raise to 2 only if cycle time matters more than
+ * reliability. Use setConcurrency() to change at runtime. */
+let _maxHttpConcurrent = 1;
+
+export function getMaxHttpConcurrent(): number { return _maxHttpConcurrent; }
+export function setConcurrency(n: 1 | 2): void { _maxHttpConcurrent = n; }
+
+/** @deprecated Use getMaxHttpConcurrent() — kept for compatibility with scheduler import */
+export const MAX_HTTP_CONCURRENT = 1;
 
 const activeSyncs: Map<string, "playwright" | "http" | "api"> = new Map();
 
@@ -282,7 +290,7 @@ export function tryAcquireSyncLock(institution: string, scraperType: "playwright
     if (activeSyncs.size > 0) return false;
   } else {
     if (hasPlaywrightSync()) return false;
-    if (activeSyncs.size >= MAX_HTTP_CONCURRENT) return false;
+    if (activeSyncs.size >= _maxHttpConcurrent) return false;
   }
 
   activeSyncs.set(institution, scraperType);

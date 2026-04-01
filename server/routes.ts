@@ -22,7 +22,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth, loadAllScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -1394,10 +1394,13 @@ export async function registerRoutes(
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
           health = "ok";
         } else if (session.status === "failed") {
+          // consecutiveFailures is maintained by the scheduler and correctly
+          // excludes transient events (server restart, DB blip) via isTransientDbError().
+          // When it's 0, the last failure was transient — don't show Warning.
           health = consecutiveFailures >= 4 ? "failing" :
                    consecutiveFailures >= 2 ? "degraded" :
                    consecutiveFailures >= 1 ? "warning" :
-                   session.errorMessage ? "warning" : "ok";
+                   "ok";
         } else {
           health = "degraded";
         }
@@ -1575,6 +1578,15 @@ export async function registerRoutes(
     const result = setDelay(delayMs);
     if (!result.ok) return res.status(400).json(result);
     res.json(result);
+  });
+
+  app.post("/api/ingest/scheduler/concurrency", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { concurrency } = req.body ?? {};
+    if (concurrency !== 1 && concurrency !== 2) return res.status(400).json({ error: "concurrency must be 1 or 2" });
+    setConcurrency(concurrency as 1 | 2);
+    res.json({ ok: true, message: `Concurrency set to ${concurrency}`, concurrency });
   });
 
   app.get("/api/admin/scraper-health", async (req, res) => {

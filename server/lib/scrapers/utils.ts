@@ -179,12 +179,15 @@ export function extractList($: cheerio.CheerioAPI, selectors: string[]): string[
 
 /**
  * Fetch an HTML page through the egress proxy defined by SCRAPER_PROXY_URL.
- * Falls back to direct fetchHtml if the env var is not set.
+ * Returns null immediately if SCRAPER_PROXY_URL is not configured — does NOT
+ * fall back to a direct fetch, because the sites that require this function
+ * (DOE national labs etc.) block Replit egress IPs and would hang until the
+ * per-request timeout fires, wasting the entire scraper timeout budget.
  *
- * Used for sources that block Replit's shared egress IPs (e.g. DOE national labs).
  * Set SCRAPER_PROXY_URL to the deployed Cloudflare Worker URL from
  * server/lib/scrapers/cloudflare-proxy/worker.js before running these scrapers.
  */
+let _proxyWarnedOnce = false;
 export async function fetchHtmlViaProxy(
   url: string,
   timeoutMs = 15_000,
@@ -193,8 +196,11 @@ export async function fetchHtmlViaProxy(
   const proxyBase = process.env.SCRAPER_PROXY_URL?.trim();
 
   if (!proxyBase) {
-    console.warn(`[scraper] SCRAPER_PROXY_URL not set — falling back to direct fetch for: ${url}`);
-    return fetchHtml(url, timeoutMs, externalSignal);
+    if (!_proxyWarnedOnce) {
+      console.warn(`[scraper] SCRAPER_PROXY_URL not configured — proxy-required scrapers (DOE labs etc.) will return 0 results. Set the env var to enable them.`);
+      _proxyWarnedOnce = true;
+    }
+    return null;
   }
 
   const proxyUrl = `${proxyBase}?url=${encodeURIComponent(url)}`;

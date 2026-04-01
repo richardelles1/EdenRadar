@@ -128,6 +128,7 @@ interface SchedulerStatus {
   estimatedRemainingMs: number | null;
   lastCycleCompletedAt: string | null;
   concurrentSyncs: number;
+  maxConcurrency: number;
   currentTier: 1 | 2 | 3 | 4 | null;
 }
 
@@ -839,6 +840,28 @@ function DataHealth({ pw }: { pw: string }) {
     }
   };
 
+  const setConcurrencyMutation = useMutation({
+    mutationFn: async (concurrency: 1 | 2) => {
+      const res = await fetch("/api/ingest/scheduler/concurrency", {
+        method: "POST",
+        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        body: JSON.stringify({ concurrency }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; concurrency: number }) => {
+      toast({ title: `Concurrency set to ${d.concurrency}`, description: d.concurrency === 1 ? "Serial mode — one institution at a time" : "Parallel mode — two simultaneous syncs" });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to set concurrency", description: err.message, variant: "destructive" });
+    },
+  });
+
   type ScraperHealthRow = {
     institution: string;
     consecutiveFailures: number;
@@ -1116,6 +1139,22 @@ function DataHealth({ pw }: { pw: string }) {
                   {schedPaused ? "Resume" : "Start"}
                 </Button>
               )}
+              <div className="flex items-center border border-border rounded-md overflow-hidden h-8 text-xs flex-shrink-0" data-testid="concurrency-selector">
+                <button
+                  className={`px-2.5 h-full font-medium transition-colors ${(sched.maxConcurrency ?? 1) === 1 ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                  onClick={() => setConcurrencyMutation.mutate(1)}
+                  disabled={setConcurrencyMutation.isPending || (sched.maxConcurrency ?? 1) === 1}
+                  title="Serial — one institution at a time (recommended)"
+                  data-testid="button-concurrency-1"
+                >1x</button>
+                <button
+                  className={`px-2.5 h-full font-medium border-l border-border transition-colors ${(sched.maxConcurrency ?? 1) === 2 ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                  onClick={() => setConcurrencyMutation.mutate(2)}
+                  disabled={setConcurrencyMutation.isPending || (sched.maxConcurrency ?? 1) === 2}
+                  title="Parallel — two simultaneous syncs"
+                  data-testid="button-concurrency-2"
+                >2x</button>
+              </div>
               <Button
                 size="sm"
                 variant="outline"
@@ -1331,8 +1370,12 @@ function DataHealth({ pw }: { pw: string }) {
                                   />
                                 </div>
                               </div>
-                            ) : row.lastSyncError ? (
+                            ) : row.lastSyncError && row.consecutiveFailures > 0 ? (
                               <span className="text-xs text-red-500 truncate block max-w-[200px]" title={row.lastSyncError}>
+                                {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
+                              </span>
+                            ) : row.lastSyncError && row.consecutiveFailures === 0 ? (
+                              <span className="text-xs text-muted-foreground/50 truncate block max-w-[200px]" title={row.lastSyncError}>
                                 {row.lastSyncError.length > 60 ? row.lastSyncError.slice(0, 60) + "..." : row.lastSyncError}
                               </span>
                             ) : (
