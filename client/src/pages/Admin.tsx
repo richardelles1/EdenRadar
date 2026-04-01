@@ -249,7 +249,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
 
   useEffect(() => {
     const status = statusData?.session?.status;
-    const isTerminal = status === "enriched" || status === "pushed" || status === "failed";
+    const isTerminal = status === "enriched" || status === "pushed" || status === "failed" || status === "anomalous";
     if (isTerminal) {
       setPolling(false);
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
@@ -309,6 +309,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   const isEnriched = session?.status === "enriched" && !syncForThisInst;
   const isPushed = session?.status === "pushed" && !syncForThisInst;
   const isFailed = session?.status === "failed" && !syncForThisInst;
+  const isAnomalous = session?.status === "anomalous" && !syncForThisInst;
   const syncIsActive = statusData?.syncRunning ?? false;
 
   const rawCount = session?.rawCount ?? 0;
@@ -408,8 +409,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
             </div>
             <div className="flex items-center gap-2">
               <Badge
-                variant={isPushed ? "default" : isFailed ? "destructive" : isEnriched ? "secondary" : "outline"}
-                className={isRunning ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800" : ""}
+                variant={isPushed ? "default" : isFailed ? "destructive" : isAnomalous ? "destructive" : isEnriched ? "secondary" : "outline"}
+                className={isRunning ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800" : isAnomalous ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-800" : ""}
                 data-testid="sync-status-badge"
               >
                 {syncForThisInst && session?.status !== "running" ? "starting…" : session.status}
@@ -419,6 +420,22 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
               </Button>
             </div>
           </div>
+
+          {isAnomalous && (
+            <div className="px-5 py-4" data-testid="sync-anomaly-warning">
+              <div className="flex items-start gap-3 p-4 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30">
+                <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-400">Anomaly detected — sync halted</p>
+                  <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">
+                    {session.lastRefreshedAt
+                      ? `Too many new assets relative to the existing index — suspected dedup failure. All new rows quarantined. Review them in the Indexing Queue.`
+                      : "Suspected dedup failure. All new rows quarantined. Review them in the Indexing Queue."}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {isRunning && (
             <div className="px-5 py-5" data-testid="sync-progress">
@@ -4465,6 +4482,110 @@ function AccountCenter({ pw }: { pw: string }) {
   );
 }
 
+// ── Quarantine Panel ─────────────────────────────────────────────────────────
+
+type QuarantineSummaryRow = { institution: string; count: number };
+
+function QuarantinePanel({ pw }: { pw: string }) {
+  const { toast } = useToast();
+
+  const { data, isLoading, refetch } = useQuery<{ summary: QuarantineSummaryRow[] }>({
+    queryKey: ["/api/admin/indexing-queue/quarantine-summary"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/indexing-queue/quarantine-summary", {
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to load quarantine summary");
+      return res.json();
+    },
+    staleTime: 30000,
+    enabled: !!pw,
+  });
+
+  const releaseMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch("/api/admin/indexing-queue/release-quarantine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ institution }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Release failed");
+      return res.json() as Promise<{ released: number; institution: string }>;
+    },
+    onSuccess: (d) => {
+      toast({ title: "Released", description: `${d.released} row(s) returned to the enrichment pipeline for ${d.institution}.` });
+      refetch();
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/new-arrivals"] });
+    },
+    onError: (err: Error) => toast({ title: "Release failed", description: err.message, variant: "destructive" }),
+  });
+
+  const discardMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await fetch("/api/admin/indexing-queue/discard-quarantine", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ institution }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Discard failed");
+      return res.json() as Promise<{ discarded: number; institution: string }>;
+    },
+    onSuccess: (d) => {
+      toast({ title: "Discarded", description: `${d.discarded} quarantined row(s) permanently discarded for ${d.institution}.` });
+      refetch();
+    },
+    onError: (err: Error) => toast({ title: "Discard failed", description: err.message, variant: "destructive" }),
+  });
+
+  if (isLoading || !data || data.summary.length === 0) return null;
+
+  return (
+    <div className="border border-orange-200 dark:border-orange-900 rounded-lg bg-orange-50 dark:bg-orange-950/20 p-4 space-y-3" data-testid="quarantine-panel">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+        <h3 className="text-sm font-semibold text-orange-700 dark:text-orange-400">Quarantined Batches</h3>
+        <span className="text-xs text-orange-600 dark:text-orange-500 ml-1">Rows held back due to suspected dedup failure. Review and release or discard.</span>
+      </div>
+      <div className="space-y-2">
+        {data.summary.map((row) => (
+          <div
+            key={row.institution}
+            className="flex items-center justify-between bg-white dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-md px-3 py-2 gap-3"
+            data-testid={`quarantine-row-${row.institution}`}
+          >
+            <div className="min-w-0 flex-1">
+              <span className="text-sm font-medium text-foreground">{row.institution}</span>
+              <span className="ml-2 text-xs text-orange-600 dark:text-orange-400">{row.count} quarantined</span>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs border-orange-300 dark:border-orange-700 text-orange-700 dark:text-orange-300 hover:bg-orange-100 dark:hover:bg-orange-900/40"
+                onClick={() => releaseMutation.mutate(row.institution)}
+                disabled={releaseMutation.isPending || discardMutation.isPending}
+                data-testid={`button-release-quarantine-${row.institution}`}
+              >
+                {releaseMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Release"}
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                onClick={() => discardMutation.mutate(row.institution)}
+                disabled={releaseMutation.isPending || discardMutation.isPending}
+                data-testid={`button-discard-quarantine-${row.institution}`}
+              >
+                {discardMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Discard"}
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── New Arrivals ─────────────────────────────────────────────────────────────
 
 type NewArrivalAsset = {
@@ -4560,6 +4681,8 @@ function NewArrivals({ pw }: { pw: string }) {
 
   return (
     <div className="space-y-6" data-testid="new-arrivals-panel">
+      {/* Quarantine panel — shown when anomalous batches are held */}
+      <QuarantinePanel pw={pw} />
       {/* Header row */}
       <div className="flex items-center justify-end">
         <Button

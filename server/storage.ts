@@ -122,6 +122,9 @@ export interface IStorage {
   supersedeStagingForInstitution(institution: string): Promise<number>;
   quarantineNewStagingRows(institution: string): Promise<number>;
   quarantineSessionNewRows(sessionId: string): Promise<number>;
+  releaseQuarantinedRows(institution: string): Promise<number>;
+  discardQuarantinedRows(institution: string): Promise<number>;
+  getQuarantineSummary(): Promise<Array<{ institution: string; count: number }>>;
   getInstitutionIndexedCount(institution: string): Promise<number>;
 
   getEnrichmentStats(): Promise<{
@@ -937,6 +940,24 @@ export class DatabaseStorage implements IStorage {
     const fingerprints = new Set(dbRows.map(r => r.fingerprint));
     const sourceUrls = new Set<string>(dbRows.filter(r => r.sourceUrl).map(r => r.sourceUrl!));
 
+    // 1b. Domain-based cross-institution URL dedup for techtransfer.universityofcalifornia.edu.
+    //     UCB and UCSD both scrape the same portal — an asset present under either campus
+    //     must be treated as known by both, preventing false-new floods when the URL format
+    //     changes or an asset migrates between campus tabs.
+    const UC_TT_DOMAIN = "techtransfer.universityofcalifornia.edu";
+    const isUcCampus = dbRows.some(r => r.sourceUrl?.includes(UC_TT_DOMAIN));
+    if (isUcCampus) {
+      const crossRows = await db.execute(sql`
+        SELECT source_url FROM ingested_assets
+        WHERE source_url LIKE ${"%" + UC_TT_DOMAIN + "%"}
+          AND institution != ${institution}
+          AND source_url IS NOT NULL
+      `);
+      for (const r of crossRows.rows as Array<{ source_url: string }>) {
+        if (r.source_url) sourceUrls.add(r.source_url);
+      }
+    }
+
     // 2. Also include fingerprints + source URLs from staging rows for this institution.
     //    Include ALL staging rows regardless of isNew flag (a Day-N scan may have inserted
     //    the same asset as isNew=false, and we must still recognise it on Day N+1).
@@ -962,16 +983,17 @@ export class DatabaseStorage implements IStorage {
   }
 
   async supersedeStagingForInstitution(institution: string): Promise<number> {
-    // Supersede stale/incomplete session rows (running, failed, stuck).
+    // Supersede stale/incomplete session rows (running, failed, stuck, anomalous).
     // Rows from enriched sessions are preserved (they are the Indexing Queue).
+    // 'quarantined' rows are also preserved — they may be released later.
     const staleResult = await db.execute(sql`
       UPDATE sync_staging ss
       SET status = 'skipped'
       FROM sync_sessions ses
       WHERE ss.session_id = ses.session_id
         AND ss.institution = ${institution}
-        AND ss.status NOT IN ('pushed', 'skipped')
-        AND ses.status != 'enriched'
+        AND ss.status NOT IN ('pushed', 'skipped', 'quarantined')
+        AND ses.status NOT IN ('enriched', 'anomalous')
       RETURNING ss.id
     `);
 
@@ -989,7 +1011,7 @@ export class DatabaseStorage implements IStorage {
       FROM sync_sessions ses
       WHERE ss.session_id = ses.session_id
         AND ss.institution = ${institution}
-        AND ss.status != 'skipped'
+        AND ss.status NOT IN ('skipped', 'quarantined')
         AND ses.status = 'enriched'
         AND ss.created_at < NOW() - INTERVAL '14 days'
     `);
@@ -998,15 +1020,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async quarantineNewStagingRows(institution: string): Promise<number> {
-    // Mark all is_new=true staging rows for the institution as 'skipped' so they
-    // cannot be pushed. Used to quarantine false-new floods caused by URL/dedup churn
-    // (e.g., UC campus URL format changes) and by the anomaly guard in runInstitutionSync.
+    // Mark all is_new=true staging rows for the institution as 'quarantined' so they
+    // cannot be pushed but can be released later. Used to quarantine false-new floods
+    // caused by URL/dedup churn (e.g., UC campus URL format changes).
     const result = await db.execute(sql`
       UPDATE sync_staging
-      SET status = 'skipped'
+      SET status = 'quarantined'
       WHERE institution = ${institution}
         AND is_new = true
-        AND status NOT IN ('pushed', 'skipped')
+        AND status NOT IN ('pushed', 'skipped', 'quarantined')
       RETURNING id
     `);
     return result.rows.length;
@@ -1017,13 +1039,50 @@ export class DatabaseStorage implements IStorage {
     // Only touches rows from the current (bad) session rather than all institution rows.
     const result = await db.execute(sql`
       UPDATE sync_staging
-      SET status = 'skipped'
+      SET status = 'quarantined'
       WHERE session_id = ${sessionId}
         AND is_new = true
-        AND status NOT IN ('pushed', 'skipped')
+        AND status NOT IN ('pushed', 'skipped', 'quarantined')
       RETURNING id
     `);
     return result.rows.length;
+  }
+
+  async releaseQuarantinedRows(institution: string): Promise<number> {
+    // Release quarantined rows back to 'scraped' so they re-enter the enrichment
+    // pipeline on the next sync. Used when an anomaly was a false alarm.
+    const result = await db.execute(sql`
+      UPDATE sync_staging
+      SET status = 'scraped'
+      WHERE institution = ${institution}
+        AND status = 'quarantined'
+      RETURNING id
+    `);
+    return result.rows.length;
+  }
+
+  async discardQuarantinedRows(institution: string): Promise<number> {
+    // Permanently discard quarantined rows by marking them 'skipped'.
+    // Used when the quarantine is confirmed to be a genuine dedup failure.
+    const result = await db.execute(sql`
+      UPDATE sync_staging
+      SET status = 'skipped'
+      WHERE institution = ${institution}
+        AND status = 'quarantined'
+      RETURNING id
+    `);
+    return result.rows.length;
+  }
+
+  async getQuarantineSummary(): Promise<Array<{ institution: string; count: number }>> {
+    const rows = await db.execute(sql`
+      SELECT institution, COUNT(*)::int AS count
+      FROM sync_staging
+      WHERE status = 'quarantined'
+      GROUP BY institution
+      ORDER BY count DESC
+    `);
+    return rows.rows as Array<{ institution: string; count: number }>;
   }
 
   async markAsIrrelevant(id: number): Promise<void> {

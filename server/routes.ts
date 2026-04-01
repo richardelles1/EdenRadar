@@ -3459,6 +3459,7 @@ export async function registerRoutes(
 
   // Quarantine all unpushed is_new=true staging rows for a specific institution.
   // Used to resolve false-new floods from URL/dedup churn before they reach the push step.
+  // Legacy path kept for backward compat — new path is /api/admin/indexing-queue/quarantine.
   app.post("/api/admin/staging/quarantine", async (req, res) => {
     const pw = req.headers["x-admin-password"] as string;
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
@@ -3469,6 +3470,64 @@ export async function registerRoutes(
     try {
       const quarantined = await storage.quarantineNewStagingRows(institution.trim());
       res.json({ ok: true, institution: institution.trim(), quarantined });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Indexing Queue quarantine controls ────────────────────────────────────
+
+  app.get("/api/admin/indexing-queue/quarantine-summary", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const summary = await storage.getQuarantineSummary();
+      res.json({ summary });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/indexing-queue/quarantine", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { institution } = req.body as { institution?: string };
+    if (!institution || typeof institution !== "string" || !institution.trim()) {
+      return res.status(400).json({ error: "institution is required" });
+    }
+    try {
+      const quarantined = await storage.quarantineNewStagingRows(institution.trim());
+      res.json({ ok: true, institution: institution.trim(), quarantined });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/indexing-queue/release-quarantine", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { institution } = req.body as { institution?: string };
+    if (!institution || typeof institution !== "string" || !institution.trim()) {
+      return res.status(400).json({ error: "institution is required" });
+    }
+    try {
+      const released = await storage.releaseQuarantinedRows(institution.trim());
+      res.json({ ok: true, institution: institution.trim(), released });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/indexing-queue/discard-quarantine", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { institution } = req.body as { institution?: string };
+    if (!institution || typeof institution !== "string" || !institution.trim()) {
+      return res.status(400).json({ error: "institution is required" });
+    }
+    try {
+      const discarded = await storage.discardQuarantinedRows(institution.trim());
+      res.json({ ok: true, institution: institution.trim(), discarded });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

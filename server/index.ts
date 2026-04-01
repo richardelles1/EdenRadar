@@ -181,12 +181,13 @@ async function batchCleanStagingThenIndex(): Promise<void> {
       await new Promise(r => setTimeout(r, DELAY_MS));
     }
 
-    // Pass 2 — Mark non-pushed/non-skipped old rows as skipped.  No JOIN.
+    // Pass 2 — Mark non-pushed/non-skipped/non-quarantined old rows as skipped.  No JOIN.
+    // 'quarantined' rows are excluded so they survive for manual release/discard.
     while (true) {
       const result = await db.execute(sql`
         WITH batch AS (
           SELECT id FROM sync_staging
-          WHERE status NOT IN ('pushed', 'skipped')
+          WHERE status NOT IN ('pushed', 'skipped', 'quarantined')
             AND created_at < NOW() - INTERVAL '14 days'
           LIMIT ${BATCH}
         )
@@ -749,6 +750,23 @@ async function runPostStartupTasks(): Promise<void> {
     }
   } catch (err: any) {
     log(`[startup] Could not clear orphaned runs: ${err?.message}`, "startup");
+  }
+
+  // ── One-time startup quarantine for UC Berkeley + UC San Diego ────────────
+  // The 2025-03-31 URL format change (NCD/Detail?NCDId=XXX → NCD/XXXXX.html)
+  // caused ~262 UCB and ~450 UCSD staging rows to be flagged as new assets
+  // when they are actually already indexed. We quarantine them so they cannot
+  // be pushed until explicitly reviewed and released or discarded.
+  // The idempotency guard: if no quarantinable rows exist, the function returns 0.
+  for (const institution of ["UC Berkeley", "UC San Diego"]) {
+    try {
+      const n = await storage.quarantineNewStagingRows(institution);
+      if (n > 0) {
+        log(`[startup] Auto-quarantined ${n} false-new staging row(s) for ${institution}`, "startup");
+      }
+    } catch (err: any) {
+      log(`[startup] Auto-quarantine skipped for ${institution}: ${err?.message}`, "startup");
+    }
   }
 }
 
