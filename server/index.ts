@@ -29,13 +29,17 @@ process.on("unhandledRejection", (reason: unknown) => {
 async function onShutdownSignal(signal: string) {
   console.log(`[scheduler] ${signal} received — flushing state before exit`);
   try {
-    // Attempt a durable DB write; timeout after 2500ms (Supabase/PgBouncer headroom).
-    // If flushSchedulerState rejects before the timeout the catch branch logs it,
-    // but process.exit(0) always fires via finally.
-    await Promise.race([
-      flushSchedulerState(),
-      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
-    ]);
+    // Race the DB write against a 2500ms safety-net (Supabase/PgBouncer headroom).
+    // If flushSchedulerState rejects, the catch branch logs the failure.
+    // process.exit(0) always fires via finally regardless of outcome.
+    let timedOut = false;
+    const timeout = new Promise<void>((resolve) => setTimeout(() => { timedOut = true; resolve(); }, 2500));
+    await Promise.race([flushSchedulerState(), timeout]);
+    if (timedOut) {
+      console.warn(`[scheduler] State flush did not complete within 2500ms on ${signal} — exiting anyway`);
+    } else {
+      console.log(`[scheduler] State flushed successfully on ${signal}`);
+    }
   } catch (err: any) {
     console.warn(`[scheduler] State flush failed on ${signal}: ${err?.message}`);
   } finally {
