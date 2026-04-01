@@ -76,7 +76,7 @@ export function ScoreBadge({ score, breakdown, size = "md" }: ScoreBadgeProps) {
       <TooltipContent side="bottom" className="p-3 w-56 bg-card border border-card-border shadow-xl">
         <p className="text-xs font-semibold text-foreground mb-1">Signal Profile</p>
         <p className="text-[10px] text-muted-foreground mb-2">
-          {scoredCount} of 6 dimensions scored &middot; {Math.round(coverage)}% coverage
+          {scoredCount} of 6 dimensions scored
         </p>
         <div className="space-y-1.5">
           {dims.map((k) => {
