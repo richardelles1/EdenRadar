@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key, Shield,
   Activity, Sparkles, BookOpen, Printer, Swords, GraduationCap,
-  Beaker, Tag, FlaskConical, Lightbulb,
+  Beaker, Tag, FlaskConical, Lightbulb, Lock, ChevronRight,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
 
@@ -239,6 +239,12 @@ export default function AssetDossier() {
   const stageClass = STAGE_COLORS[asset.development_stage?.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
   const licensingAvailable = (enriched?.licensingStatus ?? asset.licensing_status ?? "").toLowerCase().includes("available");
 
+  const scoreVerdict = asset.score >= 85
+    ? { label: "Strong Commercial Signal", color: "text-emerald-600 dark:text-emerald-400" }
+    : asset.score >= 70
+    ? { label: "Moderate Signal", color: "text-amber-600 dark:text-amber-400" }
+    : { label: "Early Stage", color: "text-muted-foreground" };
+
   const KEY_FIELDS = ["target", "modality", "indication", "development_stage", "patent_status", "licensing_status"] as const;
   const UNKNOWN_LIKE = /^(unknown|n\/a|none|not available|tbd|tba|-)$/i;
   const unknownCount = KEY_FIELDS.filter((f) => {
@@ -285,6 +291,9 @@ export default function AssetDossier() {
                     </span>
                   )}
                 </div>
+                <p className={`text-xs font-semibold mb-1.5 ${scoreVerdict.color}`} data-testid="score-verdict-label">
+                  {scoreVerdict.label}
+                </p>
                 <h1 className="text-2xl font-bold text-foreground mb-2 leading-tight" data-testid="dossier-asset-name">
                   {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
                 </h1>
@@ -368,228 +377,249 @@ export default function AssetDossier() {
                 </div>
               )}
 
-              {enriched?.innovationClaim && enriched.innovationClaim.length > 30 && (
-                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-                    <h2 className="text-sm font-semibold text-foreground">Innovation Claim</h2>
+              {!dossier ? (
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-6" data-testid="dossier-gate">
+                  <div className="flex items-start gap-4">
+                    <div className="rounded-lg bg-primary/15 p-2.5 shrink-0 mt-0.5">
+                      <Lock className="w-5 h-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-semibold text-foreground mb-1">Full Intelligence Brief</h3>
+                      <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+                        Generate the complete analysis for this asset: innovation claim, unmet need, comparable drugs, competitive landscape, supporting literature, and a full commercial narrative.
+                      </p>
+                      <ul className="space-y-1.5 mb-5">
+                        {[
+                          "Innovation claim and unmet need analysis",
+                          "Comparable drugs and competitive landscape",
+                          "Supporting literature",
+                          "Full commercial narrative",
+                        ].map((item) => (
+                          <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <ChevronRight className="w-3 h-3 text-primary shrink-0" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+                      <Button
+                        onClick={() => asset && dossierMutation.mutate(asset)}
+                        disabled={dossierMutation.isPending}
+                        className="gap-2"
+                        data-testid="button-generate-dossier"
+                      >
+                        <FileText className="w-4 h-4" />
+                        {dossierMutation.isPending ? "Generating..." : "Generate Full Intelligence Brief"}
+                      </Button>
+                    </div>
                   </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{enriched.innovationClaim}</p>
-                </div>
-              )}
-
-              {enriched?.unmetNeed && enriched.unmetNeed.length > 30 && (
-                <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <FlaskConical className="w-4 h-4 text-rose-600 dark:text-rose-400" />
-                    <h2 className="text-sm font-semibold text-foreground">Unmet Need</h2>
-                  </div>
-                  <p className="text-sm text-foreground/80 leading-relaxed">{enriched.unmetNeed}</p>
-                </div>
-              )}
-
-              {enriched?.comparableDrugs && (
-                <div className="rounded-xl border border-card-border bg-card p-5">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Beaker className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold text-foreground">Comparable Drugs</h2>
-                  </div>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{enriched.comparableDrugs}</p>
-                </div>
-              )}
-
-              {dossier ? (
-                <div className="rounded-xl border border-card-border bg-card p-5" data-testid="dossier-narrative-panel">
-                  <div className="flex items-center gap-2 mb-4">
-                    <FileText className="w-4 h-4 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">Full Commercial Dossier</h2>
-                    <span className="text-[10px] text-muted-foreground ml-auto">
-                      Generated {new Date(dossier.generated_at).toLocaleTimeString()}
-                    </span>
-                  </div>
-                  <NarrativeSection narrative={dossier.narrative} />
                 </div>
               ) : (
-                <div className="rounded-xl border border-card-border bg-card p-5 text-center">
-                  <FileText className="w-8 h-8 text-muted-foreground mx-auto mb-3 opacity-40" />
-                  <h3 className="text-sm font-semibold text-foreground mb-1">Full Commercial Dossier</h3>
-                  <p className="text-xs text-muted-foreground mb-4">
-                    Investor-grade brief: exec summary, commercial rationale, licensing outlook, risks, and recommended next step.
-                  </p>
-                  <Button
-                    onClick={() => asset && dossierMutation.mutate(asset)}
-                    disabled={dossierMutation.isPending}
-                    className="gap-2 text-sm"
-                    data-testid="button-generate-dossier"
-                  >
-                    <FileText className="w-4 h-4" />
-                    {dossierMutation.isPending ? "Generating..." : "Generate Dossier"}
-                  </Button>
-                </div>
-              )}
+                <>
+                  {enriched?.innovationClaim && enriched.innovationClaim.length > 30 && (
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                        <h2 className="text-sm font-semibold text-foreground">Innovation Claim</h2>
+                      </div>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{enriched.innovationClaim}</p>
+                    </div>
+                  )}
 
-              {(intelligence?.competingAssets?.length ?? 0) > 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-5" data-testid="competing-assets-panel">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Swords className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold text-foreground">Competing Assets</h2>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {intelligence!.competingAssets.length} found
-                    </Badge>
+                  {enriched?.unmetNeed && enriched.unmetNeed.length > 30 && (
+                    <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <FlaskConical className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+                        <h2 className="text-sm font-semibold text-foreground">Unmet Need</h2>
+                      </div>
+                      <p className="text-sm text-foreground/80 leading-relaxed">{enriched.unmetNeed}</p>
+                    </div>
+                  )}
+
+                  {enriched?.comparableDrugs && (
+                    <div className="rounded-xl border border-card-border bg-card p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Beaker className="w-4 h-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold text-foreground">Comparable Drugs</h2>
+                      </div>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{enriched.comparableDrugs}</p>
+                    </div>
+                  )}
+
+                  <div className="rounded-xl border border-card-border bg-card p-5" data-testid="dossier-narrative-panel">
+                    <div className="flex items-center gap-2 mb-4">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <h2 className="text-sm font-semibold text-foreground">Full Commercial Dossier</h2>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        Generated {new Date(dossier.generated_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <NarrativeSection narrative={dossier.narrative} />
                   </div>
-                  <div className="space-y-2">
-                    {intelligence!.competingAssets.map((comp) => {
-                      const compStage = STAGE_COLORS[comp.developmentStage?.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
-                      return (
-                        <div
-                          key={comp.fingerprint}
-                          className="flex items-center gap-3 p-3 rounded-lg bg-background border border-card-border hover:border-primary/20 transition-colors cursor-pointer"
-                          onClick={() => {
-                            sessionStorage.setItem(`asset-${comp.fingerprint}`, JSON.stringify({
-                              id: comp.fingerprint,
-                              asset_name: comp.assetName,
-                              target: comp.target,
-                              modality: comp.modality,
-                              indication: comp.indication,
-                              development_stage: comp.developmentStage,
-                              owner_name: comp.institution,
-                              owner_type: "university",
-                              institution: comp.institution,
-                              patent_status: "unknown",
-                              licensing_status: "unknown",
-                              summary: "",
-                              why_it_matters: "",
-                              evidence_count: 0,
-                              source_types: ["tech_transfer"],
-                              source_urls: [],
-                              latest_signal_date: "",
-                              score: 0,
-                              score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0, signal_coverage: 0, scored_dimensions: [], dimension_basis: {} },
-                              matching_tags: [],
-                              confidence: "low",
-                              signals: [],
-                            }));
-                            sessionStorage.setItem(`asset-fingerprint-${comp.fingerprint}`, comp.fingerprint);
-                            setLocation(`/asset/${comp.fingerprint}`);
-                          }}
-                          data-testid={`competing-asset-${comp.fingerprint}`}
-                        >
-                          <div className="flex-1 min-w-0">
-                            <p className="text-xs font-semibold text-foreground truncate">{comp.assetName}</p>
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <span className="text-[10px] text-muted-foreground">{comp.target}</span>
-                              <span className="text-[10px] text-muted-foreground">·</span>
-                              <span className="text-[10px] text-muted-foreground">{comp.modality}</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold capitalize ${compStage}`}>
-                              {comp.developmentStage}
-                            </span>
-                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                              <Building2 className="w-3 h-3" />
-                              <span className="truncate max-w-[100px]">{comp.institution}</span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
-              {intelLoading && (
-                <div className="space-y-3" data-testid="intelligence-loading">
-                  <Skeleton className="h-32 w-full rounded-xl" />
-                  <Skeleton className="h-24 w-full rounded-xl" />
-                </div>
-              )}
-
-              {intelError && (
-                <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-center" data-testid="intelligence-error">
-                  <p className="text-sm text-destructive">Failed to load pipeline intelligence data.</p>
-                </div>
-              )}
-
-              {(intelligence?.literature?.length ?? 0) > 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-5" data-testid="supporting-literature-panel">
-                  <div className="flex items-center gap-2 mb-4">
-                    <GraduationCap className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold text-foreground">Supporting Literature</h2>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {intelligence!.literature.length} results
-                    </Badge>
-                  </div>
-                  <div className="space-y-2">
-                    {intelligence!.literature.map((lit, i) => (
-                      <div
-                        key={i}
-                        className="flex items-start gap-3 p-3 rounded-lg bg-background border border-card-border"
-                      >
-                        <Badge
-                          variant="outline"
-                          className={`text-[10px] shrink-0 mt-0.5 ${SOURCE_BADGE_COLORS[lit.source_type] ?? "bg-muted text-muted-foreground"}`}
-                        >
-                          {lit.source_type === "paper" ? "PubMed" : lit.source_type === "preprint" ? "bioRxiv" : lit.source_type}
+                  {(intelligence?.competingAssets?.length ?? 0) > 0 && (
+                    <div className="rounded-xl border border-card-border bg-card p-5" data-testid="competing-assets-panel">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Swords className="w-4 h-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold text-foreground">Competing Assets</h2>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {intelligence!.competingAssets.length} found
                         </Badge>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground line-clamp-2">{lit.title}</p>
-                          {lit.date && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">{lit.date}</p>
-                          )}
-                        </div>
-                        {lit.url && (
-                          <a
-                            href={lit.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0 text-primary hover:text-primary/80 transition-colors"
-                            data-testid={`literature-link-${i}`}
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      <div className="space-y-2">
+                        {intelligence!.competingAssets.map((comp) => {
+                          const compStage = STAGE_COLORS[comp.developmentStage?.toLowerCase()] ?? "bg-muted text-muted-foreground border-border";
+                          return (
+                            <div
+                              key={comp.fingerprint}
+                              className="flex items-center gap-3 p-3 rounded-lg bg-background border border-card-border hover:border-primary/20 transition-colors cursor-pointer"
+                              onClick={() => {
+                                sessionStorage.setItem(`asset-${comp.fingerprint}`, JSON.stringify({
+                                  id: comp.fingerprint,
+                                  asset_name: comp.assetName,
+                                  target: comp.target,
+                                  modality: comp.modality,
+                                  indication: comp.indication,
+                                  development_stage: comp.developmentStage,
+                                  owner_name: comp.institution,
+                                  owner_type: "university",
+                                  institution: comp.institution,
+                                  patent_status: "unknown",
+                                  licensing_status: "unknown",
+                                  summary: "",
+                                  why_it_matters: "",
+                                  evidence_count: 0,
+                                  source_types: ["tech_transfer"],
+                                  source_urls: [],
+                                  latest_signal_date: "",
+                                  score: 0,
+                                  score_breakdown: { novelty: 0, freshness: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0, signal_coverage: 0, scored_dimensions: [], dimension_basis: {} },
+                                  matching_tags: [],
+                                  confidence: "low",
+                                  signals: [],
+                                }));
+                                sessionStorage.setItem(`asset-fingerprint-${comp.fingerprint}`, comp.fingerprint);
+                                setLocation(`/asset/${comp.fingerprint}`);
+                              }}
+                              data-testid={`competing-asset-${comp.fingerprint}`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold text-foreground truncate">{comp.assetName}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                  <span className="text-[10px] text-muted-foreground">{comp.target}</span>
+                                  <span className="text-[10px] text-muted-foreground">·</span>
+                                  <span className="text-[10px] text-muted-foreground">{comp.modality}</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold capitalize ${compStage}`}>
+                                  {comp.developmentStage}
+                                </span>
+                                <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                                  <Building2 className="w-3 h-3" />
+                                  <span className="truncate max-w-[100px]">{comp.institution}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
-              {asset.signals?.length > 0 && (
-                <div className="rounded-xl border border-card-border bg-card p-5">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Activity className="w-4 h-4 text-muted-foreground" />
-                    <h2 className="text-sm font-semibold text-foreground">Evidence Signals</h2>
-                    <span className="text-xs text-muted-foreground ml-1">({asset.signals.length})</span>
-                  </div>
-                  <div className="space-y-3">
-                    {asset.signals.map((signal) => (
-                      <div key={signal.id} className="flex items-start gap-3 p-3 rounded-lg bg-background border border-card-border">
-                        <SourceBadge sourceType={signal.source_type} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-medium text-foreground line-clamp-2">{signal.title}</p>
-                          {signal.date && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">{signal.date}</p>
-                          )}
-                        </div>
-                        {signal.url && (
-                          <a
-                            href={signal.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="shrink-0 text-primary hover:text-primary/80 transition-colors"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-                        )}
+                  {intelLoading && (
+                    <div className="space-y-3" data-testid="intelligence-loading">
+                      <Skeleton className="h-32 w-full rounded-xl" />
+                      <Skeleton className="h-24 w-full rounded-xl" />
+                    </div>
+                  )}
+
+                  {intelError && (
+                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-center" data-testid="intelligence-error">
+                      <p className="text-sm text-destructive">Failed to load pipeline intelligence data.</p>
+                    </div>
+                  )}
+
+                  {(intelligence?.literature?.length ?? 0) > 0 && (
+                    <div className="rounded-xl border border-card-border bg-card p-5" data-testid="supporting-literature-panel">
+                      <div className="flex items-center gap-2 mb-4">
+                        <GraduationCap className="w-4 h-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold text-foreground">Supporting Literature</h2>
+                        <Badge variant="secondary" className="text-[10px]">
+                          {intelligence!.literature.length} results
+                        </Badge>
                       </div>
-                    ))}
-                  </div>
-                </div>
+                      <div className="space-y-2">
+                        {intelligence!.literature.map((lit, i) => (
+                          <div
+                            key={i}
+                            className="flex items-start gap-3 p-3 rounded-lg bg-background border border-card-border"
+                          >
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] shrink-0 mt-0.5 ${SOURCE_BADGE_COLORS[lit.source_type] ?? "bg-muted text-muted-foreground"}`}
+                            >
+                              {lit.source_type === "paper" ? "PubMed" : lit.source_type === "preprint" ? "bioRxiv" : lit.source_type}
+                            </Badge>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-foreground line-clamp-2">{lit.title}</p>
+                              {lit.date && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">{lit.date}</p>
+                              )}
+                            </div>
+                            {lit.url && (
+                              <a
+                                href={lit.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-primary hover:text-primary/80 transition-colors"
+                                data-testid={`literature-link-${i}`}
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {asset.signals?.length > 0 && (
+                    <div className="rounded-xl border border-card-border bg-card p-5">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Activity className="w-4 h-4 text-muted-foreground" />
+                        <h2 className="text-sm font-semibold text-foreground">Evidence Signals</h2>
+                        <span className="text-xs text-muted-foreground ml-1">({asset.signals.length})</span>
+                      </div>
+                      <div className="space-y-3">
+                        {asset.signals.map((signal) => (
+                          <div key={signal.id} className="flex items-start gap-3 p-3 rounded-lg bg-background border border-card-border">
+                            <SourceBadge sourceType={signal.source_type} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-medium text-foreground line-clamp-2">{signal.title}</p>
+                              {signal.date && (
+                                <p className="text-[10px] text-muted-foreground mt-0.5">{signal.date}</p>
+                              )}
+                            </div>
+                            {signal.url && (
+                              <a
+                                href={signal.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="shrink-0 text-primary hover:text-primary/80 transition-colors"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-4 sticky top-6 max-h-[calc(100vh-3rem)] overflow-y-auto">
               {enriched?.contactEmail && (
                 <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4" data-testid="contact-card">
                   <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -618,12 +648,6 @@ export default function AssetDossier() {
               )}
 
               <ScoreBreakdownCard breakdown={asset.score_breakdown} />
-
-              {enriched?.completenessScore != null && (
-                <div className="rounded-xl border border-card-border bg-card p-4" data-testid="completeness-card">
-                  <CompletenessBar score={adjustedCompleteness(enriched.completenessScore)} />
-                </div>
-              )}
 
               {(enriched?.categories?.length ?? 0) > 0 && (
                 <div className="rounded-xl border border-card-border bg-card p-4" data-testid="taxonomy-tags-card">

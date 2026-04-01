@@ -22,9 +22,10 @@ type SearchBarProps = {
   sources: Source[];
   selectedSource: string;
   onSourceChange: (source: string) => void;
+  placeholder?: string;
 };
 
-export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sources, selectedSource, onSourceChange }: SearchBarProps) {
+export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sources, selectedSource, onSourceChange, placeholder = "Search biotech assets..." }: SearchBarProps) {
   const currentSource = sources.find((s) => s.id === selectedSource);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -42,7 +43,7 @@ export function SearchBar({ query = "", onQueryChange, onSearch, isLoading, sour
           type="text"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          placeholder="Search biotech assets..."
+          placeholder={placeholder}
           className="pl-10 h-11 bg-card border-card-border focus:border-primary/60 text-sm"
           data-testid="input-search"
           disabled={isLoading}

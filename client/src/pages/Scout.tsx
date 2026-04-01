@@ -503,7 +503,7 @@ export default function Scout() {
   ].filter(Boolean).length;
 
   return (
-    <div className="min-h-full flex flex-col">
+    <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
         <main className="flex-1 min-w-0 flex flex-col">
           <div className="px-4 sm:px-6 pt-8 pb-5 space-y-4">
@@ -547,6 +547,7 @@ export default function Scout() {
                   sources={[]}
                   selectedSource=""
                   onSourceChange={() => {}}
+                  placeholder="Search indications, targets, modalities, mechanisms..."
                 />
               </div>
               {inputQuery.trim().length > 0 && (
@@ -704,22 +705,25 @@ export default function Scout() {
               <>
                 {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
                 {hasSearched && (
-                  <div className="flex items-center justify-start gap-2">
-                    <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
-                      {([0, 60, 70, 80] as const).map((threshold) => (
-                        <button
-                          key={threshold}
-                          onClick={() => setMinScore(threshold)}
-                          className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
-                            minScore === threshold
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-background text-muted-foreground hover:text-foreground"
-                          }`}
-                          data-testid={`score-threshold-${threshold}`}
-                        >
-                          {threshold === 0 ? "Any" : `${threshold}+`}
-                        </button>
-                      ))}
+                  <div className="flex items-end justify-start gap-4">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
+                        {([0, 60, 70, 80] as const).map((threshold) => (
+                          <button
+                            key={threshold}
+                            onClick={() => setMinScore(threshold)}
+                            className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                              minScore === threshold
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-background text-muted-foreground hover:text-foreground"
+                            }`}
+                            data-testid={`score-threshold-${threshold}`}
+                          >
+                            {threshold === 0 ? "Any" : `${threshold}+`}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                     <Select value={sinceFilter} onValueChange={setSinceFilter} data-testid="filter-since-inline">
                       <SelectTrigger className="h-7 text-[11px] w-[110px] border-border">
