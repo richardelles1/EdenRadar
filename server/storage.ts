@@ -973,16 +973,23 @@ export class DatabaseStorage implements IStorage {
       RETURNING ss.id
     `);
 
-    // Also expire enriched-session rows older than 14 days. These are either
-    // already pushed (and reflected in ingested_assets) or abandoned — keeping
-    // them forever causes sync_staging to grow unbounded and turns every
-    // getExistingFingerprints query into a full table scan.
+    // Expire all enriched-session rows older than 14 days — including pushed rows.
+    // Pushed rows are already committed to ingested_assets, so keeping them in
+    // staging is purely redundant. Non-pushed enriched rows this old are abandoned.
+    // Skipping them (rather than deleting) keeps them out of the Indexing Queue
+    // while still being excluded by getExistingFingerprints (which reads from
+    // ingestedAssets for the pushed fingerprints and skips 'pushed' staging rows).
+    // Scoped to enriched sessions; non-enriched old rows are already handled by
+    // the stale-session supersede above.
     await db.execute(sql`
-      UPDATE sync_staging
+      UPDATE sync_staging ss
       SET status = 'skipped'
-      WHERE institution = ${institution}
-        AND status NOT IN ('pushed', 'skipped')
-        AND created_at < NOW() - INTERVAL '14 days'
+      FROM sync_sessions ses
+      WHERE ss.session_id = ses.session_id
+        AND ss.institution = ${institution}
+        AND ss.status != 'skipped'
+        AND ses.status = 'enriched'
+        AND ss.created_at < NOW() - INTERVAL '14 days'
     `);
 
     return staleResult.rows.length;

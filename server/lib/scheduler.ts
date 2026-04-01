@@ -121,6 +121,12 @@ function getMinRunningTier(): 1 | 2 | 3 | 4 | null {
   );
 }
 
+/** Flush scheduler state to DB immediately, bypassing the 60-second throttle.
+ * Called on SIGTERM / SIGINT so in-flight queue progress is not lost. */
+export function flushSchedulerState(): void {
+  persistState(true);
+}
+
 function persistState(immediate = false): void {
   const now = Date.now();
   // Throttle routine per-institution saves to at most once per 60 seconds.

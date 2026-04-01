@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
-import { loadAndRestoreScheduler, startScheduler } from "./lib/scheduler";
+import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
 import pg from "pg";
 
 const app = express();
@@ -23,6 +23,17 @@ process.on("uncaughtException", (err: Error) => {
 process.on("unhandledRejection", (reason: unknown) => {
   console.error(`[fatal] Unhandled rejection (process kept alive):`, reason);
 });
+
+// Flush scheduler queue-position to DB before the process exits so a restart
+// resumes from the correct institution rather than repeating the full cycle.
+function onShutdownSignal(signal: string) {
+  console.log(`[scheduler] ${signal} received — flushing state before exit`);
+  flushSchedulerState();
+  // Brief pause so the async DB write can be enqueued, then exit normally.
+  setTimeout(() => process.exit(0), 500);
+}
+process.on("SIGTERM", () => onShutdownSignal("SIGTERM"));
+process.on("SIGINT", () => onShutdownSignal("SIGINT"));
 
 declare module "http" {
   interface IncomingMessage {
@@ -123,14 +134,86 @@ async function ensureStagingIndexes(attempt = 1): Promise<void> {
   }
 }
 
+// ── Batch cleanup for sync_staging + index creation ──────────────────────────
+// Full-table UPDATEs on sync_staging always exceed Supabase's 8-second statement
+// timeout when the table is large. This function cleans up old enriched-session
+// rows in small batches (5 000 rows each). Each batch uses a LIMIT clause so
+// PostgreSQL stops scanning after finding N matching rows — fast even without an
+// index, because old rows are dense throughout the table.
+// After all batches complete it fires ensureStagingIndexes(), which will succeed
+// once the table is small enough.
+async function batchCleanStagingThenIndex(): Promise<void> {
+  const BATCH = 5_000;
+  const DELAY_MS = 50;
+  let totalDeleted = 0;
+  let totalSkipped = 0;
+
+  try {
+    // Pass 1 — DELETE old pushed rows (safe: fingerprints live in ingested_assets,
+    // not in staging).  No JOIN needed — fast even without indexes.
+    while (true) {
+      const result = await db.execute(sql`
+        DELETE FROM sync_staging
+        WHERE id IN (
+          SELECT id FROM sync_staging
+          WHERE status = 'pushed'
+            AND created_at < NOW() - INTERVAL '14 days'
+          LIMIT ${BATCH}
+        )
+      `);
+      const deleted = (result as any).rowCount ?? 0;
+      totalDeleted += deleted;
+      if (deleted < BATCH) break;
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+
+    // Pass 2 — Mark non-pushed/non-skipped old rows as skipped.  No JOIN.
+    while (true) {
+      const result = await db.execute(sql`
+        WITH batch AS (
+          SELECT id FROM sync_staging
+          WHERE status NOT IN ('pushed', 'skipped')
+            AND created_at < NOW() - INTERVAL '14 days'
+          LIMIT ${BATCH}
+        )
+        UPDATE sync_staging
+        SET status = 'skipped'
+        FROM batch
+        WHERE sync_staging.id = batch.id
+      `);
+      const updated = (result as any).rowCount ?? 0;
+      totalSkipped += updated;
+      if (updated < BATCH) break;
+      await new Promise(r => setTimeout(r, DELAY_MS));
+    }
+
+    const total = totalDeleted + totalSkipped;
+    if (total > 0) {
+      log(
+        `[startup] Batch cleanup complete — deleted ${totalDeleted} pushed rows, skipped ${totalSkipped} stale rows`,
+        "startup",
+      );
+    } else {
+      log("[startup] Batch cleanup: no stale staging rows found", "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Batch cleanup error: ${err?.message}`, "startup");
+  }
+
+  // Now that the table is smaller, attempt index creation immediately.
+  await ensureStagingIndexes().catch(() => {});
+}
+
 // ── All startup migrations in one place, run after port opens ─────────────────
 // Uses a DEDICATED pg.Client that is completely separate from the API connection
 // pool. This ensures migrations never compete with API requests for pool slots.
 async function runStartupMigrations() {
-  if (process.env.NODE_ENV === "production") {
-    log("[startup] Production: skipping startup migrations (already applied)", "startup");
-    return;
-  }
+  // All columns and tables already exist in Supabase — skip DDL at startup.
+  // Running migrations via the dedicated pg.Client causes Supabase FATAL errors
+  // that cascade to the shared pool (PgBouncer rejects backend connections under
+  // DDL load). Use `npm run db:push` to apply new schema changes explicitly.
+  log("[startup] Skipping startup migrations (use db:push to sync schema)", "startup");
+  return;
   const client = new pg.Client({
     connectionString: process.env.SUPABASE_DATABASE_URL,
     ssl: { rejectUnauthorized: false },
@@ -220,9 +303,23 @@ async function runStartupMigrations() {
       WHERE duplicate_flag = true
     `);
     log("[startup] near-duplicate detection columns ready", "startup");
-    // Heavy dedup queries deferred 60 s so they don't compete with API traffic at startup.
+    // Heavy dedup queries deferred so they don't compete with API traffic at startup.
     // They use the shared pool (db) since the dedicated migration client is closed by then.
+    // Idempotency guard: if the unique index already exists the cleanup was done on a
+    // previous run — skip the expensive full-table scans entirely.
     setTimeout(async () => {
+      try {
+        const alreadyDone = await db.execute(sql`
+          SELECT 1 FROM pg_indexes
+          WHERE tablename = 'ingested_assets'
+            AND indexname = 'idx_ingested_assets_source_url_unique'
+        `);
+        if (alreadyDone.rows.length > 0) {
+          log("[startup] source_url unique index already exists — skipping reconciliation", "startup");
+          return;
+        }
+      } catch (_) { /* continue to full migration if probe fails */ }
+
       const MAX_ATTEMPTS = 3;
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
         try {
@@ -603,6 +700,12 @@ async function runStartupMigrations() {
     await client.end().catch(() => {});
   }
 
+}
+
+// ── Post-startup tasks: scheduler restore + orphaned run cleanup ──────────────
+// Extracted from runStartupMigrations() so they always run even when migrations
+// are skipped (early return).
+async function runPostStartupTasks(): Promise<void> {
   // ── Scheduler restore ─────────────────────────────────────────────────────
   try {
     const wasRunning = await loadAndRestoreScheduler();
@@ -692,17 +795,20 @@ async function runStartupMigrations() {
     },
     () => {
       log(`serving on port ${port}`);
-      // ── Run all DB migrations in background after port is open ─────────
-      runStartupMigrations().catch((err: any) => {
-        log(`[startup] Background migrations failed: ${err?.message}`, "startup");
+      // ── Scheduler restore + orphaned run cleanup ────────────────────────
+      runPostStartupTasks().catch((err: any) => {
+        log(`[startup] Post-startup tasks failed: ${err?.message}`, "startup");
       });
-      // ── Ensure sync_staging indexes exist (idempotent, safe in all envs) ─
-      // Delayed 45s so startup DB traffic settles before we run DDL.
+      // ── runStartupMigrations: no-op (migrations skipped; use db:push) ───
+      runStartupMigrations().catch(() => {});
+      // ── Batch-clean stale staging rows then create indexes ─────────────
+      // Runs 5 seconds after startup. Cleans old rows in small LIMIT batches,
+      // then calls ensureStagingIndexes once the table is smaller.
       setTimeout(() => {
-        ensureStagingIndexes().catch((err: any) => {
-          log(`[startup] ensureStagingIndexes failed: ${err?.message}`, "startup");
+        batchCleanStagingThenIndex().catch((err: any) => {
+          log(`[startup] batchCleanStagingThenIndex failed: ${err?.message}`, "startup");
         });
-      }, 45_000);
+      }, 5_000);
     },
   );
 })();

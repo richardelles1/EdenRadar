@@ -2398,7 +2398,9 @@ export async function registerRoutes(
     }
   });
 
-  (async () => {
+  // Delay startup enrichment resume check so the migration client and scheduler
+  // restoration queries can connect to Supabase/PgBouncer first without contention.
+  setTimeout(async () => {
     try {
       const staleJob = await storage.getRunningEnrichmentJob();
       if (staleJob) {
@@ -2414,7 +2416,7 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[enrichment] Failed to check for resumable jobs:", e);
     }
-  })();
+  }, 15_000);
 
   // ── EDEN routes ──────────────────────────────────────────────────────────
 
@@ -2562,9 +2564,9 @@ export async function registerRoutes(
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
   });
 
-  // In production, delay 30 s so the scheduler's restoration queries finish
+  // Delay so the migration client and scheduler restoration queries finish
   // before we hit the pool with startup enrichment-job checks.
-  const edenStartupDelay = process.env.NODE_ENV === "production" ? 30_000 : 0;
+  const edenStartupDelay = 15_000;
   setTimeout(async () => {
     try {
       const staleDeepJob = await storage.getRunningDeepEnrichmentJob();
