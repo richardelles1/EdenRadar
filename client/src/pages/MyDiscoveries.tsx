@@ -100,7 +100,7 @@ export default function MyDiscoveries() {
           <p className="text-sm text-muted-foreground mt-0.5">
             {cards.length === 0
               ? "Create your first discovery card to reach industry partners."
-              : `${cards.length} discovery card${cards.length !== 1 ? "s" : ""} — ${cards.filter(c => c.published).length} published`}
+              : `${cards.length} discovery card${cards.length !== 1 ? "s" : ""}, ${cards.filter(c => c.published).length} published`}
           </p>
         </div>
         <Button
