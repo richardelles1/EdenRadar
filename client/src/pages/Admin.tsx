@@ -20,7 +20,7 @@ import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills 
 const ADMIN_KEY = "eden-admin-pw";
 
 function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState("");
+  const [pw, setPw] = useState(() => localStorage.getItem(ADMIN_KEY) ?? "");
   const [error, setError] = useState(false);
 
   const submit = () => {
@@ -5538,14 +5538,9 @@ function EdenTab({ pw }: { pw: string }) {
 }
 
 export default function Admin() {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(() => localStorage.getItem(ADMIN_KEY) === "eden");
   const [activeTab, setActiveTab] = useState("data-health");
   const { theme, setTheme } = useTheme();
-
-  useEffect(() => {
-    const stored = localStorage.getItem(ADMIN_KEY);
-    if (stored === "eden") setAuthed(true);
-  }, []);
 
   if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
 
