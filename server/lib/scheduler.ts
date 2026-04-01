@@ -142,16 +142,14 @@ export function flushSchedulerState(): Promise<void> {
   return saveSchedulerState(buildStateSnapshot());
 }
 
-function persistState(immediate = false): void {
+function persistState(immediate = false): Promise<void> {
   const now = Date.now();
   // Throttle routine per-institution saves to at most once per 60 seconds.
-  // State-critical events (start, cycle complete) always pass immediate=true.
-  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return;
+  // State-critical events (start, pause, cycle complete) always pass immediate=true.
+  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return Promise.resolve();
   _lastPersistAt = now;
 
-  // Fire-and-forget; errors are logged by saveSchedulerState but not propagated
-  // so transient DB issues never crash the scheduler loop.
-  saveSchedulerState(buildStateSnapshot()).catch(() => {});
+  return saveSchedulerState(buildStateSnapshot());
 }
 
 export function getSchedulerStatus(): SchedulerStatus {
@@ -258,7 +256,7 @@ export function startScheduler(): { ok: boolean; message: string } {
     return { ok: false, message: "Full ingestion pipeline is running — wait for it to finish" };
   }
   schedulerState = "running";
-  persistState(true);
+  persistState(true).catch(() => {});
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
     console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
@@ -300,7 +298,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   cycleCount++;
   priorityQueue = [];
   schedulerState = "running";
-  persistState(true);
+  persistState(true).catch(() => {});
   console.log(`[scheduler] Reset (gen=${runGeneration}) — starting fresh cycle #${cycleCount} from position 0/${tieredQueue.length}`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   scheduleNext();
@@ -351,7 +349,7 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   cycleCount++;
   priorityQueue = [];
   schedulerState = "running";
-  persistState();
+  persistState().catch(() => {});
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   scheduleNext();
@@ -440,7 +438,7 @@ function scheduleNext(): void {
       if (syncDurations.length > 20) syncDurations.shift();
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       lastActivityAt = new Date();
-      persistState();
+      persistState().catch(() => {});
       scheduleNext();
     });
 
@@ -471,7 +469,7 @@ function scheduleNext(): void {
         if (syncDurations.length > 20) syncDurations.shift();
         currentInstitutions = [];
         lastActivityAt = new Date();
-        persistState();
+        persistState().catch(() => {});
         scheduleNext();
       });
 
@@ -517,7 +515,7 @@ function scheduleNext(): void {
       if (syncDurations.length > 20) syncDurations.shift();
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       lastActivityAt = new Date();
-      persistState();
+      persistState().catch(() => {});
       scheduleNext();  // fill freed slot immediately; tier boundary re-evaluated
     });
     // Continue loop to fill remaining concurrent slots within the same tier
@@ -532,7 +530,7 @@ function scheduleNext(): void {
     );
     lastCycleCompletedAt = new Date();
     schedulerState = "idle";
-    persistState(true);
+    persistState(true).catch(() => {});
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
   }
@@ -658,6 +656,6 @@ async function runOne(institution: string, gen: number): Promise<void> {
     }
   }
   if (runGeneration === gen) {
-    persistState();
+    persistState().catch(() => {});
   }
 }

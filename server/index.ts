@@ -28,13 +28,19 @@ process.on("unhandledRejection", (reason: unknown) => {
 // resumes from the correct institution rather than repeating the full cycle.
 async function onShutdownSignal(signal: string) {
   console.log(`[scheduler] ${signal} received — flushing state before exit`);
-  // Await the DB write so the pause/running state is durable before the process exits.
-  // 2500ms safety-net covers Supabase PgBouncer latency under load.
-  await Promise.race([
-    flushSchedulerState(),
-    new Promise<void>((resolve) => setTimeout(resolve, 2500)),
-  ]);
-  process.exit(0);
+  try {
+    // Attempt a durable DB write; timeout after 2500ms (Supabase/PgBouncer headroom).
+    // If flushSchedulerState rejects before the timeout the catch branch logs it,
+    // but process.exit(0) always fires via finally.
+    await Promise.race([
+      flushSchedulerState(),
+      new Promise<void>((resolve) => setTimeout(resolve, 2500)),
+    ]);
+  } catch (err: any) {
+    console.warn(`[scheduler] State flush failed on ${signal}: ${err?.message}`);
+  } finally {
+    process.exit(0);
+  }
 }
 process.on("SIGTERM", async () => { await onShutdownSignal("SIGTERM"); });
 process.on("SIGINT", async () => { await onShutdownSignal("SIGINT"); });
