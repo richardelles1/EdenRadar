@@ -82,6 +82,10 @@ app.use((req, res, next) => {
 // Uses a DEDICATED pg.Client that is completely separate from the API connection
 // pool. This ensures migrations never compete with API requests for pool slots.
 async function runStartupMigrations() {
+  if (process.env.NODE_ENV === "production") {
+    log("[startup] Production: skipping startup migrations (already applied)", "startup");
+    return;
+  }
   const client = new pg.Client({
     connectionString: process.env.SUPABASE_DATABASE_URL,
     ssl: { rejectUnauthorized: false },
