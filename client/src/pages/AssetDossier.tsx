@@ -346,26 +346,39 @@ export default function AssetDossier() {
                 </div>
               )}
 
+              {intelLoading && (
+                <div className="space-y-3" data-testid="intelligence-loading">
+                  <Skeleton className="h-32 w-full rounded-xl" />
+                  <Skeleton className="h-24 w-full rounded-xl" />
+                </div>
+              )}
+
+              {intelError && (
+                <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4" data-testid="intelligence-error">
+                  <p className="text-xs text-amber-700 dark:text-amber-400">Competitive landscape data is unavailable for this asset.</p>
+                </div>
+              )}
+
               {!dossier ? (
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-6" data-testid="dossier-gate">
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-lg bg-primary/15 p-2.5 shrink-0 mt-0.5">
-                      <Lock className="w-5 h-5 text-primary" />
+                <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-7" data-testid="dossier-gate">
+                  <div className="flex items-start gap-5">
+                    <div className="rounded-xl bg-primary/15 p-3 shrink-0 mt-0.5">
+                      <Lock className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1">
-                      <h3 className="text-sm font-semibold text-foreground mb-1">Full Intelligence Brief</h3>
-                      <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-                        Generate the complete analysis for this asset: innovation claim, unmet need, comparable drugs, competitive landscape, supporting literature, and a full commercial narrative.
+                      <h3 className="text-xl font-bold text-foreground mb-2">Unlock the Full Intelligence Brief</h3>
+                      <p className="text-sm text-muted-foreground mb-5 leading-relaxed">
+                        Run a complete commercial diligence analysis on this licensable asset — covering innovation, unmet need, competitive context, and a full investment-grade narrative.
                       </p>
-                      <ul className="space-y-1.5 mb-5">
+                      <ul className="space-y-2 mb-6">
                         {[
                           "Innovation claim and unmet need analysis",
                           "Comparable drugs and competitive landscape",
                           "Supporting literature",
                           "Full commercial narrative",
                         ].map((item) => (
-                          <li key={item} className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <ChevronRight className="w-3 h-3 text-primary shrink-0" />
+                          <li key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
+                            <ChevronRight className="w-3.5 h-3.5 text-primary shrink-0" />
                             {item}
                           </li>
                         ))}
@@ -373,7 +386,8 @@ export default function AssetDossier() {
                       <Button
                         onClick={() => asset && dossierMutation.mutate(asset)}
                         disabled={dossierMutation.isPending}
-                        className="gap-2"
+                        size="lg"
+                        className="gap-2 w-full"
                         data-testid="button-generate-dossier"
                       >
                         <FileText className="w-4 h-4" />
@@ -384,6 +398,17 @@ export default function AssetDossier() {
                 </div>
               ) : (
                 <>
+                  <div className="rounded-xl border border-card-border bg-card p-5" data-testid="dossier-narrative-panel">
+                    <div className="flex items-center gap-2 mb-4">
+                      <FileText className="w-4 h-4 text-primary" />
+                      <h2 className="text-sm font-semibold text-foreground">Full Commercial Dossier</h2>
+                      <span className="text-[10px] text-muted-foreground ml-auto">
+                        Generated {new Date(dossier.generated_at).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <NarrativeSection narrative={dossier.narrative} />
+                  </div>
+
                   {enriched?.innovationClaim && enriched.innovationClaim.length > 30 && (
                     <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-5">
                       <div className="flex items-center gap-2 mb-3">
@@ -413,17 +438,6 @@ export default function AssetDossier() {
                       <p className="text-sm text-muted-foreground leading-relaxed">{enriched.comparableDrugs}</p>
                     </div>
                   )}
-
-                  <div className="rounded-xl border border-card-border bg-card p-5" data-testid="dossier-narrative-panel">
-                    <div className="flex items-center gap-2 mb-4">
-                      <FileText className="w-4 h-4 text-primary" />
-                      <h2 className="text-sm font-semibold text-foreground">Full Commercial Dossier</h2>
-                      <span className="text-[10px] text-muted-foreground ml-auto">
-                        Generated {new Date(dossier.generated_at).toLocaleTimeString()}
-                      </span>
-                    </div>
-                    <NarrativeSection narrative={dossier.narrative} />
-                  </div>
 
                   {(intelligence?.competingAssets?.length ?? 0) > 0 && (
                     <div className="rounded-xl border border-card-border bg-card p-5" data-testid="competing-assets-panel">
@@ -492,19 +506,6 @@ export default function AssetDossier() {
                           );
                         })}
                       </div>
-                    </div>
-                  )}
-
-                  {intelLoading && (
-                    <div className="space-y-3" data-testid="intelligence-loading">
-                      <Skeleton className="h-32 w-full rounded-xl" />
-                      <Skeleton className="h-24 w-full rounded-xl" />
-                    </div>
-                  )}
-
-                  {intelError && (
-                    <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-4 text-center" data-testid="intelligence-error">
-                      <p className="text-sm text-destructive">Failed to load pipeline intelligence data.</p>
                     </div>
                   )}
 
