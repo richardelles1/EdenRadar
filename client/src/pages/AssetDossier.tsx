@@ -488,8 +488,8 @@ export default function AssetDossier() {
           <>
             {/* Narrative */}
             <div
-              className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-              style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 80ms both" }}
+              className="rounded-xl border border-border bg-card p-5"
+              style={{ animation: "dash-fade-up 400ms ease 80ms both" }}
               data-testid="dossier-narrative-panel"
             >
               <div className="flex items-center gap-2 mb-4">
@@ -505,8 +505,8 @@ export default function AssetDossier() {
             {/* Abstract / Summary */}
             {(enriched?.abstract || (!isTrivialSummary(asset.summary, asset.asset_name) && asset.summary)) && (
               <div
-                className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 120ms both" }}
+                className="rounded-xl border border-border bg-card p-5"
+                style={{ animation: "dash-fade-up 400ms ease 120ms both" }}
               >
                 <div className="flex items-center gap-2 mb-3">
                   <BookOpen className="w-4 h-4 text-muted-foreground" />
@@ -551,8 +551,8 @@ export default function AssetDossier() {
             {/* Comparable Drugs */}
             {enriched?.comparableDrugs && (
               <div
-                className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 240ms both" }}
+                className="rounded-xl border border-border bg-card p-5"
+                style={{ animation: "dash-fade-up 400ms ease 240ms both" }}
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Beaker className="w-4 h-4 text-muted-foreground" />
@@ -565,8 +565,8 @@ export default function AssetDossier() {
             {/* Competing Assets */}
             {(intelligence?.competingAssets?.length ?? 0) > 0 && (
               <div
-                className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 280ms both" }}
+                className="rounded-xl border border-border bg-card p-5"
+                style={{ animation: "dash-fade-up 400ms ease 280ms both" }}
                 data-testid="competing-assets-panel"
               >
                 <div className="flex items-center gap-2 mb-4">
@@ -640,8 +640,8 @@ export default function AssetDossier() {
             {/* Supporting Literature */}
             {(intelligence?.literature?.length ?? 0) > 0 && (
               <div
-                className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 320ms both" }}
+                className="rounded-xl border border-border bg-card p-5"
+                style={{ animation: "dash-fade-up 400ms ease 320ms both" }}
                 data-testid="supporting-literature-panel"
               >
                 <div className="flex items-center gap-2 mb-4">
@@ -689,8 +689,8 @@ export default function AssetDossier() {
             {/* Evidence Signals */}
             {asset.signals?.length > 0 && (
               <div
-                className="rounded-xl border border-primary/15 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
-                style={{ background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))", animation: "dash-fade-up 400ms ease 360ms both" }}
+                className="rounded-xl border border-border bg-card p-5"
+                style={{ animation: "dash-fade-up 400ms ease 360ms both" }}
               >
                 <div className="flex items-center gap-2 mb-4">
                   <Activity className="w-4 h-4 text-muted-foreground" />
