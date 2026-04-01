@@ -655,7 +655,7 @@ export default function AssetDossier() {
                   {intelligence!.literature.map((lit, i) => (
                     <div
                       key={i}
-                      className="flex items-start gap-3 p-3 rounded-lg bg-background/50 border border-border/60"
+                      className="flex items-start gap-3 p-3 rounded-lg bg-background/50 border border-border/60 hover:border-primary/30 hover:bg-primary/5 transition-all"
                     >
                       <Badge
                         variant="outline"
