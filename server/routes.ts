@@ -1540,8 +1540,13 @@ export async function registerRoutes(
   app.post("/api/ingest/scheduler/pause", async (req, res) => {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    const result = await pauseScheduler();
-    res.json(result);
+    try {
+      const result = await pauseScheduler();
+      res.json(result);
+    } catch (err: any) {
+      console.error(`[scheduler] Pause DB write failed: ${err?.message}`);
+      res.status(500).json({ error: "Pause succeeded in-memory but failed to persist — restart risk remains", detail: err?.message });
+    }
   });
 
   app.post("/api/ingest/scheduler/reset", async (req, res) => {

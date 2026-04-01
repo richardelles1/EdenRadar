@@ -42,6 +42,7 @@ export async function saveSchedulerState(state: SchedulerStateRow): Promise<void
     `);
   } catch (err: any) {
     console.warn(`[scraperState] saveSchedulerState failed: ${err?.message}`);
+    throw err;
   }
 }
 

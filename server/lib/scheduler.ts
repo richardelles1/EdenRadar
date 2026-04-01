@@ -121,30 +121,37 @@ function getMinRunningTier(): 1 | 2 | 3 | 4 | null {
   );
 }
 
-/** Flush scheduler state to DB immediately, bypassing the 60-second throttle.
- * Returns the save Promise so callers (SIGTERM handler, pause route) can await it. */
-export function flushSchedulerState(): Promise<void> {
-  return persistState(true);
-}
-
-function persistState(immediate = false): Promise<void> {
-  const now = Date.now();
-  // Throttle routine per-institution saves to at most once per 60 seconds.
-  // State-critical events (start, pause, cycle complete) always pass immediate=true.
-  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return Promise.resolve();
-  _lastPersistAt = now;
-
-  // Save checkpoint rolled back by any in-flight institutions so they are retried on restart.
-  const safeCheckpoint = Math.max(0, queueIndex - currentInstitutions.length);
-  return saveSchedulerState({
-    queueIndex: safeCheckpoint,
+/** Build the state snapshot to persist. */
+function buildStateSnapshot() {
+  return {
+    queueIndex: Math.max(0, queueIndex - currentInstitutions.length),
     cycleCount,
     cycleStartedAt,
     completedThisCycle,
     failedThisCycle,
     lastCycleCompletedAt,
     schedulerRunning: schedulerState === "running",
-  });
+  };
+}
+
+/** Flush scheduler state to DB immediately, bypassing the 60-second throttle.
+ * Returns a bare Promise from saveSchedulerState so callers (SIGTERM handler,
+ * pause route) can detect DB write failures — unlike persistState which absorbs them. */
+export function flushSchedulerState(): Promise<void> {
+  _lastPersistAt = Date.now();
+  return saveSchedulerState(buildStateSnapshot());
+}
+
+function persistState(immediate = false): void {
+  const now = Date.now();
+  // Throttle routine per-institution saves to at most once per 60 seconds.
+  // State-critical events (start, cycle complete) always pass immediate=true.
+  if (!immediate && now - _lastPersistAt < PERSIST_THROTTLE_MS) return;
+  _lastPersistAt = now;
+
+  // Fire-and-forget; errors are logged by saveSchedulerState but not propagated
+  // so transient DB issues never crash the scheduler loop.
+  saveSchedulerState(buildStateSnapshot()).catch(() => {});
 }
 
 export function getSchedulerStatus(): SchedulerStatus {
@@ -309,11 +316,11 @@ export async function pauseScheduler(): Promise<{ ok: boolean; message: string }
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
   }
-  // Await the DB write before returning so callers (HTTP route handler) only
-  // respond with 200 after the paused state is durably committed to Supabase.
-  // This prevents auto-resume on any server restart that happens immediately
-  // after the HTTP response is sent.
-  await persistState(true);
+  // Await the DB write before returning so the HTTP route handler only sends 200
+  // after schedulerRunning=false is durably committed to Supabase.
+  // Uses flushSchedulerState() (bare saveSchedulerState Promise, no error swallow)
+  // so the caller can detect and surface a DB failure.
+  await flushSchedulerState();
   console.log(`[scheduler] Paused at position ${queueIndex}/${getInstitutionQueue().length}`);
   return { ok: true, message: "Scheduler paused" };
 }
