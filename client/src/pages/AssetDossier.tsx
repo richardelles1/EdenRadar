@@ -362,7 +362,7 @@ export default function AssetDossier() {
               {!dossier ? (
                 <div className="rounded-xl border border-primary/30 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-7" data-testid="dossier-gate">
                   <div className="flex items-start gap-5">
-                    <div className="rounded-xl bg-primary/15 p-3 shrink-0 mt-0.5">
+                    <div className="rounded-xl bg-primary/15 w-10 h-10 flex items-center justify-center shrink-0 mt-0.5">
                       <Lock className="w-6 h-6 text-primary" />
                     </div>
                     <div className="flex-1">
