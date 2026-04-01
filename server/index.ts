@@ -36,8 +36,8 @@ async function onShutdownSignal(signal: string) {
   ]);
   process.exit(0);
 }
-process.on("SIGTERM", () => { onShutdownSignal("SIGTERM"); });
-process.on("SIGINT", () => { onShutdownSignal("SIGINT"); });
+process.on("SIGTERM", async () => { await onShutdownSignal("SIGTERM"); });
+process.on("SIGINT", async () => { await onShutdownSignal("SIGINT"); });
 
 declare module "http" {
   interface IncomingMessage {

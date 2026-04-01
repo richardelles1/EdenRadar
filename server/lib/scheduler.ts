@@ -144,7 +144,7 @@ function persistState(immediate = false): Promise<void> {
     failedThisCycle,
     lastCycleCompletedAt,
     schedulerRunning: schedulerState === "running",
-  }).catch(() => {});
+  });
 }
 
 export function getSchedulerStatus(): SchedulerStatus {
