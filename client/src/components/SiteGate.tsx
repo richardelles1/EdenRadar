@@ -38,7 +38,7 @@ export function SiteGate({ children }: { children: React.ReactNode }) {
         </div>
         <div className="text-center space-y-1">
           <h1 className="text-lg font-bold text-foreground">EdenRadar</h1>
-          <p className="text-sm text-muted-foreground">Private beta — enter access code</p>
+          <p className="text-sm text-muted-foreground">Private beta: enter access code</p>
         </div>
         <Input
           type="password"

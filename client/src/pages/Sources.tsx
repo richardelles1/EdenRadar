@@ -78,7 +78,7 @@ const DATA_SOURCES = [
     id: "techtransfer",
     name: "Tech Transfer (TTO)",
     category: "Licensing",
-    description: "Live scraper monitoring 205 global institutions. Active feeds from 143 university TTO portals — scanned daily.",
+    description: "Live scraper monitoring 205 global institutions. Active feeds from 143 university TTO portals, scanned daily.",
     url: "/institutions",
     icon: Building2,
     color: "text-primary bg-primary/10",
@@ -193,7 +193,7 @@ export default function Sources() {
         <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
           <h1 className="text-2xl font-bold text-foreground">Sources</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            All data sources powering EdenRadar — literature, clinical, patents, grants, and live TTO feeds.
+            All data sources powering EdenRadar: literature, clinical, patents, grants, and live TTO feeds.
           </p>
         </div>
       </div>

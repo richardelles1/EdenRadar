@@ -200,7 +200,7 @@ export default function DossierPrint() {
             }}
           >
             <Printer style={{ width: 14, height: 14 }} />
-            Print / Download PDF
+            Download PDF
           </button>
         </div>
 

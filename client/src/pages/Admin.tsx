@@ -351,7 +351,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 <Database className="h-5 w-5 opacity-40" />
                 <div>
                   <p className="text-sm font-medium text-foreground">{institution}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">No sync session found — this institution has not been synced yet.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">No sync session found. This institution has not been synced yet.</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -374,7 +374,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                         ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
                           <span className="inline-flex items-center gap-1 text-blue-500"><Clock className="h-3.5 w-3.5 shrink-0" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                         ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Scraped 0 results — site may have been unreachable" />
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Scraped 0 results: site may have been unreachable" />
                         )}
                         <span className="text-muted-foreground">{s.completedAt ? formatDate(s.completedAt) : "In progress"}</span>
                       </div>
@@ -426,9 +426,9 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
               <div className="flex items-start gap-3 p-4 rounded-lg border border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30">
                 <AlertTriangle className="h-5 w-5 text-orange-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="text-sm font-medium text-orange-700 dark:text-orange-400">Anomaly detected — sync halted</p>
+                  <p className="text-sm font-medium text-orange-700 dark:text-orange-400">Anomaly detected: sync halted</p>
                   <p className="text-xs text-orange-600 dark:text-orange-500 mt-1">
-                    Too many new assets relative to the existing index — suspected dedup failure. New rows quarantined. Go to the Indexing Queue to release (then re-sync to classify) or discard them.
+                    Too many new assets relative to the existing index, suspected dedup failure. New rows quarantined. Go to the Indexing Queue to release (then re-sync to classify) or discard them.
                   </p>
                 </div>
               </div>
@@ -497,7 +497,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
                   <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Site was likely rate-limited or unreachable — 0 results returned. Run a manual scrape to retry.</p>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Site was likely rate-limited or unreachable. 0 results returned. Run a manual scrape to retry.</p>
                     <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper returned no results. This could indicate a broken connection, website change, or temporary outage. Push is blocked.</p>
                   </div>
                 </div>
@@ -509,7 +509,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                   <div>
                     <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
                     <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count — the scraper may only be returning partial results.
+                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count; the scraper may only be returning partial results.
                     </p>
                   </div>
                 </div>
@@ -611,7 +611,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
               {isEnriched && session.relevantCount === 0 && session.newCount === 0 && !isFailed && (
                 <div className="text-center py-4 text-muted-foreground" data-testid="sync-no-new">
                   <CheckCircle2 className="h-6 w-6 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm">No new entries found — index is up to date.</p>
+                  <p className="text-sm">No new entries found. Index is up to date.</p>
                 </div>
               )}
 
@@ -642,7 +642,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                       ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
                         <span className="inline-flex items-center gap-1 text-blue-500 shrink-0"><Clock className="h-3.5 w-3.5" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                       ) : (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Scraped 0 results — site may have been unreachable" />
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Scraped 0 results: site may have been unreachable" />
                       )}
                       <span className="text-muted-foreground truncate">
                         {s.completedAt ? formatDate(s.completedAt) : "In progress"}
@@ -869,7 +869,7 @@ function DataHealth({ pw }: { pw: string }) {
       return res.json();
     },
     onSuccess: (d: { ok: boolean; concurrency: number }) => {
-      toast({ title: `Concurrency set to ${d.concurrency}`, description: d.concurrency === 1 ? "Serial mode — one institution at a time" : "Parallel mode — two simultaneous syncs" });
+      toast({ title: `Concurrency set to ${d.concurrency}`, description: d.concurrency === 1 ? "Serial mode: one institution at a time" : "Parallel mode: two simultaneous syncs" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
     onError: (err: Error) => {
@@ -1159,14 +1159,14 @@ function DataHealth({ pw }: { pw: string }) {
                   className={`px-2.5 h-full font-medium transition-colors ${(sched.maxConcurrency ?? 1) === 1 ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
                   onClick={() => setConcurrencyMutation.mutate(1)}
                   disabled={setConcurrencyMutation.isPending || (sched.maxConcurrency ?? 1) === 1}
-                  title="Serial — one institution at a time (recommended)"
+                  title="Serial: one institution at a time (recommended)"
                   data-testid="button-concurrency-1"
                 >1x</button>
                 <button
                   className={`px-2.5 h-full font-medium border-l border-border transition-colors ${(sched.maxConcurrency ?? 1) === 2 ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
                   onClick={() => setConcurrencyMutation.mutate(2)}
                   disabled={setConcurrencyMutation.isPending || (sched.maxConcurrency ?? 1) === 2}
-                  title="Parallel — two simultaneous syncs"
+                  title="Parallel: two simultaneous syncs"
                   data-testid="button-concurrency-2"
                 >2x</button>
               </div>
@@ -1327,7 +1327,7 @@ function DataHealth({ pw }: { pw: string }) {
                             <div className="flex items-center gap-1.5">
                               <span className="truncate">{row.institution}</span>
                               {row.tier === 1 && (
-                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-sky-600 border-sky-500/30 bg-sky-500/5" title="Tier 1: API/RSS — fastest">T1</Badge>
+                                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-sky-600 border-sky-500/30 bg-sky-500/5" title="Tier 1: API/RSS (fastest)">T1</Badge>
                               )}
                               {row.tier === 2 && (
                                 <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0 text-violet-600 border-violet-500/30 bg-violet-500/5" title="Tier 2: Platform factory (TechPublisher/Flintbox)">T2</Badge>
@@ -1477,7 +1477,7 @@ function DataHealth({ pw }: { pw: string }) {
             <PackagePlus className="h-4 w-4 text-violet-500" />
             <span className="font-semibold text-foreground text-sm">Active Search</span>
             <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">{data.totalActiveSearch ?? 0}</span>
-            <span className="text-[11px] text-muted-foreground/60">Manually imported — not sequence scanned</span>
+            <span className="text-[11px] text-muted-foreground/60">Manually imported, not sequence scanned</span>
           </div>
           <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${activeSearchOpen ? "rotate-90" : ""}`} />
         </button>
@@ -1550,7 +1550,7 @@ function DataHealth({ pw }: { pw: string }) {
                       <td colSpan={5} className="text-center py-8 text-sm text-muted-foreground">
                         {activeSearchQuery.trim()
                           ? "No institutions match your search."
-                          : "No Active Search institutions yet — use Manual Import to add one."}
+                          : "No Active Search institutions yet. Use Manual Import to add one."}
                       </td>
                     </tr>
                   )}
@@ -2839,7 +2839,7 @@ function Enrichment({ pw }: { pw: string }) {
                 <div className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
                   <span className="text-sm font-medium text-foreground">
-                    Field Enrichment (GPT-4o-mini){isResumed ? " — resuming from checkpoint" : ""}
+                    Field Enrichment (GPT-4o-mini){isResumed ? " (resuming from checkpoint)" : ""}
                   </span>
                   <span className="text-sm tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
                     {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
@@ -4739,7 +4739,7 @@ function NewArrivals({ pw }: { pw: string }) {
         data.groups.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground" data-testid="text-no-arrivals">
             <Inbox className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm font-medium">No assets pending enrichment — queue is clear.</p>
+            <p className="text-sm font-medium">No assets pending enrichment. Queue is clear.</p>
           </div>
         ) : (
           <div className="space-y-2">
@@ -4776,7 +4776,7 @@ function NewArrivals({ pw }: { pw: string }) {
                         onClick={() => quarantineInstitutionMutation.mutate(group.institution)}
                         disabled={quarantineInstitutionMutation.isPending || pushMutation.isPending}
                         className="h-7 text-xs text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/30"
-                        title="Hold all pending rows for this institution — prevents push until reviewed"
+                        title="Hold all pending rows for this institution (prevents push until reviewed)"
                         data-testid={`button-quarantine-institution-${group.institution}`}
                       >
                         {quarantineInstitutionMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Hold"}
@@ -5148,7 +5148,7 @@ function EdenTab({ pw }: { pw: string }) {
         body: JSON.stringify({ sessionId: chatSessionId, messageIndex: msgIndex, sentiment }),
       });
       if (!res.ok) throw new Error("server error");
-      toast({ title: "Feedback noted — thanks!", duration: 2000 });
+      toast({ title: "Feedback noted, thanks!", duration: 2000 });
     } catch {
       setMessageFeedback((prev) => { const n = { ...prev }; delete n[msgIndex]; return n; });
       toast({ title: "Couldn't save feedback", variant: "destructive" });
@@ -5291,7 +5291,7 @@ function EdenTab({ pw }: { pw: string }) {
         {!chatReady && (
           <div className="mx-5 my-3 px-3 py-2 rounded-lg bg-amber-500/8 border border-amber-500/20 flex items-center gap-2" data-testid="chat-not-ready">
             <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-            <p className="text-xs text-amber-700 dark:text-amber-400">EDEN is not yet active — generate vector embeddings first using the EDEN Readiness panel below.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">EDEN is not yet active. Generate vector embeddings first using the EDEN Readiness panel below.</p>
           </div>
         )}
 
@@ -5659,7 +5659,7 @@ function EdenTab({ pw }: { pw: string }) {
                 <div className="flex items-center gap-2 mb-2">
                   <Loader2 className="h-4 w-4 text-emerald-500 animate-spin" />
                   <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
-                    EDEN Deep Enrichment (GPT-4o) — {live.processed.toLocaleString()} / {live.total.toLocaleString()}
+                    EDEN Deep Enrichment (GPT-4o): {live.processed.toLocaleString()} / {live.total.toLocaleString()}
                   </span>
                   <span className="text-sm font-bold text-emerald-600">{pct}%</span>
                   <Button
@@ -5683,7 +5683,7 @@ function EdenTab({ pw }: { pw: string }) {
                 <div className="flex items-center gap-2 mb-2">
                   <Loader2 className="h-4 w-4 text-violet-500 animate-spin" />
                   <span className="text-sm font-semibold text-violet-700 dark:text-violet-400">
-                    Embedding running — {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
+                    Embedding running: {embedLive.processed.toLocaleString()} / {embedLive.total.toLocaleString()}
                   </span>
                   <span className="ml-auto text-sm font-bold text-violet-600">{embedPct}%</span>
                 </div>
@@ -6138,7 +6138,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
 
             {mode === "text" ? (
               <Textarea
-                placeholder="Paste the TTO listing text — titles, descriptions, inventors, patent info…"
+                placeholder="Paste the TTO listing text: titles, descriptions, inventors, patent info…"
                 value={pastedText}
                 onChange={(e) => setPastedText(e.target.value)}
                 className="min-h-[180px] font-mono text-xs"
@@ -6163,7 +6163,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                   <Upload className="h-8 w-8 text-muted-foreground/50" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-foreground">Drag & drop or click to upload screenshots</p>
-                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP — up to 10 images</p>
+                    <p className="text-xs text-muted-foreground mt-1">PNG, JPG, or WebP, up to 10 images</p>
                   </div>
                 </div>
                 <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFileChange} data-testid="input-file-upload" />
@@ -6193,7 +6193,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                   <Upload className="h-8 w-8 text-muted-foreground/50" />
                   <div className="text-center">
                     <p className="text-sm font-medium text-foreground">Drag & drop or click to upload documents</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF or DOCX — up to 5 files, 20 MB each</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF or DOCX, up to 5 files, 20 MB each</p>
                   </div>
                 </div>
                 <input
@@ -6258,7 +6258,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
                   {failedImages.length} image{failedImages.length !== 1 ? "s" : ""} yielded no asset
                 </p>
                 <p className="text-xs text-amber-600 dark:text-amber-500 mt-0.5">
-                  {failedImages.join(", ")} — the screenshot may be too low resolution, cropped, or show a listing index rather than a single asset page. Try re-uploading a cleaner screenshot.
+                  {failedImages.join(", ")}: the screenshot may be too low resolution, cropped, or show a listing index rather than a single asset page. Try re-uploading a cleaner screenshot.
                 </p>
               </div>
             </div>
@@ -8103,7 +8103,7 @@ function SubscriptionData() {
     <div className="space-y-6" data-testid="section-subscription-data">
       <div className="rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 px-4 py-3 text-sm text-amber-700 dark:text-amber-400 flex items-center gap-2">
         <AlertTriangle className="h-4 w-4 shrink-0" />
-        Preview data — connect billing provider to activate live metrics.
+        Preview data: connect billing provider to activate live metrics.
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -8175,7 +8175,7 @@ function SubscriptionData() {
         <div className="text-right shrink-0">
           <p className="text-xs text-muted-foreground">Annualised</p>
           <p className="text-xl font-semibold text-foreground">${ARR.toLocaleString("en-US", { maximumFractionDigits: 0 })}/yr</p>
-          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1">preview — connect billing to activate</p>
+          <p className="text-[10px] text-muted-foreground/60 uppercase tracking-wide mt-1">preview, connect billing to activate</p>
         </div>
       </div>
     </div>
@@ -8506,7 +8506,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Manual Import</h2>
-                <p className="text-sm text-muted-foreground mt-1">Upload a screenshot or paste text from any TTO listing — AI extracts structured fields and adds the asset to the Indexing Queue.</p>
+                <p className="text-sm text-muted-foreground mt-1">Upload a screenshot or paste text from any TTO listing. AI extracts structured fields and adds the asset to the Indexing Queue.</p>
               </div>
               <ManualImportTab pw={pw} setActiveTab={setActiveTab} />
             </>
@@ -8582,7 +8582,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Subscription Data</h2>
-                <p className="text-sm text-muted-foreground mt-1">Revenue by tier, MRR, and subscriber metrics. Preview data — connect a billing provider to activate live figures.</p>
+                <p className="text-sm text-muted-foreground mt-1">Revenue by tier, MRR, and subscriber metrics. Connect a billing provider to activate live figures.</p>
               </div>
               <SubscriptionData />
             </>
@@ -8603,7 +8603,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
                   <EdenAvatar size={28} />
-                  EDEN — AI Analyst
+                  EDEN: AI Analyst
                 </h2>
                 <p className="text-sm text-muted-foreground mt-1">Eden Radar Novel Innovation Experience. Deep-enriches the 20K relevant TTO assets using GPT-4o for RAG-powered analysis.</p>
               </div>

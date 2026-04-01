@@ -51,7 +51,8 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
         <h3 className="text-sm font-semibold text-foreground">Signal Profile</h3>
         {hasScore ? (
           <div className="text-xs text-muted-foreground">
-            Score: <span className="font-bold text-foreground">{Math.round(breakdown.total)}</span>/100
+            <span className="font-bold text-foreground">{Math.round(breakdown.total)}</span>
+            <span className="text-muted-foreground/60"> / 100</span>
           </div>
         ) : (
           <span className="text-[10px] text-muted-foreground italic">not scored</span>
@@ -72,7 +73,7 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
 
       {hasScore && scoredRows.length > 0 && (
         <div className="space-y-3">
-          {scoredRows.map(({ key, label, icon: Icon, weight, fallback }) => {
+          {scoredRows.map(({ key, label, icon: Icon, fallback }) => {
             const val = breakdown[key];
             const { bar, text } = scoreColor(val);
             const basisText = basis[key] ?? fallback;
@@ -83,7 +84,6 @@ export function ScoreBreakdownCard({ breakdown, className = "" }: ScoreBreakdown
                   <div className="flex items-center gap-1.5">
                     <Icon className={`w-3 h-3 ${text}`} />
                     <span className="text-xs font-medium text-foreground">{label}</span>
-                    <span className="text-[10px] text-muted-foreground">({weight})</span>
                   </div>
                   <span className={`text-xs font-mono font-bold ${text}`}>{Math.round(val)}</span>
                 </div>

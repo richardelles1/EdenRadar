@@ -286,7 +286,7 @@ export function ResearcherOnboarding({ open, onClose }: Props) {
             <div className="space-y-2">
               <Label>Alert Keywords <span className="text-muted-foreground font-normal">(up to 10)</span></Label>
               <p className="text-xs text-muted-foreground leading-relaxed">
-                Specific terms to monitor — try your target protein, a modality, or a disease subtype.
+                Specific terms to monitor. Try your target protein, a modality, or a disease subtype.
               </p>
               <div className="flex gap-2">
                 <Input

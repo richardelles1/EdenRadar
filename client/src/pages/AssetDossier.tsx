@@ -11,7 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
-  Activity, Sparkles, BookOpen, Printer, Swords, GraduationCap,
+  Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
   Beaker, Tag, FlaskConical, Lightbulb, Mail,
 } from "lucide-react";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
@@ -118,7 +118,7 @@ function InfoRow({ label, value, accent }: { label: string; value: string; accen
   if (!value || value === "unknown") return null;
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wide font-semibold text-muted-foreground">{label}</span>
+      <span className="text-[11px] uppercase tracking-wide font-semibold text-foreground/50">{label}</span>
       <span className={`text-sm font-medium ${accent ? "text-primary" : "text-foreground"}`}>{value}</span>
     </div>
   );
@@ -329,9 +329,11 @@ export default function AssetDossier() {
             <div className="flex-1 min-w-0">
               <div className="flex flex-wrap items-center gap-2 mb-2">
                 <ScoreBadge score={asset.score} breakdown={asset.score_breakdown} size="lg" />
-                <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border capitalize ${stageClass}`}>
-                  {asset.development_stage}
-                </span>
+                {asset.development_stage && asset.development_stage !== "unknown" && (
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border capitalize ${stageClass}`}>
+                    {asset.development_stage}
+                  </span>
+                )}
                 {licensingAvailable && (
                   <span className="inline-flex items-center gap-1 text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-md px-2.5 py-1 font-semibold">
                     <Key className="w-3 h-3" />
@@ -339,7 +341,7 @@ export default function AssetDossier() {
                   </span>
                 )}
               </div>
-              <p className={`text-xs font-semibold mb-1.5 ${scoreVerdict.color}`} data-testid="score-verdict-label">
+              <p className={`text-sm font-bold mb-1.5 ${scoreVerdict.color}`} data-testid="score-verdict-label">
                 {scoreVerdict.label}
               </p>
               <h1 className="text-2xl font-bold text-foreground mb-1 leading-tight" data-testid="dossier-asset-name">
@@ -374,10 +376,10 @@ export default function AssetDossier() {
                 } catch {}
                 setLocation(`/asset/${id}/print`);
               }}
-              data-testid="button-print-dossier"
+              data-testid="button-export-dossier"
             >
-              <Printer className="w-3.5 h-3.5" />
-              Print Dossier
+              <Upload className="w-3.5 h-3.5" />
+              Export Dossier
             </Button>
           </div>
 
@@ -450,7 +452,7 @@ export default function AssetDossier() {
 
           {/* CTA gate */}
           {!dossier && (
-            <div className="mt-4 pt-4 border-t border-primary/10" data-testid="dossier-gate">
+            <div className="mt-6 pt-5 border-t border-primary/10" data-testid="dossier-gate">
               <Button
                 onClick={() => asset && dossierMutation.mutate(asset)}
                 disabled={dossierMutation.isPending}
@@ -515,7 +517,7 @@ export default function AssetDossier() {
                   </h2>
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  {enriched?.abstract ?? asset.summary}
+                  {(enriched?.abstract ?? asset.summary).replace(/^summary:\s*/i, "")}
                 </p>
               </div>
             )}
@@ -615,11 +617,15 @@ export default function AssetDossier() {
                       >
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-foreground truncate">{comp.assetName}</p>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-[10px] text-muted-foreground">{comp.target}</span>
-                            <span className="text-[10px] text-muted-foreground">·</span>
-                            <span className="text-[10px] text-muted-foreground">{comp.modality}</span>
-                          </div>
+                          {[comp.target, comp.modality].filter(v => v && v !== "unknown").length > 0 && (
+                            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                              {[comp.target, comp.modality].filter(v => v && v !== "unknown").map((v, i, arr) => (
+                                <span key={v} className="text-[10px] text-muted-foreground">
+                                  {v}{i < arr.length - 1 ? " ·" : ""}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className={`text-[10px] px-2 py-0.5 rounded-md border font-semibold capitalize ${compStage}`}>
