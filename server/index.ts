@@ -94,6 +94,7 @@ async function runStartupMigrations() {
   }
   const mdb = drizzle(client);
 
+  try {
   // ── pgvector + source_name column ─────────────────────────────────────────
   try {
     await mdb.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
@@ -542,8 +543,10 @@ async function runStartupMigrations() {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
 
-  // ── Close dedicated migration client (frees the connection back to Supabase) ──
-  await client.end().catch(() => {});
+  } finally {
+    // Always close the dedicated migration client, even if a migration throws
+    await client.end().catch(() => {});
+  }
 
   // ── Scheduler restore ─────────────────────────────────────────────────────
   try {
