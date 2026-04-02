@@ -753,19 +753,24 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
         ))}
       </div>
 
+      {/* Label above Scout card */}
+      <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest mb-1.5 sm:mb-2" style={{ color: colors.green }}>
+        This is where we make money
+      </p>
+
       {/* EdenScout — the revenue engine, full-width featured card */}
       <motion.div
         className="rounded-2xl p-4 sm:p-6 relative overflow-hidden"
         style={{
           background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`,
-          border: `2px solid ${colors.green}66`,
-          boxShadow: `0 0 32px ${colors.green}1a`,
+          border: `2px solid ${colors.green}88`,
+          boxShadow: `0 0 40px ${colors.green}22`,
         }}
         initial={skip ? false : { opacity: 0, y: 16 }}
         animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
         transition={skip ? { duration: 0 } : { duration: 0.45, delay: 0.25, ease: "easeOut" }}
       >
-        {/* Glow accent */}
+        {/* Glow accent bar */}
         <div className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-2xl" style={{ background: colors.green }} />
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-4">
@@ -775,7 +780,7 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
               <Sprout className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: "#fff" }} />
             </div>
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3</p>
+              <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3 · Paid</p>
               <h3 className="text-base sm:text-xl font-bold" style={{ color: colors.text }}>EdenScout</h3>
               <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Industry intelligence platform</p>
             </div>
@@ -783,13 +788,13 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
 
           {/* Revenue badge */}
           <div
-            className="flex items-center gap-2 px-3 py-2 rounded-lg self-start sm:self-auto"
-            style={{ background: `${colors.green}22`, border: `1px solid ${colors.green}55` }}
+            className="flex items-center gap-2 px-3 py-2 rounded-xl self-start sm:self-auto shrink-0"
+            style={{ background: `${colors.green}22`, border: `1px solid ${colors.green}66` }}
           >
             <DollarSign className="w-4 h-4 shrink-0" style={{ color: colors.green }} />
             <div>
-              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.green }}>Revenue product</p>
-              <p className="text-sm sm:text-base font-extrabold tabular-nums" style={{ color: colors.text }}>$799 / mo</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.green }}>Scout subscribers</p>
+              <p className="text-sm sm:text-base font-extrabold tabular-nums leading-tight" style={{ color: colors.text }}>$799 / mo</p>
             </div>
           </div>
 
@@ -1091,22 +1096,25 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
 
 const EDEN_PANELS = [
   {
+    step: "01",
     label: "Pull",
     icon: Database,
     color: "#3b82f6",
-    desc: "Continuously pulls from 300+ TTO databases and active research labs — scored, enriched, and ready to search.",
+    desc: "Continuously ingests from 300+ TTO databases and active research labs — every asset scored, classified, and enriched on arrival.",
   },
   {
+    step: "02",
     label: "Push",
     icon: Zap,
     color: "#f59e0b",
-    desc: "Pushes personalised email alerts to scouts the moment a matching asset appears, by modality, stage, or institution.",
+    desc: "Sends personalised email alerts to each scout the moment a new asset matches their saved criteria — modality, stage, or institution.",
   },
   {
+    step: "03",
     label: "Ask",
     icon: Brain,
     color: "#22c55e",
-    desc: "Natural-language Q&A lets scouts query the entire landscape in plain English and get ranked, scored results instantly.",
+    desc: "Natural-language Q&A across the entire landscape. Scouts query in plain English and get ranked, scored results instantly.",
   },
 ];
 
@@ -1120,17 +1128,18 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
           How EDEN works.
         </h2>
 
-        {/* Pull / Push / Ask panels — compact row on mobile */}
+        {/* Pull / Push / Ask — compact 3-panel row on mobile */}
         <div className="grid grid-cols-3 gap-2 mb-3 shrink-0">
           {EDEN_PANELS.map((panel) => (
             <div
               key={panel.label}
               className="rounded-xl p-2.5 flex flex-col items-center text-center"
-              style={{ background: `${panel.color}18`, border: `1px solid ${panel.color}44` }}
+              style={{ background: `${panel.color}18`, border: `1px solid ${panel.color}44`, borderTop: `2px solid ${panel.color}` }}
             >
               <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-1.5" style={{ background: panel.color }}>
                 <panel.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
               </div>
+              <p className="text-[9px] font-bold uppercase tracking-widest mb-0.5" style={{ color: `${panel.color}88` }}>{panel.step}</p>
               <p className="text-xs font-bold" style={{ color: panel.color }}>{panel.label}</p>
             </div>
           ))}
@@ -1166,7 +1175,10 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: panel.color }}>
                   <panel.icon className="w-5 h-5" style={{ color: "#fff" }} />
                 </div>
-                <p className="text-lg font-extrabold" style={{ color: panel.color }}>{panel.label}</p>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}99` }}>{panel.step}</p>
+                  <p className="text-lg font-extrabold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
+                </div>
               </div>
               <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{panel.desc}</p>
             </div>
