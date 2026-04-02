@@ -1041,8 +1041,14 @@ export default function Alerts() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const matchedTtoCount = data?.newAssets.hasAlerts
+    ? (data.newAssets.byInstitution
+        .filter((inst) => inst.matchedBy !== null)
+        .reduce((s, inst) => s + inst.matchedCount, 0))
+    : (data?.newAssets.total ?? 0);
+
   const totalNew =
-    (data?.newAssets.total ?? 0) +
+    matchedTtoCount +
     (data?.newConcepts.total ?? 0) +
     (data?.newProjects.total ?? 0);
 
@@ -1112,7 +1118,7 @@ export default function Alerts() {
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">TTO Assets</span>
                     <span className="font-semibold text-foreground tabular-nums">
-                      +{data.newAssets.total}
+                      +{matchedTtoCount}
                     </span>
                   </div>
                   <div className="flex items-center justify-between text-sm">

@@ -5380,30 +5380,30 @@ If a field cannot be determined, use "N/A".`
         // Wildcard: no filters set — matches everything
         if (!hasInst && !hasModality && !hasStage && !hasQuery) return true;
 
-        const instLower  = (asset.institution ?? "").toLowerCase();
-        const modLower   = (asset.modality ?? "").toLowerCase();
-        const stageLower = (asset.developmentStage ?? "").toLowerCase();
-        const nameLower  = (asset.assetName ?? "").toLowerCase();
-
+        // All filter checks use one-direction containment (asset value contains
+        // the filter term) and require the asset field to be non-empty; a null
+        // or empty field never satisfies a non-empty filter.
         if (hasInst) {
-          const ok = alert.institutions!.some(
-            (ai) => instLower.includes(ai.toLowerCase()) || ai.toLowerCase().includes(instLower),
-          );
+          if (!asset.institution) return false;
+          const instLower = asset.institution.toLowerCase();
+          const ok = alert.institutions!.some((ai) => instLower.includes(ai.toLowerCase()));
           if (!ok) return false;
         }
         if (hasModality) {
-          const ok = alert.modalities!.some(
-            (m) => modLower.includes(m.toLowerCase()) || m.toLowerCase().includes(modLower),
-          );
+          if (!asset.modality) return false;
+          const modLower = asset.modality.toLowerCase();
+          const ok = alert.modalities!.some((m) => modLower.includes(m.toLowerCase()));
           if (!ok) return false;
         }
         if (hasStage) {
-          const ok = alert.stages!.some(
-            (s) => stageLower.includes(s.toLowerCase()) || s.toLowerCase().includes(stageLower),
-          );
+          if (!asset.developmentStage) return false;
+          const stageLower = asset.developmentStage.toLowerCase();
+          const ok = alert.stages!.some((s) => stageLower.includes(s.toLowerCase()));
           if (!ok) return false;
         }
         if (hasQuery) {
+          const nameLower = (asset.assetName ?? "").toLowerCase();
+          const instLower = (asset.institution ?? "").toLowerCase();
           const tokens = alert.query!.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
           const haystack = `${nameLower} ${instLower}`;
           const ok = tokens.some((t) => haystack.includes(t));
