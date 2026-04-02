@@ -641,8 +641,8 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
 function ProblemSlide({ colors }: { colors: Colors }) {
   const problems = [
     { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no path to industry." },
-    { icon: Search, title: "Industry Starts Too Late", desc: "Discovery begins at the patent stage. The best assets are already locked or gone." },
-    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, TTOs, and BD teams use disconnected systems. Nothing connects them." },
+    { icon: Search, title: "Industry Starts Too Late", desc: "By the patent stage, the best assets are already locked, gone, or unfunded." },
+    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, TTOs, and BD teams operate in disconnected silos with no shared intelligence." },
   ];
 
   return (
