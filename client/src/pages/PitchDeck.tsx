@@ -1246,14 +1246,25 @@ function EdenDetailZone({ panelId, colors, panelColor, mobile = false }: { panel
   if (panelId === "db-pull") return <PullDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
   if (panelId === "email-push") return <PushDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
   return (
-    <div className={mobile ? "flex flex-col" : "flex items-start gap-4"}>
-      {!mobile && (
-        <div className="shrink-0 pt-1">
-          <EdenAvatar size={40} />
+    <div
+      className="rounded-xl p-3 sm:p-4"
+      style={{ background: colors.bgLight, border: `1px solid ${panelColor}33` }}
+    >
+      <div className="flex items-center gap-2 mb-3">
+        <Brain className="w-3.5 h-3.5" style={{ color: panelColor }} />
+        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>
+          EDEN AI Query · Live Demo
+        </p>
+      </div>
+      <div className={mobile ? "flex flex-col" : "flex items-start gap-4"}>
+        {!mobile && (
+          <div className="shrink-0 pt-1">
+            <EdenOrb />
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <PitchEdenChat colors={colors} mobile={mobile} chatHeight={mobile ? 240 : 290} />
         </div>
-      )}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <PitchEdenChat colors={colors} mobile={mobile} chatHeight={mobile ? 260 : 310} />
       </div>
     </div>
   );
