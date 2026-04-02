@@ -4,7 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -5304,12 +5304,14 @@ If a field cannot be determined, use "N/A".`
         ? new Date(sinceParam)
         : new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
 
-      const [newAssetRows, newConceptRows, newProjectRows] = await Promise.all([
+      const [newAssetRows, newConceptRows, newProjectRows, savedAlerts] = await Promise.all([
         db
           .select({
             id: ingestedAssets.id,
             institution: ingestedAssets.institution,
             assetName: ingestedAssets.assetName,
+            modality: ingestedAssets.modality,
+            developmentStage: ingestedAssets.developmentStage,
           })
           .from(ingestedAssets)
           .where(
@@ -5360,24 +5362,97 @@ If a field cannot be determined, use "N/A".`
           )
           .orderBy(desc(researchProjects.lastEditedAt))
           .limit(20),
+
+        db.select().from(userAlerts).orderBy(desc(userAlerts.createdAt)),
       ]);
 
-      const institutionMap = new Map<string, { count: number; sampleAssets: Array<{ id: number; name: string }> }>();
+      // Per-asset alert matching with full AND semantics across all 4 criteria.
+      // A wildcard alert (all filter arrays empty, no query) matches any asset.
+      function assetMatchesAlert(
+        alert: UserAlert,
+        asset: { assetName: string; institution: string | null; modality: string | null; developmentStage: string | null },
+      ): boolean {
+        const hasInst     = (alert.institutions?.length ?? 0) > 0;
+        const hasModality = (alert.modalities?.length ?? 0) > 0;
+        const hasStage    = (alert.stages?.length ?? 0) > 0;
+        const hasQuery    = !!(alert.query?.trim());
+
+        // Wildcard: no filters set — matches everything
+        if (!hasInst && !hasModality && !hasStage && !hasQuery) return true;
+
+        const instLower  = (asset.institution ?? "").toLowerCase();
+        const modLower   = (asset.modality ?? "").toLowerCase();
+        const stageLower = (asset.developmentStage ?? "").toLowerCase();
+        const nameLower  = (asset.assetName ?? "").toLowerCase();
+
+        if (hasInst) {
+          const ok = alert.institutions!.some(
+            (ai) => instLower.includes(ai.toLowerCase()) || ai.toLowerCase().includes(instLower),
+          );
+          if (!ok) return false;
+        }
+        if (hasModality) {
+          const ok = alert.modalities!.some(
+            (m) => modLower.includes(m.toLowerCase()) || m.toLowerCase().includes(modLower),
+          );
+          if (!ok) return false;
+        }
+        if (hasStage) {
+          const ok = alert.stages!.some(
+            (s) => stageLower.includes(s.toLowerCase()) || s.toLowerCase().includes(stageLower),
+          );
+          if (!ok) return false;
+        }
+        if (hasQuery) {
+          const tokens = alert.query!.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
+          const haystack = `${nameLower} ${instLower}`;
+          const ok = tokens.some((t) => haystack.includes(t));
+          if (!ok) return false;
+        }
+        return true;
+      }
+
+      // Build institution map with alert-aware annotation.
+      const hasAlerts = savedAlerts.length > 0;
+      type InstEntry = { count: number; matchedCount: number; matchedBy: string | null; sampleAssets: Array<{ id: number; name: string }> };
+      const institutionMap = new Map<string, InstEntry>();
+
       for (const row of newAssetRows) {
         const inst = row.institution || "Unknown";
-        const existing = institutionMap.get(inst) ?? { count: 0, sampleAssets: [] };
+        const existing = institutionMap.get(inst) ?? { count: 0, matchedCount: 0, matchedBy: null, sampleAssets: [] };
         existing.count++;
+
+        if (hasAlerts) {
+          for (const alert of savedAlerts) {
+            if (assetMatchesAlert(alert, row)) {
+              existing.matchedCount++;
+              if (!existing.matchedBy) existing.matchedBy = alert.name ?? alert.query ?? "Your alert";
+              break; // one match label per institution is enough
+            }
+          }
+        }
+
         if (existing.sampleAssets.length < 5) existing.sampleAssets.push({ id: row.id, name: row.assetName });
         institutionMap.set(inst, existing);
       }
 
       const byInstitution = Array.from(institutionMap.entries())
-        .map(([institution, { count, sampleAssets }]) => ({ institution, count, sampleAssets }))
+        .map(([institution, { count, matchedCount, matchedBy, sampleAssets }]) => ({
+          institution,
+          count,
+          matchedCount,
+          matchedBy: matchedBy ?? null,
+          sampleAssets,
+        }))
         .sort((a, b) => b.count - a.count);
 
       const windowHours = Math.round((Date.now() - since.getTime()) / 3600000);
       res.json({
-        newAssets: { total: newAssetRows.length, byInstitution },
+        newAssets: {
+          total: newAssetRows.length,
+          hasAlerts,
+          byInstitution,
+        },
         newConcepts: { total: newConceptRows.length, items: newConceptRows },
         newProjects: { total: newProjectRows.length, items: newProjectRows },
         windowHours,

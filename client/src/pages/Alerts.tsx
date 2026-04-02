@@ -49,12 +49,15 @@ const STORAGE_KEY = "edenLastSeenAlerts";
 interface DeltaInstitution {
   institution: string;
   count: number;
+  matchedCount: number;
+  matchedBy: string | null;
   sampleAssets: Array<{ id: number; name: string }>;
 }
 
 interface IndustryDeltaResponse {
   newAssets: {
     total: number;
+    hasAlerts: boolean;
     byInstitution: DeltaInstitution[];
   };
   newConcepts: {
@@ -242,13 +245,13 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
               </p>
             )}
             <div className="flex flex-wrap gap-1">
-              {(alert.modalities ?? []).map((m) => (
+              {(alert.modalities ?? []).map((m: string) => (
                 <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{m}</span>
               ))}
-              {(alert.stages ?? []).map((s) => (
+              {(alert.stages ?? []).map((s: string) => (
                 <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{s}</span>
               ))}
-              {(alert.institutions ?? []).map((inst) => (
+              {(alert.institutions ?? []).map((inst: string) => (
                 <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
               ))}
             </div>
@@ -326,63 +329,18 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   );
 }
 
-function matchedAlertLabel(
-  institution: string,
-  assetNames: string[],
-  alerts: UserAlert[]
-): string | null {
-  for (const alert of alerts) {
-    const hasInstFilter = (alert.institutions?.length ?? 0) > 0;
-    const hasQuery = !!alert.query?.trim();
-    const hasModality = (alert.modalities?.length ?? 0) > 0;
-    const hasStage = (alert.stages?.length ?? 0) > 0;
-
-    if (!hasInstFilter && !hasQuery && !hasModality && !hasStage) {
-      return alert.name ?? alert.query ?? "Your alert";
-    }
-
-    if (hasInstFilter) {
-      const instLower = institution.toLowerCase();
-      const alertInsts = alert.institutions ?? [];
-      if (alertInsts.some((ai) => instLower.includes(ai.toLowerCase()) || ai.toLowerCase().includes(instLower))) {
-        return alert.name ?? alert.query ?? institution;
-      }
-    }
-
-    if (hasQuery && !hasInstFilter) {
-      const q = alert.query!.toLowerCase();
-      const haystack = [institution, ...assetNames].join(" ").toLowerCase();
-      if (haystack.includes(q) || q.split(/\s+/).some((tok) => tok.length >= 4 && haystack.includes(tok))) {
-        return alert.name ?? alert.query ?? "Your alert";
-      }
-    }
-  }
-  return null;
-}
-
 function TtoAssetsSection({
   data,
-  alerts,
   onCreateAlert,
 }: {
   data: IndustryDeltaResponse["newAssets"];
-  alerts: UserAlert[];
   onCreateAlert: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  const noAlerts = alerts.length === 0;
-
-  const annotated = data.byInstitution.map((inst) => ({
-    inst,
-    matchLabel: noAlerts
-      ? null
-      : matchedAlertLabel(inst.institution, inst.sampleAssets.map((a) => a.name), alerts),
-  }));
-
-  const filtered = noAlerts ? [] : annotated.filter((a) => a.matchLabel !== null);
-  const matchedTotal = filtered.reduce((s, a) => s + a.inst.count, 0);
-  const displayCount = noAlerts ? 0 : matchedTotal;
+  const matched = data.byInstitution.filter((inst) => inst.matchedBy !== null);
+  const matchedTotal = matched.reduce((s, inst) => s + inst.matchedCount, 0);
+  const displayCount = data.hasAlerts ? matchedTotal : data.total;
 
   return (
     <div className="rounded-lg border border-card-border bg-card overflow-hidden">
@@ -399,7 +357,7 @@ function TtoAssetsSection({
       </div>
       {expanded && (
         <div className="border-t border-card-border/60 px-4 pb-4">
-          {noAlerts ? (
+          {!data.hasAlerts ? (
             <div className="pt-3 space-y-2">
               <p className="text-xs text-muted-foreground">
                 Create a saved alert to personalise this feed. We'll highlight new TTO assets matching your criteria.
@@ -412,7 +370,7 @@ function TtoAssetsSection({
                 + Create your first alert
               </button>
             </div>
-          ) : filtered.length === 0 ? (
+          ) : matched.length === 0 ? (
             <p className="text-xs text-muted-foreground pt-3">
               {data.total > 0
                 ? "No new assets match your saved alert criteria. Try broadening your alert filters."
@@ -421,8 +379,8 @@ function TtoAssetsSection({
           ) : (
             <div className="pt-3 space-y-2">
               <p className="text-[10px] text-muted-foreground/70 pb-1">Matching your alerts</p>
-              {filtered.map(({ inst, matchLabel }, i) => (
-                <InstitutionRow key={inst.institution} inst={inst} index={i} matchLabel={matchLabel!} />
+              {matched.map((inst, i) => (
+                <InstitutionRow key={inst.institution} inst={inst} index={i} matchLabel={inst.matchedBy!} />
               ))}
             </div>
           )}
@@ -1080,10 +1038,6 @@ export default function Alerts() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: alerts = [] } = useQuery<UserAlert[]>({
-    queryKey: ["/api/alerts"],
-  });
-
   const totalNew =
     (data?.newAssets.total ?? 0) +
     (data?.newConcepts.total ?? 0) +
@@ -1137,7 +1091,7 @@ export default function Alerts() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} />
-              <TtoAssetsSection data={data.newAssets} alerts={alerts} onCreateAlert={() => setSheetOpen(true)} />
+              <TtoAssetsSection data={data.newAssets} onCreateAlert={() => setSheetOpen(true)} />
               <ConceptsSection data={data.newConcepts} />
               <ProjectsSection data={data.newProjects} />
             </div>
