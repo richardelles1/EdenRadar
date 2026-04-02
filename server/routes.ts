@@ -5404,9 +5404,15 @@ If a field cannot be determined, use "N/A".`
         if (hasQuery) {
           const nameLower = (asset.assetName ?? "").toLowerCase();
           const instLower = (asset.institution ?? "").toLowerCase();
-          const tokens = alert.query!.toLowerCase().split(/\s+/).filter((t) => t.length >= 3);
           const haystack = `${nameLower} ${instLower}`;
-          const ok = tokens.some((t) => haystack.includes(t));
+          const queryLower = alert.query!.toLowerCase();
+          // Tokenise on whitespace, keeping terms >= 3 chars. For short queries
+          // (e.g. "AI", "RNA") the token list may be empty, so fall back to a
+          // full-string match to avoid silently returning zero results.
+          const tokens = queryLower.split(/\s+/).filter((t) => t.length >= 3);
+          const ok = tokens.length > 0
+            ? tokens.some((t) => haystack.includes(t))
+            : haystack.includes(queryLower.trim());
           if (!ok) return false;
         }
         return true;
