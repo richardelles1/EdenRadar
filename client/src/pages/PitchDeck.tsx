@@ -1082,7 +1082,7 @@ function makeEdenPanels(colors: Colors) {
   const isDark = colors.bg !== "#ffffff";
   const shade1 = isDark ? "#1e9b55" : "#0a5c28";
   const shade2 = isDark ? "#2dba68" : "#168040";
-  const shade3 = colors.green;
+  const shade3 = isDark ? "#3fb950" : "#1a7f37";
   return [
     {
       id: "db-pull" as EdenPanelId,
