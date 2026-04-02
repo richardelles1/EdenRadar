@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -326,8 +326,63 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   );
 }
 
-function TtoAssetsSection({ data, since }: { data: IndustryDeltaResponse["newAssets"]; since?: string }) {
+function matchedAlertLabel(
+  institution: string,
+  assetNames: string[],
+  alerts: UserAlert[]
+): string | null {
+  for (const alert of alerts) {
+    const hasInstFilter = (alert.institutions?.length ?? 0) > 0;
+    const hasQuery = !!alert.query?.trim();
+    const hasModality = (alert.modalities?.length ?? 0) > 0;
+    const hasStage = (alert.stages?.length ?? 0) > 0;
+
+    if (!hasInstFilter && !hasQuery && !hasModality && !hasStage) {
+      return alert.name ?? alert.query ?? "Your alert";
+    }
+
+    if (hasInstFilter) {
+      const instLower = institution.toLowerCase();
+      const alertInsts = alert.institutions ?? [];
+      if (alertInsts.some((ai) => instLower.includes(ai.toLowerCase()) || ai.toLowerCase().includes(instLower))) {
+        return alert.name ?? alert.query ?? institution;
+      }
+    }
+
+    if (hasQuery && !hasInstFilter) {
+      const q = alert.query!.toLowerCase();
+      const haystack = [institution, ...assetNames].join(" ").toLowerCase();
+      if (haystack.includes(q) || q.split(/\s+/).some((tok) => tok.length >= 4 && haystack.includes(tok))) {
+        return alert.name ?? alert.query ?? "Your alert";
+      }
+    }
+  }
+  return null;
+}
+
+function TtoAssetsSection({
+  data,
+  alerts,
+  onCreateAlert,
+}: {
+  data: IndustryDeltaResponse["newAssets"];
+  alerts: UserAlert[];
+  onCreateAlert: () => void;
+}) {
   const [expanded, setExpanded] = useState(false);
+
+  const noAlerts = alerts.length === 0;
+
+  const annotated = data.byInstitution.map((inst) => ({
+    inst,
+    matchLabel: noAlerts
+      ? null
+      : matchedAlertLabel(inst.institution, inst.sampleAssets.map((a) => a.name), alerts),
+  }));
+
+  const filtered = noAlerts ? [] : annotated.filter((a) => a.matchLabel !== null);
+  const matchedTotal = filtered.reduce((s, a) => s + a.inst.count, 0);
+  const displayCount = noAlerts ? 0 : matchedTotal;
 
   return (
     <div className="rounded-lg border border-card-border bg-card overflow-hidden">
@@ -335,23 +390,39 @@ function TtoAssetsSection({ data, since }: { data: IndustryDeltaResponse["newAss
         <SectionHeader
           icon={Package}
           label="TTO Assets"
-          count={data.total}
+          count={displayCount}
           color="bg-primary/10 text-primary"
           expanded={expanded}
           onToggle={() => setExpanded((v) => !v)}
-          hasNew={data.total > 0}
+          hasNew={displayCount > 0}
         />
       </div>
       {expanded && (
         <div className="border-t border-card-border/60 px-4 pb-4">
-          {data.total === 0 ? (
+          {noAlerts ? (
+            <div className="pt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                Create a saved alert to personalise this feed. We'll highlight new TTO assets matching your criteria.
+              </p>
+              <button
+                onClick={onCreateAlert}
+                className="text-xs text-primary hover:underline"
+                data-testid="button-create-alert-from-tto"
+              >
+                + Create your first alert
+              </button>
+            </div>
+          ) : filtered.length === 0 ? (
             <p className="text-xs text-muted-foreground pt-3">
-              No new TTO assets since your last visit. Check back soon.
+              {data.total > 0
+                ? "No new assets match your saved alert criteria. Try broadening your alert filters."
+                : "No new TTO assets since your last visit. Check back soon."}
             </p>
           ) : (
             <div className="pt-3 space-y-2">
-              {data.byInstitution.map((inst, i) => (
-                <InstitutionRow key={inst.institution} inst={inst} index={i} />
+              <p className="text-[10px] text-muted-foreground/70 pb-1">Matching your alerts</p>
+              {filtered.map(({ inst, matchLabel }, i) => (
+                <InstitutionRow key={inst.institution} inst={inst} index={i} matchLabel={matchLabel!} />
               ))}
             </div>
           )}
@@ -406,7 +477,7 @@ function MiniAssetBloomCard({ asset, index }: { asset: { id: number; name: strin
   );
 }
 
-function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number }) {
+function InstitutionRow({ inst, index, matchLabel }: { inst: DeltaInstitution; index: number; matchLabel?: string }) {
   const [open, setOpen] = useState(false);
   const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(6);
 
@@ -442,6 +513,11 @@ function InstitutionRow({ inst, index }: { inst: DeltaInstitution; index: number
           >
             <Building2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             <span className="flex-1 text-xs font-semibold text-foreground truncate">{inst.institution}</span>
+            {matchLabel && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium truncate max-w-[80px] hidden sm:inline-block" title={matchLabel}>
+                {matchLabel}
+              </span>
+            )}
             <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">+{inst.count}</Badge>
             {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
           </div>
@@ -991,11 +1067,9 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
 export default function Alerts() {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const hasWrittenSeen = useRef(false);
-
-  const sinceParam = typeof window !== "undefined"
-    ? (localStorage.getItem(STORAGE_KEY) ?? "")
-    : "";
+  const [sinceParam, setSinceParam] = useState<string>(() =>
+    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
+  );
 
   const deltaUrl = sinceParam
     ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
@@ -1006,13 +1080,9 @@ export default function Alerts() {
     staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => {
-    if (data && !hasWrittenSeen.current) {
-      hasWrittenSeen.current = true;
-      localStorage.setItem(STORAGE_KEY, new Date().toISOString());
-      window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
-    }
-  }, [data]);
+  const { data: alerts = [] } = useQuery<UserAlert[]>({
+    queryKey: ["/api/alerts"],
+  });
 
   const totalNew =
     (data?.newAssets.total ?? 0) +
@@ -1020,6 +1090,13 @@ export default function Alerts() {
     (data?.newProjects.total ?? 0);
 
   const sinceLabel = formatRelative(data?.since ?? (sinceParam || undefined));
+
+  function handleMarkAllSeen() {
+    const now = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, now);
+    window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
+    setSinceParam(now);
+  }
 
   return (
     <div className="min-h-full">
@@ -1060,7 +1137,7 @@ export default function Alerts() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} />
-              <TtoAssetsSection data={data.newAssets} since={data.since} />
+              <TtoAssetsSection data={data.newAssets} alerts={alerts} onCreateAlert={() => setSheetOpen(true)} />
               <ConceptsSection data={data.newConcepts} />
               <ProjectsSection data={data.newProjects} />
             </div>
@@ -1102,6 +1179,16 @@ export default function Alerts() {
                     +{totalNew}
                   </span>
                 </div>
+                {totalNew > 0 && (
+                  <button
+                    onClick={handleMarkAllSeen}
+                    className="w-full text-[11px] text-muted-foreground hover:text-foreground border border-border rounded-md py-1.5 transition-colors flex items-center justify-center gap-1.5"
+                    data-testid="button-mark-all-seen"
+                  >
+                    <Check className="w-3 h-3" />
+                    Mark all as seen
+                  </button>
+                )}
               </div>
             </div>
           </div>
