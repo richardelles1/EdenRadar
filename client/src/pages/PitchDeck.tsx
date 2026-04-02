@@ -33,8 +33,9 @@ import {
   Dna,
   Shield,
   Check,
+  Bell,
 } from "lucide-react";
-import { motion, useInView, useReducedMotion } from "framer-motion";
+import { motion, AnimatePresence, useInView, useReducedMotion } from "framer-motion";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
@@ -1075,103 +1076,272 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
   );
 }
 
-const EDEN_PANELS = [
+type EdenPanelId = "db-pull" | "email-push" | "ai-query";
+
+function makeEdenPanels(colors: Colors) {
+  return [
+    {
+      id: "db-pull" as EdenPanelId,
+      step: "01",
+      label: "Database Pull",
+      icon: Database,
+      color: colors.violet,
+      desc: "Continuously collects and enriches assets from 300+ TTO databases. Every listing is scored, classified, and made searchable on arrival.",
+    },
+    {
+      id: "email-push" as EdenPanelId,
+      step: "02",
+      label: "Email Push",
+      icon: Bell,
+      color: colors.amber,
+      desc: "Sends personalised digest alerts the moment new assets match a scout's saved criteria: modality, stage, or institution.",
+    },
+    {
+      id: "ai-query" as EdenPanelId,
+      step: "03",
+      label: "AI Query",
+      icon: Brain,
+      color: colors.green,
+      desc: "Natural-language Q&A across the entire TTO landscape. Query in plain English and get ranked, scored results instantly.",
+    },
+  ];
+}
+
+const PULL_MOCK = [
   {
-    step: "01",
-    label: "Pull",
-    icon: Database,
-    color: "#3b82f6",
-    desc: "Continuously ingests from 300+ TTO databases and active research labs. Every asset is scored, classified, and enriched on arrival.",
+    id: 1,
+    score: 92,
+    title: "CAR-T Cell Therapy for CD19/CD22 Dual Antigen",
+    institution: "Johns Hopkins University",
+    modality: "Cell Therapy",
+    stage: "Pre-Clinical",
+    area: "Oncology",
   },
   {
-    step: "02",
-    label: "Push",
-    icon: Zap,
-    color: "#f59e0b",
-    desc: "Sends personalised email alerts to each scout the moment a new asset matches their saved criteria: modality, stage, or institution.",
+    id: 2,
+    score: 87,
+    title: "CRISPR Base Editing for Beta-Thalassemia",
+    institution: "MIT Technology Licensing Office",
+    modality: "Gene Therapy",
+    stage: "Research",
+    area: "Rare Disease",
   },
   {
-    step: "03",
-    label: "Ask",
-    icon: Brain,
-    color: "#22c55e",
-    desc: "Natural-language Q&A across the entire landscape. Scouts query in plain English and get ranked, scored results instantly.",
+    id: 3,
+    score: 79,
+    title: "Novel HDAC Inhibitor for Solid Tumor Microenvironment",
+    institution: "Stanford Office of Technology",
+    modality: "Small Molecule",
+    stage: "Research",
+    area: "Oncology",
   },
 ];
 
+function PullDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
+  return (
+    <div className="rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.violet}33` }}>
+      <div className="flex items-center gap-2 mb-3">
+        <Database className="w-3.5 h-3.5" style={{ color: colors.violet }} />
+        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: colors.violet }}>Live TTO Feed · 300+ Sources</p>
+        <div className="ml-auto flex items-center gap-1.5">
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: colors.green, animation: "bounce 1.5s ease-in-out infinite" }} />
+          <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>Updating now</p>
+        </div>
+      </div>
+      <div className={`grid gap-2 sm:gap-3 ${mobile ? "grid-cols-1" : "grid-cols-3"}`}>
+        {PULL_MOCK.map((asset) => (
+          <div key={asset.id} className="rounded-lg p-2.5 sm:p-3" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
+            <div className="flex items-start justify-between gap-2 mb-1.5">
+              <p className="text-[10px] sm:text-xs font-semibold leading-snug" style={{ color: colors.text }}>{asset.title}</p>
+              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: colors.greenDim, color: colors.green }}>{asset.score}</span>
+            </div>
+            <p className="text-[9px] sm:text-[10px] mb-2" style={{ color: colors.textMuted }}>{asset.institution}</p>
+            <div className="flex flex-wrap gap-1">
+              {[asset.modality, asset.stage, asset.area].map((tag) => (
+                <span key={tag} className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${colors.violet}22`, color: colors.violet }}>{tag}</span>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PushDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${colors.amber}44`, maxWidth: mobile ? "100%" : 580 }}>
+      <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${colors.amber}18`, borderBottom: `1px solid ${colors.amber}33` }}>
+        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: colors.amber }}>
+          <Bell className="w-4 h-4 text-white" />
+        </div>
+        <div>
+          <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
+          <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 new TTO assets match your alert</p>
+          <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
+        </div>
+      </div>
+      <div className="px-4 py-3" style={{ background: colors.bgLight }}>
+        <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
+          EDEN found 3 new assets this week matching your saved criteria across 2 institutions.
+        </p>
+        <div className="space-y-2">
+          {PULL_MOCK.slice(0, 2).map((asset) => (
+            <div key={asset.id} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
+              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: colors.greenDim, color: colors.green }}>{asset.score}</span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>{asset.title}</p>
+                <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+        <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${colors.amber}99` }}>
+          View all 3 assets in EdenScout
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function EdenDetailZone({ panelId, colors, mobile = false }: { panelId: EdenPanelId; colors: Colors; mobile?: boolean }) {
+  if (panelId === "db-pull") return <PullDetailZone colors={colors} mobile={mobile} />;
+  if (panelId === "email-push") return <PushDetailZone colors={colors} mobile={mobile} />;
+  return (
+    <div style={{ height: mobile ? 280 : 300 }}>
+      <PitchEdenChat colors={colors} mobile={mobile} />
+    </div>
+  );
+}
+
 function PitchEdenChatSlide({ colors }: { colors: Colors }) {
+  const [activePanel, setActivePanel] = useState<EdenPanelId | null>(null);
+  const panels = makeEdenPanels(colors);
+
+  function togglePanel(id: EdenPanelId) {
+    setActivePanel((prev) => (prev === id ? null : id));
+  }
+
   return (
     <Slide index={7} section="EDEN" accent={colors.green} colors={colors}>
 
-      {/* ── MOBILE LAYOUT ── */}
-      <div className="lg:hidden absolute inset-0 flex flex-col pt-14 pb-14 px-5" style={{ zIndex: 11 }}>
-        <h2 className="text-xl font-bold mb-3 shrink-0" style={{ color: colors.text }}>
-          How EDEN works.
-        </h2>
-
-        {/* Pull / Push / Ask — 3-panel column stack on mobile */}
-        <div className="space-y-2 mb-3 shrink-0">
-          {EDEN_PANELS.map((panel) => (
-            <div
-              key={panel.label}
-              className="rounded-xl px-3 py-2.5 flex items-start gap-3"
-              style={{ background: `${panel.color}14`, border: `1px solid ${panel.color}44`, borderLeft: `3px solid ${panel.color}` }}
-            >
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: panel.color }}>
-                <panel.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs font-bold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
-                <p className="text-[10px] leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
-              </div>
-            </div>
-          ))}
+      {/* ── HEADER ── */}
+      <div className="flex items-start justify-between mb-4 sm:mb-5">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: colors.green }}>How EDEN works</p>
+          <h2 className="text-2xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold leading-tight" style={{ color: colors.text }}>
+            The Intelligence Engine.
+          </h2>
         </div>
-
-        {/* Chat fills remaining height */}
-        <div className="flex-1 min-h-0">
-          <PitchEdenChat colors={colors} mobile />
-        </div>
+        <EdenAvatar size={44} />
       </div>
 
-      {/* ── DESKTOP LAYOUT ── */}
-      <div className="hidden lg:flex flex-col h-full">
-        <div className="flex items-start justify-between mb-5">
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: colors.green }}>The intelligence engine</p>
-            <h2 className="text-2xl lg:text-3xl xl:text-4xl font-bold leading-tight" style={{ color: colors.text }}>
-              How EDEN works.
-            </h2>
-          </div>
-          <EdenAvatar size={44} />
+      {/* ── DESKTOP: 3-column panels + shared detail zone below ── */}
+      <div className="hidden lg:block">
+        <div className="grid grid-cols-3 gap-4 mb-4">
+          {panels.map((panel) => {
+            const isActive = activePanel === panel.id;
+            return (
+              <button
+                key={panel.id}
+                onClick={() => togglePanel(panel.id)}
+                className="rounded-xl p-4 flex flex-col text-left transition-all duration-200"
+                style={{
+                  background: isActive ? `${panel.color}1e` : `${panel.color}0d`,
+                  border: `2px solid ${isActive ? panel.color : `${panel.color}44`}`,
+                  borderTop: `3px solid ${panel.color}`,
+                  cursor: "pointer",
+                  outline: "none",
+                  boxShadow: isActive ? `0 0 20px ${panel.color}22` : "none",
+                }}
+              >
+                <div className="flex items-center gap-2.5 mb-3">
+                  <div
+                    className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                    style={{ background: isActive ? panel.color : `${panel.color}44` }}
+                  >
+                    <panel.icon className="w-5 h-5" style={{ color: isActive ? "#fff" : panel.color }} />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}88` }}>{panel.step}</p>
+                    <p className="text-base font-extrabold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
+                  </div>
+                </div>
+                <p className="text-xs leading-relaxed flex-1" style={{ color: colors.textMuted }}>{panel.desc}</p>
+                <p className="text-[9px] mt-2.5 font-semibold" style={{ color: `${panel.color}88` }}>
+                  {isActive ? "Click to close" : "Click to explore"}
+                </p>
+              </button>
+            );
+          })}
         </div>
 
-        {/* Pull / Push / Ask — 3 equal panels */}
-        <div className="grid grid-cols-3 gap-4 mb-6">
-          {EDEN_PANELS.map((panel) => (
-            <div
-              key={panel.label}
-              className="rounded-xl p-4 flex flex-col"
-              style={{ background: `${panel.color}14`, border: `1px solid ${panel.color}44`, borderTop: `3px solid ${panel.color}` }}
+        <AnimatePresence mode="wait">
+          {activePanel && (
+            <motion.div
+              key={activePanel}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.28, ease: "easeOut" }}
+              style={{ overflow: "hidden" }}
             >
-              <div className="flex items-center gap-2.5 mb-3">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: panel.color }}>
-                  <panel.icon className="w-5 h-5" style={{ color: "#fff" }} />
-                </div>
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-widest leading-none" style={{ color: `${panel.color}99` }}>{panel.step}</p>
-                  <p className="text-lg font-extrabold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
-                </div>
-              </div>
-              <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{panel.desc}</p>
-            </div>
-          ))}
-        </div>
+              <EdenDetailZone panelId={activePanel} colors={colors} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-        {/* Chat demo below the 3 panels */}
-        <div className="flex-1 min-h-0">
-          <PitchEdenChat colors={colors} />
-        </div>
+      {/* ── MOBILE: stacked panels with inline detail zones ── */}
+      <div className="lg:hidden space-y-2.5">
+        {panels.map((panel) => {
+          const isActive = activePanel === panel.id;
+          return (
+            <div key={panel.id}>
+              <button
+                onClick={() => togglePanel(panel.id)}
+                className="w-full rounded-xl px-3 py-3 flex items-center gap-3 text-left transition-all duration-200"
+                style={{
+                  background: isActive ? `${panel.color}18` : `${panel.color}0d`,
+                  border: `1px solid ${isActive ? panel.color : `${panel.color}44`}`,
+                  borderLeft: `3px solid ${panel.color}`,
+                  outline: "none",
+                }}
+              >
+                <div
+                  className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all duration-200"
+                  style={{ background: isActive ? panel.color : `${panel.color}44` }}
+                >
+                  <panel.icon className="w-4 h-4" style={{ color: isActive ? "#fff" : panel.color }} />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-bold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
+                  <p className="text-[10px] leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
+                </div>
+                <ChevronRight
+                  className="w-4 h-4 shrink-0 transition-transform duration-200"
+                  style={{ color: panel.color, transform: isActive ? "rotate(90deg)" : "none" }}
+                />
+              </button>
+
+              <AnimatePresence>
+                {isActive && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: "auto" }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    style={{ overflow: "hidden" }}
+                  >
+                    <div className="mt-2">
+                      <EdenDetailZone panelId={panel.id} colors={colors} mobile />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          );
+        })}
       </div>
     </Slide>
   );
