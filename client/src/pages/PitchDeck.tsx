@@ -33,6 +33,8 @@ import {
   Workflow,
   Dna,
   Shield,
+  DollarSign,
+  Check,
 } from "lucide-react";
 import { motion, useInView, useReducedMotion } from "framer-motion";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
@@ -560,14 +562,14 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
     {
       photo: wafickPhoto,
       name: "Wafick Mohamed",
-      role: "Co-Founder & CEO",
+      role: "Co-Founder",
       bio: "Biotech executive, entrepreneur, and professor with extensive global pharma and quality systems experience.",
       color: colors.amber,
     },
     {
       photo: richardPhoto,
       name: "Richard Elles",
-      role: "Co-Founder & COO",
+      role: "Co-Founder",
       bio: "Healthcare strategist and PMP-certified leader with deep healthtech startup and academic research experience.",
       color: colors.green,
     },
@@ -697,53 +699,52 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
   const gridInView = useInView(gridRef, { once: false, amount: 0.2 });
   const reducedMotion = useReducedMotion();
   const skip = !!reducedMotion;
-  const portals = [
+  const supportingTiers = [
     {
       title: "EdenDiscovery", tier: "Tier 1", tagline: "Creative concept community", color: colors.amber, dim: colors.amberDim, icon: Lightbulb,
-      items: ["Submit hypotheses before research begins", "EDEN AI scoring and credibility scoring (0 to 100)", "Discovered by collaborators and funders"],
+      items: ["Submit hypotheses before research begins", "EDEN scoring and credibility scoring", "Discovered by collaborators and funders"],
     },
     {
       title: "EdenLab", tier: "Tier 2", tagline: "Project-based research workspace", color: colors.violet, dim: colors.violetDim, icon: FlaskConical,
       items: ["Literature search across 40+ data sources", "Structured 11-section project canvas", "AI synthesis and evidence extraction"],
     },
-    {
-      title: "EdenScout", tier: "Tier 3", tagline: "Industry intelligence platform", color: colors.green, dim: colors.greenDim, icon: Sprout,
-      items: ["300+ TTOs monitored continuously", "EDEN-scored and enriched asset dossiers", "Competing asset cross-reference by target"],
-    },
   ];
+
   return (
     <Slide index={4} section="Our Solution" accent={colors.green} colors={colors}>
       <PitchDots color={colors.amber} count={4} seed={0} />
       <PitchDots color={colors.violet} count={4} seed={1} />
       <PitchDots color={colors.green} count={4} seed={2} />
       <p className="text-[10px] sm:text-sm font-bold uppercase tracking-widest mb-2 sm:mb-3" style={{ color: colors.green }}>One platform. Three tiers. Continuous signal.</p>
-      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-6" style={{ color: colors.text }}>
+      <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-3 sm:mb-5" style={{ color: colors.text }}>
         EdenRadar <span style={{ color: colors.green }}>powers</span> the <span style={{ color: colors.green }}>full life cycle</span>.
       </h2>
-      <div ref={gridRef} className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
-        {portals.map((p, i) => (
+
+      {/* Supporting tiers — smaller, equal weight */}
+      <div ref={gridRef} className="grid grid-cols-2 gap-2.5 sm:gap-3 mb-3 sm:mb-4 opacity-80">
+        {supportingTiers.map((p, i) => (
           <motion.div
             key={p.title}
-            className="rounded-xl p-3 sm:p-6 flex flex-col relative"
-            style={{ background: p.dim, border: `1px solid ${p.color}44`, borderTop: `3px solid ${p.color}` }}
-            initial={skip ? false : { opacity: 0, x: -12 }}
-            animate={skip || gridInView ? { opacity: 1, x: 0 } : { opacity: 0, x: -12 }}
-            transition={skip ? { duration: 0 } : { duration: 0.45, delay: i * 0.12, ease: "easeOut" }}
+            className="rounded-xl p-3 sm:p-4 flex flex-col relative"
+            style={{ background: p.dim, border: `1px solid ${p.color}33`, borderTop: `2px solid ${p.color}` }}
+            initial={skip ? false : { opacity: 0, y: -8 }}
+            animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: -8 }}
+            transition={skip ? { duration: 0 } : { duration: 0.4, delay: i * 0.1, ease: "easeOut" }}
           >
-            <div className="flex items-center gap-2.5 mb-1.5 sm:mb-2">
-              <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: p.color }}>
-                <p.icon className="w-4 h-4" style={{ color: "#fff" }} />
+            <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${p.color}88` }}>
+                <p.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
               </div>
               <div className="min-w-0">
-                <p className="text-[9px] sm:text-[10px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier}</p>
-                <h3 className="text-sm sm:text-base font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
+                <p className="text-[9px] font-bold uppercase tracking-widest leading-none mb-0.5" style={{ color: p.color }}>{p.tier} · Free</p>
+                <h3 className="text-xs sm:text-sm font-bold leading-tight" style={{ color: colors.text }}>{p.title}</h3>
               </div>
             </div>
-            <p className="text-[10px] sm:text-xs mb-2 sm:mb-4 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
-            <ul className="space-y-1 sm:space-y-2 mt-auto">
+            <p className="text-[9px] sm:text-[10px] mb-1.5 leading-snug" style={{ color: colors.textMuted }}>{p.tagline}</p>
+            <ul className="space-y-1 mt-auto">
               {p.items.map((item) => (
-                <li key={item} className="flex items-start gap-1.5 sm:gap-2 text-[10px] sm:text-xs" style={{ color: colors.text }}>
-                  <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3 mt-0.5 shrink-0" style={{ color: p.color }} />
+                <li key={item} className="flex items-start gap-1.5 text-[9px] sm:text-[10px]" style={{ color: colors.text }}>
+                  <ArrowRight className="w-2.5 h-2.5 mt-0.5 shrink-0" style={{ color: p.color }} />
                   {item}
                 </li>
               ))}
@@ -751,6 +752,65 @@ function SolutionPortalsSlide({ colors }: { colors: Colors }) {
           </motion.div>
         ))}
       </div>
+
+      {/* EdenScout — the revenue engine, full-width featured card */}
+      <motion.div
+        className="rounded-2xl p-4 sm:p-6 relative overflow-hidden"
+        style={{
+          background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`,
+          border: `2px solid ${colors.green}66`,
+          boxShadow: `0 0 32px ${colors.green}1a`,
+        }}
+        initial={skip ? false : { opacity: 0, y: 16 }}
+        animate={skip || gridInView ? { opacity: 1, y: 0 } : { opacity: 0, y: 16 }}
+        transition={skip ? { duration: 0 } : { duration: 0.45, delay: 0.25, ease: "easeOut" }}
+      >
+        {/* Glow accent */}
+        <div className="absolute right-0 top-0 bottom-0 w-1.5 rounded-r-2xl" style={{ background: colors.green }} />
+
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Icon + label */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
+              <Sprout className="w-5 h-5 sm:w-6 sm:h-6" style={{ color: "#fff" }} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3</p>
+              <h3 className="text-base sm:text-xl font-bold" style={{ color: colors.text }}>EdenScout</h3>
+              <p className="text-[10px] sm:text-xs" style={{ color: colors.textMuted }}>Industry intelligence platform</p>
+            </div>
+          </div>
+
+          {/* Revenue badge */}
+          <div
+            className="flex items-center gap-2 px-3 py-2 rounded-lg self-start sm:self-auto"
+            style={{ background: `${colors.green}22`, border: `1px solid ${colors.green}55` }}
+          >
+            <DollarSign className="w-4 h-4 shrink-0" style={{ color: colors.green }} />
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: colors.green }}>Revenue product</p>
+              <p className="text-sm sm:text-base font-extrabold tabular-nums" style={{ color: colors.text }}>$799 / mo</p>
+            </div>
+          </div>
+
+          {/* Feature list */}
+          <ul className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-x-4 gap-y-1">
+            {[
+              "300+ TTOs monitored continuously",
+              "EDEN-scored and enriched asset dossiers",
+              "Competing asset cross-reference by target",
+              "Personalised alert feeds for every scout",
+              "TTO contact details and licensing pathways",
+              "EdenLab + EdenDiscovery full access included",
+            ].map((item) => (
+              <li key={item} className="flex items-start gap-1.5 text-[10px] sm:text-xs" style={{ color: colors.text }}>
+                <Check className="w-3 h-3 mt-0.5 shrink-0" style={{ color: colors.green }} />
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      </motion.div>
       <div className="mt-4 sm:mt-5 relative flex items-center rounded-lg overflow-hidden" style={{ height: 36, background: `linear-gradient(to right, ${colors.amber}33, ${colors.violet}33, ${colors.green}33)`, border: "1px solid transparent" }}>
         <div className="absolute inset-0" style={{ background: `linear-gradient(to right, ${colors.amber}22, ${colors.violet}22, ${colors.green}22)` }} />
         <span className="relative z-10 flex-1 text-center text-xs font-bold uppercase tracking-widest" style={{ color: "#ffffff", letterSpacing: "0.15em" }}>
@@ -1029,52 +1089,93 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
   );
 }
 
+const EDEN_PANELS = [
+  {
+    label: "Pull",
+    icon: Database,
+    color: "#3b82f6",
+    desc: "Continuously pulls from 300+ TTO databases and active research labs — scored, enriched, and ready to search.",
+  },
+  {
+    label: "Push",
+    icon: Zap,
+    color: "#f59e0b",
+    desc: "Pushes personalised email alerts to scouts the moment a matching asset appears, by modality, stage, or institution.",
+  },
+  {
+    label: "Ask",
+    icon: Brain,
+    color: "#22c55e",
+    desc: "Natural-language Q&A lets scouts query the entire landscape in plain English and get ranked, scored results instantly.",
+  },
+];
+
 function PitchEdenChatSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={7} section="EDEN" accent={colors.green} colors={colors}>
 
-      {/* ── MOBILE LAYOUT: absolute-fill so chat uses all remaining screen space ── */}
+      {/* ── MOBILE LAYOUT ── */}
       <div className="lg:hidden absolute inset-0 flex flex-col pt-14 pb-14 px-5" style={{ zIndex: 11 }}>
         <h2 className="text-xl font-bold mb-3 shrink-0" style={{ color: colors.text }}>
-          Ask EDEN anything about the biotech landscape.
+          How EDEN works.
         </h2>
-        {/* Compact identity bar replaces the giant orb */}
-        <div
-          className="flex items-center gap-3 mb-4 p-3 rounded-xl shrink-0"
-          style={{ background: colors.bgLight, border: `1px solid ${colors.border}` }}
-        >
-          <EdenAvatar size={34} />
-          <div>
-            <p className="text-sm font-bold" style={{ color: colors.green }}>EDEN Intelligence Engine</p>
-            <p className="text-[10px] leading-relaxed" style={{ color: colors.textMuted }}>
-              300+ tech transfer offices · Scored · Enriched · Actionable
-            </p>
-          </div>
+
+        {/* Pull / Push / Ask panels — compact row on mobile */}
+        <div className="grid grid-cols-3 gap-2 mb-3 shrink-0">
+          {EDEN_PANELS.map((panel) => (
+            <div
+              key={panel.label}
+              className="rounded-xl p-2.5 flex flex-col items-center text-center"
+              style={{ background: `${panel.color}18`, border: `1px solid ${panel.color}44` }}
+            >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-1.5" style={{ background: panel.color }}>
+                <panel.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
+              </div>
+              <p className="text-xs font-bold" style={{ color: panel.color }}>{panel.label}</p>
+            </div>
+          ))}
         </div>
-        {/* Chat fills all remaining height */}
+
+        {/* Chat fills remaining height */}
         <div className="flex-1 min-h-0">
           <PitchEdenChat colors={colors} mobile />
         </div>
       </div>
 
-      {/* ── DESKTOP LAYOUT: giant orb left, chat right ── */}
-      <div className="hidden lg:block">
-        <h2 className="text-2xl lg:text-3xl xl:text-4xl font-bold mb-7" style={{ color: colors.text }}>
-          Ask EDEN anything about the biotech landscape.
-        </h2>
-        <div className="flex flex-row gap-10 items-center">
-          <div className="flex flex-col items-center shrink-0 w-[40%]">
-            <div className="w-full max-w-[380px]">
-              <EdenOrb />
+      {/* ── DESKTOP LAYOUT ── */}
+      <div className="hidden lg:flex flex-col h-full">
+        <div className="flex items-start justify-between mb-5">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: colors.green }}>The intelligence engine</p>
+            <h2 className="text-2xl lg:text-3xl xl:text-4xl font-bold leading-tight" style={{ color: colors.text }}>
+              How EDEN works.
+            </h2>
+          </div>
+          <EdenAvatar size={44} />
+        </div>
+
+        {/* Pull / Push / Ask — 3 equal panels */}
+        <div className="grid grid-cols-3 gap-4 mb-6">
+          {EDEN_PANELS.map((panel) => (
+            <div
+              key={panel.label}
+              className="rounded-xl p-4 flex flex-col"
+              style={{ background: `${panel.color}14`, border: `1px solid ${panel.color}44`, borderTop: `3px solid ${panel.color}` }}
+            >
+              <div className="flex items-center gap-2.5 mb-3">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: panel.color }}>
+                  <panel.icon className="w-5 h-5" style={{ color: "#fff" }} />
+                </div>
+                <p className="text-lg font-extrabold" style={{ color: panel.color }}>{panel.label}</p>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: colors.textMuted }}>{panel.desc}</p>
             </div>
-            <p className="text-sm font-bold mt-1" style={{ color: colors.green }}>EDEN Intelligence Engine</p>
-            <p className="text-xs text-center max-w-xs mt-1 leading-relaxed" style={{ color: colors.textMuted }}>
-              Natural language queries across 300+ tech transfer offices. Scored. Enriched. Actionable.
-            </p>
-          </div>
-          <div className="flex-1 min-w-0">
-            <PitchEdenChat colors={colors} />
-          </div>
+          ))}
+        </div>
+
+        {/* Chat demo below the 3 panels */}
+        <div className="flex-1 min-h-0">
+          <PitchEdenChat colors={colors} />
         </div>
       </div>
     </Slide>
