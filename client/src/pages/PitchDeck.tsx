@@ -1674,7 +1674,7 @@ function ContactSlide({ colors }: { colors: Colors }) {
     <Slide index={9} section="Contact" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
-        <div className="flex flex-row items-center justify-center gap-6 sm:gap-8 mb-6">
+        <div className="flex flex-row flex-wrap items-center justify-center gap-x-6 sm:gap-x-8 gap-y-3 mb-6">
           {[
             { label: "Discovery", color: colors.amber, Icon: Lightbulb },
             { label: "Lab",       color: colors.violet, Icon: FlaskConical },
