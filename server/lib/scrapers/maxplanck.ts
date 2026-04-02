@@ -16,6 +16,11 @@ const BIOTECH_CATEGORIES = [
   "imaging-microscopy",
 ];
 
+const MAX_OFFERS = 60;
+const LISTING_TIMEOUT_MS = 10_000;
+const DETAIL_TIMEOUT_MS = 8_000;
+const DETAIL_CONCURRENCY = 3;
+
 function decodeHtmlEntities(str: string): string {
   return str
     .replace(/&#40;/g, "(")
@@ -61,8 +66,12 @@ function extractOffersFromHtml(
   return offers;
 }
 
-async function fetchPageHtml(url: string): Promise<string | null> {
+async function fetchPageHtml(url: string, signal?: AbortSignal): Promise<string | null> {
+  if (signal?.aborted) return null;
   try {
+    const combined = signal
+      ? AbortSignal.any([AbortSignal.timeout(LISTING_TIMEOUT_MS), signal])
+      : AbortSignal.timeout(LISTING_TIMEOUT_MS);
     const res = await fetch(url, {
       headers: {
         "User-Agent":
@@ -70,7 +79,7 @@ async function fetchPageHtml(url: string): Promise<string | null> {
         Accept: "text/html",
       },
       redirect: "follow",
-      signal: AbortSignal.timeout(15_000),
+      signal: combined,
     });
     if (!res.ok) return null;
     return res.text();
@@ -81,20 +90,23 @@ async function fetchPageHtml(url: string): Promise<string | null> {
 
 export const maxPlanckScraper: InstitutionScraper = {
   institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const seen = new Set<string>();
     const allOffers: { title: string; slug: string; category?: string }[] = [];
     let workingBase = DOMAINS[0];
 
     for (const base of DOMAINS) {
+      if (signal?.aborted) break;
       for (const category of BIOTECH_CATEGORIES) {
+        if (signal?.aborted) break;
         const paths = [
           `${base}/technology-offers/${category}.html`,
           `${base}/en/technology-offers/${category}.html`,
         ];
         for (const catUrl of paths) {
+          if (signal?.aborted) break;
           try {
-            const html = await fetchPageHtml(catUrl);
+            const html = await fetchPageHtml(catUrl, signal);
             if (!html) continue;
             const offers = extractOffersFromHtml(html);
             for (const o of offers) {
@@ -113,11 +125,13 @@ export const maxPlanckScraper: InstitutionScraper = {
       if (allOffers.length > 0) break;
     }
 
-    if (allOffers.length === 0) {
+    if (allOffers.length === 0 && !signal?.aborted) {
       for (const base of DOMAINS) {
+        if (signal?.aborted) break;
         for (const path of [`${base}/`, `${base}/en/`]) {
+          if (signal?.aborted) break;
           try {
-            const html = await fetchPageHtml(path);
+            const html = await fetchPageHtml(path, signal);
             if (!html) continue;
             const offers = extractOffersFromHtml(html);
             for (const o of offers) {
@@ -141,50 +155,77 @@ export const maxPlanckScraper: InstitutionScraper = {
       return [];
     }
 
-    const results: ScrapedListing[] = [];
+    const capped = allOffers.slice(0, MAX_OFFERS);
+    const skipped = allOffers.length - capped.length;
+    if (skipped > 0) {
+      console.log(`[scraper] ${INST}: capping detail fetches at ${MAX_OFFERS} (${skipped} offers title-only)`);
+    }
 
-    for (const { title, slug, category } of allOffers) {
-      const detailPaths = [
-        `${workingBase}/technology-offers/technology-offer/${slug}`,
-        `${workingBase}/en/technology-offers/technology-offer/${slug}`,
-      ];
+    const results: ScrapedListing[] = new Array(capped.length);
+    const titleOnlyItems = allOffers.slice(MAX_OFFERS);
 
-      let description = title;
-      let detailUrl = detailPaths[0];
-      let enriched = false;
+    for (let i = 0; i < capped.length; i += DETAIL_CONCURRENCY) {
+      if (signal?.aborted) break;
+      const batch = capped.slice(i, i + DETAIL_CONCURRENCY);
+      await Promise.allSettled(
+        batch.map(async ({ title, slug, category }, batchIdx) => {
+          const idx = i + batchIdx;
+          const detailPaths = [
+            `${workingBase}/technology-offers/technology-offer/${slug}`,
+            `${workingBase}/en/technology-offers/technology-offer/${slug}`,
+          ];
 
-      for (const dUrl of detailPaths) {
-        try {
-          const $ = await fetchHtml(dUrl, 12_000);
-          if (!$) continue;
-          const pageTitle = cleanText($("h1").first().text());
-          if (
-            pageTitle &&
-            pageTitle.length > 10 &&
-            !pageTitle.includes("Technology Transfer for the Max Planck")
-          ) {
-            const bodyText = cleanText(
-              $("main p")
-                .map((_, el) => $(el).text())
-                .get()
-                .join(" ")
-            ).slice(0, 2000);
-            if (bodyText && bodyText.length > 20) {
-              description = bodyText;
-              detailUrl = dUrl;
-              enriched = true;
-              break;
+          let description = title;
+          let detailUrl = detailPaths[0];
+
+          if (!signal?.aborted) {
+            for (const dUrl of detailPaths) {
+              if (signal?.aborted) break;
+              try {
+                const $ = await fetchHtml(dUrl, DETAIL_TIMEOUT_MS, signal, 1);
+                if (!$) continue;
+                const pageTitle = cleanText($("h1").first().text());
+                if (
+                  pageTitle &&
+                  pageTitle.length > 10 &&
+                  !pageTitle.includes("Technology Transfer for the Max Planck")
+                ) {
+                  const bodyText = cleanText(
+                    $("main p")
+                      .map((_, el) => $(el).text())
+                      .get()
+                      .join(" ")
+                  ).slice(0, 2000);
+                  if (bodyText && bodyText.length > 20) {
+                    description = bodyText;
+                    detailUrl = dUrl;
+                    break;
+                  }
+                }
+              } catch {
+                continue;
+              }
             }
           }
-        } catch {
-          continue;
-        }
-      }
 
+          results[idx] = {
+            title,
+            description,
+            url: detailUrl,
+            institution: INST,
+            categories: category
+              ? [category.replace(/-/g, " ").replace(/\bincl\b/g, "including")]
+              : undefined,
+          };
+        })
+      );
+    }
+
+    for (const { title, slug, category } of titleOnlyItems) {
       results.push({
         title,
-        description,
-        url: detailUrl,
+        description: title,
+        url: `${workingBase}/technology-offers/technology-offer/${slug}`,
         institution: INST,
         categories: category
           ? [category.replace(/-/g, " ").replace(/\bincl\b/g, "including")]
@@ -192,12 +233,13 @@ export const maxPlanckScraper: InstitutionScraper = {
       });
     }
 
-    const enrichedCount = results.filter(
+    const finalResults = results.filter(Boolean);
+    const enrichedCount = finalResults.filter(
       (r) => r.description !== r.title
     ).length;
     console.log(
-      `[scraper] ${INST}: ${results.length} listings (${enrichedCount} detail-enriched, ${BIOTECH_CATEGORIES.length} categories attempted)`
+      `[scraper] ${INST}: ${finalResults.length} listings (${enrichedCount} detail-enriched, ${BIOTECH_CATEGORIES.length} categories attempted, concurrency=${DETAIL_CONCURRENCY})`
     );
-    return results;
+    return finalResults;
   },
 };

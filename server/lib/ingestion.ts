@@ -373,16 +373,23 @@ export async function runInstitutionSync(institutionName: string, providedSessio
     let listings: ScrapedListing[] | undefined;
     let lastScrapeError: Error | null = null;
     for (let attempt = 1; attempt <= SCRAPE_MAX_ATTEMPTS; attempt++) {
+      const scrapeController = new AbortController();
+      let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         listings = await Promise.race([
-          scraper.scrape(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`)), SCRAPER_TIMEOUT_MS)
-          ),
+          scraper.scrape(scrapeController.signal),
+          new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              scrapeController.abort();
+              reject(new Error(`scraper timeout (${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s)`));
+            }, SCRAPER_TIMEOUT_MS);
+          }),
         ]);
+        scrapeController.abort();
         lastScrapeError = null;
         break;
       } catch (err: any) {
+        scrapeController.abort();
         lastScrapeError = err;
         const retryable = attempt < SCRAPE_MAX_ATTEMPTS && isScrapeRetryable(err?.message ?? "");
         if (retryable) {
@@ -391,6 +398,8 @@ export async function runInstitutionSync(institutionName: string, providedSessio
         } else {
           break;
         }
+      } finally {
+        if (timeoutHandle !== null) clearTimeout(timeoutHandle);
       }
     }
     if (lastScrapeError || !listings) {

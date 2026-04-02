@@ -19,7 +19,7 @@ export interface InstitutionScraper {
   institution: string;
   scraperType?: "playwright" | "http" | "api" | "stub";
   tier?: 1 | 2 | 3 | 4;
-  scrape(): Promise<ScrapedListing[]>;
+  scrape(signal?: AbortSignal): Promise<ScrapedListing[]>;
   probe?(maxResults?: number): Promise<ScrapedListing[]>;
 }
 
