@@ -973,7 +973,7 @@ function PitchDemoAssetCard({ asset, colors }: { asset: PitchAssetCard; colors: 
   );
 }
 
-function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
+function PitchEdenChat({ colors, mobile = false, chatHeight = 320 }: { colors: Colors; mobile?: boolean; chatHeight?: number }) {
   const [visibleCount, setVisibleCount] = useState(0);
   const chatRef = useRef<HTMLDivElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -1015,7 +1015,7 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
         className="pitch-chat-scroll flex flex-col gap-3 overflow-y-auto"
         style={mobile
           ? { flex: 1, minHeight: 0, scrollbarWidth: "none", msOverflowStyle: "none" }
-          : { maxHeight: "62vh", scrollbarWidth: "none", msOverflowStyle: "none" }}
+          : { maxHeight: chatHeight, scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
         {PITCH_CHAT_MESSAGES.slice(0, visibleCount).map((msg, i) => (
           <div
@@ -1079,29 +1079,33 @@ function PitchEdenChat({ colors, mobile = false }: { colors: Colors; mobile?: bo
 type EdenPanelId = "db-pull" | "email-push" | "ai-query";
 
 function makeEdenPanels(colors: Colors) {
+  const isDark = colors.bg !== "#ffffff";
+  const shade1 = isDark ? "#1e9b55" : "#0a5c28";
+  const shade2 = isDark ? "#2dba68" : "#168040";
+  const shade3 = colors.green;
   return [
     {
       id: "db-pull" as EdenPanelId,
       step: "01",
-      label: "Database Pull",
+      label: "Live Database Pull",
       icon: Database,
-      color: colors.violet,
+      color: shade1,
       desc: "Continuously collects and enriches assets from 300+ TTO databases. Every listing is scored, classified, and made searchable on arrival.",
     },
     {
       id: "email-push" as EdenPanelId,
       step: "02",
-      label: "Email Push",
+      label: "Real-Time Email Push",
       icon: Bell,
-      color: colors.amber,
+      color: shade2,
       desc: "Sends personalised digest alerts the moment new assets match a scout's saved criteria: modality, stage, or institution.",
     },
     {
       id: "ai-query" as EdenPanelId,
       step: "03",
-      label: "AI Query",
+      label: "EDEN AI Query",
       icon: Brain,
-      color: colors.green,
+      color: shade3,
       desc: "Natural-language Q&A across the entire TTO landscape. Query in plain English and get ranked, scored results instantly.",
     },
   ];
@@ -1137,14 +1141,14 @@ const PULL_MOCK = [
   },
 ];
 
-function PullDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
+function PullDetailZone({ colors, panelColor, mobile = false }: { colors: Colors; panelColor: string; mobile?: boolean }) {
   return (
-    <div className="rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${colors.violet}33` }}>
+    <div className="rounded-xl p-3 sm:p-4" style={{ background: colors.bgLight, border: `1px solid ${panelColor}33` }}>
       <div className="flex items-center gap-2 mb-3">
-        <Database className="w-3.5 h-3.5" style={{ color: colors.violet }} />
-        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: colors.violet }}>Live TTO Feed · 300+ Sources</p>
+        <Database className="w-3.5 h-3.5" style={{ color: panelColor }} />
+        <p className="text-[10px] sm:text-xs font-bold uppercase tracking-wider" style={{ color: panelColor }}>Live TTO Feed · 300+ Sources</p>
         <div className="ml-auto flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ background: colors.green, animation: "bounce 1.5s ease-in-out infinite" }} />
+          <div className="w-1.5 h-1.5 rounded-full" style={{ background: panelColor, animation: "bounce 1.5s ease-in-out infinite" }} />
           <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>Updating now</p>
         </div>
       </div>
@@ -1153,12 +1157,12 @@ function PullDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: b
           <div key={asset.id} className="rounded-lg p-2.5 sm:p-3" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
             <div className="flex items-start justify-between gap-2 mb-1.5">
               <p className="text-[10px] sm:text-xs font-semibold leading-snug" style={{ color: colors.text }}>{asset.title}</p>
-              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: colors.greenDim, color: colors.green }}>{asset.score}</span>
+              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums shrink-0 px-1.5 py-0.5 rounded" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
             </div>
             <p className="text-[9px] sm:text-[10px] mb-2" style={{ color: colors.textMuted }}>{asset.institution}</p>
             <div className="flex flex-wrap gap-1">
               {[asset.modality, asset.stage, asset.area].map((tag) => (
-                <span key={tag} className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${colors.violet}22`, color: colors.violet }}>{tag}</span>
+                <span key={tag} className="text-[8px] sm:text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>{tag}</span>
               ))}
             </div>
           </div>
@@ -1168,48 +1172,89 @@ function PullDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: b
   );
 }
 
-function PushDetailZone({ colors, mobile = false }: { colors: Colors; mobile?: boolean }) {
+function PushDetailZone({ colors, panelColor, mobile = false }: { colors: Colors; panelColor: string; mobile?: boolean }) {
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${colors.amber}44`, maxWidth: mobile ? "100%" : 580 }}>
-      <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${colors.amber}18`, borderBottom: `1px solid ${colors.amber}33` }}>
-        <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: colors.amber }}>
-          <Bell className="w-4 h-4 text-white" />
+    <div className={`grid gap-3 ${mobile ? "grid-cols-1" : "grid-cols-2"}`}>
+      {/* Card 1: Asset alert match */}
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${panelColor}44` }}>
+        <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${panelColor}18`, borderBottom: `1px solid ${panelColor}33` }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: panelColor }}>
+            <Bell className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
+            <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 new TTO assets match your alert</p>
+            <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
+          </div>
         </div>
-        <div>
-          <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
-          <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 new TTO assets match your alert</p>
-          <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Alert: "Oncology · Pre-Clinical · Any modality"</p>
+        <div className="px-4 py-3" style={{ background: colors.bgLight }}>
+          <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
+            EDEN found 3 new assets this week matching your saved criteria across 2 institutions.
+          </p>
+          <div className="space-y-2">
+            {PULL_MOCK.slice(0, 2).map((asset) => (
+              <div key={asset.id} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
+                <span className="text-[10px] sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: `${panelColor}22`, color: panelColor }}>{asset.score}</span>
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>{asset.title}</p>
+                  <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
+            View all 3 assets in EdenScout
+          </p>
         </div>
       </div>
-      <div className="px-4 py-3" style={{ background: colors.bgLight }}>
-        <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
-          EDEN found 3 new assets this week matching your saved criteria across 2 institutions.
-        </p>
-        <div className="space-y-2">
-          {PULL_MOCK.slice(0, 2).map((asset) => (
-            <div key={asset.id} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
-              <span className="text-[10px] sm:text-xs font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0" style={{ background: colors.greenDim, color: colors.green }}>{asset.score}</span>
-              <div className="min-w-0">
-                <p className="text-xs font-semibold truncate" style={{ color: colors.text }}>{asset.title}</p>
-                <p className="text-[9px] sm:text-[10px]" style={{ color: colors.textMuted }}>{asset.institution} · {asset.stage}</p>
-              </div>
-            </div>
-          ))}
+
+      {/* Card 2: New TTOs added */}
+      <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${panelColor}44` }}>
+        <div className="px-4 py-3 flex items-start gap-3" style={{ background: `${panelColor}18`, borderBottom: `1px solid ${panelColor}33` }}>
+          <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: panelColor }}>
+            <Database className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <p className="text-[10px] sm:text-xs font-bold" style={{ color: colors.text }}>EDEN Alerts · alerts@edenradar.com</p>
+            <p className="text-xs sm:text-sm font-semibold mt-0.5" style={{ color: colors.text }}>3 New Tech Transfer Offices Added</p>
+            <p className="text-[9px] sm:text-[10px] mt-0.5" style={{ color: colors.textMuted }}>Network update · EdenScout coverage expanded</p>
+          </div>
         </div>
-        <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${colors.amber}99` }}>
-          View all 3 assets in EdenScout
-        </p>
+        <div className="px-4 py-3" style={{ background: colors.bgLight }}>
+          <p className="text-[10px] sm:text-xs mb-2.5" style={{ color: colors.textMuted }}>
+            EDEN added 3 new tech transfer offices to the monitored network this week.
+          </p>
+          <div className="space-y-2">
+            {["Stanford University", "University at Buffalo", "Johns Hopkins University"].map((office) => (
+              <div key={office} className="flex items-center gap-3 rounded-lg px-3 py-2" style={{ background: colors.bg, border: `1px solid ${colors.border}` }}>
+                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: panelColor }} />
+                <p className="text-xs font-semibold flex-1" style={{ color: colors.text }}>{office}</p>
+                <span className="text-[9px] px-1.5 py-0.5 rounded font-medium" style={{ background: `${panelColor}22`, color: panelColor }}>New</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-[9px] sm:text-[10px] mt-2.5 text-center" style={{ color: `${panelColor}99` }}>
+            Explore new TTO assets in EdenScout
+          </p>
+        </div>
       </div>
     </div>
   );
 }
 
-function EdenDetailZone({ panelId, colors, mobile = false }: { panelId: EdenPanelId; colors: Colors; mobile?: boolean }) {
-  if (panelId === "db-pull") return <PullDetailZone colors={colors} mobile={mobile} />;
-  if (panelId === "email-push") return <PushDetailZone colors={colors} mobile={mobile} />;
+function EdenDetailZone({ panelId, colors, panelColor, mobile = false }: { panelId: EdenPanelId; colors: Colors; panelColor: string; mobile?: boolean }) {
+  if (panelId === "db-pull") return <PullDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
+  if (panelId === "email-push") return <PushDetailZone colors={colors} panelColor={panelColor} mobile={mobile} />;
   return (
-    <div style={{ height: mobile ? 280 : 300 }}>
-      <PitchEdenChat colors={colors} mobile={mobile} />
+    <div className={mobile ? "flex flex-col" : "flex items-start gap-4"}>
+      {!mobile && (
+        <div className="shrink-0 pt-1">
+          <EdenAvatar size={40} />
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <PitchEdenChat colors={colors} mobile={mobile} chatHeight={mobile ? 260 : 310} />
+      </div>
     </div>
   );
 }
@@ -1286,7 +1331,11 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
               transition={{ duration: 0.28, ease: "easeOut" }}
               style={{ overflow: "hidden" }}
             >
-              <EdenDetailZone panelId={activePanel} colors={colors} />
+              <EdenDetailZone
+                panelId={activePanel}
+                colors={colors}
+                panelColor={panels.find((p) => p.id === activePanel)!.color}
+              />
             </motion.div>
           )}
         </AnimatePresence>
@@ -1334,7 +1383,7 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
                     style={{ overflow: "hidden" }}
                   >
                     <div className="mt-2">
-                      <EdenDetailZone panelId={panel.id} colors={colors} mobile />
+                      <EdenDetailZone panelId={panel.id} colors={colors} panelColor={panel.color} mobile />
                     </div>
                   </motion.div>
                 )}
