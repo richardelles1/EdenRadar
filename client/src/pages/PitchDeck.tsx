@@ -387,7 +387,7 @@ function BrokenPipelineSVG({ color }: { color: string }) {
           style={{ animation: "x-flash-b 4.5s ease-in-out 0.8s infinite" }} />
         <line x1="645" y1="80" x2="585" y2="120" stroke={color} strokeWidth="3" strokeLinecap="round"
           style={{ animation: "x-flash-b 4.5s ease-in-out 0.8s infinite" }} />
-        <text x="410" y="180" textAnchor="middle" fill={color} fontSize="11" fontStyle="italic" opacity="0.45">
+        <text x="410" y="182" textAnchor="middle" fill={color} fontSize="13" fontStyle="italic" opacity="0.72">
           Two breaks in the pipeline. Industry never sees what research produces.
         </text>
       </svg>
@@ -520,7 +520,7 @@ function CoverSlide({ colors }: { colors: Colors }) {
       </div>
 
       <div className="flex flex-1 items-stretch">
-        <div className="flex flex-col justify-center flex-1 px-5 sm:px-14 lg:px-12 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
+        <div className="flex flex-col justify-center flex-1 px-5 sm:px-8 lg:px-8 py-10 sm:py-20 pb-14 sm:pb-20 relative z-10">
           <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight mb-3" style={{ color: colors.text }}>
             Eden<span style={{ color: colors.green }}>Radar</span>
           </h1>
@@ -577,27 +577,27 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
   return (
     <Slide index={2} section="Who We Are" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={10} />
-      <div className="flex flex-col lg:flex-row gap-8 lg:gap-14 items-start lg:items-center">
+      <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start lg:items-center">
 
         {/* LEFT: mission + vision text */}
         <div className="flex-1 min-w-0">
           <div
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-5"
+            className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest mb-3"
             style={{ background: colors.greenDim, color: colors.green, border: `1px solid ${colors.green}44` }}
           >
             Founded 2026
           </div>
-          <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-5 leading-tight" style={{ color: colors.text }}>
+          <h2 className="text-xl sm:text-3xl lg:text-4xl xl:text-5xl font-bold mb-4 leading-tight" style={{ color: colors.text }}>
             The team building the{" "}
             <span style={{ color: colors.green }}>connective tissue of research & biotech.</span>
           </h2>
           <blockquote
-            className="text-sm sm:text-base lg:text-lg italic mb-5 max-w-lg leading-relaxed pl-4"
+            className="text-base sm:text-lg lg:text-xl italic mb-4 max-w-lg leading-relaxed pl-4"
             style={{ color: colors.textMuted, borderLeft: `3px solid ${colors.green}44` }}
           >
             "We accelerate pharmaceutical and biotech innovation by capturing research at its earliest possible moments, creating direct connections between scientists and the industry partners who can advance it."
           </blockquote>
-          <p className="text-xs sm:text-sm max-w-lg leading-relaxed" style={{ color: colors.green }}>
+          <p className="text-sm sm:text-base max-w-lg leading-relaxed" style={{ color: colors.green }}>
             EdenRadar is building the connective tissue of biotech: an intelligence layer that makes the entire pipeline visible, searchable, and actionable from concept to commercialization.
           </p>
         </div>
@@ -640,9 +640,9 @@ function WhoWeAreSlide({ colors }: { colors: Colors }) {
 /* ═══════════════════════ SLIDE 3 — PROBLEM ═══════════════════════ */
 function ProblemSlide({ colors }: { colors: Colors }) {
   const problems = [
-    { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no pathway to industry attention." },
-    { icon: Search, title: "Industry Starts Too Late", desc: "Commercial discovery tools begin at the patent stage. The best assets are already locked, gone, or unfunded." },
-    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, Technology Transfer Offices (TTOs), and Business Development teams use disconnected systems. The pipeline has no connective tissue." },
+    { icon: AlertTriangle, title: "Innovation Gets Buried", desc: "Breakthrough concepts stall in university labs with no path to industry." },
+    { icon: Search, title: "Industry Starts Too Late", desc: "Discovery begins at the patent stage. The best assets are already locked or gone." },
+    { icon: Layers, title: "No Shared Intelligence", desc: "Researchers, TTOs, and BD teams use disconnected systems. Nothing connects them." },
   ];
 
   return (
@@ -1497,7 +1497,7 @@ function EarlySignalSlide({ colors }: { colors: Colors }) {
       </div>
 
       <p className="text-[10px] sm:text-xs text-center mt-4 sm:mt-5 max-w-2xl mx-auto leading-relaxed" style={{ color: colors.textMuted }}>
-        Every concept submitted and every research project published becomes an enriched, scored signal visible to EdenScout subscribers.
+        Every concept and research project published becomes an enriched, scored signal visible to EdenScout subscribers.
       </p>
     </Slide>
   );
@@ -1594,7 +1594,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
               </div>
               <span className="text-xl font-extrabold" style={{ color: colors.amber }}>Free</span>
             </div>
-            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.textMuted }}>Explore concepts. Validate ideas. Start free.</p>
+            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.text }}>Explore concepts. Validate ideas. Start free.</p>
             <ul className="space-y-1">
               {discoveryFeatures.map((f) => (
                 <li key={f} className="flex items-start gap-1.5 text-[10px]" style={{ color: colors.text }}>
@@ -1619,7 +1619,7 @@ function TractionSlide({ colors }: { colors: Colors }) {
               </div>
               <span className="text-xl font-extrabold" style={{ color: colors.violet }}>Free</span>
             </div>
-            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.textMuted }}>Structure your research from concept to publication.</p>
+            <p className="text-[10px] mb-2 leading-snug" style={{ color: colors.text }}>Structure your research from concept to publication.</p>
             <ul className="space-y-1">
               {labFeatures.map((f) => (
                 <li key={f} className="flex items-start gap-1.5 text-[10px]" style={{ color: colors.text }}>
@@ -1644,17 +1644,17 @@ function TractionSlide({ colors }: { colors: Colors }) {
                   <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
                 </div>
                 <h3 className="text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
-                <p className="text-[10px]" style={{ color: colors.textMuted }}>Full platform access for serious BD teams</p>
+                <p className="text-[10px]" style={{ color: colors.text }}>Full platform access for serious BD teams</p>
               </div>
             </div>
             <div className="text-right shrink-0">
               <span className="text-3xl font-extrabold tabular-nums" style={{ color: colors.green }}>$799</span>
-              <span className="text-xs" style={{ color: colors.textMuted }}>/mo</span>
+              <span className="text-xs" style={{ color: colors.text }}>/mo</span>
             </div>
           </div>
 
           {/* Feature grid — 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 mt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 mt-3">
             {scoutFeatures.map((f) => (
               <div key={f} className="flex items-start gap-1.5 text-xs" style={{ color: colors.text }}>
                 <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: colors.green }} />
@@ -1674,17 +1674,17 @@ function ContactSlide({ colors }: { colors: Colors }) {
     <Slide index={9} section="Contact" accent={colors.green} colors={colors} waves>
       <PitchDots color={colors.green} count={8} />
       <div className="flex flex-col items-center text-center px-2 sm:px-8">
-        <div className="flex flex-col items-start gap-3 mb-6">
+        <div className="flex flex-row items-center justify-center gap-6 sm:gap-8 mb-6">
           {[
-            { label: "Discovery", color: colors.amber, dim: colors.amberDim, Icon: Lightbulb },
-            { label: "Lab",       color: colors.violet, dim: colors.violetDim, Icon: FlaskConical },
-            { label: "Scout",     color: colors.green,  dim: colors.greenDim,  Icon: Search },
-          ].map(({ label, color, dim, Icon }) => (
-            <div key={label} className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color }}>
-                <Icon className="w-5 h-5 text-white" />
+            { label: "Discovery", color: colors.amber, Icon: Lightbulb },
+            { label: "Lab",       color: colors.violet, Icon: FlaskConical },
+            { label: "Scout",     color: colors.green,  Icon: Search },
+          ].map(({ label, color, Icon }) => (
+            <div key={label} className="flex items-center gap-2.5">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center flex-shrink-0" style={{ background: color }}>
+                <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
               </div>
-              <span className="text-base font-semibold" style={{ color: colors.text }}>
+              <span className="text-sm sm:text-base font-semibold" style={{ color: colors.text }}>
                 Eden<span style={{ color }}>{label}</span>
               </span>
             </div>
