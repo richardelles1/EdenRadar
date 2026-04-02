@@ -5412,14 +5412,28 @@ If a field cannot be determined, use "N/A".`
         return true;
       }
 
-      // Build institution map with alert-aware annotation.
+      // This endpoint is single-tenant: user_alerts has no user_id column and all
+      // alerts belong to the same organisation. hasAlerts and matching reflect the
+      // single tenant's alert definitions.
       const hasAlerts = savedAlerts.length > 0;
-      type InstEntry = { count: number; matchedCount: number; matchedBy: string | null; sampleAssets: Array<{ id: number; name: string }> };
+      type InstEntry = {
+        count: number;
+        matchedCount: number;
+        matchedBy: string | null;
+        sampleAssets: Array<{ id: number; name: string }>;
+        matchedSampleAssets: Array<{ id: number; name: string }>;
+      };
       const institutionMap = new Map<string, InstEntry>();
 
       for (const row of newAssetRows) {
         const inst = row.institution || "Unknown";
-        const existing = institutionMap.get(inst) ?? { count: 0, matchedCount: 0, matchedBy: null, sampleAssets: [] };
+        const existing = institutionMap.get(inst) ?? {
+          count: 0,
+          matchedCount: 0,
+          matchedBy: null,
+          sampleAssets: [],
+          matchedSampleAssets: [],
+        };
         existing.count++;
 
         if (hasAlerts) {
@@ -5427,7 +5441,11 @@ If a field cannot be determined, use "N/A".`
             if (assetMatchesAlert(alert, row)) {
               existing.matchedCount++;
               if (!existing.matchedBy) existing.matchedBy = alert.name ?? alert.query ?? "Your alert";
-              break; // one match label per institution is enough
+              // Only collect sample assets that actually matched
+              if (existing.matchedSampleAssets.length < 5) {
+                existing.matchedSampleAssets.push({ id: row.id, name: row.assetName });
+              }
+              break;
             }
           }
         }
@@ -5437,12 +5455,13 @@ If a field cannot be determined, use "N/A".`
       }
 
       const byInstitution = Array.from(institutionMap.entries())
-        .map(([institution, { count, matchedCount, matchedBy, sampleAssets }]) => ({
+        .map(([institution, { count, matchedCount, matchedBy, sampleAssets, matchedSampleAssets }]) => ({
           institution,
           count,
           matchedCount,
           matchedBy: matchedBy ?? null,
           sampleAssets,
+          matchedSampleAssets,
         }))
         .sort((a, b) => b.count - a.count);
 

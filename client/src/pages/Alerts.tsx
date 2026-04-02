@@ -52,6 +52,7 @@ interface DeltaInstitution {
   matchedCount: number;
   matchedBy: string | null;
   sampleAssets: Array<{ id: number; name: string }>;
+  matchedSampleAssets: Array<{ id: number; name: string }>;
 }
 
 interface IndustryDeltaResponse {
@@ -476,19 +477,21 @@ function InstitutionRow({ inst, index, matchLabel }: { inst: DeltaInstitution; i
                 {matchLabel}
               </span>
             )}
-            <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">+{inst.count}</Badge>
+            <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              +{matchLabel ? inst.matchedCount : inst.count}
+            </Badge>
             {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
           </div>
-          {open && inst.sampleAssets.length > 0 && (
+          {open && (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length > 0 && (
             <div className="px-3 pb-3 border-t border-white/20 dark:border-white/10">
               <div className="space-y-1.5 pt-2">
-                {inst.sampleAssets.map((asset, i) => (
+                {(matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).map((asset, i) => (
                   <MiniAssetBloomCard key={asset.id} asset={asset} index={i} />
                 ))}
               </div>
-              {inst.count > inst.sampleAssets.length && (
+              {(matchLabel ? inst.matchedCount : inst.count) > (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length && (
                 <p className="text-[10px] text-muted-foreground mt-1.5">
-                  +{inst.count - inst.sampleAssets.length} more
+                  +{(matchLabel ? inst.matchedCount : inst.count) - (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length} more
                 </p>
               )}
               <Link
