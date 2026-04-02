@@ -735,7 +735,7 @@ function DataHealth({ pw }: { pw: string }) {
       return res.json();
     },
     onSuccess: (_d, institution) => {
-      toast({ title: "Session cancelled", description: `Stale session for ${institution} cleared` });
+      toast({ title: "Sync cancelled", description: `Sync for ${institution} cancelled` });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
     onError: (err: Error) => {
@@ -1114,9 +1114,18 @@ function DataHealth({ pw }: { pw: string }) {
               {schedRunning && (sched.currentInstitutions ?? []).length > 0 && (
                 <div className="flex flex-wrap gap-1 min-w-0">
                   {(sched.currentInstitutions ?? [sched.currentInstitution]).filter(Boolean).map((inst) => (
-                    <Badge key={inst} variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10 max-w-[140px] truncate">
+                    <Badge key={inst} variant="outline" className="text-xs gap-1 text-blue-600 border-blue-500/30 bg-blue-500/10 max-w-[200px] pr-0.5 flex items-center">
                       <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
-                      {inst}
+                      <span className="truncate">{inst}</span>
+                      <button
+                        className="ml-1 flex-shrink-0 rounded-sm text-blue-600/60 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors p-0.5"
+                        onClick={() => cancelMutation.mutate(inst as string)}
+                        disabled={cancelMutation.isPending}
+                        title={`Cancel sync for ${inst}`}
+                        data-testid={`button-cancel-scheduler-${(inst as string).toLowerCase().replace(/\s+/g, "-")}`}
+                      >
+                        <XCircle className="w-3 h-3" />
+                      </button>
                     </Badge>
                   ))}
                 </div>
@@ -1412,12 +1421,14 @@ function DataHealth({ pw }: { pw: string }) {
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className="h-7 px-2 text-xs text-blue-600"
-                                  onClick={() => handleRowClick(row.institution)}
-                                  data-testid={`button-view-sync-${instSlug}`}
+                                  className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950"
+                                  onClick={() => cancelMutation.mutate(row.institution)}
+                                  disabled={cancelMutation.isPending}
+                                  title={`Cancel running sync for ${row.institution}`}
+                                  data-testid={`button-cancel-sync-${instSlug}`}
                                 >
-                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                                  View
+                                  <XCircle className="h-3.5 w-3.5 mr-1" />
+                                  Cancel
                                 </Button>
                               ) : (
                                 <>

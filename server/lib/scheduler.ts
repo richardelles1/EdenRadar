@@ -399,6 +399,12 @@ export function bumpToFront(institution: string): { ok: boolean; message: string
   return { ok: true, message: `${institution} added to priority queue` };
 }
 
+export function cancelCurrentSync(institution: string): void {
+  if (!currentInstitutions.includes(institution)) return;
+  currentInstitutions = currentInstitutions.filter((i) => i !== institution);
+  scheduleNext();
+}
+
 function scheduleNext(): void {
   if (schedulerState !== "running") return;
 

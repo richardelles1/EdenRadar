@@ -22,7 +22,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -1644,8 +1644,9 @@ export async function registerRoutes(
       });
 
       releaseSyncLock(institution);
+      cancelCurrentSync(institution);
 
-      res.json({ ok: true, message: `Session for ${institution} cancelled` });
+      res.json({ ok: true, message: `Sync for ${institution} cancelled` });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Cancel failed" });
     }
