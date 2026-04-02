@@ -4448,11 +4448,16 @@ If a field cannot be determined, use "N/A".`
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 2000);
       const offset = parseInt(req.query.offset as string) || 0;
       const is30d = windowParam === "30d";
+      const is24h = windowParam === "24h";
       const intervalSql = is30d
         ? sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '30 days'`
+        : is24h
+        ? sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '24 hours'`
         : sql`${ingestedAssets.firstSeenAt} >= NOW() - INTERVAL '7 days'`;
       const intervalRawSql = is30d
         ? sql`first_seen_at >= NOW() - INTERVAL '30 days'`
+        : is24h
+        ? sql`first_seen_at >= NOW() - INTERVAL '24 hours'`
         : sql`first_seen_at >= NOW() - INTERVAL '7 days'`;
       const windowCondition = and(
         eq(ingestedAssets.relevant, true),

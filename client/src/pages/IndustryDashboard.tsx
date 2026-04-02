@@ -384,7 +384,7 @@ export default function IndustryDashboard() {
           setNewAssetsFade(true);
         }
       }, 700);
-    }, 6000);
+    }, 15000);
 
     return () => {
       if (sharedTimerRef.current) clearInterval(sharedTimerRef.current);
@@ -608,17 +608,12 @@ export default function IndustryDashboard() {
               </div>
 
               {!newArrivalsLoading && newArrivalsData && newArrivalsData.total > 12 && (
-                <div className="pt-1 border-t border-border/50 flex items-center justify-between gap-2">
+                <div className="pt-1 border-t border-border/50">
                   <Link href="/industry/new-arrivals">
                     <span className="text-[10px] text-primary hover:underline cursor-pointer">
-                      {newArrivalsData.total.toLocaleString()} total new arrivals
+                      {newArrivalsData.total.toLocaleString()} in the last 7 days
                     </span>
                   </Link>
-                  {exploreCategory && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium shrink-0">
-                      {exploreCategory}
-                    </span>
-                  )}
                 </div>
               )}
             </div>
@@ -672,6 +667,15 @@ export default function IndustryDashboard() {
                   ))
                 )}
               </div>
+
+              {!exploreLoading && exploreCategory && (
+                <div className="pt-1 border-t border-border/50 flex items-center gap-1.5">
+                  <span className="text-[9px] uppercase tracking-wide text-muted-foreground/50 font-medium">Showing</span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary/70 border border-primary/15 capitalize font-medium">
+                    {exploreCategory}
+                  </span>
+                </div>
+              )}
             </div>
 
           </div>

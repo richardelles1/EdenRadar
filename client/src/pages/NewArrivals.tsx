@@ -119,7 +119,7 @@ function InstitutionGroup({
 const PAGE_SIZE = 500;
 
 export default function NewArrivals() {
-  const [window, setWindow] = useState<"7d" | "30d">("7d");
+  const [window, setWindow] = useState<"24h" | "7d" | "30d">("7d");
   const [accumulated, setAccumulated] = useState<NewArrivalsAsset[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const { toast } = useToast();
@@ -130,7 +130,7 @@ export default function NewArrivals() {
   });
 
   // Reset accumulated assets when window changes
-  const handleWindowChange = useCallback((w: "7d" | "30d") => {
+  const handleWindowChange = useCallback((w: "24h" | "7d" | "30d") => {
     setWindow(w);
     setAccumulated([]);
   }, []);
@@ -187,12 +187,19 @@ export default function NewArrivals() {
               <div>
                 <h1 className="text-xl font-bold text-foreground">New Arrivals</h1>
                 <p className="text-[11px] text-muted-foreground">
-                  {isLoading ? "Loading..." : `${data?.total ?? 0} new asset${(data?.total ?? 0) !== 1 ? "s" : ""} in the last ${window === "7d" ? "7 days" : "30 days"}`}
+                  {isLoading ? "Loading..." : `${data?.total ?? 0} new asset${(data?.total ?? 0) !== 1 ? "s" : ""} in the last ${window === "24h" ? "24 hours" : window === "7d" ? "7 days" : "30 days"}`}
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+              <button
+                onClick={() => handleWindowChange("24h")}
+                className={`text-[11px] px-3 py-1 rounded-md transition-colors ${window === "24h" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
+                data-testid="toggle-24h"
+              >
+                Last 24h
+              </button>
               <button
                 onClick={() => handleWindowChange("7d")}
                 className={`text-[11px] px-3 py-1 rounded-md transition-colors ${window === "7d" ? "bg-primary text-primary-foreground font-medium" : "text-muted-foreground hover:text-foreground"}`}
@@ -237,7 +244,11 @@ export default function NewArrivals() {
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">No new assets yet</p>
               <p className="text-xs text-muted-foreground">
-                Try expanding the window to 30 days, or check back after the next sync.
+                {window === "24h"
+                  ? "Try expanding the window to 7 days, or check back after the next sync."
+                  : window === "7d"
+                  ? "Try expanding the window to 30 days, or check back after the next sync."
+                  : "No new assets in this period. Check back after the next sync."}
               </p>
             </div>
           </div>
