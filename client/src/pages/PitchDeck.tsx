@@ -1128,19 +1128,21 @@ function PitchEdenChatSlide({ colors }: { colors: Colors }) {
           How EDEN works.
         </h2>
 
-        {/* Pull / Push / Ask — compact 3-panel row on mobile */}
-        <div className="grid grid-cols-3 gap-2 mb-3 shrink-0">
+        {/* Pull / Push / Ask — 3-panel column stack on mobile */}
+        <div className="space-y-2 mb-3 shrink-0">
           {EDEN_PANELS.map((panel) => (
             <div
               key={panel.label}
-              className="rounded-xl p-2.5 flex flex-col items-center text-center"
-              style={{ background: `${panel.color}18`, border: `1px solid ${panel.color}44`, borderTop: `2px solid ${panel.color}` }}
+              className="rounded-xl px-3 py-2.5 flex items-start gap-3"
+              style={{ background: `${panel.color}14`, border: `1px solid ${panel.color}44`, borderLeft: `3px solid ${panel.color}` }}
             >
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center mb-1.5" style={{ background: panel.color }}>
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5" style={{ background: panel.color }}>
                 <panel.icon className="w-3.5 h-3.5" style={{ color: "#fff" }} />
               </div>
-              <p className="text-[9px] font-bold uppercase tracking-widest mb-0.5" style={{ color: `${panel.color}88` }}>{panel.step}</p>
-              <p className="text-xs font-bold" style={{ color: panel.color }}>{panel.label}</p>
+              <div className="min-w-0">
+                <p className="text-xs font-bold leading-tight" style={{ color: panel.color }}>{panel.label}</p>
+                <p className="text-[10px] leading-snug mt-0.5 line-clamp-2" style={{ color: colors.textMuted }}>{panel.desc}</p>
+              </div>
             </div>
           ))}
         </div>
