@@ -50,7 +50,8 @@ const DEFAULT_SELECTORS: DetailSelectors = {
 export async function enrichWithDetailPages(
   listings: ScrapedListing[],
   selectors: DetailSelectors = DEFAULT_SELECTORS,
-  maxDetail = DETAIL_BATCH_LIMIT
+  maxDetail = DETAIL_BATCH_LIMIT,
+  signal?: AbortSignal
 ): Promise<ScrapedListing[]> {
   const needsDetail = listings.filter(
     (l) => !l.description || l.description === l.title || l.description.length < 30
@@ -63,10 +64,11 @@ export async function enrichWithDetailPages(
 
   async function worker() {
     while (idx < toFetch.length) {
+      if (signal?.aborted) break;
       const listing = toFetch[idx++];
       if (!listing) continue;
       try {
-        const $ = await fetchHtml(listing.url, DETAIL_TIMEOUT, undefined, 1);
+        const $ = await fetchHtml(listing.url, DETAIL_TIMEOUT, signal, 1);
         if (!$) continue;
 
         if (selectors.description) {

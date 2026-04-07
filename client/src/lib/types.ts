@@ -55,6 +55,8 @@ export interface ScoredAsset {
   matching_tags: string[];
   confidence: "high" | "medium" | "low";
   contact_office?: string;
+  stage_changed_at?: string | null;
+  previous_stage?: string | null;
   signals: RawSignal[];
 }
 

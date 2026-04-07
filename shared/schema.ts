@@ -161,6 +161,8 @@ export const ingestedAssets = pgTable("ingested_assets", {
   contentHash: text("content_hash"),
   completenessScore: real("completeness_score"),
   lastContentChangeAt: timestamp("last_content_change_at"),
+  stageChangedAt: timestamp("stage_changed_at"),
+  previousStage: text("previous_stage"),
   innovationClaim: text("innovation_claim"),
   mechanismOfAction: text("mechanism_of_action"),
   ipType: text("ip_type"),

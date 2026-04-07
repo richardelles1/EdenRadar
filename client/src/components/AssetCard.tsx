@@ -292,12 +292,24 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
           {hasPills && (
             <div className="flex flex-wrap gap-1 mt-2">
               {stageLabel && (
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(stageLabel)}`}
-                  data-testid={`pill-stage-${asset.id}`}
-                >
-                  {stageLabel}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full select-none ${stagePillClass(stageLabel)} ${asset.stage_changed_at ? "ring-1 ring-amber-400/60" : ""}`}
+                      data-testid={`pill-stage-${asset.id}`}
+                    >
+                      {stageLabel}
+                      {asset.stage_changed_at && (
+                        <span className="ml-1 text-amber-500 dark:text-amber-400" aria-label="stage changed">&#8593;</span>
+                      )}
+                    </span>
+                  </TooltipTrigger>
+                  {asset.stage_changed_at && asset.previous_stage && (
+                    <TooltipContent side="bottom" className="text-xs">
+                      Advanced from <span className="font-medium">{asset.previous_stage}</span>
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               )}
               {modalityLabel && (
                 <span

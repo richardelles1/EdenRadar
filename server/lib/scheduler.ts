@@ -65,6 +65,54 @@ let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 let _lastPersistAt = 0;
 const PERSIST_THROTTLE_MS = 60_000;
 
+/** Tracks when each currently-running institution was dispatched (ms since epoch). */
+const institutionDispatchedAt = new Map<string, number>();
+
+/** Handle for the 90-second watchdog timer. */
+let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Max wall-clock time per scraper type before the watchdog force-evicts (belt + suspenders). */
+const WATCHDOG_EVICT_MS: Record<string, number> = {
+  playwright: 15 * 60 * 1000,
+  api:        8 * 60 * 1000,
+  http:      12 * 60 * 1000,
+};
+
+function startWatchdog() {
+  if (watchdogTimer !== null) return;
+  watchdogTimer = setTimeout(watchdogTick, 90_000);
+}
+
+function stopWatchdog() {
+  if (watchdogTimer !== null) {
+    clearTimeout(watchdogTimer);
+    watchdogTimer = null;
+  }
+}
+
+function watchdogTick() {
+  watchdogTimer = null;
+  if (schedulerState !== "running") return;
+  const now = Date.now();
+  let evicted = false;
+  for (const institution of [...currentInstitutions]) {
+    const dispatchedAt = institutionDispatchedAt.get(institution);
+    if (!dispatchedAt) continue;
+    const scraperType = getScraperType(institution);
+    const maxMs = WATCHDOG_EVICT_MS[scraperType] ?? WATCHDOG_EVICT_MS.http;
+    const elapsedMin = Math.round((now - dispatchedAt) / 60000);
+    if (now - dispatchedAt > maxMs) {
+      console.warn(`[scheduler] WATCHDOG: ${institution} stuck for ${elapsedMin} min (limit ${maxMs / 60000} min) — force-evicting`);
+      currentInstitutions = currentInstitutions.filter((i) => i !== institution);
+      institutionDispatchedAt.delete(institution);
+      failedThisCycle++;
+      evicted = true;
+    }
+  }
+  if (evicted) scheduleNext();
+  watchdogTimer = setTimeout(watchdogTick, 90_000);
+}
+
 /** Returns the in-memory scraper health cache — no DB hit required. */
 export function getScraperHealthCache(): Map<string, ScraperHealthRow> {
   return scraperHealthCache;
@@ -273,6 +321,7 @@ export function startScheduler(): { ok: boolean; message: string } {
   }
 
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+  startWatchdog();
   scheduleNext();
   return { ok: true, message: "Scheduler started" };
 }
@@ -297,10 +346,12 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
   cycleStartedAt = new Date();
   cycleCount++;
   priorityQueue = [];
+  institutionDispatchedAt.clear();
   schedulerState = "running";
   persistState(true).catch(() => {});
   console.log(`[scheduler] Reset (gen=${runGeneration}) — starting fresh cycle #${cycleCount} from position 0/${tieredQueue.length}`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+  startWatchdog();
   scheduleNext();
   return { ok: true, message: `Started fresh cycle #${cycleCount}` };
 }
@@ -310,6 +361,7 @@ export async function pauseScheduler(): Promise<{ ok: boolean; message: string }
     return { ok: false, message: "Scheduler is not running" };
   }
   schedulerState = "paused";
+  stopWatchdog();
   if (schedulerTimer) {
     clearTimeout(schedulerTimer);
     schedulerTimer = null;
@@ -348,10 +400,12 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   cycleStartedAt = new Date();
   cycleCount++;
   priorityQueue = [];
+  institutionDispatchedAt.clear();
   schedulerState = "running";
   persistState().catch(() => {});
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+  startWatchdog();
   scheduleNext();
 
   // Safety drain-poll: if syncs from the prior generation are still running,
@@ -435,6 +489,7 @@ function scheduleNext(): void {
     currentInstitutions = scraperType === "playwright"
       ? [institution]
       : [...currentInstitutions, institution];
+    institutionDispatchedAt.set(institution, syncStart);
 
     console.log(`[scheduler] [priority] [T${getScraperTier(institution)}/${scraperType}] ${institution}`);
 
@@ -443,6 +498,7 @@ function scheduleNext(): void {
       syncDurations.push(Date.now() - syncStart);
       if (syncDurations.length > 20) syncDurations.shift();
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
+      institutionDispatchedAt.delete(institution);
       lastActivityAt = new Date();
       persistState().catch(() => {});
       scheduleNext();
@@ -467,6 +523,7 @@ function scheduleNext(): void {
       queueIndex++;
       const syncStart = Date.now();
       currentInstitutions = [institution];
+      institutionDispatchedAt.set(institution, syncStart);
       console.log(`[scheduler] [T4/playwright] ${institution} (${queueIndex}/${queue.length})`);
 
       runOne(institution, gen).finally(() => {
@@ -474,6 +531,7 @@ function scheduleNext(): void {
         syncDurations.push(Date.now() - syncStart);
         if (syncDurations.length > 20) syncDurations.shift();
         currentInstitutions = [];
+        institutionDispatchedAt.delete(institution);
         lastActivityAt = new Date();
         persistState().catch(() => {});
         scheduleNext();
@@ -513,6 +571,7 @@ function scheduleNext(): void {
     queueIndex++;
     const syncStart = Date.now();
     currentInstitutions = [...currentInstitutions, institution];
+    institutionDispatchedAt.set(institution, syncStart);
     console.log(`[scheduler] [T${institutionTier}/${scraperType}] ${institution} (${queueIndex}/${queue.length})`);
 
     runOne(institution, gen).finally(() => {
@@ -520,6 +579,7 @@ function scheduleNext(): void {
       syncDurations.push(Date.now() - syncStart);
       if (syncDurations.length > 20) syncDurations.shift();
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
+      institutionDispatchedAt.delete(institution);
       lastActivityAt = new Date();
       persistState().catch(() => {});
       scheduleNext();  // fill freed slot immediately; tier boundary re-evaluated

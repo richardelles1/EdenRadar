@@ -13,7 +13,14 @@ type SearchResultsProps = {
   onSave?: (asset: ScoredAsset) => void;
   onUnsave: (id: string, assetName?: string) => void;
   headerAction?: ReactNode;
+  onChipClick?: (query: string) => void;
 };
+
+const SUGGESTION_CHIPS = [
+  "KRAS inhibitor",
+  "CAR-T solid tumor",
+  "GLP-1 obesity",
+];
 
 function LoadingSkeleton() {
   return (
@@ -25,7 +32,6 @@ function LoadingSkeleton() {
           style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.08)" }}
         >
           <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-emerald-400/50 dark:bg-emerald-500/30" />
-          {/* Flush score badge skeleton */}
           <div
             className="absolute top-0 left-0 z-10 flex flex-col items-center justify-center px-3 py-1.5 border-b border-r border-emerald-400/30 dark:border-emerald-500/20 bg-white dark:bg-zinc-900"
             style={{ borderRadius: "17px 0 10px 0", minWidth: "52px" }}
@@ -33,9 +39,7 @@ function LoadingSkeleton() {
             <Skeleton className="h-2 w-7 bg-muted/60 dark:bg-zinc-700 mb-1" />
             <Skeleton className="h-6 w-5 bg-muted/60 dark:bg-zinc-700" />
           </div>
-          {/* Bookmark skeleton */}
           <Skeleton className="absolute top-2.5 right-2.5 w-7 h-7 rounded-lg bg-muted/50 dark:bg-zinc-700" />
-          {/* Content below badge */}
           <div className="relative flex flex-col h-full pl-4 pr-3 pt-[62px] pb-3">
             <div className="flex flex-col gap-2">
               <Skeleton className="h-3.5 w-full bg-muted/50 dark:bg-zinc-700" />
@@ -53,7 +57,7 @@ function LoadingSkeleton() {
   );
 }
 
-export function SearchResults({ assets, isLoading, hasSearched, query, savedAssetIds, onSave, onUnsave, headerAction }: SearchResultsProps) {
+export function SearchResults({ assets, isLoading, hasSearched, query, savedAssetIds, onSave, onUnsave, headerAction, onChipClick }: SearchResultsProps) {
   if (isLoading) {
     return (
       <div className="space-y-4">
@@ -79,10 +83,15 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
           </p>
         </div>
         <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-          {["KRAS inhibitor", "CAR-T solid tumor", "GLP-1 obesity"].map((area) => (
-            <span key={area} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
+          {SUGGESTION_CHIPS.map((area) => (
+            <button
+              key={area}
+              onClick={() => onChipClick?.(area)}
+              className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+              data-testid={`chip-suggestion-${area.toLowerCase().replace(/\s+/g, "-")}`}
+            >
               {area}
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -105,9 +114,14 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
         </div>
         <div className="flex flex-wrap justify-center gap-2 mt-1">
           {["oncology", "gene therapy", "immunotherapy"].map((sug) => (
-            <span key={sug} className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground">
+            <button
+              key={sug}
+              onClick={() => onChipClick?.(sug)}
+              className="px-3 py-1 rounded-full border border-card-border bg-card text-xs text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer"
+              data-testid={`chip-suggestion-${sug}`}
+            >
               Try: {sug}
-            </span>
+            </button>
           ))}
         </div>
       </div>
@@ -133,8 +147,8 @@ export function SearchResults({ assets, isLoading, hasSearched, query, savedAsse
             key={asset.id}
             asset={asset}
             isSaved={savedAssetIds.has(asset.id)}
-            onSave={onSave}
-            onUnsave={onUnsave}
+            onSave={onSave ? () => onSave(asset) : undefined}
+            onUnsave={() => onUnsave(asset.id, asset.asset_name)}
           />
         ))}
       </div>

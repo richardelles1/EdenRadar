@@ -308,7 +308,7 @@ export function releaseSyncLock(institution?: string): void {
 const TIMEOUT_BY_TYPE: Record<string, number> = {
   playwright: 12 * 60 * 1000,
   api: 5 * 60 * 1000,
-  http: 10 * 60 * 1000,
+  http: 5 * 60 * 1000,
 };
 const SCRAPE_RETRY_DELAY_MS = 15_000;
 const SCRAPE_MAX_ATTEMPTS = 2;
@@ -362,7 +362,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
   }
 
   const sessionId = providedSessionId ?? crypto.randomUUID();
-  const SCRAPER_TIMEOUT_MS = TIMEOUT_BY_TYPE[scraperType] ?? TIMEOUT_BY_TYPE.http;
+  const SCRAPER_TIMEOUT_MS = scraper.scraperTimeoutMs ?? TIMEOUT_BY_TYPE[scraperType] ?? TIMEOUT_BY_TYPE.http;
 
   try {
     const currentIndexed = await storage.getInstitutionIndexedCount(institutionName);

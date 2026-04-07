@@ -414,6 +414,12 @@ export default function Scout() {
   const savedAssets = savedData?.assets ?? [];
   const savedAssetIds = new Set(savedAssets.map((a) => a.pmid ?? a.assetName).filter(Boolean) as string[]);
 
+  const { data: recentlyAddedData } = useQuery<{ assets: ScoredAsset[] }>({
+    queryKey: ["/api/scout/recently-added"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const recentlyAdded = recentlyAddedData?.assets ?? [];
+
   const handleSearch = (query: string) => {
     setCurrentQuery(query);
     setInputQuery(query);
@@ -423,6 +429,11 @@ export default function Scout() {
     if (researchSources.length > 0) {
       researchMutation.mutate({ query, sources: researchSources });
     }
+  };
+
+  const handleChipClick = (query: string) => {
+    setInputQuery(query);
+    handleSearch(query);
   };
 
   const handleClearSearch = () => {
@@ -763,6 +774,29 @@ export default function Scout() {
                   </div>
                 )}
 
+                {/* Recently Added strip — shown before first search */}
+                {!hasSearched && recentlyAdded.length > 0 && (
+                  <div className="space-y-2" data-testid="recently-added-strip">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                        Recently Added
+                      </p>
+                      <span className="text-[10px] text-muted-foreground">{recentlyAdded.length} assets</span>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth -mx-1 px-1">
+                      {recentlyAdded.map((asset) => (
+                        <div key={asset.id} className="shrink-0 w-[190px] snap-start" data-testid={`recent-card-${asset.id}`}>
+                          <AssetCard
+                            asset={asset}
+                            isSaved={savedAssetIds.has(asset.id)}
+                            onUnsave={() => handleUnsave(asset.id)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {hasSearched && researchSources.length > 0 && filteredResults.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <Search className="w-8 h-8 text-muted-foreground/40" />
@@ -778,6 +812,7 @@ export default function Scout() {
                     query={currentQuery}
                     savedAssetIds={savedAssetIds}
                     onUnsave={handleUnsave}
+                    onChipClick={handleChipClick}
                   />
                 )}
               </>

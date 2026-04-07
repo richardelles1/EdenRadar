@@ -465,6 +465,8 @@ export async function registerRoutes(
           owner_type: "university" as const,
           patent_status: "unknown",
           licensing_status: r.licensingReadiness ?? "unknown",
+          stage_changed_at: r.stageChangedAt ? r.stageChangedAt.toISOString() : null,
+          previous_stage: r.previousStage ?? null,
         };
       });
 
@@ -474,6 +476,60 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
       return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: err.message ?? "Search failed" });
+    }
+  });
+
+  app.get("/api/scout/recently-added", async (_req, res) => {
+    try {
+      const rows = await db.execute(sql`
+        SELECT
+          id, asset_name, target, modality, indication, development_stage, institution,
+          mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
+          completeness_score, licensing_readiness, ip_type, source_url, source_name,
+          summary, categories, technology_id, stage_changed_at, previous_stage,
+          first_seen_at
+        FROM ingested_assets
+        WHERE relevant = true AND completeness_score >= 0.4
+        ORDER BY first_seen_at DESC NULLS LAST
+        LIMIT 12
+      `);
+      const assets = (rows.rows as Record<string, unknown>[]).map((r) => ({
+        id: String(r.id),
+        asset_name: typeof r.asset_name === "string" ? r.asset_name : String(r.asset_name ?? ""),
+        target: typeof r.target === "string" ? r.target : String(r.target ?? ""),
+        modality: typeof r.modality === "string" ? r.modality : String(r.modality ?? ""),
+        indication: typeof r.indication === "string" ? r.indication : String(r.indication ?? ""),
+        development_stage: typeof r.development_stage === "string" ? r.development_stage : String(r.development_stage ?? ""),
+        institution: typeof r.institution === "string" ? r.institution : String(r.institution ?? ""),
+        summary: typeof r.summary === "string" ? r.summary : null,
+        source_url: typeof r.source_url === "string" ? r.source_url : null,
+        source_name: typeof r.source_name === "string" ? r.source_name : null,
+        completeness_score: r.completeness_score != null ? parseFloat(String(r.completeness_score)) : null,
+        licensing_readiness: typeof r.licensing_readiness === "string" ? r.licensing_readiness : null,
+        ip_type: typeof r.ip_type === "string" ? r.ip_type : null,
+        innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
+        stage_changed_at: r.stage_changed_at ? String(r.stage_changed_at) : null,
+        previous_stage: typeof r.previous_stage === "string" ? r.previous_stage : null,
+        first_seen_at: r.first_seen_at ? String(r.first_seen_at) : null,
+        score: 0,
+        score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
+        owner_name: typeof r.institution === "string" ? r.institution : "",
+        owner_type: "university" as const,
+        patent_status: "unknown",
+        licensing_status: typeof r.licensing_readiness === "string" ? r.licensing_readiness : "unknown",
+        why_it_matters: typeof r.innovation_claim === "string" ? r.innovation_claim : "",
+        source_urls: typeof r.source_url === "string" ? [r.source_url] : [],
+        source_types: ["tech_transfer" as const],
+        latest_signal_date: "",
+        matching_tags: [],
+        evidence_count: 1,
+        confidence: "medium" as const,
+        signals: [],
+      }));
+      return res.json({ assets });
+    } catch (err: any) {
+      console.error("[scout/recently-added] Error:", err);
+      return res.status(500).json({ assets: [], error: err.message });
     }
   });
 

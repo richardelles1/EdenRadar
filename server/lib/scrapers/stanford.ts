@@ -12,13 +12,14 @@ const PAGE_BATCH = 10;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
+  scraperTimeoutMs: 7 * 60 * 1000,
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
       // Step 1: fetch page 0, detect actual max page from pagination widget
-      const page0$ = await fetchHtml(`${BASE}/`, 15_000);
+      const page0$ = await fetchHtml(`${BASE}/`, 12_000, signal);
       if (!page0$) {
         console.warn(`[scraper] ${INST}: could not fetch listing page 0`);
         return [];
@@ -58,8 +59,9 @@ export const stanfordScraper: InstitutionScraper = {
 
       // Step 3: fetch remaining pages in parallel batches of PAGE_BATCH
       for (let i = 0; i < remaining.length; i += PAGE_BATCH) {
+        if (signal?.aborted) break;
         const batch = remaining.slice(i, i + PAGE_BATCH);
-        const pages = await Promise.all(batch.map((u) => fetchHtml(u, 15_000)));
+        const pages = await Promise.all(batch.map((u) => fetchHtml(u, 12_000, signal)));
         for (const $ of pages) {
           if (!$) continue;
           extractListings($);
@@ -70,7 +72,7 @@ export const stanfordScraper: InstitutionScraper = {
 
       console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details (cap 25)...`);
 
-      // Step 4: enrich detail pages — cap 50→25, detail concurrency already 5 in detailFetcher
+      // Step 4: enrich detail pages — cap 25, pass abort signal through
       await enrichWithDetailPages(
         results,
         {
@@ -93,7 +95,8 @@ export const stanfordScraper: InstitutionScraper = {
             ".field--name-field-ip-status .field__item",
           ],
         },
-        25
+        25,
+        signal
       );
 
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);

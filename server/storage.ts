@@ -47,6 +47,8 @@ export type RetrievedAsset = {
   categories: string | null;
   technologyId: string | null;
   similarity: number;
+  stageChangedAt?: Date | null;
+  previousStage?: string | null;
 };
 
 export interface IStorage {
@@ -617,6 +619,20 @@ export class DatabaseStorage implements IStorage {
     categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string;
     ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
   }): Promise<void> {
+    // Detect stage change before overwriting
+    const [existing] = await db
+      .select({ developmentStage: ingestedAssets.developmentStage })
+      .from(ingestedAssets)
+      .where(eq(ingestedAssets.id, id))
+      .limit(1);
+
+    const oldStage = existing?.developmentStage;
+    const newStage = data.developmentStage;
+    const stageChanged =
+      oldStage && newStage &&
+      oldStage !== "unknown" && newStage !== "unknown" &&
+      oldStage !== newStage;
+
     const updateData: Record<string, any> = {
       target: data.target,
       modality: data.modality,
@@ -624,6 +640,10 @@ export class DatabaseStorage implements IStorage {
       developmentStage: data.developmentStage,
       relevant: data.biotechRelevant,
     };
+    if (stageChanged) {
+      updateData.previousStage = oldStage;
+      updateData.stageChangedAt = new Date();
+    }
     if (data.categories) updateData.categories = data.categories;
     if (data.categoryConfidence !== undefined) updateData.categoryConfidence = data.categoryConfidence;
     if (data.innovationClaim) updateData.innovationClaim = data.innovationClaim;
@@ -1874,7 +1894,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id,
+        summary, categories, technology_id, stage_changed_at, previous_stage,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -1902,6 +1922,8 @@ export class DatabaseStorage implements IStorage {
       summary: typeof r.summary === "string" && r.summary ? r.summary : null,
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
+      stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
+      previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
     }));
   }
@@ -1943,7 +1965,7 @@ export class DatabaseStorage implements IStorage {
         id, asset_name, target, modality, indication, development_stage, institution,
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
-        summary, categories, technology_id,
+        summary, categories, technology_id, stage_changed_at, previous_stage,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -1971,6 +1993,8 @@ export class DatabaseStorage implements IStorage {
       summary: typeof r.summary === "string" && r.summary ? r.summary : null,
       categories: typeof r.categories === "string" && r.categories ? r.categories : null,
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
+      stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
+      previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
       similarity: 0,
     }));
   }
