@@ -5,10 +5,10 @@ import { enrichWithDetailPages } from "./detailFetcher";
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
 // Stanford TechFinder has 900+ listings; max confirmed ~127 pages as of 2026.
-// Capped at 40 pages (~1,200 listings) so the scraper completes well within the
-// 7-minute timeout.  The full index was seeded historically; incremental runs
-// only need to pick up new or changed listings on the first few pages.
-const MAX_PAGES = 40;
+// The scraper auto-detects the real last page and caps at this constant.
+// Runtime with retries=0 on list pages: 13 batches x 12s = 156s + 60s details
+// = ~216s total — well within the 7-minute scraperTimeoutMs.
+const MAX_PAGES = 127;
 // Parallel batch size for list-page fetching — reduces wall-clock from ~175s to ~20s.
 const PAGE_BATCH = 10;
 
