@@ -5,8 +5,10 @@ import { enrichWithDetailPages } from "./detailFetcher";
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
 // Stanford TechFinder has 900+ listings; max confirmed ~127 pages as of 2026.
-// Set high ceiling; auto-detection from pagination widget will cap naturally.
-const MAX_PAGES = 200;
+// Capped at 40 pages (~1,200 listings) so the scraper completes well within the
+// 7-minute timeout.  The full index was seeded historically; incremental runs
+// only need to pick up new or changed listings on the first few pages.
+const MAX_PAGES = 40;
 // Parallel batch size for list-page fetching — reduces wall-clock from ~175s to ~20s.
 const PAGE_BATCH = 10;
 
@@ -61,7 +63,9 @@ export const stanfordScraper: InstitutionScraper = {
       for (let i = 0; i < remaining.length; i += PAGE_BATCH) {
         if (signal?.aborted) break;
         const batch = remaining.slice(i, i + PAGE_BATCH);
-        const pages = await Promise.all(batch.map((u) => fetchHtml(u, 12_000, signal)));
+        // retries=0: list pages run 10-wide in parallel so per-page retry is
+        // unnecessary; failed pages are simply skipped and re-scraped next cycle.
+        const pages = await Promise.all(batch.map((u) => fetchHtml(u, 12_000, signal, 0)));
         for (const $ of pages) {
           if (!$) continue;
           extractListings($);
