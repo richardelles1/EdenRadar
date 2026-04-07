@@ -216,7 +216,7 @@ export function EdenChatThread({
               {/* Citations */}
               {msg.role === "assistant" && msg.assets && msg.assets.length > 0 && !msg.isStreaming && (
                 <div className="mt-2" data-testid={`chat-citations-${i}`}>
-                  {!expandedCitations[i] ? (
+                  {!(expandedCitations[i] ?? msg.assets.length <= 3) ? (
                     <button
                       className={`flex items-center gap-1 ${compact ? "text-[10px]" : "text-[11px]"} text-muted-foreground hover:text-foreground transition-colors group`}
                       onClick={() => onToggleCitations(i, true)}

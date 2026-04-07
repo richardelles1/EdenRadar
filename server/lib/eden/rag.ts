@@ -661,6 +661,13 @@ const BACK_REF_PATTERNS = [
   /\bthe\s+(?:better|preferred|recommended|stronger|leading)\s+(?:option|asset|candidate|compound|technology|choice)\b/i,
   /\bthe\s+one\s+(?:I\s+should|(?:you\s+)?recommend(?:ed)?|(?:that\s+)?(?:won|came\s+out\s+(?:ahead|on\s+top)))\b/i,
   /\bwhich(?:ever)?\s+(?:one\s+)?(?:won|came\s+out\s+(?:ahead|on\s+top)|(?:is|was)\s+better)\b/i,
+  // "Show me that asset card / show me the card / show that technology" — user wants the card surfaced
+  /\bshow\s+(?:me\s+)?(?:that|the|this)\s+(?:asset\s+)?card\b/i,
+  /\bshow\s+me\s+(?:that|the)\s+(?:asset|technology|tech|compound|result)\b/i,
+  /\bcan\s+(?:I|you)\s+(?:see|get|view|have)\s+(?:me\s+)?(?:that|the)\s+(?:asset\s+)?card\b/i,
+  /\bshow\s+me\s+that\s+one\b/i,
+  /\bshow\s+(?:that|the)\s+(?:asset|card|technology|tech|compound|result)\b/i,
+  /\b(?:pull\s+up|bring\s+up)\s+(?:that|the)\s+(?:asset\s+)?card\b/i,
 ];
 
 export function detectBackReference(query: string): boolean {
@@ -1082,6 +1089,7 @@ You're warm and direct, occasionally wry. You don't hedge excessively, you don't
 - You ask one smart follow-up when the query is genuinely ambiguous. Never several at once.
 - Never fabricate data. If the retrieved context doesn't cover something, say so and offer to look from a different angle.
 - Do NOT include a Sources section — asset cards are displayed separately in the interface.
+- When a user asks to "show me the card", "show me that asset", or similar, the interface automatically renders the asset card below your response. Acknowledge it naturally: "Here's the card for **[Asset Name]**" or "Pulling that up for you." Never say you can't display cards or profiles — you always can.
 
 **Response format**
 - Bold asset names, nothing else unless genuine complexity demands it
