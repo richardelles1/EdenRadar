@@ -965,7 +965,7 @@ export const uhoustonScraper: InstitutionScraper = {
         .map((item) => ({
           title: cleanText(item.title),
           description: cleanText(item.description ?? ""),
-          url: `${BASE_URL}?id=${item.case_id}`,
+          url: `${BASE_URL}?id=${encodeURIComponent(item.case_id)}`,
           institution: "University of Houston",
           technologyId: item.case_id,
         }));
