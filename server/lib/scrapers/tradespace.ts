@@ -160,17 +160,19 @@ async function playwrightScrapeSubdomain(
     await page.waitForTimeout(3_500);
     await paginateAndCollect();
 
-    // ── Attempt 2: /market subpath if root yielded nothing ──────────────────
-    if (allItems.size === 0) {
+    // ── Attempt 2: /market subpath if root yielded few/nothing ─────────────
+    // Threshold < 10: some portals (e.g. Gladstone) show only 2 "featured"
+    // listings on the root page while the full catalog lives at /market.
+    if (allItems.size < 10) {
       await page.goto(buildUrl("/market"), { timeout: 30_000, waitUntil: "networkidle" });
       await page.waitForTimeout(3_000);
       await paginateAndCollect();
     }
 
     // ── Attempt 3: Life-sciences filter (classification_id=7) ───────────────
-    // Use when unfiltered results are noisy (>100) or still empty.
+    // Use when unfiltered results are noisy (>100) or still very few (<10).
     const lifeSciId = opts.classificationId ?? 7;
-    if (allItems.size === 0 || allItems.size > 100) {
+    if (allItems.size < 10 || allItems.size > 100) {
       const preFilterSize = allItems.size;
       const filteredItems = new Map<string, string>();
 

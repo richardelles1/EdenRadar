@@ -932,25 +932,44 @@ export const tamuScraper = createFlintboxScraper(
 );
 export const riceScraper = createInPartScraper("rice", "Rice University");
 export const jeffersonScraper = createInPartScraper("jefferson", "Thomas Jefferson University");
+// University of Houston catalog uses a public JSONP API endpoint.
+// The UH technologies page at /uh-energy-innovation/uh-innovation/technologies/index.php
+// renders its listing via a custom IpCatalog JS class that loads data from this endpoint.
+// Fetching the JSONP directly is faster and more reliable than Playwright.
 export const uhoustonScraper: InstitutionScraper = {
   institution: "University of Houston",
+  scraperType: "api",
   async scrape(): Promise<ScrapedListing[]> {
-    const url = "https://www.uh.edu/uh-energy-innovation/uh-innovation/technologies/";
+    const API = "https://www.uh.edu/uh-energy-innovation/uh-innovation/catalog/api/v2/?callback=fn";
+    const BASE_URL = "https://www.uh.edu/uh-energy-innovation/uh-innovation/catalog/technologies.php";
     try {
-      const $ = await fetchHtml(url, 15000);
-      if (!$) return [];
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
-      $('a[href*="catalog/technologies.php?id="]').each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const title = cleanText($(el).text());
-        if (!title || title.length < 5) return;
-        const fullUrl = href.startsWith("http") ? href : `https://www.uh.edu${href}`;
-        if (seen.has(fullUrl)) return;
-        seen.add(fullUrl);
-        results.push({ title, description: "", url: fullUrl, institution: "University of Houston" });
+      const res = await fetch(API, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+        signal: AbortSignal.timeout(15_000),
       });
-      console.log(`[scraper] University of Houston: ${results.length} listings`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const text = await res.text();
+      // Strip JSONP wrapper: fn({...}) -> {...}
+      const jsonStart = text.indexOf("{");
+      const jsonEnd = text.lastIndexOf("}");
+      if (jsonStart === -1 || jsonEnd === -1) throw new Error("JSONP wrapper not found");
+      const data = JSON.parse(text.slice(jsonStart, jsonEnd + 1)) as {
+        meta: { success: boolean; count: number };
+        data: Array<{ case_id: string; title: string; description?: string }>;
+      };
+      if (!data.meta?.success || !Array.isArray(data.data)) {
+        throw new Error("Unexpected API response structure");
+      }
+      const results: ScrapedListing[] = data.data
+        .filter((item) => item.case_id && item.title?.trim().length > 0)
+        .map((item) => ({
+          title: cleanText(item.title),
+          description: cleanText(item.description ?? ""),
+          url: `${BASE_URL}?id=${item.case_id}`,
+          institution: "University of Houston",
+          technologyId: item.case_id,
+        }));
+      console.log(`[scraper] University of Houston: ${results.length} listings (JSONP API)`);
       return results;
     } catch (err: any) {
       console.warn(`[scraper] University of Houston: ${err?.message}`);
