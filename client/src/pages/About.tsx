@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { Button } from "@/components/ui/button";
@@ -316,9 +316,13 @@ export default function About() {
       </main>
 
       <footer className="relative z-10 border-t border-border py-8 px-4 sm:px-6 text-xs text-muted-foreground">
-        <div className="flex items-center justify-center gap-4">
-          <p>2026 EdenRadar. All rights reserved.</p>
-          <EdenNXBadge />
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
+          <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
+          <div className="flex items-center gap-4">
+            <Link href="/privacy" className="hover:text-foreground transition-colors" data-testid="footer-link-privacy">Privacy Policy</Link>
+            <Link href="/tos" className="hover:text-foreground transition-colors" data-testid="footer-link-tos">Terms of Service</Link>
+            <EdenNXBadge />
+          </div>
         </div>
       </footer>
     </div>

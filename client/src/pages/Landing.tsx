@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
@@ -580,8 +580,23 @@ export default function Landing() {
               Eden<span className="text-primary">Radar</span>
             </span>
             <span className="text-muted-foreground text-xs">· AI Biotech Asset Intelligence</span>
+            <span className="text-muted-foreground text-xs">· © {new Date().getFullYear()}</span>
           </div>
           <nav className="flex items-center gap-4">
+            <Link
+              href="/privacy"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-privacy"
+            >
+              Privacy Policy
+            </Link>
+            <Link
+              href="/tos"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-tos"
+            >
+              Terms of Service
+            </Link>
             <EdenNXBadge />
             <button
               onClick={handleLogin}
