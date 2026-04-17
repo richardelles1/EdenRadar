@@ -13,7 +13,7 @@ const SCOUT_PLANS = [
     seats: "1 seat",
     tagline: "For solo BD professionals and licensing executives.",
     cta: "Request access",
-    ctaHref: "/login",
+    ctaHref: "/login?mode=signup",
     features: [
       "Market intelligence feed from 300+ TTOs",
       "EDEN semantic search across full asset catalog",
@@ -32,7 +32,7 @@ const SCOUT_PLANS = [
     seats: "5 seats",
     tagline: "For BD teams that share pipeline and move fast.",
     cta: "Request access",
-    ctaHref: "/login",
+    ctaHref: "/login?mode=signup",
     features: [
       "Everything in Individual",
       "5 shared team seats",
@@ -51,7 +51,7 @@ const SCOUT_PLANS = [
     seats: "10 seats",
     tagline: "For larger BD divisions running multiple workstreams.",
     cta: "Request access",
-    ctaHref: "/login",
+    ctaHref: "/login?mode=signup",
     features: [
       "Everything in Team (5-seat)",
       "10 shared team seats",
@@ -249,7 +249,7 @@ export default function Pricing() {
         <div
           className="rounded-xl p-7 sm:p-9"
           style={{
-            background: "linear-gradient(135deg, hsl(222 47% 7%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
+            background: "linear-gradient(135deg, hsl(155 25% 6%) 0%, hsl(142 45% 8%) 60%, hsl(155 40% 10%) 100%)",
             border: "1px solid hsl(142 52% 36% / 0.25)",
           }}
           data-testid="pricing-card-enterprise"

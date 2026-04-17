@@ -35,7 +35,8 @@ export default function Login() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [, navigate] = useLocation();
-  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const initialMode = new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "signin";
+  const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">("industry");
