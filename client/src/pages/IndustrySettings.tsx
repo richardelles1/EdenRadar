@@ -24,12 +24,15 @@ import {
   TriangleAlert,
   ExternalLink,
   ChevronRight,
+  Users,
+  CreditCard,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useOrg, planTierLabel, billingMethodLabel } from "@/hooks/use-org";
 
 type Frequency = "realtime" | "daily" | "weekly";
 
@@ -200,9 +203,25 @@ export function SimplifiedSettings() {
   );
 }
 
+function formatJoinDate(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  } catch {
+    return "";
+  }
+}
+
+function roleBadgeClass(role: string): string {
+  if (role === "owner") return "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30";
+  if (role === "admin") return "bg-slate-500/15 text-slate-600 dark:text-slate-400 border-slate-500/30";
+  return "bg-muted text-muted-foreground border-border";
+}
+
 export default function IndustrySettings() {
   const { user, session, signOut, role } = useAuth();
   const { toast } = useToast();
+  const { data: org } = useOrg();
 
   const isIndustry = role === "industry";
 
@@ -412,23 +431,92 @@ export default function IndustrySettings() {
       </div>
 
       {/* Plan */}
-      <div className="rounded-xl border border-card-border bg-card p-4 flex items-center justify-between">
-        <div>
-          <p className="text-xs font-semibold text-foreground">EdenScout plan</p>
-          <p className="text-xs text-muted-foreground mt-0.5">$799 / month</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Badge variant="secondary"
-            className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-xs">
-            Active
-          </Badge>
-          <button className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors"
+      <div className="rounded-xl border border-card-border bg-card p-4" data-testid="section-plan">
+        <div className="flex items-start gap-3 mb-4">
+          <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+            <CreditCard className="w-4 h-4 text-emerald-500" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="text-sm font-semibold text-foreground">EdenScout</p>
+              <Badge variant="secondary" className={cn(
+                "border text-xs px-1.5 py-0 h-4",
+                org?.planTier === "enterprise"
+                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                  : org?.planTier === "individual" || !org
+                    ? "bg-muted text-muted-foreground border-border"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+              )}>
+                {planTierLabel(org?.planTier ?? "individual")}
+              </Badge>
+            </div>
+            {org && (
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-org-name">{org.name}</p>
+            )}
+            {org && org.planTier !== "individual" && (
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-seat-count">
+                {org.seatCount} of {org.seatLimit} seat{org.seatLimit !== 1 ? "s" : ""} used
+              </p>
+            )}
+            {org && (
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-billing-method">
+                {billingMethodLabel(org.billingMethod)}
+              </p>
+            )}
+          </div>
+          <button
+            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors shrink-0"
             onClick={() => window.open("mailto:support@edennx.com?subject=Billing inquiry", "_blank")}
-            data-testid="link-billing">
+            data-testid="link-billing"
+          >
             Billing <ChevronRight className="w-3 h-3" />
           </button>
         </div>
       </div>
+
+      {/* Team */}
+      {org && org.planTier !== "individual" && org.members.length > 0 && (
+        <div className="rounded-xl border border-card-border bg-card p-5" data-testid="section-team">
+          <SectionHeader icon={Users} title="Your Team" description="Members with access to this EdenScout workspace" />
+          <div className="space-y-2">
+            {org.members.map((member) => {
+              const initials = (member.memberName ?? member.email ?? "?").trim().slice(0, 2).toUpperCase();
+              const displayName = member.memberName ?? member.email ?? "Unknown";
+              return (
+                <div
+                  key={member.userId}
+                  className="flex items-center gap-3 py-1.5"
+                  data-testid={`team-member-${member.userId}`}
+                >
+                  <div className="w-7 h-7 rounded-full bg-muted border border-border flex items-center justify-center shrink-0">
+                    <span className="text-[10px] font-semibold text-muted-foreground">{initials}</span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">{displayName}</p>
+                    {member.joinedAt && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Joined {formatJoinDate(String(member.joinedAt))}
+                      </p>
+                    )}
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("text-[10px] px-1.5 py-0 h-4 border capitalize", roleBadgeClass(member.role))}
+                    data-testid={`badge-role-${member.userId}`}
+                  >
+                    {member.role}
+                  </Badge>
+                </div>
+              );
+            })}
+          </div>
+          {org.members.some((m) => m.userId === user?.id && m.role === "owner") && (
+            <p className="text-[10px] text-muted-foreground mt-4 pt-3 border-t border-border">
+              Manage seats and members in the Admin panel.
+            </p>
+          )}
+        </div>
+      )}
 
       <ChangePasswordModal open={pwModalOpen} onClose={() => setPwModalOpen(false)} />
     </div>

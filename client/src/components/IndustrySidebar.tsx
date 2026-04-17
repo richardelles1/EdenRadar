@@ -11,6 +11,7 @@ import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useState, useEffect } from "react";
 import { getIndustryProfile } from "@/hooks/use-industry";
+import { useOrg, planTierLabel } from "@/hooks/use-org";
 import {
   AceternitySidebar,
   AceternitySidebarBody,
@@ -156,12 +157,87 @@ function NavButton({
   );
 }
 
+function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
+  const { open, animate } = useSidebar();
+  const { data: org } = useOrg();
+  const profile = getIndustryProfile();
+
+  if (org) {
+    const initials = org.name.trim().slice(0, 2).toUpperCase();
+    const accentColor = "var(--org-accent, hsl(142 52% 36%))";
+    const tierLabel = planTierLabel(org.planTier);
+
+    return (
+      <button
+        onClick={() => navigate("/industry/settings")}
+        className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-accent/60 cursor-pointer transition-colors w-full text-left"
+        style={{ background: "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 6%, transparent)" }}
+        data-testid="industry-sidebar-org-block"
+      >
+        <div
+          className="w-8 h-8 rounded-md flex items-center justify-center overflow-hidden shrink-0 border"
+          style={{ borderColor: "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 40%, transparent)" }}
+        >
+          {org.logoUrl ? (
+            <img src={org.logoUrl} alt={org.name} className="w-full h-full object-cover rounded-md" />
+          ) : (
+            <span
+              className="text-[11px] font-bold"
+              style={{ color: accentColor }}
+            >
+              {initials}
+            </span>
+          )}
+        </div>
+        <motion.div
+          animate={{
+            opacity: animate ? (open ? 1 : 0) : 1,
+            width: animate ? (open ? "auto" : 0) : "auto",
+          }}
+          transition={{ duration: 0.15, ease: "easeOut" }}
+          className="whitespace-pre overflow-hidden flex flex-col min-w-0"
+        >
+          <span
+            className="text-xs font-semibold truncate leading-tight"
+            style={{ color: accentColor }}
+          >
+            {org.name}
+          </span>
+          <span className="text-[10px] text-muted-foreground leading-tight">{tierLabel}</span>
+        </motion.div>
+      </button>
+    );
+  }
+
+  if (profile.companyName) {
+    return (
+      <button
+        onClick={() => navigate("/industry/profile")}
+        className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-accent/60 cursor-pointer transition-colors w-full text-left"
+        data-testid="industry-sidebar-avatar-link"
+      >
+        <div className="w-6 h-6 rounded-full bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center overflow-hidden shrink-0">
+          <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
+            {getInitials(profile.companyName)}
+          </span>
+        </div>
+        <AnimatedLabel>
+          <span className="text-xs font-medium text-foreground truncate">
+            {profile.companyName}
+          </span>
+        </AnimatedLabel>
+      </button>
+    );
+  }
+
+  return null;
+}
+
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { open, animate } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
-  const profile = getIndustryProfile();
 
   const [sinceParam, setSinceParam] = useState(() =>
     typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
@@ -252,26 +328,9 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
         ))}
       </nav>
 
-      {/* Bottom: company + account + controls */}
+      {/* Bottom: org identity + account + controls */}
       <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0 overflow-x-hidden">
-        {profile.companyName && (
-          <button
-            onClick={() => navigate("/industry/profile")}
-            className="flex items-center gap-2.5 px-3 py-1.5 rounded-md hover:bg-accent/60 cursor-pointer transition-colors w-full text-left"
-            data-testid="industry-sidebar-avatar-link"
-          >
-            <div className="w-6 h-6 rounded-full bg-emerald-600/20 border border-emerald-500/30 flex items-center justify-center overflow-hidden shrink-0">
-              <span className="text-[9px] font-bold text-emerald-600 dark:text-emerald-400">
-                {getInitials(profile.companyName)}
-              </span>
-            </div>
-            <AnimatedLabel>
-              <span className="text-xs font-medium text-foreground truncate">
-                {profile.companyName}
-              </span>
-            </AnimatedLabel>
-          </button>
-        )}
+        <OrgIdentityBlock navigate={navigate} />
 
         <button
           onClick={() => navigate("/industry/profile")}

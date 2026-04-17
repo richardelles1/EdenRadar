@@ -4,6 +4,7 @@ import { IndustrySidebar } from "@/components/IndustrySidebar";
 import { IndustryOnboarding } from "@/components/IndustryOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { getIndustryProfile, useIndustrySyncOnMount } from "@/hooks/use-industry";
+import { useOrg } from "@/hooks/use-org";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 type DashboardLayoutProps = {
@@ -15,6 +16,8 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const { session, role, loading } = useAuth();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const { hydrated } = useIndustrySyncOnMount();
+  const { data: org } = useOrg();
+  const orgColor = org?.primaryColor ?? null;
 
   useEffect(() => {
     if (loading) return;
@@ -45,7 +48,10 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   if (!session || role !== "industry") return null;
 
   return (
-    <div className="flex min-h-screen bg-background relative">
+    <div
+      className="flex min-h-screen bg-background relative"
+      style={orgColor ? { "--org-accent": orgColor } as React.CSSProperties : {}}
+    >
       <IndustrySidebar />
       <main className="flex-1 min-w-0 overflow-y-auto relative z-10">
         <ErrorBoundary>

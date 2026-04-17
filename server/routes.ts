@@ -1041,9 +1041,14 @@ export async function registerRoutes(
 
   app.post("/api/pipelines", async (req, res) => {
     try {
-      const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+      const { name, shared } = z.object({ name: z.string().min(1).max(100), shared: z.boolean().optional() }).parse(req.body);
       const userId = await tryGetUserId(req);
-      const list = await storage.createPipelineList({ name }, userId);
+      let orgId: number | undefined;
+      if (shared && userId) {
+        const userOrg = await storage.getOrgForUser(userId);
+        if (userOrg && userOrg.planTier !== "individual") orgId = userOrg.id;
+      }
+      const list = await storage.createPipelineList({ name, ...(orgId ? { orgId } : {}) }, userId);
       res.status(201).json({ pipeline: { ...list, assetCount: 0 } });
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });

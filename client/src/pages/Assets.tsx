@@ -28,13 +28,16 @@ import {
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Badge } from "@/components/ui/badge";
 import type { SavedAsset } from "@shared/schema";
+import { useOrg } from "@/hooks/use-org";
 
 type PipelineWithCount = {
   id: number;
   name: string;
   assetCount: number;
   createdAt: string;
+  orgId?: number | null;
 };
 
 type PipelinesResponse = {
@@ -170,7 +173,7 @@ function PipelineSidebar({
   uncategorisedCount: number;
   selectedId: number | null | "all";
   onSelect: (id: number | null | "all") => void;
-  onCreatePipeline: (name: string) => void;
+  onCreatePipeline: (name: string, shared?: boolean) => void;
   onBrief?: (id: number) => void;
   briefLoadingId?: number | null;
   isLoading: boolean;
@@ -179,8 +182,14 @@ function PipelineSidebar({
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
+  const [createShared, setCreateShared] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [editName, setEditName] = useState("");
+  const { data: org } = useOrg();
+
+  const hasTeamOrg = !!(org && org.planTier !== "individual");
+  const myLists = pipelines.filter((p) => !p.orgId);
+  const teamLists = pipelines.filter((p) => !!p.orgId);
 
   const renameMutation = useMutation({
     mutationFn: async ({ id, name }: { id: number; name: string }) => {
@@ -211,10 +220,93 @@ function PipelineSidebar({
   const handleCreate = () => {
     const name = newName.trim();
     if (!name) return;
-    onCreatePipeline(name);
+    onCreatePipeline(name, createShared);
     setNewName("");
+    setCreateShared(false);
     setCreating(false);
   };
+
+  function renderPipelineRow(p: PipelineWithCount, showSharedBadge?: boolean) {
+    return (
+      <div key={p.id} className="group relative">
+        {editId === p.id ? (
+          <div className="flex items-center gap-1 px-1.5 py-1">
+            <Input
+              autoFocus
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") renameMutation.mutate({ id: p.id, name: editName.trim() });
+                if (e.key === "Escape") { setEditId(null); setEditName(""); }
+              }}
+              className="h-7 text-xs flex-1"
+              data-testid={`input-rename-pipeline-${p.id}`}
+            />
+            <button
+              onClick={() => renameMutation.mutate({ id: p.id, name: editName.trim() })}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-primary"
+              data-testid={`button-confirm-rename-${p.id}`}
+            >
+              <Check className="w-3 h-3" />
+            </button>
+            <button
+              onClick={() => { setEditId(null); setEditName(""); }}
+              className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => onSelect(p.id)}
+            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${selectedId === p.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+            data-testid={`pipeline-filter-${p.id}`}
+          >
+            <Layers className="w-3.5 h-3.5 shrink-0 text-primary/70" />
+            <span className="flex-1 text-left truncate">{p.name}</span>
+            {showSharedBadge && (
+              <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-muted-foreground/30 text-muted-foreground group-hover:hidden shrink-0">
+                shared
+              </Badge>
+            )}
+            <span className="text-[10px] tabular-nums text-muted-foreground group-hover:hidden">{p.assetCount}</span>
+            <div className="hidden group-hover:flex items-center gap-0.5">
+              {onBrief && p.assetCount > 0 && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onBrief(p.id); }}
+                  disabled={briefLoadingId === p.id}
+                  className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-primary disabled:opacity-50"
+                  title="Pipeline brief"
+                  data-testid={`button-pipeline-brief-${p.id}`}
+                >
+                  {briefLoadingId === p.id
+                    ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                    : <FileText className="w-2.5 h-2.5" />
+                  }
+                </button>
+              )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditName(p.name); }}
+                className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50"
+                title="Rename"
+                data-testid={`button-rename-pipeline-${p.id}`}
+              >
+                <Pencil className="w-2.5 h-2.5" />
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(p.id); }}
+                className="w-5 h-5 flex items-center justify-center rounded hover:bg-destructive/10 hover:text-destructive"
+                title="Delete pipeline"
+                data-testid={`button-delete-pipeline-${p.id}`}
+              >
+                <Trash2 className="w-2.5 h-2.5" />
+              </button>
+            </div>
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="w-56 shrink-0 flex flex-col gap-0.5">
@@ -248,111 +340,83 @@ function PipelineSidebar({
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-8 w-full rounded-md" />)}
         </div>
       ) : (
-        pipelines.map((p) => (
-          <div key={p.id} className="group relative">
-            {editId === p.id ? (
-              <div className="flex items-center gap-1 px-1.5 py-1">
-                <Input
-                  autoFocus
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") renameMutation.mutate({ id: p.id, name: editName.trim() });
-                    if (e.key === "Escape") { setEditId(null); setEditName(""); }
-                  }}
-                  className="h-7 text-xs flex-1"
-                  data-testid={`input-rename-pipeline-${p.id}`}
-                />
-                <button
-                  onClick={() => renameMutation.mutate({ id: p.id, name: editName.trim() })}
-                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-primary"
-                  data-testid={`button-confirm-rename-${p.id}`}
-                >
-                  <Check className="w-3 h-3" />
-                </button>
-                <button
-                  onClick={() => { setEditId(null); setEditName(""); }}
-                  className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => onSelect(p.id)}
-                className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors ${selectedId === p.id ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
-                data-testid={`pipeline-filter-${p.id}`}
-              >
-                <Layers className="w-3.5 h-3.5 shrink-0 text-primary/70" />
-                <span className="flex-1 text-left truncate">{p.name}</span>
-                <span className="text-[10px] tabular-nums text-muted-foreground group-hover:hidden">{p.assetCount}</span>
-                <div className="hidden group-hover:flex items-center gap-0.5">
-                  {onBrief && p.assetCount > 0 && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onBrief(p.id); }}
-                      disabled={briefLoadingId === p.id}
-                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-primary disabled:opacity-50"
-                      title="Pipeline brief"
-                      data-testid={`button-pipeline-brief-${p.id}`}
-                    >
-                      {briefLoadingId === p.id
-                        ? <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                        : <FileText className="w-2.5 h-2.5" />
-                      }
-                    </button>
-                  )}
-                  <button
-                    onClick={(e) => { e.stopPropagation(); setEditId(p.id); setEditName(p.name); }}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-muted/50"
-                    title="Rename"
-                    data-testid={`button-rename-pipeline-${p.id}`}
-                  >
-                    <Pencil className="w-2.5 h-2.5" />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(p.id); }}
-                    className="w-5 h-5 flex items-center justify-center rounded hover:bg-destructive/10 hover:text-destructive"
-                    title="Delete pipeline"
-                    data-testid={`button-delete-pipeline-${p.id}`}
-                  >
-                    <Trash2 className="w-2.5 h-2.5" />
-                  </button>
+        <>
+          {hasTeamOrg ? (
+            <>
+              {myLists.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 mb-0.5">
+                    My Lists
+                  </div>
+                  {myLists.map((p) => renderPipelineRow(p, false))}
                 </div>
-              </button>
-            )}
-          </div>
-        ))
+              )}
+              {teamLists.length > 0 && (
+                <div className="mt-2">
+                  <div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 mb-0.5">
+                    Team Lists
+                  </div>
+                  {teamLists.map((p) => renderPipelineRow(p, true))}
+                </div>
+              )}
+            </>
+          ) : (
+            pipelines.map((p) => renderPipelineRow(p, false))
+          )}
+        </>
       )}
 
       <div className="mt-1 border-t border-border pt-1">
         {creating ? (
-          <div className="flex items-center gap-1 px-1.5 py-1">
-            <Input
-              autoFocus
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleCreate();
-                if (e.key === "Escape") { setCreating(false); setNewName(""); }
-              }}
-              placeholder="Pipeline name…"
-              className="h-7 text-xs flex-1"
-              data-testid="input-create-pipeline"
-            />
-            <button
-              onClick={handleCreate}
-              disabled={!newName.trim()}
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-primary disabled:opacity-40"
-              data-testid="button-confirm-create-pipeline"
-            >
-              <Check className="w-3 h-3" />
-            </button>
-            <button
-              onClick={() => { setCreating(false); setNewName(""); }}
-              className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground"
-            >
-              <X className="w-3 h-3" />
-            </button>
+          <div className="flex flex-col gap-1 px-1.5 py-1">
+            <div className="flex items-center gap-1">
+              <Input
+                autoFocus
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleCreate();
+                  if (e.key === "Escape") { setCreating(false); setNewName(""); setCreateShared(false); }
+                }}
+                placeholder="Pipeline name…"
+                className="h-7 text-xs flex-1"
+                data-testid="input-create-pipeline"
+              />
+              <button
+                onClick={handleCreate}
+                disabled={!newName.trim()}
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-primary disabled:opacity-40"
+                data-testid="button-confirm-create-pipeline"
+              >
+                <Check className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => { setCreating(false); setNewName(""); setCreateShared(false); }}
+                className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+            {hasTeamOrg && (
+              <div className="flex items-center gap-1 px-0.5">
+                <button
+                  type="button"
+                  onClick={() => setCreateShared(false)}
+                  className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${!createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`}
+                  data-testid="button-create-personal"
+                >
+                  Personal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateShared(true)}
+                  className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`}
+                  data-testid="button-create-team"
+                >
+                  Team
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <button
@@ -434,8 +498,8 @@ export default function Assets() {
   });
 
   const createPipelineMutation = useMutation({
-    mutationFn: async (name: string) => {
-      const res = await apiRequest("POST", "/api/pipelines", { name });
+    mutationFn: async ({ name, shared }: { name: string; shared?: boolean }) => {
+      const res = await apiRequest("POST", "/api/pipelines", { name, shared: shared ?? false });
       return res.json();
     },
     onSuccess: ({ pipeline }) => {
@@ -600,7 +664,7 @@ export default function Assets() {
               uncategorisedCount={uncategorisedCount}
               selectedId={selectedPipeline}
               onSelect={setSelectedPipeline}
-              onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
+              onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
               onBrief={handleBrief}
               briefLoadingId={briefLoading}
               isLoading={pipelinesLoading}
@@ -632,7 +696,7 @@ export default function Assets() {
                           uncategorisedCount={uncategorisedCount}
                           selectedId={selectedPipeline}
                           onSelect={setSelectedPipeline}
-                          onCreatePipeline={(name) => createPipelineMutation.mutate(name)}
+                          onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
                           onBrief={handleBrief}
                           briefLoadingId={briefLoading}
                           isLoading={pipelinesLoading}
