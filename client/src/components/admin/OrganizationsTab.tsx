@@ -4,6 +4,7 @@ import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -657,12 +658,14 @@ export function OrganizationsTab({ pw }: { pw: string }) {
             {["ach", "invoice"].includes(orgForm.billingMethod) && (
               <div className="space-y-1.5">
                 <Label htmlFor="org-billing-notes">Billing Notes</Label>
-                <Input
+                <Textarea
                   id="org-billing-notes"
                   value={orgForm.billingNotes}
                   onChange={(e) => setOrgForm((f) => ({ ...f, billingNotes: e.target.value }))}
                   placeholder={orgForm.billingMethod === "ach" ? "Routing: 021000021, Account: ..." : "NET-30, PO required, send to..."}
                   data-testid="input-org-billing-notes"
+                  rows={3}
+                  className="resize-none text-sm"
                 />
               </div>
             )}
