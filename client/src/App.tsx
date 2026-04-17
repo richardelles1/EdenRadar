@@ -54,6 +54,7 @@ import { ResearchLayout } from "@/layouts/ResearchLayout";
 import { DiscoveryLayout } from "@/layouts/DiscoveryLayout";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
+import { ScoutGate } from "@/components/ScoutGate";
 import Login from "@/pages/Login";
 import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
@@ -126,7 +127,9 @@ function Router() {
       </Route>
       <Route path="/industry/new-arrivals">
         <DashboardLayout>
-          <NewArrivals />
+          <ScoutGate>
+            <NewArrivals />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/dashboard">
@@ -134,58 +137,80 @@ function Router() {
       </Route>
       <Route path="/scout">
         <DashboardLayout>
-          <Scout />
+          <ScoutGate>
+            <Scout />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/assets">
         <DashboardLayout>
-          <Assets />
+          <ScoutGate>
+            <Assets />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/reports">
         <DashboardLayout>
-          <Reports />
+          <ScoutGate>
+            <Reports />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/alerts">
         <DashboardLayout>
-          <Alerts />
+          <ScoutGate>
+            <Alerts />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/institutions/:slug">
         <DashboardLayout>
-          <InstitutionDetail />
+          <ScoutGate>
+            <InstitutionDetail />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/institutions">
         <DashboardLayout>
-          <Institutions />
+          <ScoutGate>
+            <Institutions />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/sources">
         <DashboardLayout>
-          <Sources />
+          <ScoutGate>
+            <Sources />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/asset/:id">
         <DashboardLayout>
-          <AssetDossier />
+          <ScoutGate>
+            <AssetDossier />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/report">
         <DashboardLayout>
-          <Report />
+          <ScoutGate>
+            <Report />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
 
       <Route path="/industry/concepts">
         <DashboardLayout>
-          <IndustryConcepts />
+          <ScoutGate>
+            <IndustryConcepts />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/industry/projects">
         <DashboardLayout>
-          <IndustryProjects />
+          <ScoutGate>
+            <IndustryProjects />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/industry/profile">
