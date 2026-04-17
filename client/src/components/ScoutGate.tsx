@@ -1,7 +1,11 @@
 import { Link } from "wouter";
-import { useOrg } from "@/hooks/use-org";
+import { useQuery } from "@tanstack/react-query";
 import { Radar, CheckCircle2, ArrowRight, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
+
+type PlanResponse = { plan: string | null; orgName: string | null };
+
+const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
 
 const SCOUT_FEATURES = [
   "Semantic search across 300+ TTO asset catalogs",
@@ -19,7 +23,10 @@ const PLANS = [
 ];
 
 export function ScoutGate({ children }: { children: React.ReactNode }) {
-  const { data: org, isLoading } = useOrg();
+  const { data, isLoading } = useQuery<PlanResponse>({
+    queryKey: ["/api/me/plan"],
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (isLoading) {
     return (
@@ -29,7 +36,9 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (org) {
+  const hasAccess = data?.plan != null && (PAID_PLANS as readonly string[]).includes(data.plan);
+
+  if (hasAccess) {
     return <>{children}</>;
   }
 

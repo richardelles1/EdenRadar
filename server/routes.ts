@@ -5066,6 +5066,23 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Plan-check endpoint — returns the authenticated user's active EdenScout plan tier.
+  // Returns { plan: string | null, orgName: string | null }
+  // plan is null when the user has no org or their org has no recognised paid tier.
+  app.get("/api/me/plan", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
+      if (!org || !PAID_PLANS.includes(org.planTier as (typeof PAID_PLANS)[number])) {
+        return res.json({ plan: null, orgName: null });
+      }
+      return res.json({ plan: org.planTier, orgName: org.name });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Industry-facing org context route — requires verified JWT via verifyAnyAuth
   app.get("/api/industry/org", verifyAnyAuth, async (req, res) => {
     try {

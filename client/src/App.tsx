@@ -122,7 +122,9 @@ function Router() {
 
       <Route path="/industry/dashboard">
         <DashboardLayout>
-          <IndustryDashboard />
+          <ScoutGate>
+            <IndustryDashboard />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/industry/new-arrivals">
@@ -222,7 +224,9 @@ function Router() {
       <Route path="/settings" component={SettingsRoute} />
       <Route path="/industry/eden">
         <DashboardLayout>
-          <IndustryEden />
+          <ScoutGate>
+            <IndustryEden />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
 
