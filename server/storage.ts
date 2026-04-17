@@ -312,6 +312,7 @@ export interface IStorage {
   deleteUserAccount(userId: string): Promise<void>;
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
+  getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2616,6 +2617,16 @@ export class DatabaseStorage implements IStorage {
       .limit(1);
     if (!profile?.orgId) return undefined;
     return this.getOrganization(profile.orgId);
+  }
+
+  async getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null> {
+    const [row] = await db
+      .select({ plan: organizations.planTier, orgName: organizations.name })
+      .from(orgMembers)
+      .innerJoin(organizations, eq(orgMembers.orgId, organizations.id))
+      .where(eq(orgMembers.userId, userId))
+      .limit(1);
+    return row ?? null;
   }
 }
 

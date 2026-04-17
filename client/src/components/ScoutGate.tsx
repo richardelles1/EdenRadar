@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { Radar, CheckCircle2, ArrowRight, Lock } from "lucide-react";
+import { useAuth } from "@/hooks/use-auth";
+import { Radar, CheckCircle2, ArrowRight, Lock, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 type PlanResponse = { plan: string | null; orgName: string | null };
@@ -23,15 +24,51 @@ const PLANS = [
 ];
 
 export function ScoutGate({ children }: { children: React.ReactNode }) {
-  const { data, isLoading } = useQuery<PlanResponse>({
+  const { session, loading: authLoading } = useAuth();
+
+  const { data, isLoading, isError, refetch } = useQuery<PlanResponse>({
     queryKey: ["/api/me/plan"],
     staleTime: 5 * 60 * 1000,
+    enabled: !authLoading && !!session?.access_token,
+    queryFn: async () => {
+      const res = await fetch("/api/me/plan", {
+        headers: {
+          Authorization: `Bearer ${session!.access_token}`,
+        },
+      });
+      if (!res.ok) throw new Error("Failed to load plan");
+      return res.json() as Promise<PlanResponse>;
+    },
   });
 
-  if (isLoading) {
+  if (authLoading || isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
         <div className="w-5 h-5 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4 text-center px-4">
+          <AlertCircle className="w-8 h-8 text-muted-foreground/60" />
+          <div>
+            <p className="text-sm font-medium text-foreground mb-1">Unable to verify your plan</p>
+            <p className="text-xs text-muted-foreground">Check your connection and try again.</p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={() => refetch()}
+            data-testid="scout-gate-retry"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            Retry
+          </Button>
+        </div>
       </div>
     );
   }

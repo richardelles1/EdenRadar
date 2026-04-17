@@ -5072,12 +5072,12 @@ If a field cannot be determined, use "N/A".`
   app.get("/api/me/plan", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const org = await storage.getOrgForUser(userId);
       const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
-      if (!org || !PAID_PLANS.includes(org.planTier as (typeof PAID_PLANS)[number])) {
+      const membership = await storage.getOrgPlanByMembership(userId);
+      if (!membership || !PAID_PLANS.includes(membership.plan as (typeof PAID_PLANS)[number])) {
         return res.json({ plan: null, orgName: null });
       }
-      return res.json({ plan: org.planTier, orgName: org.name });
+      return res.json({ plan: membership.plan, orgName: membership.orgName });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
