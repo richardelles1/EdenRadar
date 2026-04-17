@@ -34,7 +34,7 @@ type View = "auth" | "forgot" | "forgot-sent" | "set-password";
 
 export default function Login() {
   const {
-    signIn, signUp, signInWithGoogle, sendPasswordReset,
+    signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword,
     session, role, loading: authLoading,
     isPasswordRecovery, clearPasswordRecovery,
   } = useAuth();
@@ -147,10 +147,10 @@ export default function Login() {
       return;
     }
     setSetPasswordLoading(true);
-    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    const { error: err } = await updatePassword(newPassword);
     setSetPasswordLoading(false);
     if (err) {
-      setSetPasswordError(err.message);
+      setSetPasswordError(err);
       return;
     }
     clearPasswordRecovery();
