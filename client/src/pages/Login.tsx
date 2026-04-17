@@ -81,7 +81,7 @@ export default function Login() {
   }, [isPasswordRecovery, view]);
 
   useEffect(() => {
-    if (!authLoading && session && role && !isPasswordRecovery && view === "auth") {
+    if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
       const dest =
         role === "industry" ? "/industry/dashboard" :
         role === "researcher" ? "/research" :
@@ -90,7 +90,7 @@ export default function Login() {
     }
   }, [authLoading, session, role, isPasswordRecovery, navigate, view]);
 
-  if (!authLoading && session && role && !isPasswordRecovery && view === "auth") return null;
+  if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
     navigate(
@@ -138,9 +138,8 @@ export default function Login() {
     setPickRoleLoading(false);
     if (err) {
       setPickRoleError(err);
-      return;
     }
-    redirectByRole(r);
+    // Navigation is handled by the redirect useEffect once role updates in auth context
   }
 
   async function handleForgotSubmit(e: React.FormEvent) {
