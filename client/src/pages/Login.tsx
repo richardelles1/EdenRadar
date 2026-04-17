@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2, Lightbulb, FlaskConical } from "lucide-react";
+import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2 } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 
 const PORTAL_STYLES = {
@@ -30,13 +30,17 @@ function GoogleIcon() {
   );
 }
 
+type View = "auth" | "forgot" | "forgot-sent" | "set-password";
+
 export default function Login() {
-  const { signIn, signUp, signInWithGoogle, session, role, loading: authLoading } = useAuth();
+  const { signIn, signUp, signInWithGoogle, sendPasswordReset, session, role, loading: authLoading } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [, navigate] = useLocation();
   const initialMode = new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "signin";
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
+  const [view, setView] = useState<View>("auth");
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">("industry");
@@ -45,17 +49,38 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [setPasswordLoading, setSetPasswordLoading] = useState(false);
+  const [setPasswordError, setSetPasswordError] = useState<string | null>(null);
+
   useEffect(() => {
-    if (!authLoading && session && role) {
+    if (!authLoading && session && role && view === "auth") {
       const dest =
         role === "industry" ? "/industry/dashboard" :
         role === "researcher" ? "/research" :
         "/discovery";
       navigate(dest, { replace: true });
     }
-  }, [authLoading, session, role, navigate]);
+  }, [authLoading, session, role, navigate, view]);
 
-  if (!authLoading && session && role) return null;
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setView("set-password");
+        setSetPasswordError(null);
+        setNewPassword("");
+        setConfirmPassword("");
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (!authLoading && session && role && view === "auth") return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
     navigate(
@@ -96,6 +121,46 @@ export default function Login() {
     }
   }
 
+  async function handleForgotSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setResetError(null);
+    setResetLoading(true);
+    const { error: err } = await sendPasswordReset(resetEmail);
+    setResetLoading(false);
+    if (err) {
+      setResetError(err);
+    } else {
+      setView("forgot-sent");
+    }
+  }
+
+  async function handleSetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setSetPasswordError(null);
+    if (newPassword !== confirmPassword) {
+      setSetPasswordError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setSetPasswordError("Password must be at least 8 characters");
+      return;
+    }
+    setSetPasswordLoading(true);
+    const { error: err } = await supabase.auth.updateUser({ password: newPassword });
+    setSetPasswordLoading(false);
+    if (err) {
+      setSetPasswordError(err.message);
+      return;
+    }
+    const { data } = await supabase.auth.getUser();
+    const r = data.user?.user_metadata?.role;
+    if (r === "industry" || r === "researcher" || r === "concept") {
+      redirectByRole(r);
+    } else {
+      setView("auth");
+    }
+  }
+
   const panelBg  = isDark ? "hsl(222 47% 5%)"  : "#ffffff";
   const heading  = isDark ? "text-white"        : "text-gray-900";
   const sub      = isDark ? "text-white/45"     : "text-gray-500/90";
@@ -120,6 +185,9 @@ export default function Login() {
     ? "text-white placeholder:text-white/30"
     : "text-gray-700 placeholder:text-gray-400/80";
   const inputIconColor = isDark ? "#6b7280" : "#9ca3af";
+
+  const mutedText = isDark ? "text-white/50" : "text-gray-500";
+  const bodyText  = isDark ? "text-white/80" : "text-gray-700";
 
   return (
     <div className="flex min-h-screen" style={{ background: panelBg }}>
@@ -157,191 +225,336 @@ export default function Login() {
             })}
           </div>
 
-          {/* Heading */}
-          <div className="text-center space-y-1">
-            <h1 className={`text-3xl font-semibold ${heading}`}>
-              {mode === "signin" ? "Sign in" : "Create account"}
-            </h1>
-            <p className={`text-sm ${sub}`}>
-              {mode === "signin"
-                ? "Welcome back! Please sign in to continue"
-                : "Sign up for an EdenRadar account"}
-            </p>
-          </div>
-
-          {/* Mode toggle */}
-          <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: tabBorder }}>
-            {(["signin", "signup"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                className={`flex-1 py-2 text-sm font-medium transition-colors ${mode === m ? "bg-emerald-600 text-white" : `bg-transparent ${tabOff}`}`}
-                onClick={() => { setMode(m); setError(null); setTosAccepted(false); }}
-                data-testid={`tab-${m}`}
-              >
-                {m === "signin" ? "Sign In" : "Sign Up"}
-              </button>
-            ))}
-          </div>
-
-          {/* Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-
-            {/* Email */}
-            <div className={`${inputBase} ${inputBorder}`}>
-              <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-                <path fillRule="evenodd" clipRule="evenodd" d="M0 .55.571 0H15.43l.57.55v9.9l-.571.55H.57L0 10.45zm1.143 1.138V9.9h13.714V1.69l-6.503 4.8h-.697zM13.749 1.1H2.25L8 5.356z" fill={inputIconColor}/>
-              </svg>
-              <input
-                type="email"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                data-testid="input-email"
-                className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
-              />
-            </div>
-
-            {/* Password */}
-            <div className={`${inputBase} ${inputBorder}`}>
-              <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
-                <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
-              </svg>
-              <input
-                type="password"
-                placeholder="Password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={6}
-                data-testid="input-password"
-                className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
-              />
-            </div>
-
-            {/* Forgot password (sign in only) */}
-            {mode === "signin" && (
-              <div className="flex justify-end -mt-1">
+          {/* ── Forgot password form ── */}
+          {view === "forgot" && (
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <h1 className={`text-2xl font-semibold ${heading}`}>Reset password</h1>
+                <p className={`text-sm ${sub}`}>
+                  Enter your email and we'll send you a link to set a new password.
+                </p>
+              </div>
+              <form onSubmit={handleForgotSubmit} className="space-y-4">
+                <div className={`${inputBase} ${inputBorder}`}>
+                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                    <path fillRule="evenodd" clipRule="evenodd" d="M0 .55.571 0H15.43l.57.55v9.9l-.571.55H.57L0 10.45zm1.143 1.138V9.9h13.714V1.69l-6.503 4.8h-.697zM13.749 1.1H2.25L8 5.356z" fill={inputIconColor}/>
+                  </svg>
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    required
+                    autoFocus
+                    data-testid="input-reset-email"
+                    className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                  />
+                </div>
+                {resetError && (
+                  <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-reset-error">{resetError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  data-testid="button-send-reset"
+                  className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {resetLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Send reset link
+                </button>
+              </form>
+              <div className="text-center">
                 <button
                   type="button"
-                  className={`text-xs underline transition-colors ${forgotLink}`}
-                  data-testid="link-forgot-password"
+                  className={`inline-flex items-center gap-1.5 text-xs transition-colors ${backLink}`}
+                  onClick={() => { setView("auth"); setResetError(null); }}
+                  data-testid="link-back-to-signin"
                 >
-                  Forgot password?
+                  <ArrowLeft className="w-3 h-3" />
+                  Back to sign in
                 </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {/* Role selector (sign up only) */}
-            {mode === "signup" && (
+          {/* ── Reset link sent confirmation ── */}
+          {view === "forgot-sent" && (
+            <div className="space-y-5 text-center">
+              <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
               <div className="space-y-1.5">
-                <p className={`text-xs font-medium ${isDark ? "text-white/50" : "text-gray-500"}`}>I am</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {([
-                    { value: "industry"   as const, label: "Industry",   active: "border-emerald-500/55 bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
-                    { value: "researcher" as const, label: "Researcher", active: "border-violet-500/55 bg-violet-500/12 text-violet-600 dark:text-violet-400"   },
-                    { value: "concept"    as const, label: "Concept",    active: "border-amber-500/55 bg-amber-500/12 text-amber-600 dark:text-amber-400"        },
-                  ]).map(({ value, label, active }) => (
-                    <button
-                      key={value}
-                      type="button"
-                      className={`p-2.5 rounded-lg border text-xs font-medium transition-all ${selectedRole === value ? active : roleOff}`}
-                      onClick={() => setSelectedRole(value)}
-                      data-testid={`role-${value}`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
+                <h2 className={`text-xl font-semibold ${heading}`}>Check your email</h2>
+                <p className={`text-sm ${sub}`}>
+                  We sent a password reset link to{" "}
+                  <span className={`font-medium ${bodyText}`}>{resetEmail}</span>.
+                  The link expires in 24 hours.
+                </p>
               </div>
-            )}
+              <button
+                type="button"
+                className={`inline-flex items-center gap-1.5 text-xs transition-colors ${backLink}`}
+                onClick={() => { setView("auth"); setResetEmail(""); }}
+                data-testid="link-back-to-signin-from-sent"
+              >
+                <ArrowLeft className="w-3 h-3" />
+                Back to sign in
+              </button>
+            </div>
+          )}
 
-            {/* TOS checkbox (signup only) */}
-            {mode === "signup" && (
-              <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-tos-accept">
-                <input
-                  type="checkbox"
-                  checked={tosAccepted}
-                  onChange={(e) => setTosAccepted(e.target.checked)}
-                  required
-                  data-testid="checkbox-tos"
-                  className="mt-0.5 h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
-                />
-                <span className={`text-xs leading-relaxed ${isDark ? "text-white/50" : "text-gray-500"}`}>
-                  I agree to the{" "}
-                  <a
-                    href="/tos"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline text-emerald-600 hover:text-emerald-500"
-                    onClick={(e) => e.stopPropagation()}
-                    data-testid="link-tos-signup"
+          {/* ── Set new password (PASSWORD_RECOVERY event) ── */}
+          {view === "set-password" && (
+            <div className="space-y-5">
+              <div className="space-y-1">
+                <h1 className={`text-2xl font-semibold ${heading}`}>Set new password</h1>
+                <p className={`text-sm ${sub}`}>Choose a strong password for your account.</p>
+              </div>
+              <form onSubmit={handleSetPassword} className="space-y-4">
+                <div className={`${inputBase} ${inputBorder}`}>
+                  <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                    <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
+                  </svg>
+                  <input
+                    type="password"
+                    placeholder="New password (min. 8 characters)"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    autoFocus
+                    data-testid="input-new-password"
+                    className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                  />
+                </div>
+                <div className={`${inputBase} ${inputBorder}`}>
+                  <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                    <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
+                  </svg>
+                  <input
+                    type="password"
+                    placeholder="Confirm new password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    minLength={8}
+                    data-testid="input-confirm-password"
+                    className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                  />
+                </div>
+                {setPasswordError && (
+                  <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-set-password-error">{setPasswordError}</p>
+                )}
+                <button
+                  type="submit"
+                  disabled={setPasswordLoading}
+                  data-testid="button-set-password"
+                  className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {setPasswordLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Set new password
+                </button>
+              </form>
+              <p className={`text-xs text-center ${mutedText}`}>
+                You'll be signed in automatically after setting your password.
+              </p>
+            </div>
+          )}
+
+          {/* ── Normal sign in / sign up ── */}
+          {view === "auth" && (
+            <>
+              {/* Heading */}
+              <div className="text-center space-y-1">
+                <h1 className={`text-3xl font-semibold ${heading}`}>
+                  {mode === "signin" ? "Sign in" : "Create account"}
+                </h1>
+                <p className={`text-sm ${sub}`}>
+                  {mode === "signin"
+                    ? "Welcome back! Please sign in to continue"
+                    : "Sign up for an EdenRadar account"}
+                </p>
+              </div>
+
+              {/* Mode toggle */}
+              <div className="flex rounded-lg border overflow-hidden" style={{ borderColor: tabBorder }}>
+                {(["signin", "signup"] as const).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    className={`flex-1 py-2 text-sm font-medium transition-colors ${mode === m ? "bg-emerald-600 text-white" : `bg-transparent ${tabOff}`}`}
+                    onClick={() => { setMode(m); setError(null); setTosAccepted(false); }}
+                    data-testid={`tab-${m}`}
                   >
-                    Terms of Service
-                  </a>
-                  {" "}and{" "}
-                  <a
-                    href="/privacy"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="underline text-emerald-600 hover:text-emerald-500"
-                    onClick={(e) => e.stopPropagation()}
-                    data-testid="link-privacy-signup"
-                  >
-                    Privacy Policy
-                  </a>
-                </span>
-              </label>
-            )}
+                    {m === "signin" ? "Sign In" : "Sign Up"}
+                  </button>
+                ))}
+              </div>
 
-            {/* Error */}
-            {error && (
-              <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-auth-error">{error}</p>
-            )}
+              {/* Form */}
+              <form onSubmit={handleSubmit} className="space-y-4">
 
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={loading || (mode === "signup" && !tosAccepted)}
-              data-testid="button-auth-submit"
-              className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
-            >
-              {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {mode === "signin" ? "Sign In" : "Create Account"}
-            </button>
-          </form>
+                {/* Email */}
+                <div className={`${inputBase} ${inputBorder}`}>
+                  <svg width="16" height="11" viewBox="0 0 16 11" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                    <path fillRule="evenodd" clipRule="evenodd" d="M0 .55.571 0H15.43l.57.55v9.9l-.571.55H.57L0 10.45zm1.143 1.138V9.9h13.714V1.69l-6.503 4.8h-.697zM13.749 1.1H2.25L8 5.356z" fill={inputIconColor}/>
+                  </svg>
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                    data-testid="input-email"
+                    className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                  />
+                </div>
 
-          {/* Divider */}
-          <div className="flex items-center gap-3">
-            <div className={`flex-1 h-px ${dividerLine}`} />
-            <span className={`text-xs text-nowrap ${dividerText}`}>or continue with</span>
-            <div className={`flex-1 h-px ${dividerLine}`} />
-          </div>
+                {/* Password */}
+                <div className={`${inputBase} ${inputBorder}`}>
+                  <svg width="13" height="17" viewBox="0 0 13 17" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+                    <path d="M13 8.5c0-.938-.729-1.7-1.625-1.7h-.812V4.25C10.563 1.907 8.74 0 6.5 0S2.438 1.907 2.438 4.25V6.8h-.813C.729 6.8 0 7.562 0 8.5v6.8c0 .938.729 1.7 1.625 1.7h9.75c.896 0 1.625-.762 1.625-1.7zM4.063 4.25c0-1.406 1.093-2.55 2.437-2.55s2.438 1.144 2.438 2.55V6.8H4.061z" fill={inputIconColor}/>
+                  </svg>
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={6}
+                    data-testid="input-password"
+                    className={`bg-transparent outline-none text-sm w-full h-full ${inputText}`}
+                  />
+                </div>
 
-          {/* Google button */}
-          <button
-            type="button"
-            onClick={handleGoogle}
-            disabled={googleLoading}
-            data-testid="button-google-signin"
-            className={`w-full h-12 rounded-full flex items-center justify-center gap-3 text-sm font-medium transition-colors disabled:opacity-60 ${googleBtn}`}
-          >
-            {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-            Continue with Google
-          </button>
+                {/* Forgot password link */}
+                {mode === "signin" && (
+                  <div className="flex justify-end -mt-1">
+                    <button
+                      type="button"
+                      className={`text-xs underline transition-colors ${forgotLink}`}
+                      onClick={() => {
+                        setResetEmail(email);
+                        setResetError(null);
+                        setView("forgot");
+                      }}
+                      data-testid="link-forgot-password"
+                    >
+                      Forgot password?
+                    </button>
+                  </div>
+                )}
 
-          {/* Back to home */}
-          <div className="text-center pt-1">
-            <button
-              type="button"
-              className={`text-xs transition-colors ${backLink}`}
-              onClick={() => navigate("/")}
-              data-testid="link-back-home"
-            >
-              Back to home
-            </button>
-          </div>
+                {/* Role selector (sign up only) */}
+                {mode === "signup" && (
+                  <div className="space-y-1.5">
+                    <p className={`text-xs font-medium ${isDark ? "text-white/50" : "text-gray-500"}`}>I am</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {([
+                        { value: "industry"   as const, label: "Industry",   active: "border-emerald-500/55 bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
+                        { value: "researcher" as const, label: "Researcher", active: "border-violet-500/55 bg-violet-500/12 text-violet-600 dark:text-violet-400"   },
+                        { value: "concept"    as const, label: "Concept",    active: "border-amber-500/55 bg-amber-500/12 text-amber-600 dark:text-amber-400"        },
+                      ]).map(({ value, label, active }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          className={`p-2.5 rounded-lg border text-xs font-medium transition-all ${selectedRole === value ? active : roleOff}`}
+                          onClick={() => setSelectedRole(value)}
+                          data-testid={`role-${value}`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* TOS checkbox (signup only) */}
+                {mode === "signup" && (
+                  <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-tos-accept">
+                    <input
+                      type="checkbox"
+                      checked={tosAccepted}
+                      onChange={(e) => setTosAccepted(e.target.checked)}
+                      required
+                      data-testid="checkbox-tos"
+                      className="mt-0.5 h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
+                    />
+                    <span className={`text-xs leading-relaxed ${isDark ? "text-white/50" : "text-gray-500"}`}>
+                      I agree to the{" "}
+                      <a
+                        href="/tos"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-emerald-600 hover:text-emerald-500"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid="link-tos-signup"
+                      >
+                        Terms of Service
+                      </a>
+                      {" "}and{" "}
+                      <a
+                        href="/privacy"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline text-emerald-600 hover:text-emerald-500"
+                        onClick={(e) => e.stopPropagation()}
+                        data-testid="link-privacy-signup"
+                      >
+                        Privacy Policy
+                      </a>
+                    </span>
+                  </label>
+                )}
+
+                {/* Error */}
+                {error && (
+                  <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-auth-error">{error}</p>
+                )}
+
+                {/* Submit */}
+                <button
+                  type="submit"
+                  disabled={loading || (mode === "signup" && !tosAccepted)}
+                  data-testid="button-auth-submit"
+                  className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                >
+                  {loading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {mode === "signin" ? "Sign In" : "Create Account"}
+                </button>
+              </form>
+
+              {/* Divider */}
+              <div className="flex items-center gap-3">
+                <div className={`flex-1 h-px ${dividerLine}`} />
+                <span className={`text-xs text-nowrap ${dividerText}`}>or continue with</span>
+                <div className={`flex-1 h-px ${dividerLine}`} />
+              </div>
+
+              {/* Google button */}
+              <button
+                type="button"
+                onClick={handleGoogle}
+                disabled={googleLoading}
+                data-testid="button-google-signin"
+                className={`w-full h-12 rounded-full flex items-center justify-center gap-3 text-sm font-medium transition-colors disabled:opacity-60 ${googleBtn}`}
+              >
+                {googleLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
+                Continue with Google
+              </button>
+
+              {/* Back to home */}
+              <div className="text-center pt-1">
+                <button
+                  type="button"
+                  className={`text-xs transition-colors ${backLink}`}
+                  onClick={() => navigate("/")}
+                  data-testid="link-back-home"
+                >
+                  Back to home
+                </button>
+              </div>
+            </>
+          )}
+
         </div>
       </div>
     </div>

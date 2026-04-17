@@ -13,6 +13,7 @@ interface AuthContextValue {
   signUp: (email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -74,8 +75,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
   }
 
+  async function sendPasswordReset(email: string) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/login`,
+    });
+    return { error: error?.message ?? null };
+  }
+
   return (
-    <AuthContext.Provider value={{ user, session, loading, role, signIn, signUp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, role, signIn, signUp, signInWithGoogle, signOut, sendPasswordReset }}>
       {children}
     </AuthContext.Provider>
   );
