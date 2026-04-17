@@ -361,7 +361,8 @@ export class DatabaseStorage implements IStorage {
 
   async getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]> {
     const conditions: SQL[] = [];
-    if (userId) conditions.push(eq(savedAssets.userId, userId));
+    // Include user's assets + legacy rows (null userId) to preserve backward compatibility
+    if (userId) conditions.push(or(eq(savedAssets.userId, userId), isNull(savedAssets.userId)) as SQL);
     if (pipelineListId === null) conditions.push(isNull(savedAssets.pipelineListId));
     else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
@@ -397,6 +398,8 @@ export class DatabaseStorage implements IStorage {
       const conditions: SQL[] = [];
       if (userId) conditions.push(eq(pipelineLists.userId, userId));
       if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
+      // Legacy rows (null userId + null orgId) remain visible during migration
+      conditions.push(and(isNull(pipelineLists.userId), isNull(pipelineLists.orgId)) as SQL);
       return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);
     }
     return db.select().from(pipelineLists).orderBy(pipelineLists.createdAt);
