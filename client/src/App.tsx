@@ -217,7 +217,9 @@ function Router() {
       </Route>
       <Route path="/industry/profile">
         <DashboardLayout>
-          <IndustryProfile />
+          <ScoutGate>
+            <IndustryProfile />
+          </ScoutGate>
         </DashboardLayout>
       </Route>
       <Route path="/industry/settings" component={SettingsRoute} />

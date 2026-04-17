@@ -1,5 +1,6 @@
 import { Link } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { Radar, CheckCircle2, ArrowRight, Lock, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,17 @@ const PLANS = [
 
 export function ScoutGate({ children }: { children: React.ReactNode }) {
   const { session, loading: authLoading } = useAuth();
+  const qc = useQueryClient();
+  const userId = session?.user?.id ?? null;
+
+  useEffect(() => {
+    if (!authLoading && !userId) {
+      qc.removeQueries({ queryKey: ["/api/me/plan"] });
+    }
+  }, [userId, authLoading, qc]);
 
   const { data, isLoading, isError, refetch } = useQuery<PlanResponse>({
-    queryKey: ["/api/me/plan"],
+    queryKey: ["/api/me/plan", userId],
     staleTime: 5 * 60 * 1000,
     enabled: !authLoading && !!session?.access_token,
     queryFn: async () => {
