@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
+import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -8478,6 +8479,16 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               Account Center
             </button>
             <button
+              onClick={() => setActiveTab("organizations")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "organizations" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-organizations"
+            >
+              <Building2 className="h-4 w-4" />
+              Organizations
+            </button>
+            <button
               onClick={() => setActiveTab("subscription-data")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
                 activeTab === "subscription-data" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -8587,6 +8598,10 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               </div>
               <AccountCenter pw={pw} />
             </>
+          )}
+
+          {activeTab === "organizations" && (
+            <OrganizationsTab pw={pw} />
           )}
 
           {activeTab === "subscription-data" && (

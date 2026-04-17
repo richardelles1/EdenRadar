@@ -39,6 +39,7 @@ export const industryProfiles = pgTable("industry_profiles", {
   onboardingDone: boolean("onboarding_done").notNull().default(false),
   notificationPrefs: jsonb("notification_prefs").$type<{ frequency: string }>().default({ frequency: "daily" }),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  orgId: integer("org_id"),
 });
 
 export type IndustryProfileRow = typeof industryProfiles.$inferSelect;
@@ -63,6 +64,8 @@ export const pipelineLists = pgTable("pipeline_lists", {
   name: text("name").notNull(),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  userId: text("user_id"),
+  orgId: integer("org_id"),
 });
 
 export const insertPipelineListSchema = createInsertSchema(pipelineLists).omit({
@@ -75,6 +78,7 @@ export type PipelineList = typeof pipelineLists.$inferSelect;
 
 export const savedAssets = pgTable("saved_assets", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   ingestedAssetId: integer("ingested_asset_id"),
   pipelineListId: integer("pipeline_list_id").references(() => pipelineLists.id, { onDelete: "set null" }),
   assetName: text("asset_name").notNull(),
@@ -558,6 +562,7 @@ export type EdenMessageFeedback = typeof edenMessageFeedback.$inferSelect;
 
 export const userAlerts = pgTable("user_alerts", {
   id: serial("id").primaryKey(),
+  userId: text("user_id"),
   name: text("name"),
   query: text("query"),
   modalities: text("modalities").array(),
@@ -604,6 +609,37 @@ export const edenSessions = pgTable("eden_sessions", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export type EdenSession = typeof edenSessions.$inferSelect;
+
+// ── Organizations & Org Members ───────────────────────────────────────────────
+
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  planTier: text("plan_tier").notNull().default("individual"), // individual | team5 | team10 | enterprise
+  seatLimit: integer("seat_limit").notNull().default(1),
+  logoUrl: text("logo_url"),
+  primaryColor: text("primary_color"), // hex e.g. "#16a34a"
+  billingEmail: text("billing_email"),
+  billingMethod: text("billing_method").notNull().default("stripe"), // stripe | ach | invoice
+  billingNotes: text("billing_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+export const insertOrganizationSchema = createInsertSchema(organizations).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+export type Organization = typeof organizations.$inferSelect;
+
+export const orgMembers = pgTable("org_members", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
+  userId: text("user_id").notNull(),
+  role: text("role").notNull().default("member"), // owner | admin | member
+  invitedBy: text("invited_by"),
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+});
+export const insertOrgMemberSchema = createInsertSchema(orgMembers).omit({ id: true, joinedAt: true });
+export type InsertOrgMember = z.infer<typeof insertOrgMemberSchema>;
+export type OrgMember = typeof orgMembers.$inferSelect;
 
 export const dispatchLogs = pgTable("dispatch_logs", {
   id: serial("id").primaryKey(),

@@ -21,6 +21,8 @@ import {
   manualInstitutions, type ManualInstitution, type InsertManualInstitution,
   dispatchLogs, type DispatchLog, type InsertDispatchLog,
   industryProfiles, type IndustryProfileRow,
+  organizations, type Organization, type InsertOrganization,
+  orgMembers, type OrgMember, type InsertOrgMember,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -289,6 +291,20 @@ export interface IStorage {
   getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
   getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
   getAllInstitutionNames(): Promise<string[]>;
+
+  // Organizations
+  listOrganizations(): Promise<Organization[]>;
+  getOrganization(id: number): Promise<Organization | undefined>;
+  createOrganization(data: InsertOrganization): Promise<Organization>;
+  updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
+  deleteOrganization(id: number): Promise<void>;
+
+  // Org Members
+  listOrgMembers(orgId: number): Promise<OrgMember[]>;
+  addOrgMember(data: InsertOrgMember): Promise<OrgMember>;
+  updateOrgMemberRole(id: number, role: string): Promise<OrgMember | undefined>;
+  removeOrgMember(id: number): Promise<void>;
+  getOrgByUserId(userId: string): Promise<Organization | undefined>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2451,6 +2467,65 @@ export class DatabaseStorage implements IStorage {
       firstSeenAt: r.firstSeenAt ?? new Date(),
       _categories: r.categories ?? [],
     }));
+  }
+
+  // ── Organizations ────────────────────────────────────────────────────────────
+
+  async listOrganizations(): Promise<Organization[]> {
+    return db.select().from(organizations).orderBy(organizations.name);
+  }
+
+  async getOrganization(id: number): Promise<Organization | undefined> {
+    const [row] = await db.select().from(organizations).where(eq(organizations.id, id));
+    return row;
+  }
+
+  async createOrganization(data: InsertOrganization): Promise<Organization> {
+    const [row] = await db.insert(organizations).values({ ...data, updatedAt: new Date() }).returning();
+    return row;
+  }
+
+  async updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined> {
+    const [row] = await db
+      .update(organizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(organizations.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteOrganization(id: number): Promise<void> {
+    await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  // ── Org Members ──────────────────────────────────────────────────────────────
+
+  async listOrgMembers(orgId: number): Promise<OrgMember[]> {
+    return db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId)).orderBy(orgMembers.joinedAt);
+  }
+
+  async addOrgMember(data: InsertOrgMember): Promise<OrgMember> {
+    const [row] = await db.insert(orgMembers).values(data).returning();
+    return row;
+  }
+
+  async updateOrgMemberRole(id: number, role: string): Promise<OrgMember | undefined> {
+    const [row] = await db
+      .update(orgMembers)
+      .set({ role })
+      .where(eq(orgMembers.id, id))
+      .returning();
+    return row;
+  }
+
+  async removeOrgMember(id: number): Promise<void> {
+    await db.delete(orgMembers).where(eq(orgMembers.id, id));
+  }
+
+  async getOrgByUserId(userId: string): Promise<Organization | undefined> {
+    const [member] = await db.select().from(orgMembers).where(eq(orgMembers.userId, userId)).limit(1);
+    if (!member) return undefined;
+    return this.getOrganization(member.orgId);
   }
 }
 

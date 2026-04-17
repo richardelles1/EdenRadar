@@ -4841,6 +4841,135 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // ── Organization Management Routes ──────────────────────────────────────────
+
+  const orgBodySchema = z.object({
+    name: z.string().min(1),
+    planTier: z.enum(["individual", "team5", "team10", "enterprise"]).default("individual"),
+    seatLimit: z.number().int().min(1).default(1),
+    logoUrl: z.string().url().nullable().optional(),
+    primaryColor: z.string().nullable().optional(),
+    billingEmail: z.string().email().nullable().optional(),
+    billingMethod: z.enum(["stripe", "ach", "invoice"]).default("stripe"),
+    billingNotes: z.string().nullable().optional(),
+  });
+
+  function adminGuard(req: any, res: any): boolean {
+    if (req.headers["x-admin-password"] !== "eden") {
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
+
+  app.get("/api/admin/orgs", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const orgs = await storage.listOrganizations();
+      res.json(orgs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/orgs/:id", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const org = await storage.getOrganization(Number(req.params.id));
+      if (!org) return res.status(404).json({ error: "Not found" });
+      const members = await storage.listOrgMembers(org.id);
+      res.json({ ...org, members });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/orgs", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const data = orgBodySchema.parse(req.body);
+      const org = await storage.createOrganization(data);
+      res.json(org);
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/orgs/:id", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const data = orgBodySchema.partial().parse(req.body);
+      const org = await storage.updateOrganization(Number(req.params.id), data);
+      if (!org) return res.status(404).json({ error: "Not found" });
+      res.json(org);
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/orgs/:id", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      await storage.deleteOrganization(Number(req.params.id));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Org member management
+  app.get("/api/admin/orgs/:id/members", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const members = await storage.listOrgMembers(Number(req.params.id));
+      res.json(members);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/admin/orgs/:id/members", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const memberSchema = z.object({
+        userId: z.string().min(1),
+        role: z.enum(["owner", "admin", "member"]).default("member"),
+        invitedBy: z.string().optional(),
+      });
+      const { userId, role, invitedBy } = memberSchema.parse(req.body);
+      const member = await storage.addOrgMember({ orgId: Number(req.params.id), userId, role, invitedBy });
+      res.json(member);
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/orgs/members/:memberId", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const { role } = z.object({ role: z.enum(["owner", "admin", "member"]) }).parse(req.body);
+      const member = await storage.updateOrgMemberRole(Number(req.params.memberId), role);
+      if (!member) return res.status(404).json({ error: "Not found" });
+      res.json(member);
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/admin/orgs/members/:memberId", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      await storage.removeOrgMember(Number(req.params.memberId));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   function stripPrivateFields(c: Record<string, any>) {
     const { submitterEmail, ...rest } = c;
     return rest;

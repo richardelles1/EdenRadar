@@ -164,7 +164,7 @@ client/src/
     AssetDossier.tsx      # /asset/:id — dossier view with pipeline intelligence panel
     Report.tsx            # /report — buyer intelligence report
 
-shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets, scanInstitutionCounts
+shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestionRuns, ingestedAssets, scanInstitutionCounts, organizations, orgMembers
 ```
 
 ### Pages
@@ -174,7 +174,7 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - **`/institutions`** — 195 TTO cards with live listing counts from DB
 - **`/institutions/:slug`** — Ingested listings with sort (Newest First / Best Commercial / A-Z / Z-A), search filter, modality/stage tags via title-signal parser, commercial score badge, expandable detail panel per asset
 - **`/alerts`** — Real delta data from last ingestion run (new assets per institution), Create Alert sheet
-- **`/admin`** — Admin control panel (password: "eden") with Data Health, Enrichment, Pipeline Review (review queue + wipe/re-collect), Research Queue tabs
+- **`/admin`** — Admin control panel (password: "eden") with Data Health, Enrichment, Pipeline Review (review queue + wipe/re-collect), Research Queue, Organizations (org + member CRUD) tabs
 - **`/reports`** — Mock report cards
 - **`/asset/:id`** — Full dossier with score breakdown + pipeline intelligence (enriched fields, competing assets, supporting literature)
 - **`/report`** — Buyer intelligence report
