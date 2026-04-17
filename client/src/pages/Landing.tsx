@@ -506,6 +506,15 @@ export default function Landing() {
               </div>
             </div>
 
+            <Link href="/pricing">
+              <span
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer underline underline-offset-2"
+                data-testid="link-see-pricing"
+              >
+                See pricing
+              </span>
+            </Link>
+
             <div
               ref={statsRef}
               className="reveal-section mt-16 sm:mt-20 grid grid-cols-2 sm:grid-cols-4 gap-6 sm:gap-10"
@@ -583,6 +592,13 @@ export default function Landing() {
             <span className="text-muted-foreground text-xs">· © {new Date().getFullYear()}</span>
           </div>
           <nav className="flex items-center gap-4">
+            <Link
+              href="/pricing"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-pricing"
+            >
+              Pricing
+            </Link>
             <Link
               href="/privacy"
               className="text-xs text-muted-foreground hover:text-foreground transition-colors"

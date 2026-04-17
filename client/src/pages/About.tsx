@@ -304,7 +304,7 @@ export default function About() {
             <Button
               size="lg"
               variant="outline"
-              onClick={() => navigate("/how-it-works")}
+              onClick={() => navigate("/pricing")}
               data-testid="about-cta-pricing"
               className="h-11 px-7 font-semibold"
             >
@@ -319,6 +319,7 @@ export default function About() {
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-6">
           <p>© {new Date().getFullYear()} EdenRadar. All rights reserved.</p>
           <div className="flex items-center gap-4">
+            <Link href="/pricing" className="hover:text-foreground transition-colors" data-testid="footer-link-pricing">Pricing</Link>
             <Link href="/privacy" className="hover:text-foreground transition-colors" data-testid="footer-link-privacy">Privacy Policy</Link>
             <Link href="/tos" className="hover:text-foreground transition-colors" data-testid="footer-link-tos">Terms of Service</Link>
             <EdenNXBadge />
