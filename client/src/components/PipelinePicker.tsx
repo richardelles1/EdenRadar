@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -10,6 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2 } from "lucide-react";
 import type { ScoredAsset } from "@/lib/types";
+import { useOrg } from "@/hooks/use-org";
 
 export type PipelinePickerPayload = {
   asset_name: string;
@@ -32,6 +34,7 @@ type PipelineWithCount = {
   name: string;
   assetCount: number;
   createdAt: string;
+  orgId?: number | null;
 };
 
 type PipelinesResponse = {
@@ -74,8 +77,12 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [createShared, setCreateShared] = useState(false);
 
   const effectivePayload = payload ?? (asset ? buildPayload(asset) : null);
+
+  const { data: org } = useOrg();
+  const hasTeamOrg = !!(org && org.planTier !== "individual");
 
   const { data: pipelinesData } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
@@ -89,6 +96,9 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
 
   const pipelines = pipelinesData?.pipelines ?? [];
   const savedAssets = savedData?.assets ?? [];
+
+  const myLists = pipelines.filter((p) => !p.orgId);
+  const teamLists = pipelines.filter((p) => !!p.orgId);
 
   const isSaved = alreadySaved !== undefined
     ? alreadySaved
@@ -139,12 +149,12 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   });
 
   const createAndSaveMutation = useMutation({
-    mutationFn: async (name: string) => {
+    mutationFn: async ({ name, shared }: { name: string; shared?: boolean }) => {
       if (!effectivePayload) throw new Error("No asset payload");
       const plRes = await fetch("/api/pipelines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, shared: shared ?? false }),
       });
       if (!plRes.ok) throw new Error("Failed to create pipeline");
       const { pipeline } = await plRes.json();
@@ -175,6 +185,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
       toast({ title: "Asset saved", description: `Added to new pipeline "${pipeline.name}"` });
       setNewName("");
+      setCreateShared(false);
       setCreating(false);
       setOpen(false);
     },
@@ -188,8 +199,29 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const handleCreateAndSave = () => {
     const name = newName.trim();
     if (!name) return;
-    createAndSaveMutation.mutate(name);
+    createAndSaveMutation.mutate({ name, shared: createShared });
   };
+
+  function renderPipelineRow(p: PipelineWithCount, showSharedBadge?: boolean) {
+    return (
+      <button
+        key={p.id}
+        onClick={() => saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
+        disabled={isPending}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted/50 transition-colors text-left"
+        data-testid={`pipeline-option-${p.id}`}
+      >
+        <Layers className="w-3.5 h-3.5 text-primary/70 shrink-0" />
+        <span className="flex-1 truncate">{p.name}</span>
+        {showSharedBadge && (
+          <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-muted-foreground/30 text-muted-foreground shrink-0">
+            shared
+          </Badge>
+        )}
+        <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
+      </button>
+    );
+  }
 
   return (
     <Popover open={open && !isSaved} onOpenChange={(o) => { if (!isSaved) setOpen(o); }}>
@@ -250,48 +282,83 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
           <span className="flex-1 truncate">Uncategorised</span>
         </button>
 
-        {pipelines.length > 0 && (
-          <div className="my-1 border-t border-border" />
+        {hasTeamOrg ? (
+          <>
+            {myLists.length > 0 && (
+              <>
+                <div className="my-1 border-t border-border" />
+                <div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">
+                  My Lists
+                </div>
+                {myLists.map((p) => renderPipelineRow(p, false))}
+              </>
+            )}
+            {teamLists.length > 0 && (
+              <>
+                <div className="my-1 border-t border-border" />
+                <div className="text-[9px] font-semibold text-muted-foreground/70 uppercase tracking-widest px-2 py-0.5">
+                  Team Lists
+                </div>
+                {teamLists.map((p) => renderPipelineRow(p, true))}
+              </>
+            )}
+            {myLists.length === 0 && teamLists.length === 0 && (
+              <div className="my-1 border-t border-border" />
+            )}
+          </>
+        ) : (
+          <>
+            {pipelines.length > 0 && <div className="my-1 border-t border-border" />}
+            {pipelines.map((p) => renderPipelineRow(p, false))}
+          </>
         )}
-
-        {pipelines.map((p) => (
-          <button
-            key={p.id}
-            onClick={() => saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
-            disabled={isPending}
-            className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted/50 transition-colors text-left"
-            data-testid={`pipeline-option-${p.id}`}
-          >
-            <Layers className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-            <span className="flex-1 truncate">{p.name}</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
-          </button>
-        ))}
 
         <div className="mt-1 border-t border-border pt-1">
           {creating ? (
-            <div className="flex items-center gap-1.5 px-1">
-              <Input
-                autoFocus
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleCreateAndSave();
-                  if (e.key === "Escape") { setCreating(false); setNewName(""); }
-                }}
-                placeholder="Pipeline name…"
-                className="h-7 text-xs flex-1"
-                data-testid="input-new-pipeline-name"
-              />
-              <Button
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={handleCreateAndSave}
-                disabled={!newName.trim() || isPending}
-                data-testid="button-confirm-new-pipeline"
-              >
-                <Check className="w-3 h-3" />
-              </Button>
+            <div className="flex flex-col gap-1.5 px-1">
+              <div className="flex items-center gap-1.5">
+                <Input
+                  autoFocus
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleCreateAndSave();
+                    if (e.key === "Escape") { setCreating(false); setNewName(""); setCreateShared(false); }
+                  }}
+                  placeholder="Pipeline name…"
+                  className="h-7 text-xs flex-1"
+                  data-testid="input-new-pipeline-name"
+                />
+                <Button
+                  size="sm"
+                  className="h-7 px-2 text-xs"
+                  onClick={handleCreateAndSave}
+                  disabled={!newName.trim() || isPending}
+                  data-testid="button-confirm-new-pipeline"
+                >
+                  <Check className="w-3 h-3" />
+                </Button>
+              </div>
+              {hasTeamOrg && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCreateShared(false)}
+                    className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${!createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`}
+                    data-testid="button-picker-create-personal"
+                  >
+                    Personal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateShared(true)}
+                    className={`flex-1 text-[10px] px-2 py-0.5 rounded border transition-colors ${createShared ? "border-primary/40 bg-primary/5 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20"}`}
+                    data-testid="button-picker-create-team"
+                  >
+                    Team
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <button
