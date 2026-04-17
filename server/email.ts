@@ -1,7 +1,14 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_ADDRESS = "EdenRadar <noreply@edenradar.com>";
+const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "EdenRadar <noreply@edenradar.com>";
 const APP_URL = "https://edenradar.com";
 const LOGIN_URL = `${APP_URL}/login`;
+
+if (!process.env.RESEND_FROM_ADDRESS) {
+  console.warn(
+    "[email] RESEND_FROM_ADDRESS is not set — using default noreply@edenradar.com." +
+      " Set this env var to a Resend-verified domain address before going to production."
+  );
+}
 
 const PLAN_LABELS: Record<string, string> = {
   individual: "EdenScout Individual",
@@ -109,8 +116,22 @@ export function sendTeamInviteEmail(
   name: string,
   orgName: string,
   planTier: string,
+  setPasswordLink?: string,
 ): Promise<void> {
   const displayName = name?.trim() || "there";
+  const actionBlock = setPasswordLink
+    ? `<a href="${setPasswordLink}"
+         style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+        Set Your Password
+      </a>
+      <p style="margin:16px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+        This link expires in 24 hours. After setting your password you can sign in at
+        <a href="${LOGIN_URL}" style="color:#059669;text-decoration:none;">edenradar.com</a> anytime.
+      </p>`
+    : `<a href="${LOGIN_URL}"
+         style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+        Sign in to EdenRadar
+      </a>`;
   const html = baseHtml(`
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">${orgName} has added you to EdenRadar.</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
@@ -118,12 +139,9 @@ export function sendTeamInviteEmail(
       <strong>${planLabel(planTier)}</strong> plan.
     </p>
     <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
-      Sign in to access EdenScout, EdenDiscovery, and EdenLab. Your credentials were provided by your team administrator.
+      You will have access to EdenScout, EdenDiscovery, and EdenLab once you set your password below.
     </p>
-    <a href="${LOGIN_URL}"
-       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
-      Sign in to EdenRadar
-    </a>
+    ${actionBlock}
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       If you were not expecting this invitation, please contact
       <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.

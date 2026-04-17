@@ -178,7 +178,6 @@ export function OrganizationsTab({ pw }: { pw: string }) {
   const [memberOrgId, setMemberOrgId] = useState<number | null>(null);
   const [memberEmail, setMemberEmail] = useState("");
   const [memberFullName, setMemberFullName] = useState("");
-  const [memberPassword, setMemberPassword] = useState("");
   const [memberRole, setMemberRole] = useState("member");
 
   // Delete confirm
@@ -230,9 +229,8 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       setMemberDialogOpen(false);
       setMemberEmail("");
       setMemberFullName("");
-      setMemberPassword("");
       setMemberRole("member");
-      toast({ title: "Member added and account created" });
+      toast({ title: "Member added — password-set link sent to their email" });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -769,7 +767,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
           </DialogHeader>
           <div className="space-y-4 py-2">
             <p className="text-xs text-muted-foreground">
-              A new EdenScout account will be created and linked to this organization.
+              A new EdenScout account will be created. The member receives an email with a link to set their own password.
             </p>
             <div className="space-y-1.5">
               <Label htmlFor="member-email">Email</Label>
@@ -793,17 +791,6 @@ export function OrganizationsTab({ pw }: { pw: string }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="member-password">Password (admin sets it)</Label>
-              <Input
-                id="member-password"
-                type="password"
-                value={memberPassword}
-                onChange={(e) => setMemberPassword(e.target.value)}
-                placeholder="min 8 characters"
-                data-testid="input-member-password"
-              />
-            </div>
-            <div className="space-y-1.5">
               <Label>Role</Label>
               <Select value={memberRole} onValueChange={setMemberRole}>
                 <SelectTrigger data-testid="select-member-role">
@@ -822,12 +809,12 @@ export function OrganizationsTab({ pw }: { pw: string }) {
               Cancel
             </Button>
             <Button
-              disabled={!memberEmail.trim() || !memberFullName.trim() || memberPassword.length < 8 || addMemberMutation.isPending}
+              disabled={!memberEmail.trim() || !memberFullName.trim() || addMemberMutation.isPending}
               onClick={() => {
                 if (!memberOrgId) return;
                 addMemberMutation.mutate({
                   orgId: memberOrgId,
-                  data: { email: memberEmail.trim(), fullName: memberFullName.trim(), password: memberPassword, role: memberRole },
+                  data: { email: memberEmail.trim(), fullName: memberFullName.trim(), role: memberRole },
                 });
               }}
               data-testid="button-save-member"

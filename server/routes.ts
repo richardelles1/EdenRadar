@@ -4975,11 +4975,10 @@ If a field cannot be determined, use "N/A".`
       }
       const memberSchema = z.object({
         email: z.string().email(),
-        password: z.string().min(8),
         fullName: z.string().min(1),
         role: z.enum(["owner", "admin", "member"]).default("member"),
       });
-      const { email, password, fullName, role } = memberSchema.parse(req.body);
+      const { email, fullName, role } = memberSchema.parse(req.body);
       const orgId = Number(req.params.id);
 
       // Seat limit check
@@ -4990,17 +4989,32 @@ If a field cannot be determined, use "N/A".`
         return res.status(400).json({ error: `Seat limit reached (${currentCount}/${org.seatLimit}). Upgrade the plan to add more members.` });
       }
 
-      // Create Supabase user
+      // Create Supabase user without a password — they set it via the emailed link
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data: userData, error: supabaseError } = await adminSupabase.auth.admin.createUser({
         email,
-        password,
         email_confirm: true,
         user_metadata: { role: "industry", fullName },
       });
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const userId = userData.user.id;
+
+      // Generate a password-recovery link the new member can use to set their password
+      let setPasswordLink: string | undefined;
+      try {
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
+          type: "recovery",
+          email,
+        });
+        if (linkError) {
+          console.warn("[email] Could not generate password-set link:", linkError.message);
+        } else {
+          setPasswordLink = linkData?.properties?.action_link ?? undefined;
+        }
+      } catch (linkErr) {
+        console.warn("[email] generateLink threw:", linkErr);
+      }
 
       // Add to org_members — store email/name for display in admin UI
       const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role });
@@ -5008,7 +5022,7 @@ If a field cannot be determined, use "N/A".`
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
 
-      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual").catch((err) =>
+      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Team invite email failed:", err)
       );
 
