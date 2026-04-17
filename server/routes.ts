@@ -5046,6 +5046,48 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Resend invite — generates a fresh recovery link and re-sends the team invite email
+  app.post("/api/admin/organizations/:id/members/:userId/resend-invite", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const orgId = Number(req.params.id);
+      const { userId } = req.params;
+
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Organization not found" });
+
+      const members = await storage.getOrgMembers(orgId);
+      const member = members.find((m) => m.userId === userId);
+      if (!member) return res.status(404).json({ error: "Member not found in this organization" });
+      if (!member.email) return res.status(400).json({ error: "Member has no email address on record" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
+        type: "recovery",
+        email: member.email,
+      });
+      if (linkError) return res.status(500).json({ error: linkError.message });
+      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+
+      await sendTeamInviteEmail(
+        member.email,
+        member.memberName ?? "",
+        org.name,
+        org.planTier ?? "individual",
+        setPasswordLink,
+      ).catch((err) => console.error("[email] Resend invite email failed:", err));
+
+      res.json({ ok: true, email: member.email });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Delete user account — deletes from Supabase Auth, org_members (all orgs), and industry_profiles
   app.delete("/api/admin/members/:userId", async (req, res) => {
     try {

@@ -31,7 +31,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Building2, Plus, Users, Pencil, Trash2, UserPlus, UserMinus, ChevronDown, ChevronRight } from "lucide-react";
+import { Building2, Plus, Users, Pencil, Trash2, UserPlus, UserMinus, ChevronDown, ChevronRight, Mail } from "lucide-react";
 
 interface Organization {
   id: number;
@@ -265,6 +265,15 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       if (expandedId) queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", expandedId] });
       setDeleteAccountUserId(null);
       toast({ title: "Account deleted" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const resendInviteMutation = useMutation({
+    mutationFn: ({ orgId, userId }: { orgId: number; userId: string }) =>
+      adminFetch(`/api/admin/organizations/${orgId}/members/${userId}/resend-invite`, { method: "POST" }, pw),
+    onSuccess: (data: { ok: boolean; email: string }) => {
+      toast({ title: `Invite resent to ${data.email}` });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -560,6 +569,17 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                   >
                                     {m.role}
                                   </span>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-muted-foreground hover:text-emerald-600"
+                                    title="Resend invite email"
+                                    disabled={resendInviteMutation.isPending && resendInviteMutation.variables?.userId === m.userId}
+                                    onClick={() => resendInviteMutation.mutate({ orgId: org.id, userId: m.userId })}
+                                    data-testid={`button-resend-invite-${m.userId}`}
+                                  >
+                                    <Mail className="h-3.5 w-3.5" />
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="ghost"
