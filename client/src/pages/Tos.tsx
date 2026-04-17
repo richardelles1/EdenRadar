@@ -41,7 +41,11 @@ export default function Tos() {
             <p className="text-sm text-muted-foreground mt-1">Effective date: {EFFECTIVE_DATE}</p>
           </div>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Please read these Terms of Service carefully before using any EdenRadar product or service. By creating an account or accessing the platform, you agree to be bound by these terms.
+            Please read these Terms of Service carefully before using any EdenRadar product or service. By creating an account or accessing the platform, you agree to be bound by these terms and our{" "}
+            <Link href="/privacy">
+              <span className="text-emerald-600 hover:text-emerald-500 underline cursor-pointer" data-testid="link-privacy-from-tos">Privacy Policy</span>
+            </Link>
+            .
           </p>
         </div>
 
@@ -116,7 +120,11 @@ export default function Tos() {
 
           <Section title="7. Data and Privacy">
             <p>
-              Our collection and use of personal data is governed by our Privacy Policy, which is incorporated into these Terms by reference. By using the Service, you consent to the data practices described in the Privacy Policy.
+              Our collection and use of personal data is governed by our{" "}
+              <Link href="/privacy">
+                <span className="text-emerald-600 hover:text-emerald-500 underline cursor-pointer" data-testid="link-privacy-section7">Privacy Policy</span>
+              </Link>
+              , which is incorporated into these Terms by reference. By using the Service, you consent to the data practices described in the Privacy Policy.
             </p>
             <p>
               We implement reasonable technical and organizational measures to protect your data. However, no method of transmission over the internet is completely secure, and we cannot guarantee absolute security.

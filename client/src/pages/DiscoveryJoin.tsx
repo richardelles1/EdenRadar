@@ -237,6 +237,17 @@ export default function DiscoveryJoin() {
                 >
                   Terms of Service
                 </a>
+                {" "}and{" "}
+                <a
+                  href="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-amber-500 hover:text-amber-600"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid="link-privacy-join"
+                >
+                  Privacy Policy
+                </a>
               </span>
             </label>
           )}

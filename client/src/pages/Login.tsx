@@ -279,6 +279,17 @@ export default function Login() {
                   >
                     Terms of Service
                   </a>
+                  {" "}and{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-emerald-600 hover:text-emerald-500"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid="link-privacy-signup"
+                  >
+                    Privacy Policy
+                  </a>
                 </span>
               </label>
             )}

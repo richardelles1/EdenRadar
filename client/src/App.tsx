@@ -39,6 +39,7 @@ import About from "@/pages/About";
 import WhatWeDo from "@/pages/WhatWeDo";
 import HowItWorks from "@/pages/HowItWorks";
 import Tos from "@/pages/Tos";
+import Privacy from "@/pages/Privacy";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
@@ -261,6 +262,7 @@ function Router() {
       <Route path="/what-we-do" component={WhatWeDo} />
       <Route path="/how-it-works" component={HowItWorks} />
       <Route path="/tos" component={Tos} />
+      <Route path="/privacy" component={Privacy} />
 
       <Route path="/discovery">
         <DiscoveryLayout requireAuth={false}>
