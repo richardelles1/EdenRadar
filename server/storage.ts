@@ -61,16 +61,16 @@ export interface IStorage {
   getSearchHistory(limit?: number): Promise<SearchHistory[]>;
   createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory>;
 
-  getSavedAssets(pipelineListId?: number | null): Promise<SavedAsset[]>;
+  getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]>;
   getSavedAsset(id: number): Promise<SavedAsset | undefined>;
-  createSavedAsset(asset: InsertSavedAsset): Promise<SavedAsset>;
+  createSavedAsset(asset: InsertSavedAsset, userId?: string): Promise<SavedAsset>;
   updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
   updateSavedAssetStatus(id: number, status: string | null): Promise<SavedAsset | undefined>;
   deleteSavedAsset(id: number): Promise<void>;
 
-  getPipelineLists(): Promise<PipelineList[]>;
+  getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
   getPipelineList(id: number): Promise<PipelineList | undefined>;
-  createPipelineList(data: InsertPipelineList): Promise<PipelineList>;
+  createPipelineList(data: InsertPipelineList, userId?: string): Promise<PipelineList>;
   updatePipelineList(id: number, name: string): Promise<PipelineList | undefined>;
   deletePipelineList(id: number): Promise<void>;
 
@@ -284,8 +284,9 @@ export interface IStorage {
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
-  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt">): Promise<IndustryProfileRow>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId">): Promise<IndustryProfileRow>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
+  setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void>;
 
   getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]>;
   getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
@@ -293,18 +294,19 @@ export interface IStorage {
   getAllInstitutionNames(): Promise<string[]>;
 
   // Organizations
-  listOrganizations(): Promise<Organization[]>;
+  getAllOrganizations(): Promise<Organization[]>;
   getOrganization(id: number): Promise<Organization | undefined>;
   createOrganization(data: InsertOrganization): Promise<Organization>;
   updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
   deleteOrganization(id: number): Promise<void>;
 
   // Org Members
-  listOrgMembers(orgId: number): Promise<OrgMember[]>;
+  getOrgMembers(orgId: number): Promise<OrgMember[]>;
+  getOrgMemberCount(orgId: number): Promise<number>;
   addOrgMember(data: InsertOrgMember): Promise<OrgMember>;
-  updateOrgMemberRole(id: number, role: string): Promise<OrgMember | undefined>;
-  removeOrgMember(id: number): Promise<void>;
-  getOrgByUserId(userId: string): Promise<Organization | undefined>;
+  removeOrgMember(orgId: number, userId: string): Promise<void>;
+  updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
+  getOrgForUser(userId: string): Promise<Organization | undefined>;
 }
 
 export type SubscriberMatchEntry = {
@@ -357,14 +359,13 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getSavedAssets(pipelineListId?: number | null): Promise<SavedAsset[]> {
-    if (pipelineListId === null) {
-      return db.select().from(savedAssets).where(isNull(savedAssets.pipelineListId)).orderBy(desc(savedAssets.savedAt));
-    }
-    if (pipelineListId !== undefined) {
-      return db.select().from(savedAssets).where(eq(savedAssets.pipelineListId, pipelineListId)).orderBy(desc(savedAssets.savedAt));
-    }
-    return db.select().from(savedAssets).orderBy(desc(savedAssets.savedAt));
+  async getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]> {
+    const conditions: SQL[] = [];
+    if (userId) conditions.push(eq(savedAssets.userId, userId));
+    if (pipelineListId === null) conditions.push(isNull(savedAssets.pipelineListId));
+    else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
+    const where = conditions.length > 0 ? and(...conditions) : undefined;
+    return db.select().from(savedAssets).where(where).orderBy(desc(savedAssets.savedAt));
   }
 
   async getSavedAsset(id: number): Promise<SavedAsset | undefined> {
@@ -372,8 +373,8 @@ export class DatabaseStorage implements IStorage {
     return asset;
   }
 
-  async createSavedAsset(asset: InsertSavedAsset): Promise<SavedAsset> {
-    const [row] = await db.insert(savedAssets).values(asset).returning();
+  async createSavedAsset(asset: InsertSavedAsset, userId?: string): Promise<SavedAsset> {
+    const [row] = await db.insert(savedAssets).values({ ...asset, ...(userId ? { userId } : {}) }).returning();
     return row;
   }
 
@@ -391,7 +392,13 @@ export class DatabaseStorage implements IStorage {
     await db.delete(savedAssets).where(eq(savedAssets.id, id));
   }
 
-  async getPipelineLists(): Promise<PipelineList[]> {
+  async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {
+    if (userId || orgId) {
+      const conditions: SQL[] = [];
+      if (userId) conditions.push(eq(pipelineLists.userId, userId));
+      if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
+      return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);
+    }
     return db.select().from(pipelineLists).orderBy(pipelineLists.createdAt);
   }
 
@@ -400,8 +407,8 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async createPipelineList(data: InsertPipelineList): Promise<PipelineList> {
-    const [row] = await db.insert(pipelineLists).values(data).returning();
+  async createPipelineList(data: InsertPipelineList, userId?: string): Promise<PipelineList> {
+    const [row] = await db.insert(pipelineLists).values({ ...data, ...(userId ? { userId } : {}) }).returning();
     return row;
   }
 
@@ -2360,7 +2367,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt">): Promise<IndustryProfileRow> {
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId">): Promise<IndustryProfileRow> {
     const [row] = await db
       .insert(industryProfiles)
       .values({ userId, ...data, updatedAt: new Date() })
@@ -2370,6 +2377,16 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  async setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void> {
+    await db
+      .insert(industryProfiles)
+      .values({ userId, orgId, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: industryProfiles.userId,
+        set: { orgId, updatedAt: new Date() },
+      });
   }
 
   async getAllIndustryProfiles(): Promise<IndustryProfileRow[]> {
@@ -2471,7 +2488,7 @@ export class DatabaseStorage implements IStorage {
 
   // ── Organizations ────────────────────────────────────────────────────────────
 
-  async listOrganizations(): Promise<Organization[]> {
+  async getAllOrganizations(): Promise<Organization[]> {
     return db.select().from(organizations).orderBy(organizations.name);
   }
 
@@ -2500,8 +2517,16 @@ export class DatabaseStorage implements IStorage {
 
   // ── Org Members ──────────────────────────────────────────────────────────────
 
-  async listOrgMembers(orgId: number): Promise<OrgMember[]> {
+  async getOrgMembers(orgId: number): Promise<OrgMember[]> {
     return db.select().from(orgMembers).where(eq(orgMembers.orgId, orgId)).orderBy(orgMembers.joinedAt);
+  }
+
+  async getOrgMemberCount(orgId: number): Promise<number> {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orgMembers)
+      .where(eq(orgMembers.orgId, orgId));
+    return count;
   }
 
   async addOrgMember(data: InsertOrgMember): Promise<OrgMember> {
@@ -2509,23 +2534,26 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateOrgMemberRole(id: number, role: string): Promise<OrgMember | undefined> {
-    const [row] = await db
+  async removeOrgMember(orgId: number, userId: string): Promise<void> {
+    await db.delete(orgMembers).where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
+    await this.setIndustryProfileOrg(userId, null);
+  }
+
+  async updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void> {
+    await db
       .update(orgMembers)
       .set({ role })
-      .where(eq(orgMembers.id, id))
-      .returning();
-    return row;
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
   }
 
-  async removeOrgMember(id: number): Promise<void> {
-    await db.delete(orgMembers).where(eq(orgMembers.id, id));
-  }
-
-  async getOrgByUserId(userId: string): Promise<Organization | undefined> {
-    const [member] = await db.select().from(orgMembers).where(eq(orgMembers.userId, userId)).limit(1);
-    if (!member) return undefined;
-    return this.getOrganization(member.orgId);
+  async getOrgForUser(userId: string): Promise<Organization | undefined> {
+    const [profile] = await db
+      .select({ orgId: industryProfiles.orgId })
+      .from(industryProfiles)
+      .where(eq(industryProfiles.userId, userId))
+      .limit(1);
+    if (!profile?.orgId) return undefined;
+    return this.getOrganization(profile.orgId);
   }
 }
 
