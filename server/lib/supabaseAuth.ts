@@ -6,6 +6,22 @@ const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || "";
 
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+/**
+ * Try to extract a verified userId from the Bearer token without blocking the request.
+ * Returns undefined if there is no token, or the token is invalid.
+ */
+export async function tryGetUserId(req: Request): Promise<string | undefined> {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return undefined;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return undefined;
+    return data.user.id;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function verifyResearcherAuth(
   req: Request,
   res: Response,

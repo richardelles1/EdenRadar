@@ -633,6 +633,8 @@ export const orgMembers = pgTable("org_members", {
   id: serial("id").primaryKey(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),
   userId: text("user_id").notNull(),
+  email: text("email"),
+  memberName: text("member_name"),
   role: text("role").notNull().default("member"), // owner | admin | member
   invitedBy: text("invited_by"),
   joinedAt: timestamp("joined_at").defaultNow().notNull(),

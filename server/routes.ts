@@ -29,7 +29,7 @@ import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
-import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth } from "./lib/supabaseAuth";
+import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
 
@@ -912,7 +912,8 @@ export async function registerRoutes(
         const parsed = parseInt(rawPl as string, 10);
         if (!isNaN(parsed)) pipelineListId = parsed;
       }
-      const assets = await storage.getSavedAssets(pipelineListId);
+      const userId = await tryGetUserId(req);
+      const assets = await storage.getSavedAssets(pipelineListId, userId);
       res.json({ assets });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch saved assets" });
@@ -922,6 +923,7 @@ export async function registerRoutes(
   app.post("/api/saved-assets", async (req, res) => {
     try {
       const body = saveAssetBodySchema.parse(req.body);
+      const userId = await tryGetUserId(req);
       const asset = await storage.createSavedAsset({
         ingestedAssetId: body.ingested_asset_id ?? null,
         pipelineListId: body.pipeline_list_id ?? null,
@@ -937,7 +939,7 @@ export async function registerRoutes(
         sourceName: body.source_name,
         sourceUrl: body.source_url,
         pmid: body.pmid,
-      });
+      }, userId);
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to save asset" });
@@ -1017,10 +1019,11 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pipelines", async (_req, res) => {
+  app.get("/api/pipelines", async (req, res) => {
     try {
-      const lists = await storage.getPipelineLists();
-      const all = await storage.getSavedAssets();
+      const userId = await tryGetUserId(req);
+      const lists = await storage.getPipelineLists(userId);
+      const all = await storage.getSavedAssets(undefined, userId);
       const counts: Record<number, number> = {};
       let uncategorised = 0;
       for (const a of all) {
@@ -1036,7 +1039,8 @@ export async function registerRoutes(
   app.post("/api/pipelines", async (req, res) => {
     try {
       const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
-      const list = await storage.createPipelineList({ name });
+      const userId = await tryGetUserId(req);
+      const list = await storage.createPipelineList({ name }, userId);
       res.status(201).json({ pipeline: { ...list, assetCount: 0 } });
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: err.message ?? "Invalid pipeline name" });
@@ -1076,6 +1080,7 @@ export async function registerRoutes(
       const pipeline = await storage.getPipelineList(pipelineId);
       if (!pipeline) return res.status(404).json({ error: "Pipeline not found" });
       const body = saveAssetBodySchema.parse({ ...req.body, pipeline_list_id: pipelineId });
+      const userId = await tryGetUserId(req);
       const asset = await storage.createSavedAsset({
         ingestedAssetId: body.ingested_asset_id ?? null,
         pipelineListId: pipelineId,
@@ -1091,7 +1096,7 @@ export async function registerRoutes(
         sourceName: body.source_name,
         sourceUrl: body.source_url ?? null,
         pmid: body.pmid ?? null,
-      });
+      }, userId);
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to add asset to pipeline" });
@@ -4975,8 +4980,8 @@ If a field cannot be determined, use "N/A".`
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const userId = userData.user.id;
 
-      // Add to org_members
-      const member = await storage.addOrgMember({ orgId, userId, role });
+      // Add to org_members — store email/name for display in admin UI
+      const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role });
 
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
@@ -5016,11 +5021,10 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // Industry-facing org context route
-  app.get("/api/industry/org", async (req, res) => {
+  // Industry-facing org context route — requires verified JWT via verifyAnyAuth
+  app.get("/api/industry/org", verifyAnyAuth, async (req, res) => {
     try {
-      const userId = req.headers["x-user-id"] as string | undefined;
-      if (!userId) return res.status(401).json({ error: "x-user-id header required" });
+      const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
       if (!org) return res.json(null);
       const members = await storage.getOrgMembers(org.id);

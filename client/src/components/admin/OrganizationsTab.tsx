@@ -52,6 +52,8 @@ interface OrgMember {
   id: number;
   orgId: number;
   userId: string;
+  email: string | null;
+  memberName: string | null;
   role: string;
   invitedBy: string | null;
   joinedAt: string;
@@ -333,11 +335,12 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       ) : (
         <div className="rounded-lg border border-border overflow-hidden">
           {/* Table header */}
-          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">
+          <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b border-border">
             <span>Organization</span>
             <span>Plan</span>
             <span>Seats</span>
             <span>Billing</span>
+            <span>Created</span>
             <span />
           </div>
 
@@ -348,7 +351,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
               <div key={org.id} className={isLast ? "" : "border-b border-border"} data-testid={`card-org-${org.id}`}>
                 {/* Row */}
                 <div
-                  className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-4 items-center px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+                  className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_auto] gap-4 items-center px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
                   onClick={() => setExpandedId(isExpanded ? null : org.id)}
                   data-testid={`row-org-${org.id}`}
                 >
@@ -381,6 +384,9 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                   </span>
                   <span className="text-sm text-muted-foreground">
                     {BILLING_LABELS[org.billingMethod] ?? org.billingMethod}
+                  </span>
+                  <span className="text-sm text-muted-foreground" data-testid={`text-org-created-${org.id}`}>
+                    {new Date(org.createdAt).toLocaleDateString()}
                   </span>
                   <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <Button
@@ -501,9 +507,20 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                   data-testid={`row-member-${m.userId}`}
                                 >
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-mono truncate" data-testid={`text-member-userId-${m.userId}`}>
-                                      {m.userId}
-                                    </p>
+                                    {m.memberName ? (
+                                      <p className="text-sm font-medium truncate" data-testid={`text-member-name-${m.userId}`}>
+                                        {m.memberName}
+                                      </p>
+                                    ) : null}
+                                    {m.email ? (
+                                      <p className="text-xs text-muted-foreground truncate" data-testid={`text-member-email-${m.userId}`}>
+                                        {m.email}
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs font-mono text-muted-foreground truncate" data-testid={`text-member-userId-${m.userId}`}>
+                                        {m.userId}
+                                      </p>
+                                    )}
                                     <p className="text-xs text-muted-foreground">
                                       Joined {new Date(m.joinedAt).toLocaleDateString()}
                                     </p>
