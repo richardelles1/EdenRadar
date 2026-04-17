@@ -839,26 +839,50 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       </Dialog>
 
       {/* Delete Org Confirm */}
-      <AlertDialog open={deleteOrgId !== null} onOpenChange={(o) => { if (!o) setDeleteOrgId(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Organization?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the organization and remove all member associations. Supabase accounts are not deleted. This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel data-testid="button-cancel-delete-org">Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => deleteOrgId !== null && deleteOrgMutation.mutate(deleteOrgId)}
-              data-testid="button-confirm-delete-org"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {(() => {
+        const orgToDelete = deleteOrgId !== null ? orgs.find((o) => o.id === deleteOrgId) : null;
+        const hasMembers = (orgToDelete?.memberCount ?? 0) > 0;
+        return (
+          <AlertDialog open={deleteOrgId !== null} onOpenChange={(o) => { if (!o) setDeleteOrgId(null); }}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  {hasMembers ? "Delete Organization with Active Members?" : "Delete Organization?"}
+                </AlertDialogTitle>
+                <AlertDialogDescription asChild>
+                  <div className="space-y-2 text-sm text-muted-foreground">
+                    {hasMembers ? (
+                      <>
+                        <p className="font-medium text-destructive">
+                          This organization has {orgToDelete?.memberCount} active member{orgToDelete?.memberCount === 1 ? "" : "s"}.
+                        </p>
+                        <p>
+                          Deleting will remove all member associations and shared pipeline lists. Member login accounts are not deleted -- you must delete those separately if needed. This cannot be undone.
+                        </p>
+                      </>
+                    ) : (
+                      <p>
+                        This will permanently delete the organization. Member login accounts are not affected. This cannot be undone.
+                      </p>
+                    )}
+                  </div>
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel data-testid="button-cancel-delete-org">Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                  disabled={deleteOrgMutation.isPending}
+                  onClick={() => deleteOrgId !== null && deleteOrgMutation.mutate(deleteOrgId)}
+                  data-testid="button-confirm-delete-org"
+                >
+                  {deleteOrgMutation.isPending ? "Deleting..." : hasMembers ? "Delete Org and Remove Members" : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        );
+      })()}
 
       {/* Remove Member Confirm */}
       <AlertDialog open={removeMemberKey !== null} onOpenChange={(o) => { if (!o) setRemoveMemberKey(null); }}>

@@ -6,8 +6,9 @@ import { Lock } from "lucide-react";
 const SITE_KEY = "eden-access";
 
 export function SiteGate({ children }: { children: React.ReactNode }) {
-  const isPitch = window.location.pathname === "/pitch";
-  const [unlocked, setUnlocked] = useState(() => isPitch || localStorage.getItem(SITE_KEY) === "true");
+  const PUBLIC_PATHS = ["/pitch", "/tos", "/privacy"];
+  const isPublic = PUBLIC_PATHS.includes(window.location.pathname);
+  const [unlocked, setUnlocked] = useState(() => isPublic || localStorage.getItem(SITE_KEY) === "true");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);
   const [shake, setShake] = useState(false);
