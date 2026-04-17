@@ -32,6 +32,7 @@ import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, 
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -5007,6 +5008,10 @@ If a field cannot be determined, use "N/A".`
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
 
+      sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual").catch((err) =>
+        console.error("[email] Team invite email failed:", err)
+      );
+
       res.json({ member, user: { id: userId, email: userData.user.email, fullName } });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
@@ -5035,9 +5040,21 @@ If a field cannot be determined, use "N/A".`
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
-      // Delete Supabase Auth user first — if this fails, nothing else is touched
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+
+      // Fetch email BEFORE deleting so we can send a confirmation after
+      let deletedEmail: string | undefined;
+      let deletedName: string | undefined;
+      try {
+        const { data: authUser } = await adminSupabase.auth.admin.getUserById(userId);
+        deletedEmail = authUser?.user?.email;
+        deletedName = (authUser?.user?.user_metadata?.fullName as string | undefined) ?? undefined;
+      } catch (lookupErr) {
+        console.warn("[delete-account] Could not look up user email before deletion:", lookupErr);
+      }
+
+      // Delete Supabase Auth user first — if this fails, nothing else is touched
       const { error: supabaseError } = await adminSupabase.auth.admin.deleteUser(userId);
       if (supabaseError) {
         console.error("[delete-account] Supabase delete error:", supabaseError.message);
@@ -5045,6 +5062,13 @@ If a field cannot be determined, use "N/A".`
       }
       // Auth account removed — now clean up DB records
       await storage.deleteUserAccount(userId);
+
+      if (deletedEmail) {
+        sendAccountDeletionEmail(deletedEmail, deletedName ?? "").catch((err) =>
+          console.error("[email] Account deletion email failed:", err)
+        );
+      }
+
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -6669,7 +6693,23 @@ If multiple assets appear, return each as a separate array item.`;
       if (!parsed.success) {
         return res.status(400).json({ error: "Invalid payload", details: parsed.error.flatten() });
       }
+      const isNewProfile = !(await storage.getIndustryProfileByUserId(userId));
       const profile = await storage.upsertIndustryProfile(userId, parsed.data);
+      if (isNewProfile && supabaseServiceRoleKey && supabaseUrl) {
+        (async () => {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+            const { data: authUser } = await adminSupabase.auth.admin.getUserById(userId);
+            const email = authUser?.user?.email;
+            if (email) {
+              await sendWelcomeEmail(email, profile.userName ?? "");
+            }
+          } catch (emailErr) {
+            console.error("[email] Welcome email failed:", emailErr);
+          }
+        })();
+      }
       return res.json({ profile });
     } catch (err: any) {
       console.error("[industry/profile PUT]", err);
