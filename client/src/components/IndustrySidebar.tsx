@@ -114,22 +114,30 @@ function NavButton({
     : location === href || location.startsWith(href + "/");
   const showDot = alertsBadge && totalAlerts > 0 && !isActive;
 
+  const orgAccent = "var(--org-accent, hsl(142 52% 36%))";
+
   return (
     <button
       onClick={() => navigate(href)}
       className={cn(
         "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-        isActive
-          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+        isActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
       )}
+      style={isActive ? {
+        backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
+        color: orgAccent,
+      } : {}}
       data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
     >
-      <div className="relative shrink-0">
-        <Icon className={cn("w-4 h-4", showDot && "text-emerald-500")} />
+      <div
+        className="relative shrink-0"
+        style={showDot ? { color: orgAccent } : {}}
+      >
+        <Icon className="w-4 h-4" />
         {showDot && (
           <span
-            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-500 border-2 border-background"
+            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-background"
+            style={{ backgroundColor: orgAccent }}
             data-testid="alerts-dot"
           />
         )}
@@ -146,7 +154,8 @@ function NavButton({
         <span>{label}</span>
         {showDot && (
           <span
-            className="text-[10px] font-semibold text-emerald-500 tabular-nums"
+            className="text-[10px] font-semibold tabular-nums"
+            style={{ color: orgAccent }}
             data-testid="alerts-count"
           >
             {totalAlerts}
@@ -332,33 +341,46 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0 overflow-x-hidden">
         <OrgIdentityBlock navigate={navigate} />
 
-        <button
-          onClick={() => navigate("/industry/profile")}
-          className={cn(
-            "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-            location === "/industry/profile"
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-          )}
-          data-testid="industry-sidebar-link-profile"
-        >
-          <User className="w-4 h-4 shrink-0" />
-          <AnimatedLabel>Profile</AnimatedLabel>
-        </button>
+        {(() => {
+          const orgAccent = "var(--org-accent, hsl(142 52% 36%))";
+          const profileActive = location === "/industry/profile";
+          const settingsActive = location === "/settings" || location === "/industry/settings";
+          return (
+            <>
+              <button
+                onClick={() => navigate("/industry/profile")}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
+                  profileActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+                style={profileActive ? {
+                  backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
+                  color: orgAccent,
+                } : {}}
+                data-testid="industry-sidebar-link-profile"
+              >
+                <User className="w-4 h-4 shrink-0" />
+                <AnimatedLabel>Profile</AnimatedLabel>
+              </button>
 
-        <button
-          onClick={() => navigate("/settings")}
-          className={cn(
-            "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-            location === "/settings" || location === "/industry/settings"
-              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-          )}
-          data-testid="industry-sidebar-link-settings"
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          <AnimatedLabel>Settings</AnimatedLabel>
-        </button>
+              <button
+                onClick={() => navigate("/settings")}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
+                  settingsActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
+                )}
+                style={settingsActive ? {
+                  backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
+                  color: orgAccent,
+                } : {}}
+                data-testid="industry-sidebar-link-settings"
+              >
+                <Settings className="w-4 h-4 shrink-0" />
+                <AnimatedLabel>Settings</AnimatedLabel>
+              </button>
+            </>
+          );
+        })()}
 
         <button
           onClick={toggleTheme}

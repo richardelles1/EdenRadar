@@ -453,16 +453,18 @@ export default function IndustrySettings() {
             {org && (
               <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-org-name">{org.name}</p>
             )}
-            {org && org.planTier !== "individual" && (
+            {org && org.planTier !== "individual" ? (
               <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-seat-count">
                 {org.seatCount} of {org.seatLimit} seat{org.seatLimit !== 1 ? "s" : ""} used
               </p>
-            )}
-            {org && (
-              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-billing-method">
-                {billingMethodLabel(org.billingMethod)}
+            ) : (
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-seat-count">
+                1 seat
               </p>
             )}
+            <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-billing-method">
+              {billingMethodLabel(org?.billingMethod ?? "stripe")}
+            </p>
           </div>
           <button
             className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors shrink-0"
