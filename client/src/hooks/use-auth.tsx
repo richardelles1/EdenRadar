@@ -17,6 +17,7 @@ interface AuthContextValue {
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
   updatePassword: (password: string) => Promise<{ error: string | null }>;
+  updateRole: (role: "industry" | "researcher" | "concept") => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -112,11 +113,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   }
 
+  async function updateRole(r: "industry" | "researcher" | "concept") {
+    const { error } = await supabase.auth.updateUser({ data: { role: r } });
+    return { error: error?.message ?? null };
+  }
+
   return (
     <AuthContext.Provider value={{
       user, session, loading, role,
       isPasswordRecovery, clearPasswordRecovery,
-      signIn, signUp, signInWithGoogle, signOut, sendPasswordReset, updatePassword,
+      signIn, signUp, signInWithGoogle, signOut, sendPasswordReset, updatePassword, updateRole,
     }}>
       {children}
     </AuthContext.Provider>

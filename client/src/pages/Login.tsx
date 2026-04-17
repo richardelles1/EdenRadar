@@ -30,11 +30,11 @@ function GoogleIcon() {
   );
 }
 
-type View = "auth" | "forgot" | "forgot-sent" | "set-password";
+type View = "auth" | "forgot" | "forgot-sent" | "set-password" | "pick-role";
 
 export default function Login() {
   const {
-    signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword,
+    signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword, updateRole,
     session, role, loading: authLoading,
     isPasswordRecovery, clearPasswordRecovery,
   } = useAuth();
@@ -61,6 +61,15 @@ export default function Login() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [setPasswordLoading, setSetPasswordLoading] = useState(false);
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null);
+
+  const [pickRoleLoading, setPickRoleLoading] = useState(false);
+  const [pickRoleError, setPickRoleError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && session && !role && !isPasswordRecovery && view === "auth") {
+      setView("pick-role");
+    }
+  }, [authLoading, session, role, isPasswordRecovery, view]);
 
   useEffect(() => {
     if (isPasswordRecovery && view !== "set-password") {
@@ -120,6 +129,18 @@ export default function Login() {
     } else {
       setTimeout(() => setGoogleLoading(false), 8000);
     }
+  }
+
+  async function handlePickRole(r: "industry" | "researcher" | "concept") {
+    setPickRoleLoading(true);
+    setPickRoleError(null);
+    const { error: err } = await updateRole(r);
+    setPickRoleLoading(false);
+    if (err) {
+      setPickRoleError(err);
+      return;
+    }
+    redirectByRole(r);
   }
 
   async function handleForgotSubmit(e: React.FormEvent) {
@@ -358,6 +379,49 @@ export default function Login() {
               <p className={`text-xs text-center ${mutedText}`}>
                 You'll be signed in automatically after setting your password.
               </p>
+            </div>
+          )}
+
+          {/* ── Role picker (Google OAuth new user) ── */}
+          {view === "pick-role" && (
+            <div className="space-y-6">
+              <div className="space-y-1">
+                <h1 className={`text-2xl font-semibold ${heading}`}>One more step</h1>
+                <p className={`text-sm ${sub}`}>
+                  How will you use EdenRadar? Choose the portal that best describes you.
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                {([
+                  { value: "industry"   as const, label: "Industry",   active: "border-emerald-500/55 bg-emerald-500/12 text-emerald-600 dark:text-emerald-400" },
+                  { value: "researcher" as const, label: "Researcher", active: "border-violet-500/55 bg-violet-500/12 text-violet-600 dark:text-violet-400"   },
+                  { value: "concept"    as const, label: "Concept",    active: "border-amber-500/55 bg-amber-500/12 text-amber-600 dark:text-amber-400"        },
+                ]).map(({ value, label, active }) => (
+                  <button
+                    key={value}
+                    type="button"
+                    disabled={pickRoleLoading}
+                    className={`p-2.5 rounded-lg border text-xs font-medium transition-all disabled:opacity-60 ${selectedRole === value ? active : roleOff}`}
+                    onClick={() => setSelectedRole(value)}
+                    data-testid={`pick-role-${value}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {pickRoleError && (
+                <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-pick-role-error">{pickRoleError}</p>
+              )}
+              <button
+                type="button"
+                disabled={pickRoleLoading}
+                onClick={() => handlePickRole(selectedRole)}
+                data-testid="button-confirm-role"
+                className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+              >
+                {pickRoleLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                Continue to EdenRadar
+              </button>
             </div>
           )}
 
