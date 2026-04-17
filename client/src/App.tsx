@@ -222,6 +222,8 @@ function Router() {
           </ScoutGate>
         </DashboardLayout>
       </Route>
+      {/* Settings is intentionally exempt from ScoutGate — users need it to connect
+          their org context (the mechanism by which they gain paid-plan access). */}
       <Route path="/industry/settings" component={SettingsRoute} />
       <Route path="/settings" component={SettingsRoute} />
       <Route path="/industry/eden">
