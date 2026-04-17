@@ -99,7 +99,7 @@ export default function Tos() {
 
           <Section title="5. Subscriptions and Payments">
             <p>
-              EdenScout is a paid service available on the following plans: Individual ($1,999/month), Team-5 ($4,999/month), Team-10 ($8,999/month), and Enterprise (custom pricing). Free tiers (EdenDiscovery, EdenLab) are provided at no charge and may be modified or discontinued at our discretion.
+              EdenScout is a paid service available on the following plans: Individual ($1,999/month), Team-5 ($8,999/month), Team-10 ($16,999/month), and Enterprise (custom pricing). Free tiers (EdenDiscovery, EdenLab) are provided at no charge and may be modified or discontinued at our discretion.
             </p>
             <p>
               Paid plans are billed in advance on a monthly or annual basis. All fees are non-refundable except as required by law or as expressly stated in your order. We may adjust pricing with at least 30 days' written notice to active subscribers.

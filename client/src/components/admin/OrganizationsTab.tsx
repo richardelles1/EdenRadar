@@ -62,8 +62,8 @@ interface OrgMember {
 
 const PLAN_LABELS: Record<string, string> = {
   individual: "Individual  $1,999/mo",
-  team5: "Team 5-Seat  $4,999/mo",
-  team10: "Team 10-Seat  $8,999/mo",
+  team5: "Team 5-Seat  $8,999/mo",
+  team10: "Team 10-Seat  $16,999/mo",
   enterprise: "Enterprise  $50,000+/mo",
 };
 
@@ -632,8 +632,8 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="individual">Individual  $1,999/mo</SelectItem>
-                    <SelectItem value="team5">Team 5-Seat  $4,999/mo</SelectItem>
-                    <SelectItem value="team10">Team 10-Seat  $8,999/mo</SelectItem>
+                    <SelectItem value="team5">Team 5-Seat  $8,999/mo</SelectItem>
+                    <SelectItem value="team10">Team 10-Seat  $16,999/mo</SelectItem>
                     <SelectItem value="enterprise">Enterprise  $50,000+/mo</SelectItem>
                   </SelectContent>
                 </Select>
