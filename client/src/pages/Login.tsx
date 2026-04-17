@@ -39,6 +39,7 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">("industry");
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -174,7 +175,7 @@ export default function Login() {
                 key={m}
                 type="button"
                 className={`flex-1 py-2 text-sm font-medium transition-colors ${mode === m ? "bg-emerald-600 text-white" : `bg-transparent ${tabOff}`}`}
-                onClick={() => { setMode(m); setError(null); }}
+                onClick={() => { setMode(m); setError(null); setTosAccepted(false); }}
                 data-testid={`tab-${m}`}
               >
                 {m === "signin" ? "Sign In" : "Sign Up"}
@@ -255,6 +256,33 @@ export default function Login() {
               </div>
             )}
 
+            {/* TOS checkbox (signup only) */}
+            {mode === "signup" && (
+              <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-tos-accept">
+                <input
+                  type="checkbox"
+                  checked={tosAccepted}
+                  onChange={(e) => setTosAccepted(e.target.checked)}
+                  required
+                  data-testid="checkbox-tos"
+                  className="mt-0.5 h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
+                />
+                <span className={`text-xs leading-relaxed ${isDark ? "text-white/50" : "text-gray-500"}`}>
+                  I agree to the{" "}
+                  <a
+                    href="/tos"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-emerald-600 hover:text-emerald-500"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid="link-tos-signup"
+                  >
+                    Terms of Service
+                  </a>
+                </span>
+              </label>
+            )}
+
             {/* Error */}
             {error && (
               <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-auth-error">{error}</p>
@@ -263,7 +291,7 @@ export default function Login() {
             {/* Submit */}
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || (mode === "signup" && !tosAccepted)}
               data-testid="button-auth-submit"
               className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
             >

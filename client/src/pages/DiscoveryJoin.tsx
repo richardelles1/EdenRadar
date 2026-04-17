@@ -35,6 +35,7 @@ export default function DiscoveryJoin() {
   const [goal, setGoal] = useState("");
   const [seeking, setSeeking] = useState("");
 
+  const [tosAccepted, setTosAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -47,7 +48,7 @@ export default function DiscoveryJoin() {
   if (!authLoading && session && role === "concept") return null;
 
   function signupValid() {
-    return email && password && fullName;
+    return email && password && fullName && tosAccepted;
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -106,7 +107,7 @@ export default function DiscoveryJoin() {
           <button
             type="button"
             className={`flex-1 py-2 text-sm font-medium transition-colors ${mode === "signup" ? "bg-amber-500 text-white" : "bg-transparent text-muted-foreground hover:text-foreground"}`}
-            onClick={() => { setMode("signup"); setError(null); }}
+            onClick={() => { setMode("signup"); setError(null); setTosAccepted(false); }}
             data-testid="tab-join-signup"
           >
             Sign Up
@@ -213,6 +214,32 @@ export default function DiscoveryJoin() {
               data-testid="input-join-password"
             />
           </div>
+
+          {mode === "signup" && (
+            <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-tos-accept-join">
+              <input
+                type="checkbox"
+                checked={tosAccepted}
+                onChange={(e) => setTosAccepted(e.target.checked)}
+                required
+                data-testid="checkbox-tos-join"
+                className="mt-0.5 h-4 w-4 cursor-pointer accent-amber-500 shrink-0"
+              />
+              <span className="text-xs text-muted-foreground leading-relaxed">
+                I agree to the{" "}
+                <a
+                  href="/tos"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline text-amber-500 hover:text-amber-600"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid="link-tos-join"
+                >
+                  Terms of Service
+                </a>
+              </span>
+            </label>
+          )}
 
           {error && (
             <p className="text-sm text-red-500" data-testid="text-join-error">{error}</p>

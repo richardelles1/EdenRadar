@@ -184,6 +184,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
   // Delete confirm
   const [deleteOrgId, setDeleteOrgId] = useState<number | null>(null);
   const [removeMemberKey, setRemoveMemberKey] = useState<{ orgId: number; userId: string } | null>(null);
+  const [deleteAccountUserId, setDeleteAccountUserId] = useState<string | null>(null);
 
   const createOrgMutation = useMutation({
     mutationFn: (data: Record<string, any>) =>
@@ -254,6 +255,18 @@ export function OrganizationsTab({ pw }: { pw: string }) {
       if (expandedId) queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", expandedId] });
       setRemoveMemberKey(null);
       toast({ title: "Member removed" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: (userId: string) =>
+      adminFetch(`/api/admin/members/${userId}`, { method: "DELETE" }, pw),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations"] });
+      if (expandedId) queryClient.invalidateQueries({ queryKey: ["/api/admin/organizations", expandedId] });
+      setDeleteAccountUserId(null);
+      toast({ title: "Account deleted" });
     },
     onError: (err: any) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -553,10 +566,21 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                     size="sm"
                                     variant="ghost"
                                     className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                                    title="Remove from org"
                                     onClick={() => setRemoveMemberKey({ orgId: org.id, userId: m.userId })}
                                     data-testid={`button-remove-member-${m.userId}`}
                                   >
                                     <UserMinus className="h-3.5 w-3.5" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    className="h-7 w-7 p-0 text-destructive/60 hover:text-destructive hover:bg-destructive/10"
+                                    title="Delete account permanently"
+                                    onClick={() => setDeleteAccountUserId(m.userId)}
+                                    data-testid={`button-delete-account-${m.userId}`}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
                                   </Button>
                                 </div>
                               ))}
@@ -842,7 +866,7 @@ export function OrganizationsTab({ pw }: { pw: string }) {
           <AlertDialogHeader>
             <AlertDialogTitle>Remove Member?</AlertDialogTitle>
             <AlertDialogDescription>
-              This member will lose access to the organization's shared resources. Their Supabase account is not deleted.
+              This member will lose access to the organization's shared resources. Their login account is not deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -853,6 +877,29 @@ export function OrganizationsTab({ pw }: { pw: string }) {
               data-testid="button-confirm-remove-member"
             >
               Remove
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Account Confirm */}
+      <AlertDialog open={deleteAccountUserId !== null} onOpenChange={(o) => { if (!o) setDeleteAccountUserId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Account Permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the user's login account and remove them from all organizations. All their pipeline data will remain but will no longer be attributed to a user. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-delete-account">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteAccountMutation.isPending}
+              onClick={() => deleteAccountUserId && deleteAccountMutation.mutate(deleteAccountUserId)}
+              data-testid="button-confirm-delete-account"
+            >
+              {deleteAccountMutation.isPending ? "Deleting..." : "Delete Account"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

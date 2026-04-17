@@ -38,6 +38,7 @@ import PitchDeck from "@/pages/PitchDeck";
 import About from "@/pages/About";
 import WhatWeDo from "@/pages/WhatWeDo";
 import HowItWorks from "@/pages/HowItWorks";
+import Tos from "@/pages/Tos";
 import IndustryConcepts from "@/pages/IndustryConcepts";
 import IndustryProjects from "@/pages/IndustryProjects";
 import IndustryProfile from "@/pages/IndustryProfile";
@@ -259,6 +260,7 @@ function Router() {
       <Route path="/about" component={About} />
       <Route path="/what-we-do" component={WhatWeDo} />
       <Route path="/how-it-works" component={HowItWorks} />
+      <Route path="/tos" component={Tos} />
 
       <Route path="/discovery">
         <DiscoveryLayout requireAuth={false}>

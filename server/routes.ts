@@ -5027,6 +5027,31 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Delete user account — deletes from Supabase Auth, org_members (all orgs), and industry_profiles
+  app.delete("/api/admin/members/:userId", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const { userId } = req.params;
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      // Remove from DB first (org_members cascade, industry_profiles delete)
+      await storage.deleteUserAccount(userId);
+      // Delete Supabase Auth user
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { error: supabaseError } = await adminSupabase.auth.admin.deleteUser(userId);
+      if (supabaseError) {
+        console.error("[delete-account] Supabase delete error:", supabaseError.message);
+        // DB records already removed; surface a warning but return success
+        return res.json({ ok: true, warning: `Supabase user deletion failed: ${supabaseError.message}` });
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Change member role
   app.patch("/api/admin/organizations/:id/members/:userId/role", async (req, res) => {
     try {

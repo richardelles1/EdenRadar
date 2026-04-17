@@ -309,6 +309,7 @@ export interface IStorage {
   getOrgMemberCount(orgId: number): Promise<number>;
   addOrgMember(data: InsertOrgMember): Promise<OrgMember>;
   removeOrgMember(orgId: number, userId: string): Promise<void>;
+  deleteUserAccount(userId: string): Promise<void>;
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
 }
@@ -2593,6 +2594,11 @@ export class DatabaseStorage implements IStorage {
   async removeOrgMember(orgId: number, userId: string): Promise<void> {
     await db.delete(orgMembers).where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
     await this.setIndustryProfileOrg(userId, null);
+  }
+
+  async deleteUserAccount(userId: string): Promise<void> {
+    await db.delete(orgMembers).where(eq(orgMembers.userId, userId));
+    await db.delete(industryProfiles).where(eq(industryProfiles.userId, userId));
   }
 
   async updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void> {
