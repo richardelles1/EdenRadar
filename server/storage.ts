@@ -239,8 +239,8 @@ export interface IStorage {
   createEdenMessageFeedback(sessionId: string, messageIndex: number, sentiment: string): Promise<void>;
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
 
-  createUserAlert(data: InsertUserAlert): Promise<UserAlert>;
-  listUserAlerts(): Promise<UserAlert[]>;
+  createUserAlert(data: InsertUserAlert, userId?: string): Promise<UserAlert>;
+  listUserAlerts(userId?: string): Promise<UserAlert[]>;
   deleteUserAlert(id: number): Promise<void>;
 
   getManualInstitutions(): Promise<ManualInstitution[]>;
@@ -2131,12 +2131,17 @@ export class DatabaseStorage implements IStorage {
       .limit(limit);
   }
 
-  async createUserAlert(data: InsertUserAlert): Promise<UserAlert> {
-    const [row] = await db.insert(userAlerts).values(data).returning();
+  async createUserAlert(data: InsertUserAlert, userId?: string): Promise<UserAlert> {
+    const values: any = { ...data };
+    if (userId) values.userId = userId;
+    const [row] = await db.insert(userAlerts).values(values).returning();
     return row;
   }
 
-  async listUserAlerts(): Promise<UserAlert[]> {
+  async listUserAlerts(userId?: string): Promise<UserAlert[]> {
+    if (userId) {
+      return db.select().from(userAlerts).where(eq(userAlerts.userId, userId)).orderBy(desc(userAlerts.createdAt));
+    }
     return db.select().from(userAlerts).orderBy(desc(userAlerts.createdAt));
   }
 

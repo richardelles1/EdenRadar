@@ -39,7 +39,7 @@ export const industryProfiles = pgTable("industry_profiles", {
   onboardingDone: boolean("onboarding_done").notNull().default(false),
   notificationPrefs: jsonb("notification_prefs").$type<{ frequency: string }>().default({ frequency: "daily" }),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-  orgId: integer("org_id"),
+  orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
 });
 
 export type IndustryProfileRow = typeof industryProfiles.$inferSelect;
@@ -65,7 +65,7 @@ export const pipelineLists = pgTable("pipeline_lists", {
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   userId: text("user_id"),
-  orgId: integer("org_id"),
+  orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }),
 });
 
 export const insertPipelineListSchema = createInsertSchema(pipelineLists).omit({

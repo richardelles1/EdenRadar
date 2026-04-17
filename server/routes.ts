@@ -1022,7 +1022,10 @@ export async function registerRoutes(
   app.get("/api/pipelines", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
-      const lists = await storage.getPipelineLists(userId);
+      // Resolve orgId so org-shared pipeline lists are included alongside personal ones
+      const userOrg = userId ? await storage.getOrgForUser(userId) : null;
+      const orgId = userOrg?.id;
+      const lists = await storage.getPipelineLists(userId, orgId);
       const all = await storage.getSavedAssets(undefined, userId);
       const counts: Record<number, number> = {};
       let uncategorised = 0;
@@ -5493,9 +5496,10 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  app.get("/api/alerts", async (_req, res) => {
+  app.get("/api/alerts", async (req, res) => {
     try {
-      const alerts = await storage.listUserAlerts();
+      const userId = await tryGetUserId(req);
+      const alerts = await storage.listUserAlerts(userId);
       res.json(alerts);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -5508,13 +5512,14 @@ If a field cannot be determined, use "N/A".`
       if (!query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
+      const userId = await tryGetUserId(req);
       const alert = await storage.createUserAlert({
         name: name ?? null,
         query: query ?? null,
         modalities: modalities ?? null,
         stages: stages ?? null,
         institutions: institutions ?? null,
-      });
+      }, userId);
       res.status(201).json(alert);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
