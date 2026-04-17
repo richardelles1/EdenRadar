@@ -33,13 +33,17 @@ function GoogleIcon() {
 type View = "auth" | "forgot" | "forgot-sent" | "set-password";
 
 export default function Login() {
-  const { signIn, signUp, signInWithGoogle, sendPasswordReset, session, role, loading: authLoading } = useAuth();
+  const {
+    signIn, signUp, signInWithGoogle, sendPasswordReset,
+    session, role, loading: authLoading,
+    isPasswordRecovery, clearPasswordRecovery,
+  } = useAuth();
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [, navigate] = useLocation();
   const initialMode = new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "signin";
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
-  const [view, setView] = useState<View>("auth");
+  const [view, setView] = useState<View>(() => isPasswordRecovery ? "set-password" : "auth");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,28 +63,25 @@ export default function Login() {
   const [setPasswordError, setSetPasswordError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && session && role && view === "auth") {
+    if (isPasswordRecovery && view !== "set-password") {
+      setView("set-password");
+      setSetPasswordError(null);
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+  }, [isPasswordRecovery, view]);
+
+  useEffect(() => {
+    if (!authLoading && session && role && !isPasswordRecovery && view === "auth") {
       const dest =
         role === "industry" ? "/industry/dashboard" :
         role === "researcher" ? "/research" :
         "/discovery";
       navigate(dest, { replace: true });
     }
-  }, [authLoading, session, role, navigate, view]);
+  }, [authLoading, session, role, isPasswordRecovery, navigate, view]);
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
-      if (event === "PASSWORD_RECOVERY") {
-        setView("set-password");
-        setSetPasswordError(null);
-        setNewPassword("");
-        setConfirmPassword("");
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (!authLoading && session && role && view === "auth") return null;
+  if (!authLoading && session && role && !isPasswordRecovery && view === "auth") return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
     navigate(
@@ -152,6 +153,7 @@ export default function Login() {
       setSetPasswordError(err.message);
       return;
     }
+    clearPasswordRecovery();
     const { data } = await supabase.auth.getUser();
     const r = data.user?.user_metadata?.role;
     if (r === "industry" || r === "researcher" || r === "concept") {

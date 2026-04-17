@@ -9,6 +9,8 @@ interface AuthContextValue {
   session: Session | null;
   loading: boolean;
   role: UserRole;
+  isPasswordRecovery: boolean;
+  clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
@@ -18,10 +20,21 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+function isRecoveryUrl(): boolean {
+  try {
+    const hash = window.location.hash.slice(1);
+    const params = new URLSearchParams(hash);
+    return params.get("type") === "recovery";
+  } catch {
+    return false;
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPasswordRecovery, setIsPasswordRecovery] = useState<boolean>(isRecoveryUrl);
 
   useEffect(() => {
     let isMounted = true;
@@ -33,7 +46,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "PASSWORD_RECOVERY") {
+        setIsPasswordRecovery(true);
+      }
       setSession(s);
       setUser(s?.user ?? null);
     });
@@ -45,6 +61,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const role: UserRole = (user?.user_metadata?.role as UserRole) ?? undefined;
+
+  function clearPasswordRecovery() {
+    setIsPasswordRecovery(false);
+    const url = new URL(window.location.href);
+    if (url.hash) {
+      window.history.replaceState(null, "", url.pathname + url.search);
+    }
+  }
 
   async function signIn(email: string, password: string) {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -83,7 +107,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, role, signIn, signUp, signInWithGoogle, signOut, sendPasswordReset }}>
+    <AuthContext.Provider value={{
+      user, session, loading, role,
+      isPasswordRecovery, clearPasswordRecovery,
+      signIn, signUp, signInWithGoogle, signOut, sendPasswordReset,
+    }}>
       {children}
     </AuthContext.Provider>
   );
