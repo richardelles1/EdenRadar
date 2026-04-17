@@ -5008,7 +5008,7 @@ If a field cannot be determined, use "N/A".`
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
 
-      sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual").catch((err) =>
+      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual").catch((err) =>
         console.error("[email] Team invite email failed:", err)
       );
 
@@ -5064,7 +5064,7 @@ If a field cannot be determined, use "N/A".`
       await storage.deleteUserAccount(userId);
 
       if (deletedEmail) {
-        sendAccountDeletionEmail(deletedEmail, deletedName ?? "").catch((err) =>
+        await sendAccountDeletionEmail(deletedEmail, deletedName ?? "").catch((err) =>
           console.error("[email] Account deletion email failed:", err)
         );
       }
