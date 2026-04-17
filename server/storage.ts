@@ -62,6 +62,7 @@ export interface IStorage {
   createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory>;
 
   getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]>;
+  getSavedAssetsForTeam(orgId: number): Promise<Array<SavedAsset & { saverName: string | null }>>;
   getSavedAsset(id: number): Promise<SavedAsset | undefined>;
   createSavedAsset(asset: InsertSavedAsset, userId?: string): Promise<SavedAsset>;
   updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
@@ -367,6 +368,25 @@ export class DatabaseStorage implements IStorage {
     else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
     return db.select().from(savedAssets).where(where).orderBy(desc(savedAssets.savedAt));
+  }
+
+  async getSavedAssetsForTeam(orgId: number): Promise<Array<SavedAsset & { saverName: string | null }>> {
+    const members = await db
+      .select({ userId: orgMembers.userId, memberName: orgMembers.memberName })
+      .from(orgMembers)
+      .where(eq(orgMembers.orgId, orgId));
+    if (members.length === 0) return [];
+    const memberUserIds = members.map((m) => m.userId);
+    const nameMap = new Map(members.map((m) => [m.userId, m.memberName ?? null]));
+    const assets = await db
+      .select()
+      .from(savedAssets)
+      .where(inArray(savedAssets.userId, memberUserIds))
+      .orderBy(desc(savedAssets.savedAt));
+    return assets.map((a) => ({
+      ...a,
+      saverName: a.userId ? (nameMap.get(a.userId) ?? null) : null,
+    }));
   }
 
   async getSavedAsset(id: number): Promise<SavedAsset | undefined> {

@@ -905,6 +905,19 @@ export async function registerRoutes(
 
   app.get("/api/saved-assets", async (req, res) => {
     try {
+      const scope = req.query.scope as string | undefined;
+      const userId = await tryGetUserId(req);
+
+      if (scope === "team") {
+        if (!userId) return res.status(401).json({ error: "Authentication required" });
+        const userOrg = await storage.getOrgForUser(userId);
+        if (!userOrg || userOrg.planTier === "individual") {
+          return res.status(403).json({ error: "Team scope requires a team plan" });
+        }
+        const assets = await storage.getSavedAssetsForTeam(userOrg.id);
+        return res.json({ assets });
+      }
+
       const rawPl = req.query.pipelineListId;
       let pipelineListId: number | null | undefined = undefined;
       if (rawPl === "null") pipelineListId = null;
@@ -912,7 +925,6 @@ export async function registerRoutes(
         const parsed = parseInt(rawPl as string, 10);
         if (!isNaN(parsed)) pipelineListId = parsed;
       }
-      const userId = await tryGetUserId(req);
       const assets = await storage.getSavedAssets(pipelineListId, userId);
       res.json({ assets });
     } catch (err: any) {

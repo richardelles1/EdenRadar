@@ -25,6 +25,7 @@ import {
   Copy,
   Loader2,
   Printer,
+  Users,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -45,8 +46,10 @@ type PipelinesResponse = {
   uncategorisedCount: number;
 };
 
+type TeamSavedAsset = SavedAsset & { saverName?: string | null };
+
 type SavedAssetsResponse = {
-  assets: SavedAsset[];
+  assets: TeamSavedAsset[];
 };
 
 const MODALITY_COLORS: Record<string, string> = {
@@ -67,11 +70,19 @@ function getBadgeClass(value: string) {
   return MODALITY_COLORS[value.toLowerCase().trim()] ?? "bg-muted text-muted-foreground border-border";
 }
 
-function AssetCard({ asset, onDelete, onMove, pipelines }: {
-  asset: SavedAsset;
+function getInitials(name: string | null | undefined): string {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function AssetCard({ asset, onDelete, onMove, pipelines, readOnly }: {
+  asset: TeamSavedAsset;
   onDelete: (id: number) => void;
   onMove: (id: number, pipelineListId: number | null) => void;
   pipelines: PipelineWithCount[];
+  readOnly?: boolean;
 }) {
   return (
     <div
@@ -85,14 +96,30 @@ function AssetCard({ asset, onDelete, onMove, pipelines }: {
             {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
           </span>
         </div>
-        <button
-          onClick={() => onDelete(asset.id)}
-          className="shrink-0 w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
-          data-testid={`button-delete-asset-${asset.id}`}
-          title="Remove asset"
-        >
-          <Trash2 className="w-3 h-3" />
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          {asset.saverName !== undefined && (
+            <span
+              className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 border border-border rounded-full px-1.5 py-0.5 leading-none"
+              title={asset.saverName ?? undefined}
+              data-testid={`text-saver-${asset.id}`}
+            >
+              <span className="w-3.5 h-3.5 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                {getInitials(asset.saverName)}
+              </span>
+              <span className="truncate max-w-[80px]">{asset.saverName ?? "Unknown"}</span>
+            </span>
+          )}
+          {!readOnly && (
+            <button
+              onClick={() => onDelete(asset.id)}
+              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
+              data-testid={`button-delete-asset-${asset.id}`}
+              title="Remove asset"
+            >
+              <Trash2 className="w-3 h-3" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-1">
@@ -136,7 +163,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines }: {
               View
             </a>
           )}
-          {pipelines.length > 0 && (
+          {pipelines.length > 0 && !readOnly && (
             <select
               value={asset.pipelineListId ?? "null"}
               onChange={(e) => {
@@ -442,21 +469,31 @@ export default function Assets() {
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
+  const [teamScope, setTeamScope] = useState(false);
+  const { data: org } = useOrg();
+  const hasTeamOrg = !!(org && org.planTier !== "individual");
 
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
     staleTime: 30000,
   });
 
-  const assetsQueryKey = selectedPipeline === "all"
-    ? ["/api/saved-assets"]
-    : selectedPipeline === null
-      ? ["/api/saved-assets", "pipeline", null]
-      : ["/api/saved-assets", "pipeline", selectedPipeline];
+  const assetsQueryKey = teamScope
+    ? ["/api/saved-assets", "scope", "team"]
+    : selectedPipeline === "all"
+      ? ["/api/saved-assets"]
+      : selectedPipeline === null
+        ? ["/api/saved-assets", "pipeline", null]
+        : ["/api/saved-assets", "pipeline", selectedPipeline];
 
   const { data, isLoading: assetsLoading } = useQuery<SavedAssetsResponse>({
     queryKey: assetsQueryKey,
     queryFn: async () => {
+      if (teamScope) {
+        const res = await fetch("/api/saved-assets?scope=team");
+        if (!res.ok) throw new Error("Failed to load team assets");
+        return res.json();
+      }
       const url = selectedPipeline === "all"
         ? "/api/saved-assets"
         : selectedPipeline === null
@@ -605,40 +642,63 @@ export default function Assets() {
                 </span>
               </h1>
               <p className="text-sm text-muted-foreground mt-1">
-                {totalAssets > 0
-                  ? `${totalAssets} asset${totalAssets !== 1 ? "s" : ""} across ${pipelines.length} named pipeline${pipelines.length !== 1 ? "s" : ""}`
-                  : "Save assets from Scout to build your pipelines"}
+                {teamScope
+                  ? `All assets saved by your team`
+                  : totalAssets > 0
+                    ? `${totalAssets} asset${totalAssets !== 1 ? "s" : ""} across ${pipelines.length} named pipeline${pipelines.length !== 1 ? "s" : ""}`
+                    : "Save assets from Scout to build your pipelines"}
               </p>
             </div>
-            {displayedAssets.length > 0 && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8 text-xs border-card-border"
-                  onClick={() => handleExportJson(displayedAssets)}
-                  data-testid="button-export-json"
-                >
-                  <Download className="w-3 h-3" />
-                  JSON
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 h-8 text-xs border-card-border"
-                  onClick={() => handleExportCsv(displayedAssets)}
-                  data-testid="button-export-csv"
-                >
-                  <Download className="w-3 h-3" />
-                  CSV
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {hasTeamOrg && (
+                <div className="flex items-center rounded-md border border-border overflow-hidden text-xs" data-testid="toggle-team-scope">
+                  <button
+                    onClick={() => setTeamScope(false)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${!teamScope ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+                    data-testid="button-scope-personal"
+                  >
+                    My Pipelines
+                  </button>
+                  <button
+                    onClick={() => setTeamScope(true)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 border-l border-border transition-colors ${teamScope ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
+                    data-testid="button-scope-team"
+                  >
+                    <Users className="w-3 h-3" />
+                    Team View
+                  </button>
+                </div>
+              )}
+              {displayedAssets.length > 0 && !teamScope && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-8 text-xs border-card-border"
+                    onClick={() => handleExportJson(displayedAssets)}
+                    data-testid="button-export-json"
+                  >
+                    <Download className="w-3 h-3" />
+                    JSON
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5 h-8 text-xs border-card-border"
+                    onClick={() => handleExportCsv(displayedAssets)}
+                    data-testid="button-export-csv"
+                  >
+                    <Download className="w-3 h-3" />
+                    CSV
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {totalAssets === 0 && !isLoading ? (
+      {totalAssets === 0 && !isLoading && !teamScope ? (
         <div className="flex-1 flex flex-col items-center justify-center py-24 px-6 text-center gap-5">
           <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
             <Beaker className="w-8 h-8 text-primary" />
@@ -658,54 +718,66 @@ export default function Assets() {
         </div>
       ) : (
         <div className="flex-1 flex gap-0">
-          <div className="hidden md:block w-64 shrink-0 border-r border-border p-4">
-            <PipelineSidebar
-              pipelines={pipelines}
-              uncategorisedCount={uncategorisedCount}
-              selectedId={selectedPipeline}
-              onSelect={setSelectedPipeline}
-              onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
-              onBrief={handleBrief}
-              briefLoadingId={briefLoading}
-              isLoading={pipelinesLoading}
-            />
-          </div>
+          {!teamScope && (
+            <div className="hidden md:block w-64 shrink-0 border-r border-border p-4">
+              <PipelineSidebar
+                pipelines={pipelines}
+                uncategorisedCount={uncategorisedCount}
+                selectedId={selectedPipeline}
+                onSelect={setSelectedPipeline}
+                onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
+                onBrief={handleBrief}
+                briefLoadingId={briefLoading}
+                isLoading={pipelinesLoading}
+              />
+            </div>
+          )}
 
           <div className="flex-1 min-w-0">
             <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-6">
               <div className="flex items-center justify-between mb-5">
                 <div>
                   <div className="flex items-center gap-2">
-                    <h2 className="text-base font-semibold text-foreground">{selectedPipelineName}</h2>
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <button
-                          className="md:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 transition-colors"
-                          data-testid="button-mobile-pipeline-menu"
-                        >
-                          <Layers className="w-3 h-3" />
-                          <ChevronDown className="w-3 h-3" />
-                        </button>
-                      </SheetTrigger>
-                      <SheetContent side="left" className="w-72 p-4">
-                        <SheetHeader className="mb-4">
-                          <SheetTitle>Pipelines</SheetTitle>
-                        </SheetHeader>
-                        <PipelineSidebar
-                          pipelines={pipelines}
-                          uncategorisedCount={uncategorisedCount}
-                          selectedId={selectedPipeline}
-                          onSelect={setSelectedPipeline}
-                          onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
-                          onBrief={handleBrief}
-                          briefLoadingId={briefLoading}
-                          isLoading={pipelinesLoading}
-                        />
-                      </SheetContent>
-                    </Sheet>
+                    <h2 className="text-base font-semibold text-foreground">
+                      {teamScope ? (
+                        <span className="flex items-center gap-1.5">
+                          <Users className="w-4 h-4 text-muted-foreground" />
+                          Team Assets
+                        </span>
+                      ) : selectedPipelineName}
+                    </h2>
+                    {!teamScope && (
+                      <Sheet>
+                        <SheetTrigger asChild>
+                          <button
+                            className="md:hidden flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground border border-border rounded px-2 py-0.5 transition-colors"
+                            data-testid="button-mobile-pipeline-menu"
+                          >
+                            <Layers className="w-3 h-3" />
+                            <ChevronDown className="w-3 h-3" />
+                          </button>
+                        </SheetTrigger>
+                        <SheetContent side="left" className="w-72 p-4">
+                          <SheetHeader className="mb-4">
+                            <SheetTitle>Pipelines</SheetTitle>
+                          </SheetHeader>
+                          <PipelineSidebar
+                            pipelines={pipelines}
+                            uncategorisedCount={uncategorisedCount}
+                            selectedId={selectedPipeline}
+                            onSelect={setSelectedPipeline}
+                            onCreatePipeline={(name, shared) => createPipelineMutation.mutate({ name, shared })}
+                            onBrief={handleBrief}
+                            briefLoadingId={briefLoading}
+                            isLoading={pipelinesLoading}
+                          />
+                        </SheetContent>
+                      </Sheet>
+                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
                     {displayedAssets.length} asset{displayedAssets.length !== 1 ? "s" : ""}
+                    {teamScope && ` across ${org?.members.length ?? 0} team member${(org?.members.length ?? 0) !== 1 ? "s" : ""}`}
                   </p>
                 </div>
                 {typeof selectedPipeline === "number" && displayedAssets.length > 0 && (
@@ -729,13 +801,17 @@ export default function Assets() {
               {displayedAssets.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
                   <Layers className="w-8 h-8 text-muted-foreground/40" />
-                  <p className="text-sm">No assets in this pipeline yet.</p>
-                  <Link href="/scout">
-                    <Button variant="outline" size="sm" className="gap-1.5 mt-1" data-testid="button-discover-assets">
-                      <ArrowRight className="w-3.5 h-3.5" />
-                      Discover assets
-                    </Button>
-                  </Link>
+                  <p className="text-sm">
+                    {teamScope ? "No team assets saved yet." : "No assets in this pipeline yet."}
+                  </p>
+                  {!teamScope && (
+                    <Link href="/scout">
+                      <Button variant="outline" size="sm" className="gap-1.5 mt-1" data-testid="button-discover-assets">
+                        <ArrowRight className="w-3.5 h-3.5" />
+                        Discover assets
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -746,6 +822,7 @@ export default function Assets() {
                       onDelete={(id) => deleteMutation.mutate(id)}
                       onMove={(id, pipelineListId) => moveMutation.mutate({ id, pipelineListId })}
                       pipelines={pipelines}
+                      readOnly={teamScope}
                     />
                   ))}
                 </div>
