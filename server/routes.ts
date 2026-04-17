@@ -914,8 +914,9 @@ export async function registerRoutes(
         if (!userOrg || userOrg.planTier === "individual") {
           return res.status(403).json({ error: "Team scope requires a team plan" });
         }
-        const assets = await storage.getSavedAssetsForTeam(userOrg.id);
-        return res.json({ assets });
+        const memberId = req.query.memberId as string | undefined;
+        const result = await storage.getSavedAssetsForTeam(userOrg.id, memberId || undefined);
+        return res.json({ assets: result.assets, members: result.members });
       }
 
       const rawPl = req.query.pipelineListId;

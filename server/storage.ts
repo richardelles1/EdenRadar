@@ -62,7 +62,10 @@ export interface IStorage {
   createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory>;
 
   getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]>;
-  getSavedAssetsForTeam(orgId: number): Promise<Array<SavedAsset & { saverName: string | null }>>;
+  getSavedAssetsForTeam(orgId: number, filterUserId?: string): Promise<{
+    assets: Array<SavedAsset & { saverName: string | null }>;
+    members: Array<{ userId: string; displayName: string | null }>;
+  }>;
   getSavedAsset(id: number): Promise<SavedAsset | undefined>;
   createSavedAsset(asset: InsertSavedAsset, userId?: string): Promise<SavedAsset>;
   updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
@@ -370,23 +373,48 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(savedAssets).where(where).orderBy(desc(savedAssets.savedAt));
   }
 
-  async getSavedAssetsForTeam(orgId: number): Promise<Array<SavedAsset & { saverName: string | null }>> {
-    const members = await db
-      .select({ userId: orgMembers.userId, memberName: orgMembers.memberName })
+  async getSavedAssetsForTeam(orgId: number, filterUserId?: string): Promise<{
+    assets: Array<SavedAsset & { saverName: string | null }>;
+    members: Array<{ userId: string; displayName: string | null }>;
+  }> {
+    // LEFT JOIN with industryProfiles to prefer the user's own display name (self-set)
+    // over the admin-entered memberName (set at invite time)
+    const rows = await db
+      .select({
+        userId: orgMembers.userId,
+        memberName: orgMembers.memberName,
+        profileName: industryProfiles.userName,
+      })
       .from(orgMembers)
+      .leftJoin(industryProfiles, eq(orgMembers.userId, industryProfiles.userId))
       .where(eq(orgMembers.orgId, orgId));
-    if (members.length === 0) return [];
-    const memberUserIds = members.map((m) => m.userId);
-    const nameMap = new Map(members.map((m) => [m.userId, m.memberName ?? null]));
+    if (rows.length === 0) return { assets: [], members: [] };
+
+    // Resolve display name: profile userName wins if present and non-empty
+    const nameMap = new Map(rows.map((r) => [
+      r.userId,
+      (r.profileName && r.profileName.trim()) || r.memberName || null,
+    ]));
+    const membersList = rows.map((r) => ({ userId: r.userId, displayName: nameMap.get(r.userId) ?? null }));
+
+    // When filtering by a specific member, validate they belong to this org
+    const queryUserIds = filterUserId && nameMap.has(filterUserId)
+      ? [filterUserId]
+      : rows.map((r) => r.userId);
+
     const assets = await db
       .select()
       .from(savedAssets)
-      .where(inArray(savedAssets.userId, memberUserIds))
+      .where(inArray(savedAssets.userId, queryUserIds))
       .orderBy(desc(savedAssets.savedAt));
-    return assets.map((a) => ({
-      ...a,
-      saverName: a.userId ? (nameMap.get(a.userId) ?? null) : null,
-    }));
+
+    return {
+      assets: assets.map((a) => ({
+        ...a,
+        saverName: a.userId ? (nameMap.get(a.userId) ?? null) : null,
+      })),
+      members: membersList,
+    };
   }
 
   async getSavedAsset(id: number): Promise<SavedAsset | undefined> {

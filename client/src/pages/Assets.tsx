@@ -47,9 +47,11 @@ type PipelinesResponse = {
 };
 
 type TeamSavedAsset = SavedAsset & { saverName?: string | null };
+type TeamMember = { userId: string; displayName: string | null };
 
 type SavedAssetsResponse = {
   assets: TeamSavedAsset[];
+  members?: TeamMember[];
 };
 
 const MODALITY_COLORS: Record<string, string> = {
@@ -470,6 +472,7 @@ export default function Assets() {
   const [briefLoading, setBriefLoading] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [teamScope, setTeamScope] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const { data: org } = useOrg();
   const hasTeamOrg = !!(org && org.planTier !== "individual");
 
@@ -479,7 +482,7 @@ export default function Assets() {
   });
 
   const assetsQueryKey = teamScope
-    ? ["/api/saved-assets", "scope", "team"]
+    ? ["/api/saved-assets", "scope", "team", selectedMemberId ?? "all"]
     : selectedPipeline === "all"
       ? ["/api/saved-assets"]
       : selectedPipeline === null
@@ -490,7 +493,10 @@ export default function Assets() {
     queryKey: assetsQueryKey,
     queryFn: async () => {
       if (teamScope) {
-        const res = await fetch("/api/saved-assets?scope=team");
+        const url = selectedMemberId
+          ? `/api/saved-assets?scope=team&memberId=${encodeURIComponent(selectedMemberId)}`
+          : "/api/saved-assets?scope=team";
+        const res = await fetch(url);
         if (!res.ok) throw new Error("Failed to load team assets");
         return res.json();
       }
@@ -653,7 +659,7 @@ export default function Assets() {
               {hasTeamOrg && (
                 <div className="flex items-center rounded-md border border-border overflow-hidden text-xs" data-testid="toggle-team-scope">
                   <button
-                    onClick={() => setTeamScope(false)}
+                    onClick={() => { setTeamScope(false); setSelectedMemberId(null); }}
                     className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${!teamScope ? "bg-primary/10 text-primary font-medium" : "text-muted-foreground hover:text-foreground hover:bg-muted/50"}`}
                     data-testid="button-scope-personal"
                   >
@@ -797,6 +803,31 @@ export default function Assets() {
                   </button>
                 )}
               </div>
+
+              {teamScope && data?.members && data.members.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 mb-4" data-testid="member-filter-pills">
+                  <button
+                    onClick={() => setSelectedMemberId(null)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${!selectedMemberId ? "border-primary/40 bg-primary/8 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+                    data-testid="button-member-filter-all"
+                  >
+                    All members
+                  </button>
+                  {data.members.map((m) => (
+                    <button
+                      key={m.userId}
+                      onClick={() => setSelectedMemberId(m.userId === selectedMemberId ? null : m.userId)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs border transition-colors ${selectedMemberId === m.userId ? "border-primary/40 bg-primary/8 text-primary font-medium" : "border-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+                      data-testid={`button-member-filter-${m.userId}`}
+                    >
+                      <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                        {getInitials(m.displayName)}
+                      </span>
+                      {m.displayName ?? "Unknown"}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {displayedAssets.length === 0 ? (
                 <div className="text-center py-16 text-muted-foreground flex flex-col items-center gap-3">
