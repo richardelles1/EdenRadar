@@ -411,9 +411,42 @@ export default function Login() {
               {pickRoleError && (
                 <p className="text-sm text-red-500 dark:text-red-400" data-testid="text-pick-role-error">{pickRoleError}</p>
               )}
+              <label className="flex items-start gap-2.5 cursor-pointer" data-testid="label-tos-accept-role">
+                <input
+                  type="checkbox"
+                  checked={tosAccepted}
+                  onChange={(e) => setTosAccepted(e.target.checked)}
+                  data-testid="checkbox-tos-role"
+                  className="mt-0.5 h-4 w-4 cursor-pointer accent-emerald-600 shrink-0"
+                />
+                <span className={`text-xs leading-relaxed ${isDark ? "text-white/50" : "text-gray-500"}`}>
+                  I agree to the{" "}
+                  <a
+                    href="/tos"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-emerald-600 hover:text-emerald-500"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid="link-tos-role"
+                  >
+                    Terms of Service
+                  </a>
+                  {" "}and{" "}
+                  <a
+                    href="/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-emerald-600 hover:text-emerald-500"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid="link-privacy-role"
+                  >
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
               <button
                 type="button"
-                disabled={pickRoleLoading}
+                disabled={pickRoleLoading || !tosAccepted}
                 onClick={() => handlePickRole(selectedRole)}
                 data-testid="button-confirm-role"
                 className="w-full h-11 rounded-full text-white font-medium text-sm bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
