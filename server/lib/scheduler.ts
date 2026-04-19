@@ -690,7 +690,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
         console.log(`[scheduler] ${institution} complete — ${result.rawCount} scraped, ${result.newCount} new, ${result.relevantCount} relevant`);
       }
     }
-    await updateScraperHealth(institution, true, undefined, result.newCount);
+    await updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount);
     scraperHealthCache.set(institution, {
       institution,
       consecutiveFailures: 0,

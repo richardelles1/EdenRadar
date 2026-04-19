@@ -315,7 +315,23 @@ const SCRAPE_MAX_ATTEMPTS = 2;
 
 /** DB/infra error patterns that should never trigger a scrape retry.
  * These originate from the pg pool or auth layer, not from the target site. */
-const DB_INFRA_PATTERNS = ["pool", "during authentication", "client checkout timed out", "pg:", "postgres"];
+const DB_INFRA_PATTERNS = [
+  "pool",
+  "during authentication",
+  "client checkout timed out",
+  "pg:",
+  "postgres",
+  "too many clients",
+  "remaining connection slots",
+  "idle-in-transaction",
+  "query_canceled",
+  "statement timeout",
+  "connection refused",
+  "socket hang up",
+  "network socket disconnected",
+  "read econnreset",
+  "write econnreset",
+];
 
 /** Returns true if a scrape error is likely transient (network/timeout) and worth retrying.
  * Deterministic failures (auth/403/parsing/selector bugs) and DB infra errors are NOT retried. */

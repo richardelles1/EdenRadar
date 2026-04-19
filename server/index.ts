@@ -605,6 +605,7 @@ async function runStartupMigrations() {
       )
     `);
     await mdb.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_new_count INTEGER`);
+    await mdb.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_raw_count INTEGER`);
     log("[startup] scheduler_state + scraper_health tables ready", "startup");
   } catch (err: any) {
     log(`[startup] scheduler_state/scraper_health migration failed: ${err?.message}`, "startup");
