@@ -1,4 +1,4 @@
-import { db } from "../../db";
+import { scraperDb as db } from "../../scraperDb";
 import { ingestedAssets, therapyAreaTaxonomy, convergenceSignals } from "@shared/schema";
 import { sql, eq, and, isNotNull } from "drizzle-orm";
 

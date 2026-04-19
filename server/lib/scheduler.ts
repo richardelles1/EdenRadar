@@ -63,7 +63,7 @@ let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
 /** Timestamp of the last successful persistState DB write — used to throttle non-critical saves. */
 let _lastPersistAt = 0;
-const PERSIST_THROTTLE_MS = 60_000;
+const PERSIST_THROTTLE_MS = 15_000;
 
 /** Tracks when each currently-running institution was dispatched (ms since epoch). */
 const institutionDispatchedAt = new Map<string, number>();
@@ -145,8 +145,9 @@ function isInBackoff(institution: string): boolean {
 
 /** Returns true if the institution should be skipped:
  * - Successfully synced within FRESH_THRESHOLD_MS, AND
- * - The last sync found 0 new assets.
- * Persisted in DB so this survives restarts. */
+ * - The last sync found 0 new assets, AND
+ * - The last sync actually returned listings (rawCount > 0).
+ * If rawCount was 0 the site may have been unreachable or rate-limiting — never skip. */
 function isFresh(institution: string): boolean {
   const health = scraperHealthCache.get(institution);
   if (!health?.lastSuccessAt) return false;
@@ -154,6 +155,8 @@ function isFresh(institution: string): boolean {
   if (!withinWindow) return false;
   // lastSuccessNewCount === null means we don't know — don't skip (conservative)
   if (health.lastSuccessNewCount === null) return false;
+  // Raw count of 0 means site returned nothing — could be blocked/unreachable, not truly fresh
+  if (health.lastSuccessRawCount === 0) return false;
   return health.lastSuccessNewCount === 0;
 }
 
@@ -623,7 +626,17 @@ function isTransientDbError(msg: string): boolean {
     m.includes("client checkout timed out") ||
     m.includes("server restarted during sync") ||
     m.includes("scraper failed: scraper failed: server restarted") ||
-    m.includes("markrunningsessionsfailed")
+    m.includes("markrunningsessionsfailed") ||
+    m.includes("too many clients") ||
+    m.includes("remaining connection slots") ||
+    m.includes("idle-in-transaction") ||
+    m.includes("query_canceled") ||
+    m.includes("statement timeout") ||
+    m.includes("connection refused") ||
+    m.includes("socket hang up") ||
+    m.includes("network socket disconnected") ||
+    m.includes("read econnreset") ||
+    m.includes("write econnreset")
   );
 }
 
@@ -686,6 +699,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastSuccessAt: new Date(),
       backoffUntil: null,
       lastSuccessNewCount: result.newCount,
+      lastSuccessRawCount: result.rawCount,
     });
   } else if (finalErr !== null) {
     // ── Failure path (both attempts failed) ─────────────────────────────────
@@ -718,6 +732,7 @@ async function runOne(institution: string, gen: number): Promise<void> {
                      newFailures >= 3  ? new Date(Date.now() + 6 * 60 * 60 * 1000) :
                      (current?.backoffUntil ?? null),
         lastSuccessNewCount: current?.lastSuccessNewCount ?? null,
+        lastSuccessRawCount: current?.lastSuccessRawCount ?? null,
       });
     }
   }

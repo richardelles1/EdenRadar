@@ -1,4 +1,4 @@
-import { db } from "../db";
+import { scraperDb as db } from "../scraperDb";
 import { sql } from "drizzle-orm";
 
 export interface SchedulerStateRow {
@@ -21,6 +21,9 @@ export interface ScraperHealthRow {
   /** Number of new assets found in the most recent successful sync.
    * Used by the staleness gate: skip re-sync if lastSuccessAt < 4h AND lastSuccessNewCount === 0. */
   lastSuccessNewCount: number | null;
+  /** Raw listing count from the most recent successful sync (in-memory only, not persisted).
+   * If 0, the site may have been unreachable — the staleness gate must NOT skip the institution. */
+  lastSuccessRawCount: number | null;
 }
 
 // Graduated backoff: 3→6h, 5→24h, 8→3 days, 12→7 days
@@ -79,6 +82,7 @@ export async function loadAllScraperHealth(): Promise<Map<string, ScraperHealthR
         lastSuccessAt: row.last_success_at ? new Date(row.last_success_at) : null,
         backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
         lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
+        lastSuccessRawCount: null,
       });
     }
   } catch (err: any) {
@@ -178,6 +182,7 @@ export async function getAllScraperHealth(): Promise<ScraperHealthRow[]> {
       lastSuccessAt: row.last_success_at ? new Date(row.last_success_at) : null,
       backoffUntil: row.backoff_until ? new Date(row.backoff_until) : null,
       lastSuccessNewCount: row.last_success_new_count != null ? Number(row.last_success_new_count) : null,
+      lastSuccessRawCount: null,
     }));
   } catch (err: any) {
     console.warn(`[scraperState] getAllScraperHealth failed: ${err?.message}`);

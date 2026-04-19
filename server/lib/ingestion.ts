@@ -5,7 +5,7 @@ import { preFilterBatch } from "./pipeline/relevancePreFilter";
 import { classifyBatch, type AssetClassification } from "./pipeline/classifyAsset";
 import { computeContentHash, computeCompletenessScore, normalizeLicensingStatus, normalizePatentStatus } from "./pipeline/contentHash";
 import { syncStaging, type SyncStagingRow } from "@shared/schema";
-import { db } from "../db";
+import { scraperDb as db } from "../scraperDb";
 import { eq, and, sql } from "drizzle-orm";
 
 export function normalizeTitle(title: string): string {

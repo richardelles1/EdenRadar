@@ -1462,7 +1462,7 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        let health: "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never";
+        let health: "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked";
         // Live lock takes precedence: if ingestion is actively holding a lock for this
         // institution, it's definitively "syncing" regardless of DB session state.
         if (liveActiveSyncs.has(name)) {
@@ -1474,7 +1474,7 @@ export async function registerRoutes(
           const elapsed = now - new Date(heartbeat).getTime();
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
-          health = "ok";
+          health = (session.rawCount ?? 0) === 0 ? "blocked" : "ok";
         } else if (session.status === "failed") {
           // consecutiveFailures is maintained by the scheduler and correctly
           // excludes transient events (server restart, DB blip) via isTransientDbError().

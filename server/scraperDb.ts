@@ -12,21 +12,18 @@ if (!connectionString) {
   );
 }
 
-export const pool = new Pool({
+export const scraperPool = new Pool({
   connectionString,
   ssl: { rejectUnauthorized: false },
-  max: 8,
+  max: 3,
   idleTimeoutMillis: 30_000,
-  connectionTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 15_000,
   keepAlive: true,
   keepAliveInitialDelayMillis: 10_000,
 });
 
-// Without this, a FATAL error from Supabase on any background connection
-// propagates as an uncaught exception and permanently kills the pool.
-// With this, pg silently removes the bad connection and creates a replacement.
-pool.on("error", (err) => {
-  console.error("[db] Pool connection error (connection auto-removed):", err.message);
+scraperPool.on("error", (err) => {
+  console.error("[scraperDb] Pool connection error (connection auto-removed):", err.message);
 });
 
-export const db = drizzle(pool, { schema });
+export const scraperDb = drizzle(scraperPool, { schema });
