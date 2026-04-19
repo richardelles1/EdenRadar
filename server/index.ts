@@ -722,6 +722,12 @@ async function runStartupMigrations() {
 // Extracted from runStartupMigrations() so they always run even when migrations
 // are skipped (early return).
 async function runPostStartupTasks(): Promise<void> {
+  // ── Incremental scraper_health schema upgrades ────────────────────────────
+  // Always runs regardless of migration skip flag; safe to run on every boot.
+  try {
+    await db.execute(sql`ALTER TABLE scraper_health ADD COLUMN IF NOT EXISTS last_success_raw_count INTEGER`);
+  } catch (_) { /* column may already exist — safe to ignore */ }
+
   // ── Scheduler restore ─────────────────────────────────────────────────────
   try {
     const wasRunning = await loadAndRestoreScheduler();
