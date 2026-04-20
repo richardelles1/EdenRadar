@@ -5351,7 +5351,7 @@ export const sheffieldScraper: InstitutionScraper = {
 // No In-Part, TechPublisher, or standalone TTO catalog found. No accessible portal.
 export const exeterScraper = createStubScraper(
   "University of Exeter",
-  "exeter.flintbox.com redirects to Flintbox homepage; no In-Part/TP portal found"
+  "exeter.flintbox.com connection refused (0 bytes); all known TTO URLs return 404/0; no alternative portal found"
 );
 
 // ── 5. Cardiff University — no usable public TTO listing ─────────────────────
@@ -5359,7 +5359,7 @@ export const exeterScraper = createStubScraper(
 // Flintbox API responds 200 with empty items array. Portal exists but is empty.
 export const cardiffScraper = createStubScraper(
   "Cardiff University",
-  "cardiff.flintbox.com live but Flintbox API returns 0 items — empty portfolio"
+  "cardiff.flintbox.com — portal exists (orgId=214) but API returns 0 technologies; no alternative portal found"
 );
 
 // ── 6. University of Dundee — Flintbox ───────────────────────────────────────
@@ -5371,7 +5371,7 @@ export const dundeeScraper = createFlintboxScraper({ slug: "dundee", orgId: 0, a
 // Flintbox API responds 200 with empty items array. Portal exists but is empty.
 export const warwickScraper = createStubScraper(
   "University of Warwick",
-  "warwick.flintbox.com live but Flintbox API returns 0 items — empty portfolio"
+  "warwick.flintbox.com — portal exists (orgId=204) but API returns 0 technologies; no alternative portal found"
 );
 
 // ── Canada ────────────────────────────────────────────────────────────────────
