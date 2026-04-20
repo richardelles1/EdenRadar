@@ -3541,12 +3541,27 @@ export async function registerRoutes(
     }
   });
 
+  // Wipe a single institution's ingested_assets + sync_staging rows.
+  // Used when a scraper's fingerprint format changes (e.g., stub → Flintbox scraper)
+  // so that re-sync correctly detects existing technologies as new rather than
+  // triggering the anomaly guard.
+  // Auth: header-only (never query string, which appears in proxy/server logs).
+  // Safeguards: institution must be registered in ALL_SCRAPERS; body must include
+  // { confirm: true } to prevent accidental destructive calls.
   app.post("/api/admin/wipe-assets/:institution", async (req, res) => {
-    const pw = (req.headers["x-admin-password"] ?? req.query.pw) as string;
+    const pw = req.headers["x-admin-password"] as string;
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const institution = decodeURIComponent(req.params.institution);
+    // Only allow wiping institutions that have a registered scraper
+    if (!ALL_SCRAPERS.some((s) => s.institution === institution)) {
+      return res.status(400).json({ error: `No registered scraper for: ${institution}` });
+    }
+    if (!req.body?.confirm) {
+      return res.status(400).json({ error: "Must send { confirm: true } to confirm destructive wipe" });
+    }
     try {
       const deleted = await storage.wipeInstitutionAssets(institution);
+      console.log(`[admin] Institution wipe executed for "${institution}": ${deleted} assets removed`);
       res.json({ ok: true, institution, deleted });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
