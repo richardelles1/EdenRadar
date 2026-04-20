@@ -343,6 +343,49 @@ import {
   benaroyaScraper,
   ljiScraper,
   limrScraper,
+  // Task #360 — Scraper Expansion: ~30 New Institutions
+  sanfordHealthScraper,
+  // US children's hospitals — stubs
+  seattleChildrensScraper,
+  childrensColoradoScraper,
+  radyChildrensScraper,
+  // US independent research institutes — stubs
+  vanAndelScraper,
+  salkScraper,
+  broadInstituteScraper,
+  whiteheadScraper,
+  kesslerFoundationScraper,
+  forsythScraper,
+  jcviScraper,
+  mblScraper,
+  moteScraper,
+  hudsonAlphaScraper,
+  nationalJewishHealthScraper,
+  medStarScraper,
+  hennepinHealthcareScraper,
+  cdcTechTransferScraper,
+  jacksonLabScraper,
+  burnetInstituteScraper,
+  // International institutions — stubs
+  astarScraper,
+  csiroScraper,
+  nrcCanadaScraper,
+  fraunhoferScraper,
+  ceaScraper,
+  tecnaliaScraper,
+  vttScraper,
+  sintefScraper,
+  tnoScraper,
+  imecScraper,
+  rikenScraper,
+  aistScraper,
+  kistScraper,
+  // Chinese research institutions — stubs
+  chineseAcademySciencesScraper,
+  tsinghuaScraper,
+  pekingUniversityScraper,
+  zhejiangUniversityScraper,
+  shanghaiTechScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -899,6 +942,49 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   y12VipsScraper,                 // Y-12 National Security Complex — 143 VIPS records
   ppplVipsScraper,                // Princeton Plasma Physics Laboratory — 52 VIPS records
   nevadaNSSVipsScraper,           // Nevada National Security Site — 39 VIPS records
+  // ── Task #360 — Scraper Expansion: ~30 New Institutions ──────────────────────
+  sanfordHealthScraper,           // Sanford Health Innovation — Flintbox orgId=122 — 10 techs confirmed
+  // US children's hospitals
+  seattleChildrensScraper,        // Seattle Children's Research Institute — stub (no enumerable catalog)
+  childrensColoradoScraper,       // Children's Hospital Colorado Research Institute — stub (generic pages only)
+  radyChildrensScraper,           // Rady Children's Institute for Genomic Medicine — stub (clinical service licenses, not IP)
+  // US independent research institutes
+  vanAndelScraper,                // Van Andel Institute — stub (informational page; no WP tech CPT)
+  salkScraper,                    // Salk Institute for Biological Studies — stub (JS-rendered listing)
+  broadInstituteScraper,          // Broad Institute of MIT and Harvard — stub (marketing page only)
+  whiteheadScraper,               // Whitehead Institute for Biomedical Research — stub (30KB, no listing)
+  kesslerFoundationScraper,       // Kessler Foundation — stub (Cloudflare-blocked)
+  forsythScraper,                 // Forsyth Institute — stub (services brochure, not IP catalog)
+  jcviScraper,                    // J. Craig Venter Institute — stub (bare 2-link overview)
+  mblScraper,                     // Marine Biological Laboratory — stub (general research site)
+  moteScraper,                    // Mote Marine Laboratory & Aquarium — stub (0 bytes returned)
+  hudsonAlphaScraper,             // HudsonAlpha Institute for Biotechnology — stub (education programs only)
+  nationalJewishHealthScraper,    // National Jewish Health — stub (overview page only)
+  medStarScraper,                 // MedStar Health Research Institute — stub (marketing page)
+  hennepinHealthcareScraper,      // Hennepin Healthcare Research Institute — stub (2KB, no listing)
+  cdcTechTransferScraper,         // CDC Technology Transfer Office — stub (0 bytes returned)
+  jacksonLabScraper,              // Jackson Laboratory (JAX) — stub (55KB, 0 tech links)
+  burnetInstituteScraper,         // Burnet Institute — stub (single-technology page only)
+  // International institutions
+  astarScraper,                   // A*STAR — stub (JS-rendered portal, 0 bytes via HTTP)
+  csiroScraper,                   // CSIRO — stub (91KB, 0 tech links; JS-rendered)
+  nrcCanadaScraper,               // National Research Council Canada — stub (generic gov navigation)
+  fraunhoferScraper,              // Fraunhofer Society — stub (institute group listing, no unified IP catalog)
+  ceaScraper,                     // CEA (France) — stub (713 bytes, geo-blocked or JS-only)
+  tecnaliaScraper,                // Tecnalia — stub (86KB, no enumerable catalog)
+  vttScraper,                     // VTT Technical Research Centre of Finland — stub (service areas, not IPs)
+  sintefScraper,                  // SINTEF — stub (7KB, 0 tech links)
+  tnoScraper,                     // TNO (Netherlands) — stub (research topics, not IP catalog)
+  imecScraper,                    // IMEC — stub (33KB, 0 tech links; JS-rendered)
+  rikenScraper,                   // RIKEN — stub (lab pages only, not IP listings)
+  aistScraper,                    // AIST (Japan) — stub (18KB informational, 0 tech links)
+  kistScraper,                    // KIST (Korea) — stub (166 bytes, bot-blocked)
+  // Chinese research institutions
+  chineseAcademySciencesScraper,  // Chinese Academy of Sciences — stub (1235 bytes, no accessible catalog)
+  tsinghuaScraper,                // Tsinghua University — stub (0 bytes, blocked)
+  pekingUniversityScraper,        // Peking University — stub (no accessible English catalog)
+  zhejiangUniversityScraper,      // Zhejiang University — stub (no accessible English catalog)
+  shanghaiTechScraper,            // ShanghaiTech University — stub (no accessible English catalog)
 ];
 
 // Stamp the tier field on every scraper object at startup so that

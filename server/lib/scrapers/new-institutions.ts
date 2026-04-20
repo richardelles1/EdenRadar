@@ -6765,3 +6765,326 @@ export const novaSeScraper = createStubScraper(
   "Nova Southeastern University",
   "research.nova.edu/ottc/available-technologies — no enumerable tech catalog found"
 );
+
+// ── Task #360 — Scraper Expansion: ~30 New Institutions ─────────────────────
+
+// Sanford Health Innovation — Flintbox portal (sanfordhealth.flintbox.com)
+// orgId=122, accessKey discovered from page source 2026-04-20. 10 technologies confirmed live.
+export const sanfordHealthScraper = createFlintboxScraper(
+  { slug: "sanfordhealth", orgId: 122, accessKey: "e9fc807a-58e3-44c2-88a6-30db580c0d0b" },
+  "Sanford Health Innovation"
+);
+
+// ── US Children's Hospitals ───────────────────────────────────────────────────
+
+// Seattle Children's Research Institute — seattlechildrens.org
+// Fetched 2026-04-20: 101KB returned but 0 tech links — page is a general research
+// overview with no enumerable technology listing or IP catalog accessible via HTTP.
+export const seattleChildrensScraper = createStubScraper(
+  "Seattle Children's Research Institute",
+  "seattlechildrens.org/research/innovation — no enumerable tech catalog (general research overview only)"
+);
+
+// Children's Hospital Colorado Research Institute — childrenscolorado.org
+// Fetched 2026-04-20: 67KB, 17 links found but all point to generic /research-innovation/*
+// pages (clinical trials, funding, training). No IP/technology catalog accessible.
+export const childrensColoradoScraper = createStubScraper(
+  "Children's Hospital Colorado Research Institute",
+  "childrenscolorado.org/research-innovation — only generic research pages, no IP catalog"
+);
+
+// Children's National Hospital — Washington, DC
+// Fetched 2026-04-20: technology.childrensnational.org returns 0 bytes (JS-rendered or bot-blocked).
+// Note: childrensNationalScraper (In-Part "childrensnational") already in registry — this is
+// a separate check for their dedicated tech-transfer subdomain, which is inaccessible.
+export const childrensNationalTechScraper = createStubScraper(
+  "Children's National Hospital Technology Transfer",
+  "technology.childrensnational.org returns 0 bytes — JS-rendered or bot-blocked; main In-Part portal already covered"
+);
+
+// Rady Children's Institute for Genomic Medicine — radygenomics.org
+// Fetched 2026-04-20: /clinical-genome-services/licenses/ is a page about licensing
+// their clinical genomic sequencing *services*, not a catalog of licensable IP/patents.
+export const radyChildrensScraper = createStubScraper(
+  "Rady Children's Institute for Genomic Medicine",
+  "radygenomics.org/clinical-genome-services/licenses — clinical service licenses only, not a licensable IP catalog"
+);
+
+// ── US Independent Research Institutes ───────────────────────────────────────
+
+// Van Andel Institute — vai.org
+// Fetched 2026-04-20: /research/technologies-and-tools/ is 120KB but is an informational
+// page about the Business Development & Technology Transfer office. No WordPress custom
+// post type for technologies; no enumerable IP listing (WP API types checked: no tech CPT).
+export const vanAndelScraper = createStubScraper(
+  "Van Andel Institute",
+  "vai.org/research/technologies-and-tools — informational page only; no WordPress tech CPT or enumerable IP catalog found"
+);
+
+// Salk Institute for Biological Studies — salk.edu
+// Fetched 2026-04-20: /science/technology-development/ returns 60KB but tech listing is
+// JS-rendered (New Relic/SPA detected; anchor analysis yields only 3 self-referencing links).
+// Requires Playwright for full JS execution to enumerate individual technologies.
+export const salkScraper = createStubScraper(
+  "Salk Institute for Biological Studies",
+  "salk.edu/science/technology-development — JS-rendered listing (SPA/New Relic detected); requires Playwright"
+);
+
+// Broad Institute of MIT and Harvard — broadinstitute.org
+// Fetched 2026-04-20: /partnerships/licensing returns 79KB but contains only marketing
+// and contact information — no individual technology listing or IP catalog.
+export const broadInstituteScraper = createStubScraper(
+  "Broad Institute of MIT and Harvard",
+  "broadinstitute.org/partnerships/licensing — marketing page only; no enumerable technology catalog"
+);
+
+// Whitehead Institute for Biomedical Research — wi.mit.edu
+// Fetched 2026-04-20: /technology-transfer returns 30KB with only 1 outbound link
+// (MailChimp newsletter signup). No tech listing, no TTO catalog, no structured data.
+export const whiteheadScraper = createStubScraper(
+  "Whitehead Institute for Biomedical Research",
+  "wi.mit.edu/technology-transfer — 30KB page with no enumerable tech listing (1 link: MailChimp signup)"
+);
+
+// Kessler Foundation — kesslerfoundation.org
+// Fetched 2026-04-20: Cloudflare bot protection returns "You have been blocked" (HTTP 403)
+// for all server-side requests. Cannot be scraped without a residential proxy or browser.
+export const kesslerFoundationScraper = createStubScraper(
+  "Kessler Foundation",
+  "kesslerfoundation.org — Cloudflare bot protection blocks all server-side requests"
+);
+
+// Forsyth Institute — forsyth.org
+// Fetched 2026-04-20: /technology-development-services/ returns 136KB but is a services
+// brochure page (describes assay development, 3D models, etc.) — not an IP/patent catalog.
+export const forsythScraper = createStubScraper(
+  "Forsyth Institute",
+  "forsyth.org/technology-development-services — services brochure, not a licensable IP catalog"
+);
+
+// J. Craig Venter Institute (JCVI) — jcvi.org
+// Fetched 2026-04-20: /research/technology-tools returns 16KB with 2 links to the same
+// /research/technology-tools page — a bare overview with no individual technology listings.
+export const jcviScraper = createStubScraper(
+  "J. Craig Venter Institute",
+  "jcvi.org/research/technology-tools — bare 2-link overview page; no enumerable tech catalog"
+);
+
+// Marine Biological Laboratory — mbl.edu
+// Fetched 2026-04-20: site returns 447KB but is a general research/education portal.
+// /research/technology-licensing/ contains only careers and operational links — no IP catalog.
+export const mblScraper = createStubScraper(
+  "Marine Biological Laboratory",
+  "mbl.edu — general research portal; /research/technology-licensing has no enumerable IP catalog"
+);
+
+// Mote Marine Laboratory & Aquarium — motescience.org
+// Fetched 2026-04-20: /technology-transfer returns 0 bytes (bot-blocked or JS-only).
+export const moteScraper = createStubScraper(
+  "Mote Marine Laboratory & Aquarium",
+  "motescience.org/technology-transfer — returns 0 bytes (bot-blocked or JS-only)"
+);
+
+// HudsonAlpha Institute for Biotechnology — hudsonalpha.org
+// Fetched 2026-04-20: /for-industry/technology-transfer/ returns 122KB but content is
+// entirely focused on education programs (Biotech Academy, LABS, BiotechLaunch).
+// No technology licensing catalog or IP listing found.
+export const hudsonAlphaScraper = createStubScraper(
+  "HudsonAlpha Institute for Biotechnology",
+  "hudsonalpha.org/for-industry/technology-transfer — education programs only; no tech licensing catalog"
+);
+
+// National Jewish Health — nationaljewish.org
+// Fetched 2026-04-20: /office-of-research-innovation/overview returns 69KB but is
+// an overview page with only 2 links (both to the same /overview URL). No tech catalog.
+export const nationalJewishHealthScraper = createStubScraper(
+  "National Jewish Health",
+  "nationaljewish.org/office-of-research-innovation — overview page only; no enumerable IP catalog"
+);
+
+// MedStar Health Research Institute — medstarhealth.org
+// Fetched 2026-04-20: /research-and-innovation/technology-transfer returns 38KB with
+// only 2 tech links (both to /innovation-and-research marketing page). No IP catalog.
+export const medStarScraper = createStubScraper(
+  "MedStar Health Research Institute",
+  "medstarhealth.org/research-and-innovation/technology-transfer — marketing page only; no enumerable IP catalog"
+);
+
+// Hennepin Healthcare Research Institute — hennepin.us
+// Fetched 2026-04-20: /research/innovation-enterprise/technology-transfer returns 2KB
+// with no technology listing content found.
+export const hennepinHealthcareScraper = createStubScraper(
+  "Hennepin Healthcare Research Institute",
+  "hennepin.us/research/innovation-enterprise/technology-transfer — 2KB page with no tech listing"
+);
+
+// CDC Technology Transfer Office — cdc.gov
+// Fetched 2026-04-20: /os/technology/techtransfer/index.htm returns 0 bytes (bot-blocked).
+export const cdcTechTransferScraper = createStubScraper(
+  "CDC Technology Transfer Office",
+  "cdc.gov/os/technology/techtransfer — returns 0 bytes (bot-blocked or JS-rendered)"
+);
+
+// Jackson Laboratory (JAX) — jax.org
+// Fetched 2026-04-20: /research-and-faculty/resources/technology-transfer returns 55KB
+// but contains 0 tech links — no enumerable listing of licensable technologies.
+export const jacksonLabScraper = createStubScraper(
+  "Jackson Laboratory (JAX)",
+  "jax.org/research-and-faculty/resources/technology-transfer — 55KB page with 0 tech links; no enumerable catalog"
+);
+
+// Burnet Institute (Australia) — burnet.edu.au
+// Fetched 2026-04-20: /commercialisation/ lists only a single technology (Stellabody antibody
+// platform) — not a full catalog suitable for scraping.
+export const burnetInstituteScraper = createStubScraper(
+  "Burnet Institute",
+  "burnet.edu.au/commercialisation — only one technology listed (Stellabody); not a scrape-able catalog"
+);
+
+// ── International Institutions ────────────────────────────────────────────────
+
+// A*STAR (Agency for Science, Technology and Research) — Singapore
+// Fetched 2026-04-20: astar.edu.sg/research-and-technology/ip-and-technology-licensing
+// returns 0 bytes — JS-rendered portal (React/Next.js SPA); requires Playwright.
+export const astarScraper = createStubScraper(
+  "A*STAR (Agency for Science, Technology and Research)",
+  "astar.edu.sg/research-and-technology/ip-and-technology-licensing — JS-rendered portal (SPA); returns 0 bytes via HTTP"
+);
+
+// CSIRO (Commonwealth Scientific and Industrial Research Organisation) — Australia
+// Fetched 2026-04-20: csiro.au/en/work-with-us/ip-and-licensing returns 91KB but 0
+// tech links — catalog is JS-rendered; requires Playwright to enumerate individual IPs.
+export const csiroScraper = createStubScraper(
+  "CSIRO",
+  "csiro.au/en/work-with-us/ip-and-licensing — 91KB page with 0 tech links; JS-rendered catalog requires Playwright"
+);
+
+// National Research Council Canada — nrc.canada.ca
+// Fetched 2026-04-20: /en/research-development/research-collaboration/licensing-technologies
+// returns 26KB showing only generic Government of Canada navigation — no tech listing.
+export const nrcCanadaScraper = createStubScraper(
+  "National Research Council Canada",
+  "nrc.canada.ca/en/research-development/.../licensing-technologies — only generic gov navigation; no tech catalog"
+);
+
+// Fraunhofer Society — Germany — fraunhofer.de
+// Fetched 2026-04-20: /en/business-and-industry/patentsandlicensing.html returns 68KB
+// listing Fraunhofer institute *groups* only (ICT, energy, bioeconomy clusters) —
+// no unified searchable IP catalog; individual institutes have separate pages.
+export const fraunhoferScraper = createStubScraper(
+  "Fraunhofer Society",
+  "fraunhofer.de/en/business-and-industry/patentsandlicensing — institute group listing only; no unified IP catalog"
+);
+
+// CEA (Commissariat a l'energie atomique et aux energies alternatives) — France
+// Fetched 2026-04-20: cea.fr/english/Pages/innovation-industrial/licensing-technologies.aspx
+// returns only 713 bytes — likely geo-blocked or JS-only portal.
+export const ceaScraper = createStubScraper(
+  "CEA (France)",
+  "cea.fr/english/Pages/innovation-industrial/licensing-technologies.aspx — returns 713 bytes (geo-blocked or JS-only)"
+);
+
+// Tecnalia — Spain — tecnalia.com
+// Fetched 2026-04-20: /en/innovation/technology-transfer returns 86KB but only 3 filtered
+// links found, all to unrelated internal pages. No enumerable technology catalog.
+export const tecnaliaScraper = createStubScraper(
+  "Tecnalia",
+  "tecnalia.com/en/innovation/technology-transfer — 86KB page with no enumerable tech catalog"
+);
+
+// VTT Technical Research Centre of Finland — vttresearch.com
+// Fetched 2026-04-20: /en/ourservices/patent-licensing returns 198KB with 288 card
+// elements, but all are *service area* pages (bio-based chemicals, hydrogen, packaging) —
+// not individual licensable IP entries. No IP catalog suitable for scraping.
+export const vttScraper = createStubScraper(
+  "VTT Technical Research Centre of Finland",
+  "vttresearch.com/en/ourservices/patent-licensing — service area pages only; no individual IP/patent catalog"
+);
+
+// SINTEF — Norway — sintef.no
+// Fetched 2026-04-20: /en/technology-transfer/ returns 7KB with 0 tech links.
+export const sintefScraper = createStubScraper(
+  "SINTEF",
+  "sintef.no/en/technology-transfer — 7KB page with 0 tech links; no enumerable catalog"
+);
+
+// TNO (Netherlands Organisation for Applied Scientific Research) — tno.nl
+// Fetched 2026-04-20: /en/tno-as-a-partner/collaborate/licensing-technology-transfer/
+// returns 114KB but all 312 links are to research *topic* pages (building materials,
+// maritime, energy) — not a catalog of individual licensable IPs.
+export const tnoScraper = createStubScraper(
+  "TNO (Netherlands)",
+  "tno.nl/en/tno-as-a-partner/collaborate/licensing-technology-transfer — research topic pages only; no IP catalog"
+);
+
+// IMEC — Belgium — imec-int.com
+// Fetched 2026-04-20: /en/technology-licensing returns 33KB with 0 tech links —
+// JS-rendered; catalog requires Playwright to enumerate individual technologies.
+export const imecScraper = createStubScraper(
+  "IMEC",
+  "imec-int.com/en/technology-licensing — 33KB page with 0 tech links (JS-rendered); requires Playwright"
+);
+
+// RIKEN — Japan — riken.jp
+// Fetched 2026-04-20: /en/collab/tech_licensing/ returns 13KB with 11 links, but all
+// point to internal research lab pages (TRIP, AGIS, DMP, etc.) — not IP listing entries.
+export const rikenScraper = createStubScraper(
+  "RIKEN",
+  "riken.jp/en/collab/tech_licensing — links to research lab pages only; no enumerable IP listing"
+);
+
+// AIST (National Institute of Advanced Industrial Science and Technology) — Japan
+// Fetched 2026-04-20: aist.go.jp/aist_e/collab/tech_transfer/ returns 18KB with
+// 0 tech links — informational page; no enumerable technology catalog.
+export const aistScraper = createStubScraper(
+  "AIST (National Institute of Advanced Industrial Science and Technology)",
+  "aist.go.jp/aist_e/collab/tech_transfer — 18KB informational page with 0 tech links"
+);
+
+// KIST (Korea Institute of Science and Technology) — kist.re.kr
+// Fetched 2026-04-20: kist.re.kr/en/innovation/index.do returns 166 bytes — bot-blocked
+// or JS-rendered; no accessible technology catalog.
+export const kistScraper = createStubScraper(
+  "KIST (Korea Institute of Science and Technology)",
+  "kist.re.kr/en/innovation — returns 166 bytes (bot-blocked or JS-rendered)"
+);
+
+// ── Chinese Research Institutions ─────────────────────────────────────────────
+
+// Chinese Academy of Sciences (CAS) — English portal
+// Fetched 2026-04-20: english.cas.cn/cooperation/ip/ returns 1235 bytes —
+// no tech catalog accessible via English-language HTTP (likely geo-fenced or JS-only).
+export const chineseAcademySciencesScraper = createStubScraper(
+  "Chinese Academy of Sciences",
+  "english.cas.cn/cooperation/ip — returns 1235 bytes; no accessible English-language tech catalog"
+);
+
+// Tsinghua University Technology Transfer — tech.tsinghua.edu.cn
+// Fetched 2026-04-20: returns 0 bytes — blocked or JS-only; no accessible catalog.
+export const tsinghuaScraper = createStubScraper(
+  "Tsinghua University",
+  "tech.tsinghua.edu.cn — returns 0 bytes (blocked or JS-only); no accessible English-language catalog"
+);
+
+// Peking University — Office of Industry-University Cooperation
+// No accessible English-language tech transfer catalog found; Chinese-language portal
+// (pku.edu.cn) requires authentication for IP listings.
+export const pekingUniversityScraper = createStubScraper(
+  "Peking University",
+  "pku.edu.cn — no accessible English-language TTO catalog; Chinese portal requires authentication"
+);
+
+// Zhejiang University — Technology Transfer Office
+// No accessible English-language tech transfer catalog found; Chinese portal requires
+// authentication and does not expose an enumerable public IP listing.
+export const zhejiangUniversityScraper = createStubScraper(
+  "Zhejiang University",
+  "zju.edu.cn — no accessible English-language TTO catalog; Chinese portal not publicly enumerable"
+);
+
+// ShanghaiTech University — Technology Transfer Office
+// No accessible English-language tech transfer catalog found; no public portal identified.
+export const shanghaiTechScraper = createStubScraper(
+  "ShanghaiTech University",
+  "shanghaitech.edu.cn — no accessible English-language TTO catalog found"
+);
