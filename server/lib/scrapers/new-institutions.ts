@@ -983,7 +983,10 @@ export const baylorScraper = createInPartScraper("bcm", "Baylor College of Medic
 export const portlandStateScraper = createInPartScraper("pdx", "Portland State University");
 export const umontanaScraper = createStubScraper("University of Montana");
 export const montanaStateScraper = createMontanaStateScraper();
-export const unmScraper = createStubScraper("University of New Mexico", "unm.flintbox.com — JS-rendered, no accessible public API; requires headless browser or credentials");
+export const unmScraper = createFlintboxScraper(
+  { slug: "unm", orgId: 83, accessKey: "d806a16b-e229-4077-81f8-1704ae7099be" },
+  "University of New Mexico"
+);
 // ── New Mexico State University — Arrowhead Center (Task #135) ────────────────
 // URL: https://arrowheadcenter.nmsu.edu/technologies/
 // WordPress site — technologies as paginated HTML listing.
@@ -1201,7 +1204,10 @@ export const auburnScraper = createInPartScraper("auburn", "Auburn University");
 export const ugaScraper = createInPartScraper("uga", "University of Georgia");
 export const uarkansasScraper = createStubScraper("University of Arkansas", "Flintbox API deprecated, no public alternative found");
 export const uamsScraper = createStubScraper("University of Arkansas for Medical Sciences");
-export const udelScraper = createStubScraper("University of Delaware", "Flintbox API deprecated, no public alternative found");
+export const udelScraper = createFlintboxScraper(
+  { slug: "udel", orgId: 93, accessKey: "b3c809cf-2bd5-4b78-8f50-1cac404a5dba" },
+  "University of Delaware"
+);
 export const templeScraper = createStubScraper("Temple University");
 export const drexelScraper = createTechPublisherScraper("drexelotc", "Drexel University", { maxPg: 50 });
 export const bucknellScraper = createStubScraper("Bucknell University");
@@ -1214,7 +1220,7 @@ export const uconnScraper = createFlintboxScraper(
 export { dartmouthScraper } from "./dartmouth";
 export const brandeisScraper = createStubScraper("Brandeis University", "Flintbox API deprecated, no public alternative found");
 export const unhScraper = createStubScraper("University of New Hampshire");
-export const uriScraper = createStubScraper("University of Rhode Island", "Flintbox API deprecated, no public alternative found");
+export const uriScraper = createInPartScraper("uri", "University of Rhode Island");
 export const mountsinaiScraper = createInPartScraper("mountsinai", "Icahn School of Medicine at Mount Sinai");
 export const caltechScraper = createStubScraper("California Institute of Technology");
 export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
@@ -6529,3 +6535,182 @@ export const ucmScraper: InstitutionScraper = {
     return results;
   },
 };
+
+// ── Task #352 — 18 new institution scrapers ──────────────────────────────────
+
+// ── Tier 1: TechPublisher factory (5 institutions) ───────────────────────────
+
+export const houstonMethodistScraper = createTechPublisherScraper(
+  "tmhri",
+  "Houston Methodist Research Institute",
+  { maxPg: 10 }
+);
+
+export const sickkidsScraper = createTechPublisherScraper(
+  "sickkids",
+  "The Hospital for Sick Children (SickKids)",
+  { maxPg: 10 }
+);
+
+export const hjfScraper = createTechPublisherScraper(
+  "hjf",
+  "Henry M. Jackson Foundation for the Advancement of Military Medicine",
+  { maxPg: 20 }
+);
+
+export const okstateScraper = createTechPublisherScraper(
+  "innovations-okstate",
+  "Oklahoma State University",
+  { maxPg: 50 }
+);
+
+export const univieScraper = createTechPublisherScraper(
+  "univie",
+  "University of Vienna",
+  { maxPg: 10 }
+);
+
+// ── Tier 1: IN-PART factory (2 new institutions) ─────────────────────────────
+
+export const norinnova = createInPartScraper("norinnova", "Norinnova");
+
+export const embl = createInPartScraper("embl-em", "EMBLEM Technology Transfer (EMBL)");
+
+// ── Tier 2: Flintbox (3 new institutions — credentials from portal HTML) ──────
+
+export const unthscScraper = createFlintboxScraper(
+  { slug: "unthsc", orgId: 13, accessKey: "533cffd9-c553-4942-8f15-92b06b96a089" },
+  "University of North Texas Health Science Center"
+);
+
+export const qatarUniversityScraper = createFlintboxScraper(
+  { slug: "qataruniversity", orgId: 182, accessKey: "cf968422-0adc-4436-9c97-57d3451364b7" },
+  "Qatar University"
+);
+
+export const hollandBloorviewScraper = createFlintboxScraper(
+  { slug: "hollandbloorview", orgId: 97, accessKey: "a487340c-3e48-45d7-a5d7-a477fc40d173" },
+  "Holland Bloorview Kids Rehabilitation Hospital"
+);
+
+// ── Tier 3: Custom direct-HTML scrapers ───────────────────────────────────────
+
+// Benaroya Research Institute — Drupal listing page
+// 7 technologies with "Read more about" links under /collaborate-us/technology-available-licensing/{slug}
+export const benaroyaScraper: InstitutionScraper = {
+  institution: "Benaroya Research Institute",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Benaroya Research Institute";
+    const BASE = "https://www.benaroyaresearch.org";
+    const LIST_URL = `${BASE}/collaborations-bri/technology-available-licensing`;
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000);
+      if (!$) return [];
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      $(`a[href*="collaborate-us/technology-available-licensing/"]`).each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        const rawText = cleanText($(el).text());
+        const title = rawText.replace(/^read\s+more\s+about\s+/i, "").trim();
+        if (title.length < 5) return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (seen.has(fullUrl)) return;
+        seen.add(fullUrl);
+        results.push({ title, description: "", url: fullUrl, institution: INST });
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// La Jolla Institute for Immunology — Elementor slider listing page
+// Technologies are in .swiper-slide-inner[href] blocks with
+// .elementor-slide-heading (title) and .elementor-slide-description (description).
+export const ljiScraper: InstitutionScraper = {
+  institution: "La Jolla Institute for Immunology",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "La Jolla Institute for Immunology";
+    const BASE = "https://www.lji.org";
+    const LIST_URL = `${BASE}/research/licensing-opportunities/`;
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000);
+      if (!$) return [];
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      $(".swiper-slide-inner[href], .elementor-swiper-slide a[href]").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href || href === "#") return;
+        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
+        if (seen.has(fullUrl)) return;
+        const heading = cleanText($(el).find(".elementor-slide-heading").text());
+        if (!heading || heading.length < 3) return;
+        const description = cleanText($(el).find(".elementor-slide-description").text());
+        seen.add(fullUrl);
+        results.push({ title: heading, description, url: fullUrl, institution: INST });
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// Lankenau Institute for Medical Research (LIMR) — MainLineHealth Drupal listing
+// Technologies appear as h3 > a elements linking to /technology-development-licensing/.../{slug}
+// Category headers (Cancer, Autoimmune disease, etc.) are h2 elements without hrefs.
+export const limrScraper: InstitutionScraper = {
+  institution: "Lankenau Institute for Medical Research",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "Lankenau Institute for Medical Research";
+    const BASE = "https://limr.mainlinehealth.org";
+    const LIST_URL = `${BASE}/technology-development-licensing/intellectual-property-and-other-technology`;
+    try {
+      const $ = await fetchHtml(LIST_URL, 15_000);
+      if (!$) return [];
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      $("h3").each((_, el) => {
+        const aEl = $(el).find("a[href]").first();
+        let href = aEl.attr("href") ?? "";
+        if (!href) return;
+        const title = cleanText(aEl.text() || $(el).text());
+        if (title.length < 5) return;
+        if (href.startsWith("/")) href = `${BASE}${href}`;
+        else if (href.startsWith("http") && !href.includes("mainlinehealth.org")) return;
+        if (seen.has(href)) return;
+        seen.add(href);
+        results.push({ title, description: "", url: href, institution: INST });
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.error(`[scraper] ${INST} failed: ${err?.message}`);
+      return [];
+    }
+  },
+};
+
+// ── Unregistered stubs (JS-rendered or no accessible public listing) ───────────
+
+// BGN Technologies (Ben-Gurion University) — bgn.bgu.ac.il/technologies/
+// Technologies are JS-rendered via a SPA (WP REST API returns 404; no public JSON API).
+// Category filter params use numeric IDs (?categories=76944) but listing requires JS.
+export const bgnScraper = createStubScraper(
+  "BGN Technologies (Ben-Gurion University)",
+  "bgn.bgu.ac.il/technologies — JS-rendered SPA, no public REST API"
+);
+
+// Nova Southeastern University — research.nova.edu/ottc/available-technologies/
+// The available-technologies index page contains only college/department navigation links
+// and three non-listing sub-pages (Agreements, Criteria, Industry-Academic).
+// No enumerable technology catalog is accessible from the public web.
+export const novaSeScraper = createStubScraper(
+  "Nova Southeastern University",
+  "research.nova.edu/ottc/available-technologies — no enumerable tech catalog found"
+);

@@ -323,6 +323,26 @@ import {
   mgbScraper,
   // KAUST — Flintbox (kaust.flintbox.com, orgId 92)
   kaustScraper,
+  // Task #352 — Tier 1 TechPublisher (5 institutions)
+  houstonMethodistScraper,
+  sickkidsScraper,
+  hjfScraper,
+  okstateScraper,
+  univieScraper,
+  // Task #352 — Tier 1 IN-PART (2 new institutions + URI upgrade)
+  norinnova,
+  embl,
+  uriScraper,
+  // Task #352 — Tier 2 Flintbox (3 new + UNM/UDel upgrades)
+  unmScraper,
+  udelScraper,
+  unthscScraper,
+  qatarUniversityScraper,
+  hollandBloorviewScraper,
+  // Task #352 — Tier 3 custom HTML scrapers (3 institutions)
+  benaroyaScraper,
+  ljiScraper,
+  limrScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -700,6 +720,27 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   ncsuScraper,
   dalhousieScraper,
   kaustScraper,
+  // ── Task #352 — 16 new/upgraded scrapers (April 2026) ─────────────────────
+  // Tier 1: TechPublisher
+  houstonMethodistScraper,
+  sickkidsScraper,
+  hjfScraper,
+  okstateScraper,
+  univieScraper,
+  // Tier 1: IN-PART
+  norinnova,
+  embl,
+  uriScraper,
+  // Tier 2: Flintbox (3 new + 2 stubs upgraded)
+  unmScraper,
+  udelScraper,
+  unthscScraper,
+  qatarUniversityScraper,
+  hollandBloorviewScraper,
+  // Tier 3: custom HTML
+  benaroyaScraper,
+  ljiScraper,
+  limrScraper,
   ufScraper,
   // ── New platform-based scrapers (Task #100, March 2026) ───────────────────
   ucMercedScraper,
