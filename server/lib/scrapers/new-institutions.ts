@@ -364,7 +364,7 @@ export const gwuScraper = createTechPublisherScraper(
 );
 
 export const czBiohubScraper = createTechPublisherScraper(
-  "czbiohub",
+  "biohub",
   "CZ Biohub",
   { maxPg: 20 }
 );

@@ -81,23 +81,17 @@ export const stanfordScraper: InstitutionScraper = {
         results,
         {
           description: [
-            ".field--name-body .field__item",
-            ".field--name-field-brief-description",
-            ".node__content p",
-            "article .content p",
+            ".docket__text",
+            "article p",
           ],
           abstract: [
-            ".field--name-field-abstract",
-            ".field--name-field-description",
+            ".docket__text",
           ],
           inventors: [
-            ".field--name-field-inventors .field__item",
-            ".field--name-field-inventor li",
+            ".docket__related-people a",
+            ".docket__related-people li",
           ],
-          patentStatus: [
-            ".field--name-field-patent-status .field__item",
-            ".field--name-field-ip-status .field__item",
-          ],
+          patentStatus: [],
         },
         25,
         signal
