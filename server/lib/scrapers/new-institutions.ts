@@ -6632,12 +6632,19 @@ export const benaroyaScraper: InstitutionScraper = {
   },
 };
 
-// La Jolla Institute for Immunology — Elementor slider listing page
-// Technologies are in .swiper-slide-inner[href] blocks with
-// .elementor-slide-heading (title) and .elementor-slide-description (description).
-// Detail pages are WordPress posts — enriched with "main p" / ".entry-content p".
-// Note: most slides are JS-rendered (only 1 visible in static HTML);
-// Task #353 tracks improving listing coverage.
+// La Jolla Institute for Immunology — Elementor accordion + Swiper slider
+//
+// The licensing-opportunities page has TWO sources of technology listings:
+//
+//  1. Accordion section (.e-n-accordion-item) — 26 technologies in static HTML,
+//     organised under category headings (Infectious Disease, Cancer, etc.).
+//     Each item has a <summary> title and a body div with description + PDF link.
+//
+//  2. Swiper slider (.swiper-slide) — 5 server-rendered slides with richer
+//     descriptions but fewer entries.  Used as a supplemental source.
+//
+// Strategy: parse the accordion first (returns ≥20 listings); merge any
+// slider entries that add new titles.  No Playwright required.
 export const ljiScraper: InstitutionScraper = {
   institution: "La Jolla Institute for Immunology",
   async scrape(): Promise<ScrapedListing[]> {
@@ -6645,30 +6652,52 @@ export const ljiScraper: InstitutionScraper = {
     const BASE = "https://www.lji.org";
     const LIST_URL = `${BASE}/research/licensing-opportunities/`;
     try {
-      const $ = await fetchHtml(LIST_URL, 15_000);
+      const $ = await fetchHtml(LIST_URL, 20_000);
       if (!$) return [];
       const seen = new Set<string>();
       const results: ScrapedListing[] = [];
-      $(".swiper-slide-inner[href], .elementor-swiper-slide a[href]").each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        if (!href || href === "#") return;
-        const fullUrl = href.startsWith("http") ? href : `${BASE}${href}`;
-        if (seen.has(fullUrl)) return;
-        const heading = cleanText($(el).find(".elementor-slide-heading").text());
-        if (!heading || heading.length < 3) return;
-        const description = cleanText($(el).find(".elementor-slide-description").text());
-        seen.add(fullUrl);
-        results.push({ title: heading, description, url: fullUrl, institution: INST });
+
+      // ── Source 1: Elementor accordion (.e-n-accordion-item) ─────────────────
+      // Each item: summary.e-n-accordion-item-title = title,
+      //            first child div = body (description + PDF link).
+      $(".e-n-accordion-item").each((_, el) => {
+        const title = cleanText($(el).find("summary.e-n-accordion-item-title").text());
+        if (!title || title.length < 3) return;
+        const key = title.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        const bodyDiv = $(el).children("div").first();
+        // Use <p> text only to exclude CTA button text ("Read More", etc.)
+        const description = cleanText(bodyDiv.find("p").text() || bodyDiv.text());
+        const href = bodyDiv.find("a[href]").first().attr("href") ?? "";
+        const fullUrl = href && href !== "#"
+          ? (href.startsWith("http") ? href : `${BASE}${href}`)
+          : LIST_URL;
+        results.push({ title, description, url: fullUrl, institution: INST });
       });
-      if (results.length > 0) {
-        console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail pages...`);
-        await enrichWithDetailPages(results, {
-          description: ["main p", ".entry-content p", "article p", ".elementor-widget-container p"],
-        });
-        console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
-      } else {
-        console.log(`[scraper] ${INST}: ${results.length} listings`);
-      }
+
+      // ── Source 2: Swiper slider (.swiper-slide) ──────────────────────────────
+      // Adds any slides not already captured above.  Some slides carry richer
+      // prose descriptions absent from the accordion bodies.
+      $(".swiper-slide").each((_, el) => {
+        const title = cleanText($(el).find(".elementor-slide-heading").text());
+        if (!title || title.length < 3) return;
+        const key = title.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        const description = cleanText($(el).find(".elementor-slide-description").text());
+        const href =
+          $(el).find("a.swiper-slide-inner").attr("href") ||
+          $(el).find("a.elementor-slide-button").attr("href") ||
+          $(el).find("a[href]").first().attr("href") ||
+          "";
+        const fullUrl = href && href !== "#"
+          ? (href.startsWith("http") ? href : `${BASE}${href}`)
+          : LIST_URL;
+        results.push({ title, description, url: fullUrl, institution: INST });
+      });
+
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
@@ -6676,6 +6705,7 @@ export const ljiScraper: InstitutionScraper = {
     }
   },
 };
+
 
 // Lankenau Institute for Medical Research (LIMR) — MainLineHealth Drupal listing
 // Technologies appear as h3 > a elements linking to /technology-development-licensing/.../{slug}
