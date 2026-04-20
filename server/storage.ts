@@ -94,6 +94,7 @@ export interface IStorage {
     ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
   }): Promise<void>;
   wipeAllAssets(): Promise<void>;
+  wipeInstitutionAssets(institution: string): Promise<number>;
   getReviewQueue(): Promise<any[]>;
   resolveReviewItem(id: number, note: string): Promise<void>;
   addToReviewQueue(assetId: number, fingerprint: string, reason: string): Promise<void>;
@@ -739,6 +740,17 @@ export class DatabaseStorage implements IStorage {
   async wipeAllAssets(): Promise<void> {
     await db.delete(ingestedAssets);
     console.log("[storage] All ingested assets wiped");
+  }
+
+  async wipeInstitutionAssets(institution: string): Promise<number> {
+    const deleted = await db
+      .delete(ingestedAssets)
+      .where(eq(ingestedAssets.institution, institution))
+      .returning({ id: ingestedAssets.id });
+    // Also clear staging rows so their fingerprints don't block fresh re-sync
+    await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
+    console.log(`[storage] Wiped ${deleted.length} ingested assets + all staging rows for: ${institution}`);
+    return deleted.length;
   }
 
   async getReviewQueue(): Promise<any[]> {

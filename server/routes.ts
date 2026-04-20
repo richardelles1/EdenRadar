@@ -3541,6 +3541,18 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/admin/wipe-assets/:institution", async (req, res) => {
+    const pw = (req.headers["x-admin-password"] ?? req.query.pw) as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const institution = decodeURIComponent(req.params.institution);
+    try {
+      const deleted = await storage.wipeInstitutionAssets(institution);
+      res.json({ ok: true, institution, deleted });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Quarantine all unpushed is_new=true staging rows for a specific institution.
   // Used to resolve false-new floods from URL/dedup churn before they reach the push step.
   // Legacy path kept for backward compat — new path is /api/admin/indexing-queue/quarantine.
