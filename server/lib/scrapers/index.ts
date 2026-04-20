@@ -62,6 +62,13 @@ import {
   ornlScraper,
   argonneScraper,
   pnnlScraper,
+  // Task #364 — Recovered Flintbox scrapers + updated stubs
+  texasTechScraper,
+  brandeisScraper,
+  uarkansasScraper,
+  exeterScraper,
+  cardiffScraper,
+  warwickScraper,
 } from "./new-institutions";
 
 import {
@@ -521,6 +528,9 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "University of Arizona",
   // Task #360 — Flintbox API (orgId/accessKey confirmed live)
   "Sanford Health Innovation",
+  // Task #364 — Recovered Flintbox scrapers (re-investigated 2026-04-20)
+  "Texas Tech University",        // ttu.flintbox.com — orgId=23 — 246 techs confirmed
+  "Brandeis University",          // brandeis.flintbox.com — orgId=43 — 95 techs confirmed
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([
@@ -887,7 +897,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   cernKtScraper,                  // CERN Knowledge Transfer — Drupal SSR, 54 tech pages — probed 2026-03-17
   cancerResearchHorizonsScraper,  // Cancer Research Horizons (CRUK) — Playwright, JS-rendered, oncology portfolio — probed 2026-03-17
   // ── International Scrapers — Batch E (Task #120 → fixed Task #134) — UK & Canada ──
-  // Exeter, Cardiff, Warwick removed — no usable public TTO portal found
+  // Re-investigated 2026-04-20 (Task #364): Exeter portal gone; Cardiff+Warwick Flintbox 0 items
+  exeterScraper,                  // University of Exeter — stub (exeter.flintbox.com redirects away)
+  cardiffScraper,                 // Cardiff University — stub (cardiff.flintbox.com returns 0 items)
+  warwickScraper,                 // University of Warwick — stub (warwick.flintbox.com returns 0 items)
   imperialScraper,                // Imperial College London — paginated HTML scraper (imperial.ac.uk)
   birminghamScraper,              // University of Birmingham — Flintbox (unibirmingham.flintbox.com)
   sheffieldScraper,               // University of Sheffield — HTML listing (sheffield.ac.uk)
@@ -946,6 +959,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nevadaNSSVipsScraper,           // Nevada National Security Site — 39 VIPS records
   // ── Task #360 — Scraper Expansion: ~30 New Institutions ──────────────────────
   sanfordHealthScraper,           // Sanford Health Innovation — Flintbox orgId=122 — 10 techs confirmed
+  // Task #364 — Recovered US Flintbox scrapers (re-investigated 2026-04-20)
+  texasTechScraper,               // Texas Tech University — Flintbox orgId=23 — 246 techs confirmed
+  brandeisScraper,                // Brandeis University — Flintbox orgId=43 — 95 techs confirmed
+  uarkansasScraper,               // University of Arkansas — stub (TTO page JS-rendered, 0 enumerable tech links)
   // US children's hospitals
   seattleChildrensScraper,        // Seattle Children's Research Institute — stub (no enumerable catalog)
   childrensColoradoScraper,       // Children's Hospital Colorado Research Institute — stub (generic pages only)

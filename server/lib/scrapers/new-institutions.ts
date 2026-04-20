@@ -5347,17 +5347,32 @@ export const sheffieldScraper: InstitutionScraper = {
 };
 
 // ── 4. University of Exeter — no usable public TTO listing ───────────────────
-export const exeterScraper = createStubScraper("University of Exeter", "in-part portal inactive — no public TTO listing found");
+// Re-investigated 2026-04-20: exeter.flintbox.com redirects to generic Flintbox homepage.
+// No In-Part, TechPublisher, or standalone TTO catalog found. No accessible portal.
+export const exeterScraper = createStubScraper(
+  "University of Exeter",
+  "exeter.flintbox.com redirects to Flintbox homepage; no In-Part/TP portal found"
+);
 
 // ── 5. Cardiff University — no usable public TTO listing ─────────────────────
-export const cardiffScraper = createStubScraper("Cardiff University", "in-part portal inactive — no public TTO listing found");
+// Re-investigated 2026-04-20: cardiff.flintbox.com is live but returns 0 technologies via API.
+// Flintbox API responds 200 with empty items array. Portal exists but is empty.
+export const cardiffScraper = createStubScraper(
+  "Cardiff University",
+  "cardiff.flintbox.com live but Flintbox API returns 0 items — empty portfolio"
+);
 
 // ── 6. University of Dundee — Flintbox ───────────────────────────────────────
 // https://dundee.flintbox.com/technologies
 export const dundeeScraper = createFlintboxScraper({ slug: "dundee", orgId: 0, accessKey: "" }, "University of Dundee");
 
 // ── 7. University of Warwick — no usable public TTO listing ──────────────────
-export const warwickScraper = createStubScraper("University of Warwick", "in-part portal inactive — no public TTO listing found");
+// Re-investigated 2026-04-20: warwick.flintbox.com is live but returns 0 technologies via API.
+// Flintbox API responds 200 with empty items array. Portal exists but is empty.
+export const warwickScraper = createStubScraper(
+  "University of Warwick",
+  "warwick.flintbox.com live but Flintbox API returns 0 items — empty portfolio"
+);
 
 // ── Canada ────────────────────────────────────────────────────────────────────
 
