@@ -3561,7 +3561,10 @@ export async function registerRoutes(
     }
     try {
       const deleted = await storage.wipeInstitutionAssets(institution);
-      console.log(`[admin] Institution wipe executed for "${institution}": ${deleted} assets removed`);
+      const callerIp = req.ip ?? req.headers["x-forwarded-for"] ?? "unknown";
+      console.warn(
+        `[admin] INSTITUTION WIPE: institution="${institution}" deleted=${deleted} ip=${callerIp} ts=${new Date().toISOString()}`
+      );
       res.json({ ok: true, institution, deleted });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
