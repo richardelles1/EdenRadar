@@ -3556,7 +3556,7 @@ export async function registerRoutes(
     if (!ALL_SCRAPERS.some((s) => s.institution === institution)) {
       return res.status(400).json({ error: `No registered scraper for: ${institution}` });
     }
-    if (!req.body?.confirm) {
+    if (req.body?.confirm !== true) {
       return res.status(400).json({ error: "Must send { confirm: true } to confirm destructive wipe" });
     }
     try {

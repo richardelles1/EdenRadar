@@ -743,14 +743,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async wipeInstitutionAssets(institution: string): Promise<number> {
-    const deleted = await db
-      .delete(ingestedAssets)
-      .where(eq(ingestedAssets.institution, institution))
-      .returning({ id: ingestedAssets.id });
-    // Also clear staging rows so their fingerprints don't block fresh re-sync
-    await db.delete(syncStaging).where(eq(syncStaging.institution, institution));
-    console.log(`[storage] Wiped ${deleted.length} ingested assets + all staging rows for: ${institution}`);
-    return deleted.length;
+    let deletedCount = 0;
+    await db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(ingestedAssets)
+        .where(eq(ingestedAssets.institution, institution))
+        .returning({ id: ingestedAssets.id });
+      // Also clear staging rows so their fingerprints don't block fresh re-sync
+      await tx.delete(syncStaging).where(eq(syncStaging.institution, institution));
+      deletedCount = deleted.length;
+    });
+    console.log(`[storage] Wiped ${deletedCount} ingested assets + all staging rows for: ${institution}`);
+    return deletedCount;
   }
 
   async getReviewQueue(): Promise<any[]> {
