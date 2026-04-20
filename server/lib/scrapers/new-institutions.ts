@@ -6597,6 +6597,7 @@ export const hollandBloorviewScraper = createFlintboxScraper(
 
 // Benaroya Research Institute — Drupal listing page
 // 7 technologies with "Read more about" links under /collaborate-us/technology-available-licensing/{slug}
+// Detail pages: standard Drupal node layout; "main p" captures full description body.
 export const benaroyaScraper: InstitutionScraper = {
   institution: "Benaroya Research Institute",
   async scrape(): Promise<ScrapedListing[]> {
@@ -6618,7 +6619,11 @@ export const benaroyaScraper: InstitutionScraper = {
         seen.add(fullUrl);
         results.push({ title, description: "", url: fullUrl, institution: INST });
       });
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail pages...`);
+      await enrichWithDetailPages(results, {
+        description: ["main p", "article p", ".field p", ".node__content p"],
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
@@ -6630,6 +6635,9 @@ export const benaroyaScraper: InstitutionScraper = {
 // La Jolla Institute for Immunology — Elementor slider listing page
 // Technologies are in .swiper-slide-inner[href] blocks with
 // .elementor-slide-heading (title) and .elementor-slide-description (description).
+// Detail pages are WordPress posts — enriched with "main p" / ".entry-content p".
+// Note: most slides are JS-rendered (only 1 visible in static HTML);
+// Task #353 tracks improving listing coverage.
 export const ljiScraper: InstitutionScraper = {
   institution: "La Jolla Institute for Immunology",
   async scrape(): Promise<ScrapedListing[]> {
@@ -6652,7 +6660,15 @@ export const ljiScraper: InstitutionScraper = {
         seen.add(fullUrl);
         results.push({ title: heading, description, url: fullUrl, institution: INST });
       });
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      if (results.length > 0) {
+        console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail pages...`);
+        await enrichWithDetailPages(results, {
+          description: ["main p", ".entry-content p", "article p", ".elementor-widget-container p"],
+        });
+        console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      } else {
+        console.log(`[scraper] ${INST}: ${results.length} listings`);
+      }
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
@@ -6664,6 +6680,7 @@ export const ljiScraper: InstitutionScraper = {
 // Lankenau Institute for Medical Research (LIMR) — MainLineHealth Drupal listing
 // Technologies appear as h3 > a elements linking to /technology-development-licensing/.../{slug}
 // Category headers (Cancer, Autoimmune disease, etc.) are h2 elements without hrefs.
+// Detail pages: Drupal node layout; "main p" captures lead investigator + full description.
 export const limrScraper: InstitutionScraper = {
   institution: "Lankenau Institute for Medical Research",
   async scrape(): Promise<ScrapedListing[]> {
@@ -6687,7 +6704,11 @@ export const limrScraper: InstitutionScraper = {
         seen.add(href);
         results.push({ title, description: "", url: href, institution: INST });
       });
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      console.log(`[scraper] ${INST}: ${results.length} listings, fetching detail pages...`);
+      await enrichWithDetailPages(results, {
+        description: ["main p", "article p", ".content p", ".node__content p"],
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
