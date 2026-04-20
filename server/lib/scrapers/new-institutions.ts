@@ -977,7 +977,12 @@ export const uhoustonScraper: InstitutionScraper = {
     }
   },
 };
-export const texasTechScraper = createStubScraper("Texas Tech University", "Flintbox API deprecated, no public alternative found");
+// Texas Tech University — ttu.flintbox.com re-investigated 2026-04-20
+// Flintbox API still works — orgId=23, accessKey discovered from page source. 246 items confirmed.
+export const texasTechScraper = createFlintboxScraper(
+  { slug: "ttu", orgId: 23, accessKey: "391d483e-dc4f-4be7-913d-1a63f683a47b" },
+  "Texas Tech University"
+);
 export const untScraper = createStubScraper("University of North Texas");
 export const baylorScraper = createInPartScraper("bcm", "Baylor College of Medicine");
 export const portlandStateScraper = createInPartScraper("pdx", "Portland State University");
@@ -1202,7 +1207,13 @@ export const warfScraper: InstitutionScraper = {
 };
 export const auburnScraper = createInPartScraper("auburn", "Auburn University");
 export const ugaScraper = createInPartScraper("uga", "University of Georgia");
-export const uarkansasScraper = createStubScraper("University of Arkansas", "Flintbox API deprecated, no public alternative found");
+// University of Arkansas — re-investigated 2026-04-20
+// research.uark.edu/units/techtransfer/available-technologies.html returns 44KB but 0 tech links.
+// No Flintbox, In-Part, or TechPublisher portal found. Portal appears JS-rendered or has no catalog.
+export const uarkansasScraper = createStubScraper(
+  "University of Arkansas",
+  "research.uark.edu TTO page returns 44KB with 0 enumerable tech links; no Flintbox/In-Part/TP portal found"
+);
 export const uamsScraper = createStubScraper("University of Arkansas for Medical Sciences");
 export const udelScraper = createFlintboxScraper(
   { slug: "udel", orgId: 93, accessKey: "b3c809cf-2bd5-4b78-8f50-1cac404a5dba" },
@@ -1218,7 +1229,12 @@ export const uconnScraper = createFlintboxScraper(
   "University of Connecticut"
 );
 export { dartmouthScraper } from "./dartmouth";
-export const brandeisScraper = createStubScraper("Brandeis University", "Flintbox API deprecated, no public alternative found");
+// Brandeis University — brandeis.flintbox.com re-investigated 2026-04-20
+// Flintbox API still works — orgId=43, accessKey discovered from page source. 95 items confirmed.
+export const brandeisScraper = createFlintboxScraper(
+  { slug: "brandeis", orgId: 43, accessKey: "0bc51ba1-c4b3-41c2-a762-443373f4df2c" },
+  "Brandeis University"
+);
 export const unhScraper = createStubScraper("University of New Hampshire");
 export const uriScraper = createInPartScraper("uri", "University of Rhode Island");
 export const mountsinaiScraper = createInPartScraper("mountsinai", "Icahn School of Medicine at Mount Sinai");
