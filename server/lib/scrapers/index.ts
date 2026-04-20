@@ -519,6 +519,8 @@ const TIER1_INSTITUTIONS = new Set<string>([
   "University of Calgary",
   // Inteum + Algolia API (arizona.technologypublisher.com)
   "University of Arizona",
+  // Task #360 — Flintbox API (orgId/accessKey confirmed live)
+  "Sanford Health Innovation",
 ]);
 
 const TIER2_INSTITUTIONS = new Set<string>([

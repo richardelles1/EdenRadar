@@ -6795,12 +6795,10 @@ export const childrensColoradoScraper = createStubScraper(
 
 // Children's National Hospital — Washington, DC
 // Fetched 2026-04-20: technology.childrensnational.org returns 0 bytes (JS-rendered or bot-blocked).
-// Note: childrensNationalScraper (In-Part "childrensnational") already in registry — this is
-// a separate check for their dedicated tech-transfer subdomain, which is inaccessible.
-export const childrensNationalTechScraper = createStubScraper(
-  "Children's National Hospital Technology Transfer",
-  "technology.childrensnational.org returns 0 bytes — JS-rendered or bot-blocked; main In-Part portal already covered"
-);
+// NOT exported or registered in ALL_SCRAPERS: Children's National is already covered by
+// childrensNationalScraper (In-Part "childrensnational") which is already in the registry.
+// Adding a second entry for the same institution would create duplicate listings.
+// const _childrensNationalTechNote = "covered by childrensNationalScraper (In-Part API)";
 
 // Rady Children's Institute for Genomic Medicine — radygenomics.org
 // Fetched 2026-04-20: /clinical-genome-services/licenses/ is a page about licensing
@@ -6813,12 +6811,19 @@ export const radyChildrensScraper = createStubScraper(
 // ── US Independent Research Institutes ───────────────────────────────────────
 
 // Van Andel Institute — vai.org
-// Fetched 2026-04-20: /research/technologies-and-tools/ is 120KB but is an informational
-// page about the Business Development & Technology Transfer office. No WordPress custom
-// post type for technologies; no enumerable IP listing (WP API types checked: no tech CPT).
+// Investigated 2026-04-20 via: HTTP fetch (120KB), WP REST API pages (100 results/2 pages),
+// WP search API, WP custom post types, and WP page 16028 content.
+// Finding: The "technologies-and-tools" page is fully Elementor-rendered (confirmed:
+// elementorFrontendConfig present, main content = 4662 chars with only 2 links).
+// Technology listings visible in a browser (via JS/Elementor rendering) do NOT appear
+// in the static HTML and cannot be extracted via HTTP scraping.
+// WP CPT inventory: no "technology" or "patent" CPT found; all 200 WP pages searched —
+// only article/event/people post types; WP search for "technology" yields only news posts.
+// Elementor block data requires authenticated WP API access (context=edit returns empty for public requests).
+// Requires Playwright or authenticated WP API to enumerate individual technologies.
 export const vanAndelScraper = createStubScraper(
   "Van Andel Institute",
-  "vai.org/research/technologies-and-tools — informational page only; no WordPress tech CPT or enumerable IP catalog found"
+  "vai.org — Elementor-rendered tech listing (static HTML: 4662-char main, 2 links only); no WP tech CPT; requires Playwright"
 );
 
 // Salk Institute for Biological Studies — salk.edu
