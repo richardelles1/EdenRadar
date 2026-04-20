@@ -1149,14 +1149,14 @@ export const notredameScraper = createInPartScraper("nd", "University of Notre D
 // concurrently fetches search results per-category. Verified: 1,525 listings (140 categories).
 export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const base = "https://www.warf.org";
     const techPageUrl = `${base}/commercialize/technologies/`;
     const searchUrl = `${base}/search-results/?searchwp=&search-technology=1`;
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
     try {
-      const $index = await fetchHtml(techPageUrl, 15000);
+      const $index = await fetchHtml(techPageUrl, 15000, signal);
       if (!$index) {
         console.warn(`[scraper] University of Wisconsin (WARF): failed to load technologies page`);
         return [];
@@ -1176,10 +1176,11 @@ export const warfScraper: InstitutionScraper = {
       let catIdx = 0;
       const worker = async () => {
         while (catIdx < uniqueCats.length) {
+          if (signal?.aborted) return;
           const cat = uniqueCats[catIdx++];
           const catUrl = `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}`;
           try {
-            const $ = await fetchHtml(catUrl, 12000);
+            const $ = await fetchHtml(catUrl, 12000, signal);
             if (!$) continue;
             $('a[href*="/technologies/summary/"]').each((_, el) => {
               const href = $(el).attr("href") ?? "";
@@ -6512,7 +6513,7 @@ export const mgbScraper: InstitutionScraper = {
 // Detail pages use <p style="text-align: justify;"> for the main description.
 export const ucmScraper: InstitutionScraper = {
   institution: "Universidad Complutense de Madrid",
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const BASE = "https://www.ucm.es/otrien";
     const INST = "Universidad Complutense de Madrid";
     const CATEGORIES = ["health-sciences", "biology", "chemistry", "pharmacy", "medicine"];
@@ -6520,9 +6521,10 @@ export const ucmScraper: InstitutionScraper = {
     const results: ScrapedListing[] = [];
 
     for (const cat of CATEGORIES) {
+      if (signal?.aborted) break;
       const catUrl = `${BASE}/complutransfer-${cat}`;
       try {
-        const $ = await fetchHtml(catUrl, 15_000);
+        const $ = await fetchHtml(catUrl, 15_000, signal);
         if (!$) continue;
 
         $("a[href]").each((_, el) => {
@@ -6560,7 +6562,7 @@ export const ucmScraper: InstitutionScraper = {
         "main p",
         ".description p",
       ],
-    });
+    }, undefined, signal);
 
     console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
     return results;

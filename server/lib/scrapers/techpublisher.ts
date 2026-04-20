@@ -224,8 +224,12 @@ export function createTechPublisherScraper(
 
   return {
     institution,
-    async scrape(): Promise<ScrapedListing[]> {
+    async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
       const controller = new AbortController();
+      if (signal) {
+        if (signal.aborted) controller.abort();
+        else signal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
       let timer: ReturnType<typeof setTimeout> | undefined;
       if (opts.institutionTimeoutMs) {
         timer = setTimeout(() => controller.abort(), opts.institutionTimeoutMs);

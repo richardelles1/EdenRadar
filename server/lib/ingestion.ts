@@ -334,10 +334,13 @@ const DB_INFRA_PATTERNS = [
 ];
 
 /** Returns true if a scrape error is likely transient (network/timeout) and worth retrying.
- * Deterministic failures (auth/403/parsing/selector bugs) and DB infra errors are NOT retried. */
+ * Deterministic failures (auth/403/parsing/selector bugs) and DB infra errors are NOT retried.
+ * Orchestrator-level timeouts ("scraper timeout (Xs)") are also NOT retried — the scraper
+ * already consumed its full time budget; a second attempt would just double the damage. */
 function isScrapeRetryable(msg: string): boolean {
   const m = msg.toLowerCase();
   if (DB_INFRA_PATTERNS.some((p) => m.includes(p))) return false;
+  if (m.startsWith("scraper timeout")) return false;
   return (
     m.includes("timeout") ||
     m.includes("timed out") ||

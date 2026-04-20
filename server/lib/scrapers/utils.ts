@@ -6,22 +6,29 @@ import * as cheerio from "cheerio";
 // not generate 20+ simultaneous connections and trigger rate-limiting at TTO sites.
 const MAX_CONCURRENT_FETCH = 8;
 let _fetchSlots = MAX_CONCURRENT_FETCH;
-const _fetchQueue: Array<() => void> = [];
+const _fetchQueue: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
 
-function acquireFetchSlot(): Promise<void> {
+function acquireFetchSlot(signal?: AbortSignal): Promise<void> {
   if (_fetchSlots > 0) {
     _fetchSlots--;
     return Promise.resolve();
   }
-  return new Promise<void>((resolve) => {
-    _fetchQueue.push(resolve);
+  if (signal?.aborted) return Promise.reject(new DOMException("Aborted", "AbortError"));
+  return new Promise<void>((resolve, reject) => {
+    const entry = { resolve, reject };
+    _fetchQueue.push(entry);
+    signal?.addEventListener("abort", () => {
+      const idx = _fetchQueue.indexOf(entry);
+      if (idx !== -1) _fetchQueue.splice(idx, 1);
+      reject(new DOMException("Aborted", "AbortError"));
+    }, { once: true });
   });
 }
 
 function releaseFetchSlot(): void {
   const next = _fetchQueue.shift();
   if (next) {
-    next();
+    next.resolve();
   } else {
     _fetchSlots++;
   }
@@ -48,6 +55,7 @@ async function withRetry<T>(
       return await fn();
     } catch (err: any) {
       lastError = err;
+      if (err?.name === "AbortError") throw err;
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
         console.warn(`[scraper] Retry ${attempt + 1}/${maxRetries} for ${label} after ${Math.round(delay)}ms: ${err?.message}`);
@@ -67,7 +75,7 @@ export async function fetchHtml(
   if (externalSignal?.aborted) return null;
   try {
     return await withRetry(async () => {
-      await acquireFetchSlot();
+      await acquireFetchSlot(externalSignal);
       const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
       try {
         const res = await fetch(url, {
@@ -110,7 +118,7 @@ export async function fetchJson<T = any>(
   if (externalSignal?.aborted) return null;
   try {
     return await withRetry(async () => {
-      await acquireFetchSlot();
+      await acquireFetchSlot(externalSignal);
       const { signal, cleanup } = combineSignal(timeoutMs, externalSignal);
       try {
         const res = await fetch(url, {

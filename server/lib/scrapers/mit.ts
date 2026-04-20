@@ -10,16 +10,17 @@ const MAX_PAGES = 200;
 
 export const mitScraper: InstitutionScraper = {
   institution: INST,
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
       for (let page = 0; page < MAX_PAGES; page++) {
+        if (signal?.aborted) break;
         const url = page === 0
           ? `${BASE}${LIST_PATH}?${LIST_FILTER}`
           : `${BASE}${LIST_PATH}?${LIST_FILTER}&page=${page}`;
-        const $ = await fetchHtml(url, 15_000);
+        const $ = await fetchHtml(url, 15_000, signal);
         if (!$) break;
 
         let pageCount = 0;
@@ -65,7 +66,7 @@ export const mitScraper: InstitutionScraper = {
           ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
-      });
+      }, 100, signal);
 
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
