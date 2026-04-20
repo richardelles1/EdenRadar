@@ -1,0 +1,36 @@
+1. MedStar Institute for Innovation
+    https://www.medstarhealth.org/innovation-and-research/medstar-institute-for-innovation/business-innovation-lab/inventor-services/available-technologies
+    The page is live and lists multiple named technologies under “Available Technologies,” with direct asset pages beneath it.  
+2. Rady Children’s Institute for Genomic Medicine (RCIGM)
+    https://radygenomics.org/collaborations/
+    The page is live and explicitly has a “Licensing Opportunities” section stating some tools and methodologies are available for licensing.  
+3. Josep Carreras Leukaemia Research Institute
+    https://www.carrerasresearch.org/en/innovation
+    The page is live and includes an “Available technologies” section with named technologies such as EPICART and HDAC7.  
+4. HudsonAlpha Institute for Biotechnology
+    https://www.hudsonalpha.org/intellectual-property/
+    The page is live and explicitly advertises licensing opportunities and IP review paths. It is more partnership/IP-oriented than a card catalog, but it is a real commercialization surface.  
+5. The Lundquist Institute
+    https://lundquist.org/business-development-and-tech-transfer/innovations-for-licensing/
+    The page is live and says it has dozens of technologies available for partnering, with a searchable technologies section.  
+6. Hennepin Healthcare Research Institute (HHRI)
+    https://www.hhrinstitute.org/researcher-resources/intellectual-property-and-technology-transfer/
+    The page is live and identifies HHRI’s Tech Transfer Office and technology transfer process. This is more of an office/IP surface than a clean catalog, but it is a real tech-transfer endpoint.  
+7. CDC Technology Transfer Office
+    https://www.restoredcdc.org/www.cdc.gov/os/technology/techtransfer/industry/licensing/technologies.htm
+    The page is live and explicitly says CDC researchers develop technologies and that the page provides search/filter features for licensing and collaboration.  
+8. National Jewish Health
+    https://www.nationaljewish.org/NJH/media/pdf/techtransfer/NJH-Selected-Technologies.pdf
+    This is a live PDF with selected technologies available for licensing from National Jewish Health.  
+9. Brandeis University
+    https://www.brandeis.edu/innovation/pdfs/brandeis_available_technologies_2023.pdf
+    This is a live PDF booklet of technologies available for licensing across therapeutics, diagnostics, devices, and more.  
+10. Feinstein Institutes for Medical Research / Northwell
+    https://feinstein.northwell.edu/sites/northwell.edu/files/2019-03/Technologies-Available-for-Licensing-final.pdf
+    The HTML office page threw access issues here, but the direct PDF is live and explicitly titled “Technologies Available for Licensing.”  
+
+A couple of sharp notes so Replit doesn’t light money on fire:
+
+* Best scraper-first sources here: MedStar, Josep Carreras, Lundquist, and the CDC page. They expose clearer on-page structure or obvious tech content.  
+* PDF sources: National Jewish, Brandeis, and Feinstein are useful, but they belong in a separate PDF ingestion path from your HTML/Playwright flow.  
+* More relationship/IP than pure catalog: HudsonAlpha and HHRI are real commercialization endpoints, but I’d tag them as lower-structure sources.  

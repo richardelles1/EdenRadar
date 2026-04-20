@@ -1,0 +1,114 @@
+Asia / Global Translational Institutes
+
+1. RIKEN Innovation (Japan)
+    https://www.riken.jp/en/industry/technology/
+
+* National research institute
+* Technology transfer + licensing surface
+* Real downstream assets (biotech, life sciences)
+
+⸻
+
+2. National Institute of Advanced Industrial Science and Technology (AIST, Japan)
+    https://www.aist.go.jp/aist_e/list/latest_research/
+
+* Large applied research org
+* Listings of technologies and research outputs (scrapeable pages)
+
+⸻
+
+3. Korea Institute of Science and Technology (KIST)
+    https://eng.kist.re.kr/kist_eng/?sub_num=40
+
+* Tech commercialization + research outputs
+* Structured enough for scraping
+
+⸻
+
+4. Agency for Science, Technology and Research (A*STAR) – Exploit Technologies arm
+    https://www.a-star.edu.sg/Collaborate/for-industry/technology-offerings
+
+* Confirmed tech offerings section
+* Strong biotech + diagnostics pipeline
+
+⸻
+
+European Applied / Translational Research
+
+5. VTT Technical Research Centre of Finland
+    https://www.vttresearch.com/en/services/technology-licensing
+
+* Real licensing + commercialization services
+* Applied biotech + materials
+
+⸻
+
+6. SINTEF (Norway)
+    https://www.sintef.no/en/business/
+
+* Industry-facing research org
+* Includes commercialization pathways + tech outputs
+
+⸻
+
+7. TNO (Netherlands Organisation for Applied Scientific Research)
+    https://www.tno.nl/en/technology-science/
+
+* Large applied research organization
+* Technology domains + innovation outputs
+
+⸻
+
+8. IMEC (Belgium nano + biotech research)
+    https://www.imec-int.com/en/work-with-us/licensing
+
+* Licensing + partnership surface
+* High-end research (bioelectronics, diagnostics)
+
+⸻
+
+Independent / Niche Research Institutes
+
+9. Burnet Institute (Australia)
+    https://www.burnet.edu.au/partnerships/
+
+* Infectious disease + global health
+* Collaboration + commercialization pathways
+
+⸻
+
+10. Institute of Cancer Research (UK)
+    https://www.icr.ac.uk/business-and-innovation/licensing-opportunities
+
+* Dedicated licensing opportunities page
+* Strong oncology pipeline
+
+⸻
+
+🧠 Why this batch holds up
+
+* These are not in your original dataset
+* Not part of:
+    * UC system
+    * NIH ecosystem
+    * major US university TTO cluster you already scraped
+* All links:
+    * load
+    * expose real content
+    * have scrapeable structure or expandable pathways
+
+⸻
+
+⚠️ What to expect when scraping
+
+* Best structured
+    * A*STAR
+    * ICR
+    * RIKEN
+* Medium (needs parsing)
+    * VTT
+    * IMEC
+* Exploration-based (crawl deeper)
+    * SINTEF
+    * TNO
+    * Burnet
