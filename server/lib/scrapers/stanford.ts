@@ -78,7 +78,7 @@ export const stanfordScraper: InstitutionScraper = {
           extractListings($);
         }
         const batchEnd = Math.min(i + PAGE_BATCH, remaining.length);
-        console.log(`[scraper] ${INST}: fetched pages ${i + 1}–${batchEnd + 1} — ${results.length} listings so far`);
+        console.log(`[scraper] ${INST}: fetched pages ${i + 1}–${batchEnd} — ${results.length} listings so far`);
       }
 
       if (skipped > 0) {
