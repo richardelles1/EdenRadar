@@ -970,8 +970,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   childrensColoradoScraper,       // Children's Hospital Colorado Research Institute — stub (generic pages only)
   radyChildrensScraper,           // Rady Children's Institute for Genomic Medicine — stub (clinical service licenses, not IP)
   // US independent research institutes
-  vanAndelScraper,                // Van Andel Institute — Playwright (Elementor-rendered; wait + DOM extract)
-  salkScraper,                    // Salk Institute for Biological Studies — Playwright (SPA; extract /technology-development/ links)
+  vanAndelScraper,                // Van Andel Institute — stub (contact-only page; Playwright confirmed 0 tech links after full SPA render)
+  salkScraper,                    // Salk Institute for Biological Studies — stub (redirects to authenticated In-Part portal; Playwright confirmed 0 tech links)
   broadInstituteScraper,          // Broad Institute of MIT and Harvard — stub (marketing page only)
   whiteheadScraper,               // Whitehead Institute for Biomedical Research — stub (30KB, no listing)
   kesslerFoundationScraper,       // Kessler Foundation — stub (Cloudflare-blocked)
@@ -987,7 +987,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   jacksonLabScraper,              // Jackson Laboratory (JAX) — stub (55KB, 0 tech links)
   burnetInstituteScraper,         // Burnet Institute — stub (single-technology page only)
   // International institutions
-  astarScraper,                   // A*STAR — Playwright (Next.js SPA; XHR intercept + __NEXT_DATA__ + DOM fallback)
+  astarScraper,                   // A*STAR — stub (ERR_NAME_NOT_RESOLVED via Playwright; astar.edu.sg DNS geo-restricted to Singapore)
   csiroScraper,                   // CSIRO — Playwright (JS-rendered IP catalog; XHR intercept + DOM fallback)
   nrcCanadaScraper,               // National Research Council Canada — stub (generic gov navigation)
   fraunhoferScraper,              // Fraunhofer Society — stub (institute group listing, no unified IP catalog)
@@ -997,7 +997,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   sintefScraper,                  // SINTEF — stub (7KB, 0 tech links)
   tnoScraper,                     // TNO (Netherlands) — stub (research topics, not IP catalog)
   imecScraper,                    // IMEC — Playwright (JS-rendered; XHR intercept + DOM fallback)
-  bgnScraper,                     // BGN Technologies (Ben-Gurion University) — Playwright (SPA; XHR intercept + DOM fallback)
+  bgnScraper,                     // BGN Technologies (Ben-Gurion University) — stub (CloudFront WAF blocks both curl and Playwright headless)
   rikenScraper,                   // RIKEN — stub (lab pages only, not IP listings)
   aistScraper,                    // AIST (Japan) — stub (18KB informational, 0 tech links)
   kistScraper,                    // KIST (Korea) — stub (166 bytes, bot-blocked)
