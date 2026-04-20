@@ -6781,9 +6781,10 @@ export const limrScraper: InstitutionScraper = {
 // ── Unregistered stubs (JS-rendered or no accessible public listing) ───────────
 
 // BGN Technologies (Ben-Gurion University) — bgn.bgu.ac.il/technologies/
-// Technologies are JS-rendered via a SPA (WP REST API returns 404; no public JSON API).
-// Category filter params use numeric IDs (?categories=76944) but listing requires JS.
-// Playwright navigates the page, waits for the SPA to render, then extracts tech links.
+// Verified 2026-04-20: /technologies/ returns HTTP 403 (CloudFront bot block for curl).
+// A real browser via Playwright bypasses CloudFront JS challenge. Technologies are
+// WP SPA-rendered. Strategy: intercept WP REST API JSON responses first;
+// DOM fallback extracts /technologies/{slug} links from rendered anchor tags.
 export const bgnScraper: InstitutionScraper = {
   institution: "BGN Technologies (Ben-Gurion University)",
   scraperType: "playwright",
@@ -6937,9 +6938,10 @@ export const radyChildrensScraper = createStubScraper(
 // ── US Independent Research Institutes ───────────────────────────────────────
 
 // Van Andel Institute — vai.org
-// Technologies-and-tools page is fully Elementor-rendered (confirmed 2026-04-20).
-// Static HTML main section: 4662 chars, only 2 self-referencing links.
-// Playwright waits for Elementor to hydrate, then extracts all sub-page links.
+// Verified 2026-04-20: /research/technologies-and-tools/ returns 138KB HTML but only
+// 2 self-referencing links — all technology entries are Elementor-rendered (51 Elementor
+// script references). Playwright waits for Elementor to hydrate, then extracts
+// depth-1 child links (e.g. /research/technologies-and-tools/{slug}/).
 export const vanAndelScraper: InstitutionScraper = {
   institution: "Van Andel Institute",
   scraperType: "playwright",
@@ -7004,9 +7006,10 @@ export const vanAndelScraper: InstitutionScraper = {
 };
 
 // Salk Institute for Biological Studies — salk.edu
-// /science/technology-development/ returns 60KB static shell; tech listing is JS-rendered
-// (New Relic/SPA detected; only 3 self-referencing links in static HTML).
-// Playwright waits for the React/SPA to render, then extracts individual technology links.
+// Verified 2026-04-20: /science/technology-development/ returns 162KB HTML but only
+// self-referencing and localized-locale links (no /technology-development/{slug} detail
+// pages in static HTML). Tech listing is SPA-rendered. Playwright waits for the SPA,
+// then extracts links matching /science/technology-development/{slug}/.
 export const salkScraper: InstitutionScraper = {
   institution: "Salk Institute for Biological Studies",
   scraperType: "playwright",
@@ -7183,9 +7186,10 @@ export const burnetInstituteScraper = createStubScraper(
 // ── International Institutions ────────────────────────────────────────────────
 
 // A*STAR (Agency for Science, Technology and Research) — Singapore
-// astar.edu.sg/research-and-technology/ip-and-technology-licensing returns 0 bytes via HTTP
-// (React/Next.js SPA). Strategy: extract __NEXT_DATA__ JSON from script tag first;
-// fall back to extracting rendered tech cards from DOM.
+// Verified 2026-04-20: /research-and-technology/ip-and-technology-licensing returns
+// connection refused from the Replit environment (likely geo-filtered). A real browser
+// via Playwright (different egress) may succeed. Strategy: XHR intercept first, then
+// __NEXT_DATA__ JSON from script tag, then DOM fallback link extraction.
 export const astarScraper: InstitutionScraper = {
   institution: "A*STAR (Agency for Science, Technology and Research)",
   scraperType: "playwright",
@@ -7312,17 +7316,18 @@ export const astarScraper: InstitutionScraper = {
 };
 
 // CSIRO (Commonwealth Scientific and Industrial Research Organisation) — Australia
-// csiro.au/en/work-with-us/ip-and-licensing returns 91KB but 0 tech links via HTTP
-// (catalog is JS-rendered). Playwright navigates to the IP portfolio, waits for
-// individual technology cards to render, and extracts titles + detail URLs.
+// /en/work-with-us/ip-and-licensing (previous URL) now returns HTTP 404.
+// Verified 2026-04-20: /en/work-with-us/ip-commercialisation/Marketplace is the live
+// IP Marketplace (200 OK, 109KB). Individual technology pages (Kebari, etc.) are
+// JS-rendered inside the Marketplace SPA. DOM fallback targets /ip-commercialisation/Marketplace/.
 export const csiroScraper: InstitutionScraper = {
   institution: "CSIRO",
   scraperType: "playwright",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "CSIRO";
     const BASE = "https://www.csiro.au";
-    // The IP portfolio listing page shows individual licensable technologies
-    const LISTING_URL = `${BASE}/en/work-with-us/ip-and-licensing`;
+    // Commercialisation Marketplace — individual tech entries rendered by SPA
+    const LISTING_URL = `${BASE}/en/work-with-us/ip-commercialisation/Marketplace`;
 
     let browser: import("playwright").Browser | null = null;
     try {
@@ -7337,11 +7342,11 @@ export const csiroScraper: InstitutionScraper = {
         "Accept-Language": "en-US,en;q=0.9",
       });
 
-      // Intercept API calls the CSIRO SPA fires for the technology catalog
+      // Intercept API calls the CSIRO Marketplace SPA fires for the technology catalog
       const apiItems: { title: string; description: string; url: string }[] = [];
       page.on("response", async (resp) => {
         const url = resp.url();
-        if (!url.includes("api") && !url.includes("search") && !url.includes("technolog")) return;
+        if (!url.includes("api") && !url.includes("search") && !url.includes("marketplace") && !url.includes("commercialis")) return;
         try {
           const ct = resp.headers()["content-type"] ?? "";
           if (!ct.includes("json")) return;
@@ -7355,7 +7360,7 @@ export const csiroScraper: InstitutionScraper = {
             if (!title || title.length < 5) continue;
             const slug = String(i.slug ?? i.id ?? i.url ?? "").trim();
             const techUrl = slug.startsWith("http") ? slug
-              : slug ? `${BASE}/en/work-with-us/ip-and-licensing/${slug}` : LISTING_URL;
+              : slug ? `${BASE}/en/work-with-us/ip-commercialisation/Marketplace/${slug}` : LISTING_URL;
             apiItems.push({ title, description: String(i.description ?? i.summary ?? "").slice(0, 500), url: techUrl });
           }
         } catch { /* ignore */ }
@@ -7385,8 +7390,8 @@ export const csiroScraper: InstitutionScraper = {
       );
       for (const { href, text } of links) {
         if (!href || seen.has(href)) continue;
-        // CSIRO tech pages are nested under /ip-and-licensing/
-        if (!href.includes("/ip-and-licensing/")) continue;
+        // CSIRO individual tech pages live under /ip-commercialisation/Marketplace/
+        if (!href.includes("/ip-commercialisation/Marketplace/")) continue;
         if (href === LISTING_URL || href === LISTING_URL + "/") continue;
         const title = text.replace(/\s+/g, " ").trim();
         if (!title || title.length < 5) continue;
@@ -7465,93 +7470,39 @@ export const tnoScraper = createStubScraper(
 );
 
 // IMEC — Belgium — imec-int.com
-// /en/technology-licensing returns 33KB with 0 tech links via HTTP (JS-rendered).
-// Playwright navigates the page, waits for technology cards to render, and extracts
-// individual technology titles and detail page URLs.
+// /en/technology-licensing (previous URL) returns HTTP 404 — URL no longer exists.
+// Verified 2026-04-20: /en/imec-patent-portfolio returns 200 (96KB) with 11 licensable
+// patent entries as <h3> headings in static HTML. No h2 tags on page; h4 tags are
+// navigation-only (Expertise, Applications, etc.) — h3 selector captures patents exclusively.
+// No individual detail pages exist; the portfolio page is the canonical URL for each entry.
+// Converted from Playwright to simple HTTP scraper since the page is fully static.
 export const imecScraper: InstitutionScraper = {
   institution: "IMEC",
-  scraperType: "playwright",
+  scraperType: "http",
   async scrape(): Promise<ScrapedListing[]> {
     const INST = "IMEC";
-    const BASE = "https://www.imec-int.com";
-    const LISTING_URL = `${BASE}/en/technology-licensing`;
-
-    let browser: import("playwright").Browser | null = null;
+    const PORTFOLIO_URL = "https://www.imec-int.com/en/imec-patent-portfolio";
     try {
-      const { chromium } = await import("playwright");
-      browser = await chromium.launch({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      });
-      const page = await browser.newPage();
-      await page.setExtraHTTPHeaders({
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-      });
-
-      // Intercept XHR/API calls for the technology listing
-      const apiItems: { title: string; description: string; url: string }[] = [];
-      page.on("response", async (resp) => {
-        const url = resp.url();
-        if (!url.includes("api") && !url.includes("technolog") && !url.includes("search")) return;
-        try {
-          const ct = resp.headers()["content-type"] ?? "";
-          if (!ct.includes("json")) return;
-          const data = await resp.json().catch(() => null);
-          if (!data) return;
-          const items: unknown[] = Array.isArray(data) ? data
-            : (data.data ?? data.items ?? data.results ?? data.technologies ?? []);
-          for (const item of items) {
-            const i = item as Record<string, unknown>;
-            const title = String(i.title ?? i.name ?? "").trim();
-            if (!title || title.length < 5) continue;
-            const slug = String(i.slug ?? i.id ?? "").trim();
-            const techUrl = slug ? `${BASE}/en/technology-licensing/${slug}` : LISTING_URL;
-            apiItems.push({ title, description: String(i.description ?? i.summary ?? "").slice(0, 500), url: techUrl });
-          }
-        } catch { /* ignore */ }
-      });
-
-      await page.goto(LISTING_URL, { timeout: 60_000, waitUntil: "networkidle" });
-      await page.waitForTimeout(5_000);
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await page.waitForTimeout(2_000);
-
-      if (apiItems.length > 0) {
-        const seen = new Set<string>();
-        const results = apiItems.filter(({ title }) => {
-          if (seen.has(title)) return false;
-          seen.add(title);
-          return true;
-        }).map(({ title, description, url }) => ({ title, description, url, institution: INST }));
-        console.log(`[scraper] ${INST}: ${results.length} listings (Playwright XHR intercept)`);
-        return results;
+      const $ = await fetchHtml(PORTFOLIO_URL, 20_000);
+      if (!$) {
+        console.warn(`[scraper] ${INST}: fetchHtml returned null`);
+        return [];
       }
-
-      // Fallback: DOM extraction from rendered page
-      const seen = new Set<string>();
       const results: ScrapedListing[] = [];
-      const links = await page.$$eval("a[href]", (els) =>
-        els.map((el) => ({ href: (el as HTMLAnchorElement).href, text: el.textContent?.trim() ?? "" }))
-      );
-      for (const { href, text } of links) {
-        if (!href || seen.has(href)) continue;
-        if (!href.includes("/technology-licensing/")) continue;
-        if (href === LISTING_URL || href === LISTING_URL + "/") continue;
-        const title = text.replace(/\s+/g, " ").trim();
-        if (!title || title.length < 5) continue;
-        seen.add(href);
-        results.push({ title, description: "", url: href, institution: INST });
-      }
-
-      console.log(`[scraper] ${INST}: ${results.length} listings (Playwright DOM)`);
+      const seen = new Set<string>();
+      $("h3").each((_, el) => {
+        const title = $(el).text().replace(/\s+/g, " ").trim();
+        if (!title || title.length < 5) return;
+        if (seen.has(title)) return;
+        seen.add(title);
+        results.push({ title, description: "", url: PORTFOLIO_URL, institution: INST });
+      });
+      console.log(`[scraper] ${INST}: ${results.length} listings (HTTP static h3 patent entries)`);
       return results;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scraper] ${INST} Playwright failed: ${msg}`);
+      console.error(`[scraper] ${INST} HTTP scrape failed: ${msg}`);
       return [];
-    } finally {
-      await browser?.close();
     }
   },
 };
