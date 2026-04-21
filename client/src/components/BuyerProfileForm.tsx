@@ -147,6 +147,18 @@ function CollapsedSummary({ value }: { value: BuyerProfile }) {
   );
 }
 
+const EMPTY_PROFILE: BuyerProfile = {
+  therapeutic_areas: [],
+  modalities: [],
+  preferred_stages: [],
+  excluded_stages: [],
+  owner_type_preference: "any",
+  freshness_days: 365,
+  indication_keywords: [],
+  target_keywords: [],
+  notes: "",
+};
+
 export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
   const [open, setOpen] = useState(false);
 
@@ -160,8 +172,13 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
     value.indication_keywords.length > 0 ||
     value.target_keywords.length > 0;
 
+  const handleClear = () => {
+    onChange(EMPTY_PROFILE);
+    setOpen(false);
+  };
+
   return (
-    <div className="max-w-3xl mx-auto w-full">
+    <div className="max-w-3xl mx-auto w-full" data-testid="buyer-profile-form">
       <button
         type="button"
         onClick={() => setOpen(!open)}
@@ -270,19 +287,7 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
                 variant="ghost"
                 size="sm"
                 className="text-xs h-7 text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  onChange({
-                    therapeutic_areas: [],
-                    modalities: [],
-                    preferred_stages: [],
-                    excluded_stages: [],
-                    owner_type_preference: "any",
-                    freshness_days: 365,
-                    indication_keywords: [],
-                    target_keywords: [],
-                    notes: "",
-                  })
-                }
+                onClick={handleClear}
                 data-testid="button-clear-buyer-profile"
               >
                 <X className="w-3 h-3 mr-1" />
