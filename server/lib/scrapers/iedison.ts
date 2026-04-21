@@ -420,6 +420,13 @@ export const iEdisonScraper: InstitutionScraper = {
       console.warn(`[scraper] ${INST}: could not query last_seen_at for incremental date -- using hard cap: ${msg}`);
     }
 
+    // The cursor `fromDate` is full-precision (sub-second) and is advanced by
+    // 1 second above to avoid duplicate boundary records. However, the iEdison API
+    // `fromDate`/`toDate` parameters only accept YYYY-MM-DD (day granularity), so
+    // same-day re-pulls are possible when re-running within the same calendar day.
+    // This is harmless because ingestion deduplicates by fingerprint/contentHash;
+    // no double-counting occurs. If the API ever exposes datetime parameters,
+    // switch to `fromDate.toISOString()` here for full-precision filtering.
     const fromDateStr = fromDate.toISOString().slice(0, 10);  // YYYY-MM-DD
     const toDateStr = toDate.toISOString().slice(0, 10);
     const mode = apiKey ? "authenticated" : "public";
