@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OrientationHint } from "@/components/OrientationHint";
 import { useLocation, useSearch } from "wouter";
@@ -113,6 +113,16 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "techtransfer",     label: "Tech Transfer",        desc: "TTO licensing database" },
   { key: "lab_discoveries",  label: "Lab Discoveries",      desc: "Research lab discoveries" },
 ];
+
+const BUYER_PROFILE_KEY = "edenradar:buyer-profile";
+
+function loadBuyerProfile(): BuyerProfile {
+  try {
+    const stored = localStorage.getItem(BUYER_PROFILE_KEY);
+    if (stored) return { ...DEFAULT_BUYER_PROFILE, ...JSON.parse(stored) };
+  } catch {}
+  return DEFAULT_BUYER_PROFILE;
+}
 
 function SourcesDropdown({
   researchSources,
@@ -230,7 +240,8 @@ export default function Scout() {
   const [sinceFilter, setSinceFilter] = useState<string>("any");
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [minScore, setMinScore] = useState<number>(0);
-  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(() => ssGet("scout-buyer-profile", DEFAULT_BUYER_PROFILE));
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
+  const skipNextPersist = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [resultTab, setResultTab] = useState<"assets" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
@@ -269,11 +280,27 @@ export default function Scout() {
       sessionStorage.setItem("scout-research-results", JSON.stringify(researchResults));
       sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
-      sessionStorage.setItem("scout-buyer-profile", JSON.stringify(buyerProfile));
       sessionStorage.setItem("scout-research-sources", JSON.stringify(researchSources));
       sessionStorage.setItem("scout-result-tab", JSON.stringify(resultTab));
     } catch {}
-  }, [searchResults, researchResults, hasSearched, currentQuery, buyerProfile, researchSources, resultTab]);
+  }, [searchResults, researchResults, hasSearched, currentQuery, researchSources, resultTab]);
+
+  useEffect(() => {
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(BUYER_PROFILE_KEY, JSON.stringify(buyerProfile));
+    } catch {}
+  }, [buyerProfile]);
+
+  function handleClearProfile() {
+    skipNextPersist.current = true;
+    try {
+      localStorage.removeItem(BUYER_PROFILE_KEY);
+    } catch {}
+  }
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
   const { data: institutionsData } = useQuery<InstitutionsResponse>({
@@ -605,7 +632,7 @@ export default function Scout() {
               />
             </div>
 
-            <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
+            <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} onClear={handleClearProfile} />
           </div>
 
           {/* TTO loading indicator */}
