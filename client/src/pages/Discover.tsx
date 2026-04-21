@@ -540,6 +540,9 @@ export default function Discover() {
                   </div>
                 )}
               </div>
+              <p className="text-[10px] text-muted-foreground mt-1.5 pl-0.5">
+                Use the Date filter to control result recency.
+              </p>
             </div>
           )}
 
