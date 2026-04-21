@@ -2509,6 +2509,55 @@ function Enrichment({ pw }: { pw: string }) {
     setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
 
+  const [fdaPolling, setFdaPolling] = useState(false);
+
+  const { data: fdaStatus, refetch: refetchFdaStatus, isError: fdaStatusError } = useQuery<{
+    running: boolean;
+    lastRunAt: string | null;
+    lastTaggedCount: number | null;
+    consecutiveFailures: number;
+    lastFailureReason: string | null;
+    lastFailureAt: string | null;
+  }>({
+    queryKey: ["/api/admin/fda-designations/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/fda-designations/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load FDA designation status");
+      return res.json();
+    },
+    refetchInterval: fdaPolling ? 3000 : false,
+    retry: 2,
+  });
+
+  useEffect(() => {
+    if (fdaStatus?.running) {
+      setFdaPolling(true);
+    } else if (fdaPolling && fdaStatus && !fdaStatus.running) {
+      setFdaPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/fda-designations/status", pw] });
+    }
+  }, [fdaStatus?.running, fdaPolling, pw]);
+
+  const runFdaMatch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/fda-designations/run", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (res.status === 409) throw new Error("Job already running");
+      if (!res.ok) throw new Error("Failed to start FDA designation match");
+      return res.json();
+    },
+    onSuccess: () => {
+      setFdaPolling(true);
+      refetchFdaStatus();
+      toast({ title: "FDA Designation Match started", description: "Matching assets against Orphan Drug, Breakthrough Therapy and Fast Track registries..." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
+    },
+  });
+
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
     queryFn: async () => {
@@ -3033,6 +3082,79 @@ function Enrichment({ pw }: { pw: string }) {
             )}
           </div>
         )}
+      </div>
+
+      {/* ── FDA Designation Match card ── */}
+      <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="fda-designation-card">
+        <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-2">
+          <Shield className="h-4 w-4 text-purple-500" />
+          <h3 className="text-sm font-semibold text-foreground">FDA Designation Match</h3>
+          {fdaStatus?.running && (
+            <span className="text-xs font-normal text-primary ml-1">(running...)</span>
+          )}
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <p className="text-xs text-muted-foreground">
+            Tags assets with FDA designations (Orphan Drug, Breakthrough Therapy, Fast Track) by matching asset names against openFDA registries.
+          </p>
+
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+              {fdaStatus?.running ? (
+                <span className="flex items-center gap-1.5 text-primary font-medium" data-testid="fda-status-running">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  Running...
+                </span>
+              ) : fdaStatus?.lastRunAt ? (
+                <span data-testid="fda-status-last-run">
+                  Last run: <span className="text-foreground font-medium">{relativeTime(fdaStatus.lastRunAt)}</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground/60" data-testid="fda-status-never">Never run</span>
+              )}
+              {!fdaStatus?.running && fdaStatus?.lastTaggedCount != null && (
+                <span data-testid="fda-status-tagged-count">
+                  Tagged: <span className="text-foreground font-medium">{fdaStatus.lastTaggedCount}</span> assets
+                </span>
+              )}
+              {!fdaStatus?.running && (fdaStatus?.consecutiveFailures ?? 0) > 0 && (
+                <span className="text-amber-600 dark:text-amber-400" data-testid="fda-status-failures">
+                  {fdaStatus!.consecutiveFailures} consecutive failure{fdaStatus!.consecutiveFailures !== 1 ? "s" : ""}
+                </span>
+              )}
+            </div>
+
+            <Button
+              size="sm"
+              variant="outline"
+              className="ml-auto"
+              onClick={() => runFdaMatch.mutate()}
+              disabled={fdaStatus?.running || runFdaMatch.isPending}
+              data-testid="button-run-fda-match"
+            >
+              {(fdaStatus?.running || runFdaMatch.isPending) ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+              ) : (
+                <Shield className="h-3.5 w-3.5 mr-1.5" />
+              )}
+              {fdaStatus?.running ? "Running..." : "Run FDA Match"}
+            </Button>
+          </div>
+
+          {!fdaStatus?.running && (fdaStatus?.consecutiveFailures ?? 0) > 0 && fdaStatus?.lastFailureReason && (
+            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-xs" data-testid="fda-failure-reason">
+              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <span className="text-amber-700 dark:text-amber-400 break-all">{fdaStatus.lastFailureReason}</span>
+            </div>
+          )}
+
+          {fdaStatusError && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="fda-status-error">
+              <AlertCircle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+              <span>Could not load status — <button className="underline" onClick={() => refetchFdaStatus()}>retry</button></span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
