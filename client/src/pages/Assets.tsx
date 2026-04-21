@@ -140,19 +140,27 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
     }
   }, [notesOpen, notes.length]);
 
-  const statusMutation = useMutation({
+  const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
     mutationFn: async (status: string | null) => {
       const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, {
         status,
       });
       return res.json();
     },
+    onMutate: (newStatus) => {
+      const prev = localStatus;
+      setLocalStatus(newStatus);
+      return { prev };
+    },
     onSuccess: (_, newStatus) => {
       setLocalStatus(newStatus);
       qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
     },
-    onError: (err: any) => toast({ title: "Status update failed", description: err.message, variant: "destructive" }),
+    onError: (err, _, ctx) => {
+      if (ctx?.prev !== undefined) setLocalStatus(ctx.prev);
+      toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const noteMutation = useMutation({
@@ -170,9 +178,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
   });
 
   const handleStatusChange = (val: string) => {
-    const newStatus = val === "none" ? null : val;
-    setLocalStatus(newStatus);
-    statusMutation.mutate(newStatus);
+    statusMutation.mutate(val === "none" ? null : val);
   };
 
   const handleNoteSubmit = () => {
@@ -365,31 +371,29 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
             )}
             <div ref={notesEndRef} />
           </div>
-          {!restrictMeta && (
-            <div className="flex items-end gap-1.5 px-3 pb-2.5 pt-1.5 border-t border-card-border/50">
-              <Textarea
-                value={noteText}
-                onChange={(e) => setNoteText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleNoteSubmit();
-                  }
-                }}
-                placeholder="Add a note... (Enter to send)"
-                className="text-xs min-h-[52px] max-h-24 resize-none flex-1 bg-background"
-                data-testid={`textarea-note-${asset.id}`}
-              />
-              <button
-                onClick={handleNoteSubmit}
-                disabled={!noteText.trim() || noteMutation.isPending}
-                className="w-7 h-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0 mb-0.5"
-                data-testid={`button-note-submit-${asset.id}`}
-              >
-                {noteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-              </button>
-            </div>
-          )}
+          <div className="flex items-end gap-1.5 px-3 pb-2.5 pt-1.5 border-t border-card-border/50">
+            <Textarea
+              value={noteText}
+              onChange={(e) => setNoteText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleNoteSubmit();
+                }
+              }}
+              placeholder="Add a note... (Enter to send)"
+              className="text-xs min-h-[52px] max-h-24 resize-none flex-1 bg-background"
+              data-testid={`textarea-note-${asset.id}`}
+            />
+            <button
+              onClick={handleNoteSubmit}
+              disabled={!noteText.trim() || noteMutation.isPending}
+              className="w-7 h-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0 mb-0.5"
+              data-testid={`button-note-submit-${asset.id}`}
+            >
+              {noteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+            </button>
+          </div>
         </div>
       )}
     </div>

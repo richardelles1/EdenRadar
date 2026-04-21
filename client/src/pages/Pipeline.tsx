@@ -140,17 +140,25 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
     }
   }, [notesOpen, notes.length]);
 
-  const statusMutation = useMutation({
+  const statusMutation = useMutation<unknown, Error, string | null, { prev: string | null }>({
     mutationFn: async (status: string | null) => {
       const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, { status });
       return res.json();
+    },
+    onMutate: (newStatus) => {
+      const prev = localStatus;
+      setLocalStatus(newStatus);
+      return { prev };
     },
     onSuccess: (_, newStatus) => {
       setLocalStatus(newStatus);
       qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
     },
-    onError: (err: any) => toast({ title: "Status update failed", description: err.message, variant: "destructive" }),
+    onError: (err, _, ctx) => {
+      if (ctx?.prev !== undefined) setLocalStatus(ctx.prev);
+      toast({ title: "Status update failed", description: err.message, variant: "destructive" });
+    },
   });
 
   const noteMutation = useMutation({
@@ -246,7 +254,7 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
         >
           <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
           <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
-            {stageAbbr !== "unknown" ? STAGE_ABBREV[stageAbbr] ?? stageAbbr : <span className="opacity-40">?</span>}
+            {stageAbbr !== "unknown" ? stageAbbr : <span className="opacity-40">?</span>}
           </span>
         </div>
 
