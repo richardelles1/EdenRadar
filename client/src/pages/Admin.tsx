@@ -78,7 +78,7 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited";
+type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited" | "parser_failure";
 
 type ErrorType = "all" | "Timeout" | "Blocked" | "Network" | "Parsing" | "Unknown";
 
@@ -156,9 +156,10 @@ interface CollectorHealthData {
 function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid="health-ok" />;
   if (health === "syncing") return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" data-testid="health-syncing" />;
-  if (health === "site_down") return <XCircle className="h-4 w-4 text-red-500" data-testid="health-site-down" />;
+  if (health === "site_down") return <AlertTriangle className="h-4 w-4 text-red-500" data-testid="health-site-down" />;
   if (health === "rate_limited") return <AlertTriangle className="h-4 w-4 text-orange-500" data-testid="health-rate-limited" />;
   if (health === "blocked") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-blocked" />;
+  if (health === "parser_failure") return <AlertCircle className="h-4 w-4 text-violet-500" data-testid="health-parser-failure" />;
   if (health === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-warning" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
   if (health === "stale") return <AlertCircle className="h-4 w-4 text-orange-500" data-testid="health-stale" />;
@@ -171,7 +172,8 @@ function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "syncing") return <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">Syncing</span>;
   if (health === "site_down") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Site down</span>;
   if (health === "rate_limited") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Rate limited</span>;
-  if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Possibly blocked</span>;
+  if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Blocked / WAF</span>;
+  if (health === "parser_failure") return <span className="text-violet-600 dark:text-violet-400 text-xs font-medium">Parser failure</span>;
   if (health === "warning") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Warning</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
   if (health === "stale") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Stale</span>;
@@ -517,14 +519,19 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 const isSiteDown = m.includes(" 503") || m.includes(" 502") || m.includes(" 500") || m.includes("service unavailable") || m.includes("maintenance");
                 const isRateLimited = m.includes(" 429") || m.includes("rate limit") || m.includes("too many request");
                 const isBlocked = m.includes(" 403") || m.includes("cloudflare") || m.includes("bot challenge") || m.includes("access denied");
-                const title = isSiteDown ? "Site is down or in maintenance" : isRateLimited ? "Scraper was rate-limited" : isBlocked ? "Access blocked (WAF / bot protection)" : "Scraper returned 0 results";
-                const detail = errMsg ?? "The scraper returned no results. This could indicate a broken connection, website change, or temporary outage.";
+                const isParserFailure = !errMsg;
+                const borderCls = isSiteDown ? "border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" : isRateLimited ? "border-orange-200 dark:border-orange-900 bg-orange-50 dark:bg-orange-950/30" : isBlocked ? "border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" : "border-violet-200 dark:border-violet-900 bg-violet-50 dark:bg-violet-950/30";
+                const textCls = isSiteDown ? "text-red-700 dark:text-red-400" : isRateLimited ? "text-orange-700 dark:text-orange-400" : isBlocked ? "text-amber-700 dark:text-amber-400" : "text-violet-700 dark:text-violet-400";
+                const detailCls = isSiteDown ? "text-red-600 dark:text-red-500" : isRateLimited ? "text-orange-600 dark:text-orange-500" : isBlocked ? "text-amber-600 dark:text-amber-500" : "text-violet-600 dark:text-violet-500";
+                const iconCls = isSiteDown ? "text-red-500" : isRateLimited ? "text-orange-500" : isBlocked ? "text-amber-500" : "text-violet-500";
+                const title = isSiteDown ? "Site is down or in maintenance" : isRateLimited ? "Scraper was rate-limited" : isBlocked ? "Access blocked (WAF / bot protection)" : "Parser failure — scraper returned 0 results";
+                const detail = errMsg ?? "The scraper ran without an HTTP error but found no listings. A CSS selector change or site layout update likely broke the parser.";
                 return (
-                  <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-zero-guard">
-                    <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                  <div className={`flex items-start gap-3 p-4 rounded-lg border ${borderCls}`} data-testid="sync-zero-guard">
+                    <AlertTriangle className={`h-5 w-5 ${iconCls} flex-shrink-0 mt-0.5`} />
                     <div>
-                      <p className="text-sm font-medium text-red-700 dark:text-red-400">{title} — push blocked</p>
-                      <p className="text-xs text-red-600 dark:text-red-500 mt-1 font-mono break-all">{detail}</p>
+                      <p className={`text-sm font-medium ${textCls}`}>{title} — push blocked</p>
+                      <p className={`text-xs ${detailCls} mt-1 font-mono break-all`}>{detail}</p>
                     </div>
                   </div>
                 );
@@ -945,7 +952,7 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
+  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, parser_failure: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
 
   const sortedRowsForFreeze = React.useMemo(() => {
     if (!data) return [];

@@ -1,7 +1,7 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
-import { fetchHtml, fetchHtmlViaProxy, cleanText } from "./utils";
+import { fetchHtml, fetchHtmlViaProxy, cleanText, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
@@ -52,7 +52,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
           headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
           signal: AbortSignal.timeout(15_000),
         });
-        if (!firstRes.ok) throw new Error(`API page 1 HTTP ${firstRes.status}`);
+        if (!firstRes.ok) throw new SiteHttpError(firstRes.status, firstUrl);
 
         const firstData = await firstRes.json();
         const page1Results: any[] = firstData?.data?.results ?? firstData?.results ?? [];
@@ -134,6 +134,7 @@ function createInPartScraper(subdomain: string, institution: string): Institutio
         console.log(`[scraper] ${institution}: ${allResults.length} listings (in-part API, ${totalPages} pages)`);
         return allResults;
       } catch (err: any) {
+        if (err instanceof SiteHttpError) throw err;
         console.error(`[scraper] ${institution} (in-part) failed: ${err?.message}`);
         return [];
       }
@@ -160,7 +161,10 @@ function createWordPressApiScraper(
               signal: AbortSignal.timeout(10000),
             }
           );
-          if (!res.ok) break;
+          if (!res.ok) {
+            if (page === 1) throw new SiteHttpError(res.status, `${baseUrl}/wp-json/wp/v2/${postType}?per_page=100&page=1`);
+            break;
+          }
           const items: any[] = await res.json();
           if (!Array.isArray(items) || items.length === 0) break;
           for (const item of items) {
@@ -176,7 +180,8 @@ function createWordPressApiScraper(
           }
           if (items.length < 100) break;
           page++;
-        } catch {
+        } catch (err: unknown) {
+          if (err instanceof SiteHttpError) throw err;
           break;
         }
       }
@@ -197,7 +202,7 @@ function createMontanaStateScraper(): InstitutionScraper {
           headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
           signal: AbortSignal.timeout(10000),
         });
-        if (!res.ok) return [];
+        if (!res.ok) throw new SiteHttpError(res.status, indexUrl);
         const html = await res.text();
         const linkRe = /href="(\/links\/techops\/[^"]+\.html)"/g;
         const hrefs: string[] = [];
@@ -232,6 +237,7 @@ function createMontanaStateScraper(): InstitutionScraper {
         console.log(`[scraper] ${institution}: ${results.length} listings (${hrefs.length} pages found)`);
         return results;
       } catch (err: any) {
+        if (err instanceof SiteHttpError) throw err;
         console.warn(`[scraper] ${institution}: ${err?.message}`);
         return [];
       }

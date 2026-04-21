@@ -1462,14 +1462,14 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited";
+        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited" | "parser_failure";
 
         function classifyByError(errMsg: string | null | undefined): HealthStatus {
-          if (!errMsg) return "blocked";
+          if (!errMsg) return "parser_failure";
           const m = errMsg.toLowerCase();
           if (m.includes(" 503") || m.includes(" 502") || m.includes(" 500") || m.includes("service unavailable") || m.includes("maintenance")) return "site_down";
           if (m.includes(" 429") || m.includes("rate limit") || m.includes("rate-limit") || m.includes("too many request")) return "rate_limited";
-          if (m.includes(" 403") || m.includes("cloudflare") || m.includes("blocked") || m.includes("bot challenge") || m.includes("access denied") || m.includes(" 401")) return "blocked";
+          if (m.includes(" 403") || m.includes("cloudflare") || m.includes("bot challenge") || m.includes("access denied") || m.includes(" 401")) return "blocked";
           return "blocked";
         }
 

@@ -1,5 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText, resolveUrl, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://otd.harvard.edu";
@@ -18,7 +18,7 @@ export const harvardScraper: InstitutionScraper = {
         const url = page === 1
           ? `${BASE}${SEARCH_PATH}?q=`
           : `${BASE}${SEARCH_PATH}p${page}/?q`;
-        const $ = await fetchHtml(url, 15_000);
+        const $ = await fetchHtml(url, 15_000, undefined, 2, page === 1);
         if (!$) break;
 
         let pageNew = 0;
@@ -68,6 +68,7 @@ export const harvardScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
+      if (err instanceof SiteHttpError) throw err;
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
