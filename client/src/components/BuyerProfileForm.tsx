@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronUp, User, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Target, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
@@ -31,14 +31,6 @@ const MODALITY_OPTIONS = [
 ];
 
 const STAGE_OPTIONS = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3"];
-
-const FRESHNESS_OPTIONS = [
-  { label: "30 days", value: 30 },
-  { label: "90 days", value: 90 },
-  { label: "180 days", value: 180 },
-  { label: "1 year", value: 365 },
-  { label: "2 years", value: 730 },
-];
 
 function ToggleChip({
   label, active, onClick,
@@ -121,6 +113,36 @@ function KeywordInput({
   );
 }
 
+const CHIP_LIMIT = 5;
+
+function CollapsedSummary({ value }: { value: BuyerProfile }) {
+  const chips = [
+    ...value.therapeutic_areas,
+    ...value.modalities,
+    ...value.preferred_stages,
+  ];
+  if (chips.length === 0) return null;
+  const visible = chips.slice(0, CHIP_LIMIT);
+  const overflow = chips.length - visible.length;
+  return (
+    <div className="flex flex-wrap gap-1 mt-1.5 px-0.5">
+      {visible.map((chip) => (
+        <span
+          key={chip}
+          className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize font-medium"
+        >
+          {chip}
+        </span>
+      ))}
+      {overflow > 0 && (
+        <span className="text-[10px] px-2 py-0.5 rounded-full bg-card border border-card-border text-muted-foreground">
+          +{overflow} more
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
   const [open, setOpen] = useState(false);
 
@@ -132,8 +154,7 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
     value.modalities.length > 0 ||
     value.preferred_stages.length > 0 ||
     value.indication_keywords.length > 0 ||
-    value.target_keywords.length > 0 ||
-    value.owner_type_preference !== "any";
+    value.target_keywords.length > 0;
 
   return (
     <div className="max-w-3xl mx-auto w-full">
@@ -146,11 +167,13 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
             : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
         }`}
         data-testid="button-toggle-buyer-profile"
+        aria-expanded={open}
+        aria-label={open ? "Collapse deal focus panel" : "Expand deal focus panel"}
       >
         <div className="flex items-center gap-2">
-          <User className="w-3.5 h-3.5" />
+          <Target className="w-3.5 h-3.5" />
           <span className="font-medium">
-            {hasProfile ? "Buyer Thesis Configured" : "Configure Buyer Thesis"}
+            {hasProfile ? "Deal Focus Active" : "Your Deal Focus"}
           </span>
           {hasProfile && (
             <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-full font-semibold">
@@ -158,8 +181,10 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
             </span>
           )}
         </div>
-        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {open ? <ChevronUp className="w-3.5 h-3.5 shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 shrink-0" />}
       </button>
+
+      {!open && hasProfile && <CollapsedSummary value={value} />}
 
       {open && (
         <div className="mt-2 p-4 rounded-lg border border-card-border bg-card space-y-4">
@@ -213,40 +238,6 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
-                Owner Type
-              </label>
-              <div className="flex gap-1.5">
-                {(["any", "university", "company"] as const).map((t) => (
-                  <ToggleChip
-                    key={t}
-                    label={t === "any" ? "Any" : t === "university" ? "University" : "Company"}
-                    active={value.owner_type_preference === t}
-                    onClick={() => set("owner_type_preference", t)}
-                  />
-                ))}
-              </div>
-            </div>
-
-            <div>
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide block mb-2">
-                Freshness Window
-              </label>
-              <div className="flex flex-wrap gap-1.5">
-                {FRESHNESS_OPTIONS.map(({ label, value: v }) => (
-                  <ToggleChip
-                    key={v}
-                    label={label}
-                    active={value.freshness_days === v}
-                    onClick={() => set("freshness_days", v)}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
               <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide block mb-1.5">
                 Indication Keywords
               </label>
@@ -291,7 +282,7 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
                 data-testid="button-clear-buyer-profile"
               >
                 <X className="w-3 h-3 mr-1" />
-                Clear thesis
+                Clear focus
               </Button>
             </div>
           )}
