@@ -778,6 +778,31 @@ async function runPostStartupTasks(): Promise<void> {
   }
 }
 
+// ── One-time migration: relabel old saved_asset status values ─────────────────
+// Old constraint: ('viewing', 'evaluating', 'contacted')
+// New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
+// Mapping: 'viewing' -> 'watching', 'contacted' -> 'in_discussion'
+// The old DB-level check constraint is also dropped so the new values are accepted.
+async function migrateAssetStatusValues() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE saved_assets DROP CONSTRAINT IF EXISTS saved_assets_status_check
+    `);
+    const r1 = await db.execute(sql`
+      UPDATE saved_assets SET status = 'watching' WHERE status = 'viewing'
+    `);
+    const r2 = await db.execute(sql`
+      UPDATE saved_assets SET status = 'in_discussion' WHERE status = 'contacted'
+    `);
+    const migrated = ((r1 as any).rowCount ?? 0) + ((r2 as any).rowCount ?? 0);
+    if (migrated > 0) {
+      log(`[startup] Migrated ${migrated} saved_asset status row(s) to new vocabulary`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Asset status migration note: ${err?.message}`, "startup");
+  }
+}
+
 (async () => {
   // ── Playwright Chromium binary: install in background if missing ───────────
   try {
@@ -841,6 +866,8 @@ async function runPostStartupTasks(): Promise<void> {
       });
       // ── runStartupMigrations: no-op (migrations skipped; use db:push) ───
       runStartupMigrations().catch(() => {});
+      // ── Migrate asset status values to new vocabulary ──────────────────
+      migrateAssetStatusValues().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────
       // Runs 5 seconds after startup. Cleans old rows in small LIMIT batches,
       // then calls ensureStagingIndexes once the table is smaller.

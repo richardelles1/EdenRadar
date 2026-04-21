@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest } from "@/lib/queryClient";
@@ -21,16 +22,21 @@ import {
   X,
   FolderOpen,
   ChevronDown,
+  ChevronUp,
   FileText,
   Copy,
   Loader2,
   Printer,
   Users,
+  MessageSquare,
+  Send,
+  Clock,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import type { SavedAsset } from "@shared/schema";
+import type { SavedAsset, SavedAssetNote, SavedAssetStatus } from "@shared/schema";
+import { SAVED_ASSET_STATUSES } from "@shared/schema";
 import { useOrg } from "@/hooks/use-org";
 
 type PipelineWithCount = {
@@ -67,6 +73,14 @@ const MODALITY_COLORS: Record<string, string> = {
   "protac":             "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
 };
 
+const STATUS_CONFIG: Record<string, { label: string; pill: string; select: string }> = {
+  watching:      { label: "Watching",      pill: "bg-neutral-500/15 text-neutral-400 border-neutral-500/30",  select: "text-neutral-400" },
+  evaluating:    { label: "Evaluating",    pill: "bg-blue-500/15 text-blue-400 border-blue-500/30",           select: "text-blue-400" },
+  in_discussion: { label: "In Discussion", pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",  select: "text-emerald-500" },
+  on_hold:       { label: "On Hold",       pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",        select: "text-amber-400" },
+  passed:        { label: "Passed",        pill: "bg-red-500/15 text-red-400 border-red-500/30",              select: "text-red-400" },
+};
+
 function getBadgeClass(value: string) {
   if (!value) return "bg-muted text-muted-foreground border-border";
   return MODALITY_COLORS[value.toLowerCase().trim()] ?? "bg-muted text-muted-foreground border-border";
@@ -79,111 +93,303 @@ function getInitials(name: string | null | undefined): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function AssetCard({ asset, onDelete, onMove, pipelines, readOnly }: {
+function formatNoteTime(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - d.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 2) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserName }: {
   asset: TeamSavedAsset;
   onDelete: (id: number) => void;
   onMove: (id: number, pipelineListId: number | null) => void;
   pipelines: PipelineWithCount[];
   readOnly?: boolean;
+  currentUserName?: string | null;
 }) {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+  const notesEndRef = useRef<HTMLDivElement>(null);
+
+  const { data: notesData, isLoading: notesLoading } = useQuery<{ notes: SavedAssetNote[] }>({
+    queryKey: ["/api/saved-assets", asset.id, "notes"],
+    enabled: notesOpen,
+    staleTime: 30000,
+  });
+
+  const notes = notesData?.notes ?? [];
+
+  useEffect(() => {
+    if (notesOpen && notesEndRef.current) {
+      notesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [notesOpen, notes.length]);
+
+  const statusMutation = useMutation({
+    mutationFn: async (status: string | null) => {
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, {
+        status,
+        authorName: currentUserName ?? "Team Member",
+      });
+      return res.json();
+    },
+    onSuccess: (_, newStatus) => {
+      setLocalStatus(newStatus);
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Status update failed", description: err.message, variant: "destructive" }),
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, {
+        content,
+        authorName: currentUserName ?? "Team Member",
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      setNoteText("");
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+    },
+    onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleStatusChange = (val: string) => {
+    const newStatus = val === "none" ? null : val;
+    setLocalStatus(newStatus);
+    statusMutation.mutate(newStatus);
+  };
+
+  const handleNoteSubmit = () => {
+    const content = noteText.trim();
+    if (!content) return;
+    noteMutation.mutate(content);
+  };
+
+  const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+
   return (
     <div
-      className="group p-3.5 rounded-md border border-card-border bg-card hover:border-primary/30 transition-all duration-200 flex flex-col gap-2.5"
+      className="group rounded-md border border-card-border bg-card hover:border-primary/30 transition-all duration-200 flex flex-col"
       data-testid={`pipeline-card-${asset.id}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
-          <span className="font-semibold text-sm text-foreground truncate leading-tight">
-            {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
-          </span>
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {asset.saverName !== undefined && (
-            <span
-              className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 border border-border rounded-full px-1.5 py-0.5 leading-none"
-              title={asset.saverName ?? undefined}
-              data-testid={`text-saver-${asset.id}`}
-            >
-              <span className="w-3.5 h-3.5 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
-                {getInitials(asset.saverName)}
+      <div className="p-3.5 flex flex-col gap-2.5">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <FlaskConical className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="font-semibold text-sm text-foreground truncate leading-tight">
+              {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
+            </span>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {asset.saverName !== undefined && (
+              <span
+                className="flex items-center gap-1 text-[10px] text-muted-foreground bg-muted/60 border border-border rounded-full px-1.5 py-0.5 leading-none"
+                title={asset.saverName ?? undefined}
+                data-testid={`text-saver-${asset.id}`}
+              >
+                <span className="w-3.5 h-3.5 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                  {getInitials(asset.saverName)}
+                </span>
+                <span className="truncate max-w-[80px]">{asset.saverName ?? "Unknown"}</span>
               </span>
-              <span className="truncate max-w-[80px]">{asset.saverName ?? "Unknown"}</span>
+            )}
+            {!readOnly && (
+              <button
+                onClick={() => onDelete(asset.id)}
+                className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
+                data-testid={`button-delete-asset-${asset.id}`}
+                title="Remove asset"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap gap-1">
+          {asset.modality && asset.modality !== "unknown" && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${getBadgeClass(asset.modality)}`}>
+              {asset.modality}
             </span>
           )}
+          {asset.developmentStage && asset.developmentStage !== "unknown" && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-muted text-muted-foreground border-border capitalize">
+              {asset.developmentStage}
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+          <div>
+            <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Target</p>
+            <p className="text-foreground truncate mt-0.5">{asset.target !== "unknown" ? asset.target : "—"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Disease</p>
+            <p className="text-foreground truncate mt-0.5">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-0.5 border-t border-card-border gap-2">
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            <p className="text-[10px] text-muted-foreground truncate">
+              {asset.sourceJournal} · {asset.publicationYear}
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {asset.sourceUrl && (
+              <a
+                href={asset.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
+                data-testid={`link-asset-source-${asset.id}`}
+              >
+                <ExternalLink className="w-2.5 h-2.5" />
+                View
+              </a>
+            )}
+            {pipelines.length > 0 && !readOnly && (
+              <select
+                value={asset.pipelineListId ?? "null"}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onMove(asset.id, val === "null" ? null : parseInt(val, 10));
+                }}
+                className="text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-foreground"
+                title="Move to pipeline"
+                data-testid={`select-move-asset-${asset.id}`}
+              >
+                <option value="null">Uncategorised</option>
+                {pipelines.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between gap-2 pt-0.5">
+          {!readOnly ? (
+            <div className="flex items-center gap-1.5">
+              {statusCfg && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
+                  {statusCfg.label}
+                </span>
+              )}
+              <select
+                value={localStatus ?? "none"}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={statusMutation.isPending}
+                className={`text-[10px] bg-transparent border border-card-border rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
+                data-testid={`select-status-${asset.id}`}
+              >
+                <option value="none">Set stage</option>
+                {SAVED_ASSET_STATUSES.map((s) => (
+                  <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div>
+              {statusCfg && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
+                  {statusCfg.label}
+                </span>
+              )}
+            </div>
+          )}
+          <button
+            onClick={() => setNotesOpen((o) => !o)}
+            className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${notesOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-card-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+            data-testid={`button-notes-toggle-${asset.id}`}
+          >
+            <MessageSquare className="w-2.5 h-2.5" />
+            {notes.length > 0 ? `${notes.length} note${notes.length !== 1 ? "s" : ""}` : "Notes"}
+            {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+          </button>
+        </div>
+      </div>
+
+      {notesOpen && (
+        <div className="border-t border-card-border bg-muted/20 flex flex-col" data-testid={`notes-panel-${asset.id}`}>
+          <div className="max-h-48 overflow-y-auto px-3 py-2 flex flex-col gap-2">
+            {notesLoading ? (
+              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground py-2">
+                <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                Loading...
+              </div>
+            ) : notes.length === 0 ? (
+              <p className="text-[10px] text-muted-foreground py-2 text-center">No notes yet</p>
+            ) : (
+              notes.map((note) => (
+                <div
+                  key={note.id}
+                  className={`text-xs ${note.isSystemEvent ? "flex items-center gap-1 text-muted-foreground/70 italic" : "flex flex-col gap-0.5"}`}
+                  data-testid={`note-item-${note.id}`}
+                >
+                  {note.isSystemEvent ? (
+                    <>
+                      <Clock className="w-2.5 h-2.5 shrink-0" />
+                      <span>{note.content}</span>
+                      <span className="ml-auto text-[10px] shrink-0 pl-2">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-1.5">
+                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                          {getInitials(note.authorName)}
+                        </span>
+                        <span className="font-medium text-foreground text-[11px]">{note.authorName}</span>
+                        <span className="text-muted-foreground text-[10px] ml-auto">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                      </div>
+                      <p className="text-foreground/90 pl-5.5 leading-relaxed">{note.content}</p>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+            <div ref={notesEndRef} />
+          </div>
           {!readOnly && (
-            <button
-              onClick={() => onDelete(asset.id)}
-              className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
-              data-testid={`button-delete-asset-${asset.id}`}
-              title="Remove asset"
-            >
-              <Trash2 className="w-3 h-3" />
-            </button>
+            <div className="flex items-end gap-1.5 px-3 pb-2.5 pt-1.5 border-t border-card-border/50">
+              <Textarea
+                value={noteText}
+                onChange={(e) => setNoteText(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleNoteSubmit();
+                  }
+                }}
+                placeholder="Add a note... (Enter to send)"
+                className="text-xs min-h-[52px] max-h-24 resize-none flex-1 bg-background"
+                data-testid={`textarea-note-${asset.id}`}
+              />
+              <button
+                onClick={handleNoteSubmit}
+                disabled={!noteText.trim() || noteMutation.isPending}
+                className="w-7 h-7 flex items-center justify-center rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-all shrink-0 mb-0.5"
+                data-testid={`button-note-submit-${asset.id}`}
+              >
+                {noteMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+              </button>
+            </div>
           )}
         </div>
-      </div>
-
-      <div className="flex flex-wrap gap-1">
-        {asset.modality && asset.modality !== "unknown" && (
-          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${getBadgeClass(asset.modality)}`}>
-            {asset.modality}
-          </span>
-        )}
-        {asset.developmentStage && asset.developmentStage !== "unknown" && (
-          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-muted text-muted-foreground border-border capitalize">
-            {asset.developmentStage}
-          </span>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
-        <div>
-          <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Target</p>
-          <p className="text-foreground truncate mt-0.5">{asset.target !== "unknown" ? asset.target : "—"}</p>
-        </div>
-        <div>
-          <p className="text-muted-foreground text-[10px] uppercase tracking-wide font-semibold">Disease</p>
-          <p className="text-foreground truncate mt-0.5">{asset.diseaseIndication !== "unknown" ? asset.diseaseIndication : "—"}</p>
-        </div>
-      </div>
-
-      <div className="flex items-center justify-between pt-0.5 border-t border-card-border gap-2">
-        <p className="text-[10px] text-muted-foreground truncate flex-1">
-          {asset.sourceJournal} · {asset.publicationYear}
-        </p>
-        <div className="flex items-center gap-1 shrink-0">
-          {asset.sourceUrl && (
-            <a
-              href={asset.sourceUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-0.5 text-[10px] text-primary hover:text-primary/80 transition-colors"
-              data-testid={`link-asset-source-${asset.id}`}
-            >
-              <ExternalLink className="w-2.5 h-2.5" />
-              View
-            </a>
-          )}
-          {pipelines.length > 0 && !readOnly && (
-            <select
-              value={asset.pipelineListId ?? "null"}
-              onChange={(e) => {
-                const val = e.target.value;
-                onMove(asset.id, val === "null" ? null : parseInt(val, 10));
-              }}
-              className="text-[10px] text-muted-foreground bg-transparent border-0 focus:outline-none cursor-pointer hover:text-foreground"
-              title="Move to pipeline"
-              data-testid={`select-move-asset-${asset.id}`}
-            >
-              <option value="null">Uncategorised</option>
-              {pipelines.map((p) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -475,6 +681,13 @@ export default function Assets() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const { data: org } = useOrg();
   const hasTeamOrg = !!(org && org.planTier !== "individual");
+
+  const { data: profileData } = useQuery<{ profile?: { userName?: string | null } }>({
+    queryKey: ["/api/industry/profile"],
+    staleTime: 300000,
+    retry: false,
+  });
+  const currentUserName = profileData?.profile?.userName ?? null;
 
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
@@ -854,6 +1067,7 @@ export default function Assets() {
                       onMove={(id, pipelineListId) => moveMutation.mutate({ id, pipelineListId })}
                       pipelines={pipelines}
                       readOnly={teamScope}
+                      currentUserName={currentUserName}
                     />
                   ))}
                 </div>

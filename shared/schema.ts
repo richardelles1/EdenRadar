@@ -97,16 +97,34 @@ export const savedAssets = pgTable("saved_assets", {
   savedAt: timestamp("saved_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-const SAVED_ASSET_STATUSES = ["viewing", "evaluating", "contacted"] as const;
+export const SAVED_ASSET_STATUSES = ["watching", "evaluating", "in_discussion", "on_hold", "passed"] as const;
+export type SavedAssetStatus = typeof SAVED_ASSET_STATUSES[number];
 export const savedAssetStatusEnum = z.enum(SAVED_ASSET_STATUSES).nullable().optional();
 export const insertSavedAssetSchema = createInsertSchema(savedAssets).omit({
   id: true,
   savedAt: true,
 }).extend({
-  status: z.enum(SAVED_ASSET_STATUSES).nullable().optional(),
+  status: savedAssetStatusEnum,
 });
 export type InsertSavedAsset = z.infer<typeof insertSavedAssetSchema>;
 export type SavedAsset = typeof savedAssets.$inferSelect;
+
+export const savedAssetNotes = pgTable("saved_asset_notes", {
+  id: serial("id").primaryKey(),
+  savedAssetId: integer("saved_asset_id").notNull().references(() => savedAssets.id, { onDelete: "cascade" }),
+  userId: text("user_id"),
+  authorName: text("author_name").notNull().default("Unknown"),
+  content: text("content").notNull(),
+  isSystemEvent: boolean("is_system_event").notNull().default(false),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertSavedAssetNoteSchema = createInsertSchema(savedAssetNotes).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertSavedAssetNote = z.infer<typeof insertSavedAssetNoteSchema>;
+export type SavedAssetNote = typeof savedAssetNotes.$inferSelect;
 
 export const assetSchema = z.object({
   asset_name: z.string(),

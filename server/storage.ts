@@ -2,6 +2,7 @@ import {
   users, type User, type InsertUser,
   searchHistory, type SearchHistory, type InsertSearchHistory,
   savedAssets, type SavedAsset, type InsertSavedAsset,
+  savedAssetNotes, type SavedAssetNote, type InsertSavedAssetNote,
   pipelineLists, type PipelineList, type InsertPipelineList,
   ingestionRuns, type IngestionRun, type InsertIngestionRun,
   ingestedAssets, type IngestedAsset, type InsertIngestedAsset,
@@ -72,6 +73,10 @@ export interface IStorage {
   updateSavedAssetPipeline(id: number, pipelineListId: number | null): Promise<SavedAsset | undefined>;
   updateSavedAssetStatus(id: number, status: string | null): Promise<SavedAsset | undefined>;
   deleteSavedAsset(id: number): Promise<void>;
+
+  createAssetNote(data: InsertSavedAssetNote): Promise<SavedAssetNote>;
+  getAssetNotes(savedAssetId: number): Promise<SavedAssetNote[]>;
+  getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>>;
 
   getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
   getPipelineList(id: number): Promise<PipelineList | undefined>;
@@ -444,6 +449,32 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSavedAsset(id: number): Promise<void> {
     await db.delete(savedAssets).where(eq(savedAssets.id, id));
+  }
+
+  async createAssetNote(data: InsertSavedAssetNote): Promise<SavedAssetNote> {
+    const [row] = await db.insert(savedAssetNotes).values(data).returning();
+    return row;
+  }
+
+  async getAssetNotes(savedAssetId: number): Promise<SavedAssetNote[]> {
+    return db
+      .select()
+      .from(savedAssetNotes)
+      .where(eq(savedAssetNotes.savedAssetId, savedAssetId))
+      .orderBy(savedAssetNotes.createdAt);
+  }
+
+  async getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>> {
+    if (savedAssetIds.length === 0) return {};
+    const rows = await db
+      .select({
+        savedAssetId: savedAssetNotes.savedAssetId,
+        count: sql<number>`count(*)::int`,
+      })
+      .from(savedAssetNotes)
+      .where(inArray(savedAssetNotes.savedAssetId, savedAssetIds))
+      .groupBy(savedAssetNotes.savedAssetId);
+    return Object.fromEntries(rows.map((r) => [r.savedAssetId, r.count]));
   }
 
   async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {

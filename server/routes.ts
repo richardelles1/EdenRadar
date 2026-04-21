@@ -4,7 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -977,13 +977,80 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
-      const VALID_STATUSES = ["viewing", "evaluating", "contacted"] as const;
-      const { status } = z.object({ status: z.enum(VALID_STATUSES).nullable() }).parse(req.body);
+      const { status, authorName } = z.object({
+        status: z.enum(SAVED_ASSET_STATUSES).nullable(),
+        authorName: z.string().optional(),
+      }).parse(req.body);
+      const userId = await tryGetUserId(req);
+
+      const before = await storage.getSavedAsset(id);
+      if (!before) return res.status(404).json({ error: "Asset not found" });
+
       const asset = await storage.updateSavedAssetStatus(id, status);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
+
+      // Auto-log a system event note when status changes
+      const prevLabel = before.status ?? "none";
+      const nextLabel = status ?? "none";
+      if (prevLabel !== nextLabel) {
+        const STATUS_LABELS: Record<string, string> = {
+          watching: "Watching",
+          evaluating: "Evaluating",
+          in_discussion: "In Discussion",
+          on_hold: "On Hold",
+          passed: "Passed",
+          none: "None",
+        };
+        const displayName = authorName ?? "Someone";
+        await storage.createAssetNote({
+          savedAssetId: id,
+          userId: userId ?? null,
+          authorName: displayName,
+          content: `Status changed from ${STATUS_LABELS[prevLabel] ?? prevLabel} to ${STATUS_LABELS[nextLabel] ?? nextLabel}`,
+          isSystemEvent: true,
+        }).catch(() => {});
+      }
+
       res.json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to update status" });
+    }
+  });
+
+  app.get("/api/saved-assets/:id/notes", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const notes = await storage.getAssetNotes(id);
+      res.json({ notes });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch notes" });
+    }
+  });
+
+  app.post("/api/saved-assets/:id/notes", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const { content, authorName } = z.object({
+        content: z.string().min(1).max(2000),
+        authorName: z.string().default("Unknown"),
+      }).parse(req.body);
+      const userId = await tryGetUserId(req);
+
+      const asset = await storage.getSavedAsset(id);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+
+      const note = await storage.createAssetNote({
+        savedAssetId: id,
+        userId: userId ?? null,
+        authorName,
+        content,
+        isSystemEvent: false,
+      });
+      res.status(201).json({ note });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to create note" });
     }
   });
 
