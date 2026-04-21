@@ -371,19 +371,24 @@ export const iEdisonScraper: InstitutionScraper = {
     hardCap.setMonth(hardCap.getMonth() - MAX_LOOKBACK_MONTHS);
 
     // Incremental mode: use MAX(last_seen_at) from ingested_assets for records
-    // from this institution as the fromDate. This is the most accurate cursor
-    // since it reflects actual ingested records, not just scrape operation
-    // timestamps. Falls back to the hard cap on the first run or on DB error.
+    // that came from the iEdison site (matched by source_url domain). This is
+    // more accurate than institution name because iEdison records are stored with
+    // the extracted assignee institution (e.g. "Harvard Medical School"), not the
+    // scraper name "NIH iEdison". Source URL is the stable per-record identity.
+    // Falls back to the hard cap on the first run or on DB error.
     let fromDate = hardCap;
     try {
       const result = await db.execute(
         sql`SELECT MAX(last_seen_at) AS max_last_seen
             FROM ingested_assets
-            WHERE institution = ${INST}`
+            WHERE source_url LIKE ${`%${BASE_URL.replace("https://", "")}%`}`
       );
       const maxLastSeen = (result.rows as any[])[0]?.max_last_seen;
       if (maxLastSeen) {
         const lastIngest = new Date(maxLastSeen);
+        // Advance by one second to avoid re-pulling records at the exact
+        // same timestamp boundary on back-to-back runs.
+        lastIngest.setSeconds(lastIngest.getSeconds() + 1);
         // Use lastIngest only if it's more recent than the hard cap and in the past
         if (lastIngest > hardCap && lastIngest < toDate) {
           fromDate = lastIngest;
