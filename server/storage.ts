@@ -596,8 +596,10 @@ export class DatabaseStorage implements IStorage {
             ...(listing.inventors?.length ? { inventors: listing.inventors } : {}),
             ...(listing.patentStatus ? { patentStatus: listing.patentStatus } : {}),
             ...(listing.licensingStatus ? { licensingStatus: listing.licensingStatus } : {}),
-            // Reset enrichedAt when content changes so re-enrichment is triggered
-            ...(contentChanged ? { enrichedAt: null } : {}),
+            // Reset enrichedAt when content changes so re-enrichment is triggered.
+            // Also reset deepEnrichAttempts so the asset is eligible for bucket-C
+            // low-quality retry again if the fresh deep-enrich result is still thin.
+            ...(contentChanged ? { enrichedAt: null, deepEnrichAttempts: 0 } : {}),
           })
           .where(eq(ingestedAssets.id, existing.id));
       }
@@ -672,8 +674,10 @@ export class DatabaseStorage implements IStorage {
             abstract: listing.abstract || undefined,
             // Heal sourceUrl if it was previously null and we now have a real URL
             ...(!existing?.sourceUrl && listing.sourceUrl ? { sourceUrl: listing.sourceUrl } : {}),
-            // Reset enrichedAt so the asset gets re-enriched with improved content
+            // Reset enrichedAt so the asset gets re-enriched with improved content.
+            // Also reset deepEnrichAttempts so bucket-C low-quality retry is available again.
             enrichedAt: null,
+            deepEnrichAttempts: 0,
           })
           .where(eq(ingestedAssets.fingerprint, listing.fingerprint));
       }
@@ -1409,12 +1413,16 @@ export class DatabaseStorage implements IStorage {
       //   Covers: assets enriched before completeness scoring was introduced.
       //   These have enrichedAt set but no score recorded.
       //
-      // Bucket C — low-quality retry (completenessScore < 15 AND enrichedAt IS NOT NULL):
+      // Bucket C — low-quality retry (completenessScore < 15 AND enrichedAt IS NOT NULL
+      //           AND deepEnrichAttempts = 0):
       //   Covers: assets that received enrichedAt but produced a near-zero score
       //   (e.g., thin-content stub that later gained an abstract).
       //   Threshold: score < 15 means not even one standard field was filled
       //   (target/modality/indication each contribute 15 pts; a legitimate result
       //   that extracted one field cleanly will score >= 15 and exit this bucket).
+      //   deepEnrichAttempts = 0 gate ensures each asset gets exactly ONE retry —
+      //   after processing, deepEnrichAttempts is incremented to 1 so this bucket
+      //   never re-selects the same asset even if score stays below 15.
       .where(
         and(
           eq(ingestedAssets.relevant, true),
@@ -1428,6 +1436,7 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
+              eq(ingestedAssets.deepEnrichAttempts, 0),
             ),
           ),
         ),
@@ -1451,6 +1460,7 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
+              eq(ingestedAssets.deepEnrichAttempts, 0),
             ),
           ),
         ),
@@ -1461,16 +1471,16 @@ export class DatabaseStorage implements IStorage {
   async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; total: number }> {
     const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; total: number }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                AS fresh,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int             AS legacy,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15)::int AS low_quality_retry,
-        COUNT(*)::int                                                                                   AS total
+        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                              AS fresh,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                           AS legacy,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts = 0)::int AS low_quality_retry,
+        COUNT(*)::int                                                                                                                  AS total
       FROM ingested_assets
       WHERE relevant = true
         AND (
           enriched_at IS NULL
           OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
-          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts = 0)
         )
     `);
     const row = result.rows[0];
@@ -1503,6 +1513,7 @@ export class DatabaseStorage implements IStorage {
       licensingReadiness: data.licensingReadiness,
       completenessScore: data.completenessScore,
       enrichedAt: new Date(), // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+      deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
       // Clear stale dedupe embedding — target/indication changed so the vector must be refreshed
       // on the next nearDuplicateDetection scan to avoid false-negative dedup comparisons.
       dedupeEmbedding: null,
@@ -1536,6 +1547,7 @@ export class DatabaseStorage implements IStorage {
             licensingReadiness: data.licensingReadiness,
             completenessScore: data.completenessScore,
             enrichedAt: now, // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+            deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
             // Clear stale dedupe embedding — forces re-embedding on next scan after target/indication update
             dedupeEmbedding: null,
           }).where(eq(ingestedAssets.id, data.id));

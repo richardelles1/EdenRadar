@@ -35,13 +35,17 @@
 //              Only selects assets in one of three finite buckets:
 //              (A) enrichedAt IS NULL — fresh inserts and content-change resets,
 //              (B) completenessScore IS NULL AND enrichedAt IS NOT NULL — legacy,
-//              (C) completenessScore < 15 AND enrichedAt IS NOT NULL — thin-content.
-//              Once an asset has enrichedAt set AND completenessScore >= 15 it is
-//              NEVER re-selected unless content changes reset enrichedAt to NULL.
+//              (C) completenessScore < 15 AND enrichedAt IS NOT NULL AND
+//                  deepEnrichAttempts = 0 — thin-content one-time retry.
+//              Bucket C assets get exactly ONE retry; deepEnrichAttempts is
+//              incremented to 1 after processing, permanently exiting the bucket.
+//              Once an asset exits all three buckets it is never re-selected
+//              unless content changes reset enrichedAt to NULL (and resets
+//              deepEnrichAttempts to 0 to allow fresh bucket-C eligibility).
 //   Purpose  : Extracts MoA, innovationClaim, unmetNeed, comparableDrugs,
 //              licensingReadiness, ipType, and overwrites the mini-tier fields
 //              with higher-fidelity extraction.
-//   Cost     : ~$0.001 / asset (4o-tier, full structured extraction with context).
+//   Cost     : ~$0.01 / asset (4o-tier, full structured extraction with context).
 //
 // ────────────────────────────────────────────────────────────────────────────
 

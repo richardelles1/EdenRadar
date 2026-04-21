@@ -191,6 +191,10 @@ export const ingestedAssets = pgTable("ingested_assets", {
   dedupeEmbedding: jsonb("dedupe_embedding").$type<number[]>(),
   // Similarity score stored when near-duplicate is flagged (0.0–1.0)
   dedupeSimilarity: real("dedupe_similarity"),
+  // Tracks how many times the GPT-4o deep enrichment job has processed this asset.
+  // Bucket C (low-quality retry) only selects assets with deepEnrichAttempts = 0,
+  // so each asset gets at most one retry if its score was still below threshold.
+  deepEnrichAttempts: integer("deep_enrich_attempts").default(0).notNull(),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

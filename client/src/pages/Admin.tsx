@@ -5264,7 +5264,7 @@ function EdenTab({ pw }: { pw: string }) {
   const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
   const breakdown = stats?.breakdown;
   const remaining = breakdown?.total ?? stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
-  const estCostUsd = remaining > 0 ? (remaining * 0.0012).toFixed(0) : "0";
+  const estCostUsd = remaining > 0 ? (remaining * 0.01).toFixed(2) : "0.00";
   const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
   const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
   const embEstCost = embRemaining > 0 ? (embRemaining * 0.00002).toFixed(2) : "0.00";
@@ -5769,7 +5769,7 @@ function EdenTab({ pw }: { pw: string }) {
               <p className="text-xs text-muted-foreground mb-2">
                 GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness.
                 <span className="ml-1 font-semibold text-foreground">{remaining.toLocaleString()} assets</span> queued
-                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.001/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
+                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.01/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
               </p>
               {breakdown && remaining > 0 && (
                 <div className="flex flex-wrap gap-2 mb-3" data-testid="enrich-breakdown">
