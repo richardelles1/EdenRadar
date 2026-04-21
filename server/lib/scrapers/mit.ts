@@ -6,44 +6,27 @@ const BASE = "https://tlo.mit.edu";
 const INST = "MIT";
 const LIST_PATH = "/industry-entrepreneurs/available-technologies";
 const LIST_FILTER = "search_api_fulltext=&license_status%5BU%5D=U";
-// Safety ceiling — TLO has ~80-100 pages as of 2026. Raised to 150 to handle growth.
-const MAX_PAGES = 150;
-// Parallel batch size for list-page fetching.
-// 5 concurrent requests avoids CDN rate-limiting while cutting sequential time ~5x.
-const PAGE_BATCH = 5;
-// Per-page timeout: 15s is enough for TLO; CDN cold-start rarely exceeds 10s.
+
+// How many pages to probe in parallel per window.
+// MIT fits in one window (page 0 + window 1-20). Large sites need 2-3 windows.
+// The global semaphore already caps concurrent HTTP requests, so a large window
+// does not overwhelm the target — it just queues within that semaphore pool.
+const PAGE_WINDOW = 20;
+
+// Per-page timeout: 15s is generous; TLO CDN cold-start rarely exceeds 8s.
 const PAGE_TIMEOUT_MS = 15_000;
 
 export const mitScraper: InstitutionScraper = {
   institution: INST,
-  scraperTimeoutMs: 8 * 60 * 1000, // 8 min — headroom for slow CDN days
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      // Step 1: fetch page 0 — required to detect actual page count.
-      const page0Url = `${BASE}${LIST_PATH}?${LIST_FILTER}`;
-      const page0$ = await fetchHtml(page0Url, PAGE_TIMEOUT_MS, signal);
-      if (!page0$) {
-        console.warn(`[scraper] ${INST}: could not fetch listing page 0`);
-        return [];
-      }
-
-      // Detect actual last page from pagination widget.
-      // MIT's pagination links contain &page=N (alongside the filter params).
-      let detectedMax = 0;
-      page0$("a[href*='page=']").each((_, el) => {
-        const m = (page0$(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
-        if (m) detectedMax = Math.max(detectedMax, parseInt(m[1], 10));
-      });
-      // If no pagination links found the whole catalog fits on page 0 — don't
-      // blindly fetch MAX_PAGES more pages. Only expand when links are detected.
-      const lastPage = detectedMax > 0 ? Math.min(detectedMax, MAX_PAGES) : 0;
-      console.log(`[scraper] ${INST}: detected ${lastPage + 1} pages (pages 0–${lastPage})`);
-
       // Helper: extract all technology listings from a parsed page.
-      const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void => {
+      // Returns count of NEW listings added (0 means the page is effectively empty).
+      const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): number => {
+        let added = 0;
         $(".views-row").each((_, el) => {
           const linkEl = $(el)
             .find("a.tech-brief-teaser__link, .tech-brief-teaser__heading a, h3 a, h2 a")
@@ -51,6 +34,7 @@ export const mitScraper: InstitutionScraper = {
           const title = cleanText(linkEl.text());
           if (!title || seen.has(title)) return;
           seen.add(title);
+          added++;
           const href = linkEl.attr("href") ?? "";
           results.push({
             title,
@@ -59,41 +43,54 @@ export const mitScraper: InstitutionScraper = {
             institution: INST,
           });
         });
+        return added;
       };
 
-      // Extract from page 0 immediately.
+      // Step 1: fetch page 0 synchronously — seeds the results and confirms the site is up.
+      const page0Url = `${BASE}${LIST_PATH}?${LIST_FILTER}`;
+      const page0$ = await fetchHtml(page0Url, PAGE_TIMEOUT_MS, signal);
+      if (!page0$) {
+        console.warn(`[scraper] ${INST}: could not fetch listing page 0`);
+        return [];
+      }
       extractListings(page0$);
+      console.log(`[scraper] ${INST}: page 0 — ${results.length} listings`);
 
-      // Step 2: build remaining page URLs (1..lastPage).
-      const remaining: string[] = [];
-      for (let p = 1; p <= lastPage; p++) {
-        remaining.push(`${BASE}${LIST_PATH}?${LIST_FILTER}&page=${p}`);
-      }
+      // Step 2: adaptive parallel window scan.
+      // Launch PAGE_WINDOW pages at once. Stop as soon as any page in the window
+      // returns zero new listings — that means we have scanned past the last page.
+      // No pagination detection needed; no cap other than the safety ceiling below.
+      const MAX_PAGES = 500; // hard safety ceiling (far beyond any real TTO catalog)
+      let offset = 1;
 
-      // Step 3: fetch remaining pages in parallel batches of PAGE_BATCH.
-      // retries=1 (2 total attempts) — one silent retry handles transient CDN blips.
-      let skipped = 0;
-      for (let i = 0; i < remaining.length; i += PAGE_BATCH) {
-        if (signal?.aborted) break;
-        const batch = remaining.slice(i, i + PAGE_BATCH);
-        const pages = await Promise.all(
-          batch.map((u) => fetchHtml(u, PAGE_TIMEOUT_MS, signal, 1))
-        );
-        for (const $ of pages) {
-          if (!$) { skipped++; continue; }
-          extractListings($);
+      while (!signal?.aborted && offset < MAX_PAGES) {
+        const pageNums: number[] = [];
+        for (let i = 0; i < PAGE_WINDOW && offset + i < MAX_PAGES; i++) {
+          pageNums.push(offset + i);
         }
-        const batchEnd = Math.min(i + PAGE_BATCH, remaining.length);
-        console.log(`[scraper] ${INST}: fetched pages ${i + 1}–${batchEnd} — ${results.length} listings so far`);
+
+        const pages = await Promise.all(
+          pageNums.map((p) =>
+            fetchHtml(`${BASE}${LIST_PATH}?${LIST_FILTER}&page=${p}`, PAGE_TIMEOUT_MS, signal, 1)
+          )
+        );
+
+        let hitEmpty = false;
+        for (const $ of pages) {
+          if (!$ || extractListings($) === 0) {
+            hitEmpty = true;
+          }
+        }
+
+        console.log(`[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1} — ${results.length} listings so far`);
+
+        if (hitEmpty) break;
+        offset += PAGE_WINDOW;
       }
 
-      if (skipped > 0) {
-        console.warn(`[scraper] ${INST}: ${skipped} list page(s) skipped due to timeout/error`);
-      }
+      console.log(`[scraper] ${INST}: ${results.length} listings total, enriching details...`);
 
-      console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details (cap 100)...`);
-
-      // Step 4: enrich detail pages.
+      // Step 3: enrich detail pages for listings that lack a good description.
       await enrichWithDetailPages(results, {
         description: [
           ".tech-brief-body__inner",
@@ -116,7 +113,7 @@ export const mitScraper: InstitutionScraper = {
         ],
       }, 100, signal);
 
-      console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
+      console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
