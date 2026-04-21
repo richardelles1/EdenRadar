@@ -116,6 +116,7 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+  useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
 
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
   const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "unknown";

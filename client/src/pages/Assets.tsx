@@ -118,6 +118,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+  useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
   const notesEndRef = useRef<HTMLDivElement>(null);
 
   const { data: notesData, isLoading: notesLoading } = useQuery<{ notes: SavedAssetNote[] }>({
