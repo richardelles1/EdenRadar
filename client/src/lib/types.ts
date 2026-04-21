@@ -57,6 +57,8 @@ export interface ScoredAsset {
   contact_office?: string;
   stage_changed_at?: string | null;
   previous_stage?: string | null;
+  fda_designation?: string | null;
+  fda_designation_date?: string | null;
   signals: RawSignal[];
 }
 

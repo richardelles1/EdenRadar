@@ -27,6 +27,7 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
+import { runFdaDesignationMatch } from "./lib/fda-designations";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
@@ -468,6 +469,8 @@ export async function registerRoutes(
           licensing_status: r.licensingReadiness ?? "unknown",
           stage_changed_at: r.stageChangedAt ? r.stageChangedAt.toISOString() : null,
           previous_stage: r.previousStage ?? null,
+          fda_designation: r.fdaDesignation ?? null,
+          fda_designation_date: r.fdaDesignationDate ?? null,
         };
       });
 
@@ -488,6 +491,7 @@ export async function registerRoutes(
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
+          fda_designation, fda_designation_date,
           first_seen_at
         FROM ingested_assets
         WHERE relevant = true AND completeness_score >= 0.4
@@ -511,6 +515,8 @@ export async function registerRoutes(
         innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
         stage_changed_at: r.stage_changed_at ? String(r.stage_changed_at) : null,
         previous_stage: typeof r.previous_stage === "string" ? r.previous_stage : null,
+        fda_designation: typeof r.fda_designation === "string" ? r.fda_designation : null,
+        fda_designation_date: typeof r.fda_designation_date === "string" ? r.fda_designation_date : null,
         first_seen_at: r.first_seen_at ? String(r.first_seen_at) : null,
         score: 0,
         score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
@@ -2936,6 +2942,32 @@ export async function registerRoutes(
       succeeded: embedSucceeded,
       failed: embedFailed,
     });
+  });
+
+  // ── FDA Designation enrichment ────────────────────────────────────────────
+
+  let fdaDesignationRunning = false;
+
+  app.post("/api/admin/fda-designations/run", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (fdaDesignationRunning) return res.status(409).json({ error: "FDA designation job already running" });
+    fdaDesignationRunning = true;
+    res.json({ message: "FDA designation match started" });
+    try {
+      const result = await runFdaDesignationMatch();
+      console.log("[admin] FDA designation match complete:", result);
+    } catch (err: any) {
+      console.error("[admin] FDA designation match failed:", err?.message);
+    } finally {
+      fdaDesignationRunning = false;
+    }
+  });
+
+  app.get("/api/admin/fda-designations/status", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    res.json({ running: fdaDesignationRunning });
   });
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────

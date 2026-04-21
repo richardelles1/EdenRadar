@@ -1,4 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
+import { iEdisonScraper } from "./iedison";
 import { stanfordScraper } from "./stanford";
 import { mitScraper } from "./mit";
 import { harvardScraper } from "./harvard";
@@ -615,6 +616,8 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nyuScraper,
   nihOttScraper,
   nciTtcScraper,
+  // Task #399 — NIH iEdison federal invention disclosures
+  iEdisonScraper,
   maxPlanckScraper,
   mskScraper,
   lifeArcScraper,

@@ -53,6 +53,8 @@ export type RetrievedAsset = {
   similarity: number;
   stageChangedAt?: Date | null;
   previousStage?: string | null;
+  fdaDesignation?: string | null;
+  fdaDesignationDate?: string | null;
 };
 
 export interface IStorage {
@@ -307,6 +309,10 @@ export interface IStorage {
   setIndustryProfileSubscription(userId: string, subscribedToDigest: boolean): Promise<void>;
   getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
   getAllInstitutionNames(): Promise<string[]>;
+
+  // FDA designation enrichment
+  getIngestedAssetsForFdaTagging(): Promise<IngestedAsset[]>;
+  updateFdaDesignation(id: number, designation: string, date?: string): Promise<void>;
 
   // Organizations
   getAllOrganizations(): Promise<Organization[]>;
@@ -2152,6 +2158,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
+        fda_designation, fda_designation_date,
         1 - (embedding <=> ${vectorStr}::vector) AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -2181,6 +2188,8 @@ export class DatabaseStorage implements IStorage {
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
+      fdaDesignation: typeof r.fda_designation === "string" && r.fda_designation ? r.fda_designation : null,
+      fdaDesignationDate: typeof r.fda_designation_date === "string" && r.fda_designation_date ? r.fda_designation_date : null,
       similarity: parseFloat(String(r.similarity ?? 0)),
     }));
   }
@@ -2223,6 +2232,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
+        fda_designation, fda_designation_date,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -2252,6 +2262,8 @@ export class DatabaseStorage implements IStorage {
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
+      fdaDesignation: typeof r.fda_designation === "string" && r.fda_designation ? r.fda_designation : null,
+      fdaDesignationDate: typeof r.fda_designation_date === "string" && r.fda_designation_date ? r.fda_designation_date : null,
       similarity: 0,
     }));
   }
@@ -2706,6 +2718,28 @@ export class DatabaseStorage implements IStorage {
       .map((r) => r.institution)
       .filter((n): n is string => !!n && n.trim().length > 0)
       .sort((a, b) => a.localeCompare(b));
+  }
+
+  async getIngestedAssetsForFdaTagging(): Promise<IngestedAsset[]> {
+    return db
+      .select()
+      .from(ingestedAssets)
+      .where(
+        and(
+          eq(ingestedAssets.relevant, true),
+          isNotNull(ingestedAssets.assetName),
+        )
+      );
+  }
+
+  async updateFdaDesignation(id: number, designation: string, date?: string): Promise<void> {
+    await db
+      .update(ingestedAssets)
+      .set({
+        fdaDesignation: designation,
+        ...(date ? { fdaDesignationDate: date } : {}),
+      })
+      .where(eq(ingestedAssets.id, id));
   }
 
   private async _getNewRelevantAssets(windowHours: number): Promise<Omit<AssetSuggestion, "score" | "matchedFields">[]> {
