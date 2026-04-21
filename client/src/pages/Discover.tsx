@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, Building2, FlaskConical, GraduationCap } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -365,34 +365,16 @@ export default function Discover() {
               </p>
             </div>
 
-            <div className="max-w-3xl mx-auto flex gap-2">
-              <div className="flex-1">
-                <SearchBar
-                  query={inputQuery}
-                  onQueryChange={setInputQuery}
-                  onSearch={(q) => handleSearch(q)}
-                  isLoading={searchMutation.isPending}
-                  sources={[]}
-                  selectedSource=""
-                  onSourceChange={() => {}}
-                />
-              </div>
-              <Button
-                variant="outline"
-                className="shrink-0 gap-2 text-sm h-10 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                onClick={handleGenerateReport}
-                disabled={isAnyPending}
-                data-testid="button-generate-report"
-              >
-                {reportMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <FileBarChart2 className="w-4 h-4" />
-                )}
-                <span className="hidden sm:inline">
-                  {reportMutation.isPending ? "Generating..." : "Match Report"}
-                </span>
-              </Button>
+            <div className="max-w-3xl mx-auto">
+              <SearchBar
+                query={inputQuery}
+                onQueryChange={setInputQuery}
+                onSearch={(q) => handleSearch(q)}
+                isLoading={searchMutation.isPending}
+                sources={[]}
+                selectedSource=""
+                onSourceChange={() => {}}
+              />
             </div>
 
             <div className="max-w-3xl mx-auto flex items-center justify-end">
@@ -423,6 +405,35 @@ export default function Discover() {
             <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
 
             <SourceSelector sources={sources} selected={selectedSources} onToggle={handleToggleSource} />
+
+            <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-2">
+              <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0">Owner:</span>
+              {(["any", "university", "company"] as const).map((t) => {
+                const icon = t === "university"
+                  ? <GraduationCap className="w-3 h-3" />
+                  : t === "company"
+                  ? <Building2 className="w-3 h-3" />
+                  : <FlaskConical className="w-3 h-3" />;
+                const label = t === "any" ? "Any" : t === "university" ? "University" : "Company";
+                const active = buyerProfile.owner_type_preference === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setBuyerProfile({ ...buyerProfile, owner_type_preference: t })}
+                    className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
+                      active
+                        ? "border-primary bg-primary/15 text-primary font-medium"
+                        : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
+                    }`}
+                    data-testid={`owner-type-${t}`}
+                  >
+                    {icon}
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {searchMutation.isPending && (
@@ -533,6 +544,37 @@ export default function Discover() {
           )}
 
           <div className="flex-1 px-4 sm:px-6 pb-10">
+            {showControls && (
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm text-muted-foreground">
+                  Showing <span className="font-medium text-foreground">{filteredResults.length}</span> result{filteredResults.length !== 1 ? "s" : ""}
+                </span>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-xs h-8 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                        onClick={handleGenerateReport}
+                        disabled={isAnyPending}
+                        data-testid="button-generate-report"
+                      >
+                        {reportMutation.isPending ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <FileBarChart2 className="w-3.5 h-3.5" />
+                        )}
+                        {reportMutation.isPending ? "Generating..." : "Match Report"}
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="left">
+                      <p className="text-xs max-w-[200px]">AI summary of how these results align with your deal focus.</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            )}
             {!searchMutation.isPending && (
               <SearchResults
                 assets={filteredResults}

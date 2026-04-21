@@ -6993,6 +6993,8 @@ If multiple assets appear, return each as a separate array item.`;
         user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
       });
       if (error) return res.status(500).json({ error: error.message });
+      // Also persist to industry_profiles so alertDispatch can query it directly
+      await storage.setIndustryProfileSubscription(userId, subscribedToDigest).catch(() => {});
       return res.json({ subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false });
     } catch (err: any) {
       console.error("[users/subscribe]", err);
@@ -7023,6 +7025,19 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[users/notification-prefs]", err);
       return res.status(500).json({ error: err.message ?? "Failed to save prefs" });
+    }
+  });
+
+  app.post("/api/admin/alerts/dispatch", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const { runAlertDispatch } = await import("./lib/alertDispatch.js");
+      const result = await runAlertDispatch();
+      return res.json({ ok: true, ...result });
+    } catch (err: any) {
+      console.error("[admin/alerts/dispatch]", err);
+      return res.status(500).json({ error: err.message ?? "Dispatch failed" });
     }
   });
 

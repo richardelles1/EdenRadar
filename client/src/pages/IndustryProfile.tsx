@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Form,
   FormControl,
@@ -19,8 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Building2, CheckCircle2, Save } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Building2, Bell, CheckCircle2, Save } from "lucide-react";
 import { getIndustryProfile, saveIndustryProfile } from "@/hooks/use-industry";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -134,8 +137,25 @@ function ChipGroup({
   );
 }
 
+function formatRelativeTime(date: string | Date | null): string {
+  if (!date) return "never";
+  const d = typeof date === "string" ? new Date(date) : date;
+  const diffMs = Date.now() - d.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 1) return "just now";
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays === 1) return "yesterday";
+  if (diffDays < 7) return `${diffDays} days ago`;
+  return d.toLocaleDateString();
+}
+
 export default function IndustryProfile() {
   const { toast } = useToast();
+  const { session } = useAuth();
+  const qc = useQueryClient();
   const profile = getIndustryProfile();
   const [therapeuticAreas, setTherapeuticAreas] = useState<string[]>(profile.therapeuticAreas);
   const [modalities, setModalities] = useState<string[]>(profile.modalities);
@@ -148,6 +168,72 @@ export default function IndustryProfile() {
       userName: profile.userName ?? "",
       companyName: profile.companyName,
       companyType: profile.companyType || "",
+    },
+  });
+
+  const token = session?.access_token;
+
+  const { data: serverProfile } = useQuery({
+    queryKey: ["/api/industry/profile", token],
+    enabled: !!token,
+    queryFn: async () => {
+      const res = await fetch("/api/industry/profile", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const body = await res.json();
+      return body.profile as {
+        subscribedToDigest: boolean;
+        notificationPrefs: { frequency: string } | null;
+        lastAlertSentAt: string | null;
+      } | null;
+    },
+    staleTime: 30000,
+  });
+
+  const subscribedToDigest = serverProfile?.subscribedToDigest ?? false;
+  const frequency = serverProfile?.notificationPrefs?.frequency ?? "daily";
+  const lastAlertSentAt = serverProfile?.lastAlertSentAt ?? null;
+
+  const subscriptionMutation = useMutation({
+    mutationFn: async (value: boolean) => {
+      const res = await fetch("/api/users/subscribe", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ subscribedToDigest: value }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/industry/profile"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const frequencyMutation = useMutation({
+    mutationFn: async (freq: string) => {
+      const res = await fetch("/api/users/notification-prefs", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ frequency: freq }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error ?? "Failed");
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/industry/profile"] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -292,6 +378,55 @@ export default function IndustryProfile() {
           </Button>
         </form>
       </Form>
+
+      {token && (
+        <div className="mt-6 rounded-xl border border-card-border bg-card p-5 space-y-4">
+          <div className="flex items-center gap-2">
+            <Bell className="w-4 h-4 text-muted-foreground" />
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Notifications</p>
+          </div>
+
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-0.5">
+              <p className="text-sm font-medium text-foreground">Asset match alerts</p>
+              <p className="text-xs text-muted-foreground">
+                Email me when new assets match my therapeutic areas and modalities.
+              </p>
+              {lastAlertSentAt && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  Last sent: <span className="text-foreground">{formatRelativeTime(lastAlertSentAt)}</span>
+                </p>
+              )}
+            </div>
+            <Switch
+              checked={subscribedToDigest}
+              onCheckedChange={(v) => subscriptionMutation.mutate(v)}
+              disabled={subscriptionMutation.isPending}
+              data-testid="toggle-alert-subscription"
+              aria-label="Toggle asset match email alerts"
+            />
+          </div>
+
+          {subscribedToDigest && (
+            <div className="flex items-center gap-3 pt-1 border-t border-card-border">
+              <p className="text-sm text-muted-foreground">Send at most:</p>
+              <Select
+                value={frequency}
+                onValueChange={(v) => frequencyMutation.mutate(v)}
+                disabled={frequencyMutation.isPending}
+              >
+                <SelectTrigger className="w-28 h-8 text-sm" data-testid="select-alert-frequency">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="daily">Once daily</SelectItem>
+                  <SelectItem value="weekly">Once weekly</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -296,12 +296,15 @@ export interface IStorage {
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
-  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId">): Promise<IndustryProfileRow>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId">): Promise<IndustryProfileRow>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
   setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void>;
 
   getSubscriberMatches(windowHours: number): Promise<SubscriberMatchEntry[]>;
   getSubscriberSuggestions(userId: string, windowHours: number): Promise<AssetSuggestion[]>;
+  getAlertSubscribers(): Promise<IndustryProfileRow[]>;
+  updateAlertState(userId: string, lastAlertSentAt: Date, alertLastAssetId: number): Promise<void>;
+  setIndustryProfileSubscription(userId: string, subscribedToDigest: boolean): Promise<void>;
   getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
   getAllInstitutionNames(): Promise<string[]>;
 
@@ -2603,7 +2606,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId">): Promise<IndustryProfileRow> {
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId">): Promise<IndustryProfileRow> {
     const [row] = await db
       .insert(industryProfiles)
       .values({ userId, ...data, updatedAt: new Date() })
@@ -2662,6 +2665,27 @@ export class DatabaseStorage implements IStorage {
         return { ...a, score, matchedFields };
       })
       .sort((a, b) => b.score - a.score);
+  }
+
+  async getAlertSubscribers(): Promise<IndustryProfileRow[]> {
+    return db.select().from(industryProfiles).where(eq(industryProfiles.subscribedToDigest, true));
+  }
+
+  async updateAlertState(userId: string, lastAlertSentAt: Date, alertLastAssetId: number): Promise<void> {
+    await db
+      .update(industryProfiles)
+      .set({ lastAlertSentAt, alertLastAssetId })
+      .where(eq(industryProfiles.userId, userId));
+  }
+
+  async setIndustryProfileSubscription(userId: string, subscribedToDigest: boolean): Promise<void> {
+    await db
+      .insert(industryProfiles)
+      .values({ userId, subscribedToDigest, updatedAt: new Date() })
+      .onConflictDoUpdate({
+        target: industryProfiles.userId,
+        set: { subscribedToDigest, updatedAt: new Date() },
+      });
   }
 
   async getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }> {

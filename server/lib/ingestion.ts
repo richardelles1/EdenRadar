@@ -293,6 +293,12 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
       });
     }
 
+    if (newCount > 0) {
+      import("./alertDispatch.js")
+        .then(({ runAlertDispatch }) => runAlertDispatch())
+        .catch((err) => console.error("[alertDispatch] Background dispatch error:", err));
+    }
+
     return { totalFound: listings.length, newCount, runId: run.id };
   } catch (err: any) {
     console.error(`[ingestion] Run #${run.id} failed:`, err);

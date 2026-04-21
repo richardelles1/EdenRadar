@@ -38,6 +38,9 @@ export const industryProfiles = pgTable("industry_profiles", {
   modalities: text("modalities").array().notNull().default(sql`'{}'::text[]`),
   onboardingDone: boolean("onboarding_done").notNull().default(false),
   notificationPrefs: jsonb("notification_prefs").$type<{ frequency: string }>().default({ frequency: "daily" }),
+  subscribedToDigest: boolean("subscribed_to_digest").notNull().default(false),
+  lastAlertSentAt: timestamp("last_alert_sent_at"),
+  alertLastAssetId: integer("alert_last_asset_id"),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
 });

@@ -150,6 +150,84 @@ export function sendTeamInviteEmail(
   return sendEmail(to, `${orgName} has added you to EdenRadar.`, html);
 }
 
+export interface AlertAsset {
+  id: number;
+  assetName: string;
+  institution: string;
+  modality: string;
+  developmentStage: string;
+  indication: string;
+  sourceUrl?: string | null;
+}
+
+export function sendThesisAlertEmail(
+  to: string,
+  displayName: string,
+  assets: AlertAsset[],
+  therapeuticAreas: string[],
+  modalities: string[],
+): Promise<void> {
+  const name = displayName?.trim() || "there";
+  const focusSummary = [
+    ...(therapeuticAreas.length > 0 ? [therapeuticAreas.slice(0, 3).join(", ")] : []),
+    ...(modalities.length > 0 ? [modalities.slice(0, 2).join(", ")] : []),
+  ].join(" · ");
+
+  const assetRows = assets
+    .slice(0, 10)
+    .map(
+      (a) => `
+      <tr>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;">
+          ${
+            a.sourceUrl
+              ? `<a href="${a.sourceUrl}" style="font-size:14px;font-weight:600;color:#059669;text-decoration:none;">${a.assetName}</a>`
+              : `<span style="font-size:14px;font-weight:600;color:#111827;">${a.assetName}</span>`
+          }
+          <div style="margin-top:3px;font-size:12px;color:#6b7280;">${a.institution}</div>
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;font-size:12px;color:#374151;white-space:nowrap;">
+          ${a.modality !== "unknown" ? a.modality : "-"}
+        </td>
+        <td style="padding:10px 12px;border-bottom:1px solid #f3f4f6;vertical-align:top;font-size:12px;color:#374151;white-space:nowrap;text-transform:capitalize;">
+          ${a.developmentStage !== "unknown" ? a.developmentStage : "-"}
+        </td>
+      </tr>`,
+    )
+    .join("");
+
+  const html = baseHtml(`
+    <h1 style="margin:0 0 8px;font-size:20px;font-weight:700;color:#111827;">New assets matching your focus, ${name}.</h1>
+    <p style="margin:0 0 6px;font-size:14px;color:#6b7280;">
+      ${focusSummary ? `Focus: ${focusSummary}` : "Based on your saved deal focus."}
+    </p>
+    <p style="margin:0 0 24px;font-size:14px;color:#374151;line-height:1.6;">
+      ${assets.length} new asset${assets.length !== 1 ? "s" : ""} ingested since your last alert that match your thesis.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:24px;">
+      <thead>
+        <tr style="background:#f9fafb;">
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Asset</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Modality</th>
+          <th style="padding:8px 12px;text-align:left;font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Stage</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${assetRows}
+      </tbody>
+    </table>
+    <a href="${APP_URL}/discover"
+       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:14px;font-weight:600;padding:10px 24px;border-radius:6px;">
+      Explore in EdenScout
+    </a>
+    <p style="margin:20px 0 0;font-size:12px;color:#9ca3af;line-height:1.5;">
+      You are receiving this because you opted in to asset match alerts.
+      Update your preferences in <a href="${APP_URL}/industry/profile" style="color:#059669;text-decoration:none;">account settings</a>.
+    </p>
+  `);
+  return sendEmail(to, `${assets.length} new asset${assets.length !== 1 ? "s" : ""} match your deal focus — EdenRadar`, html);
+}
+
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {
   const displayName = name?.trim() || "your account";
   const html = baseHtml(`
