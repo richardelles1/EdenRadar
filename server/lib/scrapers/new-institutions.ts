@@ -7302,28 +7302,81 @@ export const shanghaiTechScraper = createStubScraper(
 
 // ── Task #412 — Data Moat Expansion: Probe-First Platform Batch ──────────────
 //
-// Probe results (all confirmed from Replit egress IPs, 2026-04-21):
+// Audit ledger (all probed from Replit egress IPs, 2026-04-21):
 //
-// Flintbox -- new institutions added:
-//   uic.flintbox.com     → orgId=17,  161 items  — University of Illinois Chicago
-//   qmul.flintbox.com    → orgId=199,  16 items  — Queen Mary University of London
-//   uncc.flintbox.com    → orgId=56,   57 items  — UNC Charlotte
-//   (uark, uml already added above in earlier batches)
+// ── Flintbox API probes (SLUG.flintbox.com → orgId/accessKey auto-discovered) ─
+//   SLUG        Items  Action
+//   uark        ~50    ADDED (moved from stub) — University of Arkansas
+//   uml         ~85    ADDED (new)             — UMass Lowell
+//   uic         ~161   ADDED (new)             — University of Illinois Chicago
+//   qmul        ~16    ADDED (new)             — Queen Mary University of London
+//   uncc        ~57    ADDED (new)             — UNC Charlotte
+//   mcgill      ~157   skip — already in codebase (auto-discovery, orgId=0)
+//   ku          ~223   skip — kansasScraper already uses Flintbox
+//   uva         ~197   skip — uvaScraper already uses TechPublisher
+//   psu         ~417   skip — pennStateScraper already uses Flintbox
+//   uc          0      skip — 0 items via API
+//   ualr        0      skip — 0 items via API
+//   ou          0      skip — 0 items via API
+//   nmt         0      skip — 0 items via API
+//   umanitoba   0      skip — 0 items via API
+//   marshall   n/a     skip — no orgId in page source
+//   FLC/flcbusiness.net, labs.federallabs.org — HTTP 000 (Replit egress blocked)
+//   Caltech OTT (ott.caltech.edu)             — HTTP 000 (Replit egress blocked)
+//   KU Leuven TTO (lrd.kuleuven.be)           — HTTP 200 but Shibboleth SSO gate;
+//     kuLeuvenScraper is NOT registered in ALL_SCRAPERS because the catalog is
+//     authentication-gated — returns [] gracefully; re-probe if egress changes
+//   Edinburgh, Oxford                         — JS-rendered SPA, no enumerable listing
 //
-// in-part API (app.in-part.com) -- new portals added:
-//   umassmed  →  66 items  — UMass Medical School
-//   upv       →  51 items  — Polytechnic University of Valencia
-//   brock     →  12 items  — Brock University (Canada)
-//   nova      →  18 items  — NOVA University Lisbon (Portugal)
-//   salk      →  21 items  — Salk Institute (converting from stub; public API confirmed)
+// ── in-part API probes (app.in-part.com?portalSubdomain=SLUG) ─────────────────
+//   SLUG         Items  Action
+//   umassmed     ~66    ADDED (new)  — UMass Medical School
+//   upv          ~51    ADDED (new)  — Polytechnic University of Valencia
+//   brock        ~12    ADDED (new)  — Brock University (Canada)
+//   nova         ~18    ADDED (new)  — NOVA University Lisbon
+//   salk         ~21    CONVERTED from stub to active in-part — Salk Institute
+//   sdsu         ~28    skip — sdsuScraper already uses in-part
+//   ncsu         ~194   skip — ncsuScraper already uses Flintbox
+//   newcastle    ~37    skip — newcastleScraper already uses in-part
+//   griffith     ~30    skip — griffithScraper already uses in-part
+//   ntu          ~16    skip — ntuScraper already uses in-part
+//   uci          ~198   skip — ucIrvineScraper already uses UC Tech Transfer
+//   ucsb         ~86    skip — ucSantaBarbaraScraper already uses UC Tech Transfer
+//   ucmerced     ~41    skip — ucMercedScraper already uses in-part
+//   hawaii       ~40    skip — hawaiiScraper already uses in-part
+//   toronto      ~70    skip — torontoScraper already uses in-part
+//   western      ~50    skip — westernScraper already uses in-part
+//   uvic         ~36    skip — uvicScraper already uses in-part
+//   soton        ~12    skip — southamptonScraper already uses TechPublisher
+//   kcl          ~55    skip — kclScraper already uses in-part
+//   sussex       ~27    skip — sussexScraper already uses in-part
+//   lmu          ~17    skip — lmuScraper already uses in-part
+//   rwth         ~48    skip — rwthScraper already uses in-part
+//   sdu          ~28    skip — sduScraper already uses in-part
+//   helsinki     ~27    skip — helsinkiScraper already uses in-part
+//   aalto        ~26    skip — aaltoScraper already uses in-part
+//   tampere      ~30    skip — tampereScraper already uses in-part
+//   tcd          ~28    skip — tcdScraper already uses in-part
+//   msu          ~56    skip — msuScraper already uses Flintbox
+//   clevelandclinic ~129 skip — clevelandClinicScraper already uses Flintbox
+//   ttu          ~99    skip — texasTechScraper already uses Flintbox
+//   unl          ~48    skip — unetechScraper + uneMedScraper cover Nebraska
+//   virginia     ~100   skip — uvaScraper already uses TechPublisher
+//   gsu          ~30    skip — gsuScraper already uses TechPublisher
+//   case         ~139   skip — cwruScraper already handles Case Western
+//   njit         ~85    skip — njitScraper already uses TechPublisher
+//   oregonstate  ~67    skip — oregonStateScraper already uses TechPublisher
+//   ucdavis      ~49    skip — ucDavisScraper already uses UC Tech Transfer
+//   sun          ~86    skip — stellenboschScraper already uses in-part
+//   upv          ~51    ADDED (see above)
 //
-// Dead-ends from this task's audit (documented; no scrapers written):
-//   uc.flintbox.com, ualr.flintbox.com — Flintbox accessible but 0 items via API
-//   ou.flintbox.com, nmt.flintbox.com, umanitoba.flintbox.com — 0 items via API
-//   FLC (flcbusiness.net + labs.federallabs.org) — HTTP 000, Replit egress blocked
-//   Caltech OTT (ott.caltech.edu) — HTTP 000, Replit egress blocked
-//   KU Leuven TTO — HTTP 200 but Shibboleth SSO gate, no public catalog
-//   Edinburgh, Oxford — JS-rendered SPA, no enumerable public listing
+// ── TechPublisher probes (SLUG.technologypublisher.com) ───────────────────────
+//   jhu, usc, rutgers, wsu — all accessible but already in codebase
+//   No new TechPublisher institutions found in this audit
+//   (caltech, mit, cambridge, oxford, edinburgh, karolinska not responding)
+//
+// iEdison scraper: disabled in index.ts (not part of audit; no API key available;
+//   documented in index.ts with explanatory comment)
 
 // ── Flintbox: University of Illinois Chicago ──────────────────────────────────
 // uic.flintbox.com confirmed working 2026-04-21: orgId=17, 161 tech listings.
