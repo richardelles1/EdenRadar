@@ -24,17 +24,18 @@ export const mitScraper: InstitutionScraper = {
       const seen = new Set<string>();
 
       // Helper: extract all technology listings from a parsed page.
-      // Returns count of NEW listings added (0 means the page is effectively empty).
+      // Returns the RAW row count on the page (not post-dedupe additions) so the
+      // window scan can detect a genuinely empty page regardless of how many titles
+      // have already been seen across prior pages.
       const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): number => {
-        let added = 0;
-        $(".views-row").each((_, el) => {
+        const rows = $(".views-row");
+        rows.each((_, el) => {
           const linkEl = $(el)
             .find("a.tech-brief-teaser__link, .tech-brief-teaser__heading a, h3 a, h2 a")
             .first();
           const title = cleanText(linkEl.text());
           if (!title || seen.has(title)) return;
           seen.add(title);
-          added++;
           const href = linkEl.attr("href") ?? "";
           results.push({
             title,
@@ -43,7 +44,9 @@ export const mitScraper: InstitutionScraper = {
             institution: INST,
           });
         });
-        return added;
+        // Return raw DOM row count — zero means the page truly has no listings
+        // (not just that everything was a duplicate of a prior page).
+        return rows.length;
       };
 
       // Step 1: fetch page 0 synchronously — seeds the results and confirms the site is up.
