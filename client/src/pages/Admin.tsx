@@ -8,6 +8,7 @@ import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } fro
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -1366,7 +1367,8 @@ function DataHealth({ pw }: { pw: string }) {
                           data-testid={`health-row-${instSlug}`}
                           onClick={() => handleRowClick(row.institution)}
                         >
-                          <td className="py-2 px-4 font-medium text-foreground truncate max-w-[250px]" title={row.institution}>
+                          <td className="py-2 px-4 font-medium text-foreground max-w-[250px]" title={row.institution}>
+                            <div className="flex flex-col gap-0.5">
                             <div className="flex items-center gap-1.5">
                               <span className="truncate">{row.institution}</span>
                               {row.tier === 1 && (
@@ -1396,6 +1398,22 @@ function DataHealth({ pw }: { pw: string }) {
                                   1x failed
                                 </Badge>
                               )}
+                            </div>
+                            {row.lastSyncError && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    className="text-[10px] text-red-500/80 truncate block max-w-[230px] cursor-help leading-tight"
+                                    data-testid={`error-snippet-${instSlug}`}
+                                  >
+                                    {row.lastSyncError.length > 55 ? row.lastSyncError.slice(0, 55) + "…" : row.lastSyncError}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="bottom" align="start" className="max-w-[360px] break-words text-xs">
+                                  {row.lastSyncError}
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
                             </div>
                           </td>
                           <td className="text-center py-2 px-3">
