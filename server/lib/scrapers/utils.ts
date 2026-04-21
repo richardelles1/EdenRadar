@@ -105,7 +105,13 @@ export async function fetchHtml(
           },
         });
         if (res.status === 429) {
-          throw new SiteHttpError(429, url);
+          // Strict mode (first-page / critical fetch): surface as named SiteHttpError
+          // so the ingestion pipeline captures "rate_limited" health status.
+          // Non-strict (pagination pages): throw plain Error so withRetry still
+          // retries and, after exhausting retries, fetchHtml returns null gracefully
+          // without aborting the whole scrape run.
+          if (strict) throw new SiteHttpError(429, url);
+          throw new Error(`HTTP 429 rate limited`);
         }
         if (!res.ok) {
           if (strict) throw new SiteHttpError(res.status, url);

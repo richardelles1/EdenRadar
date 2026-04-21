@@ -170,7 +170,7 @@ function HealthDot({ health }: { health: HealthStatus }) {
 function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "ok") return <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Working</span>;
   if (health === "syncing") return <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">Syncing</span>;
-  if (health === "site_down") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Site down</span>;
+  if (health === "site_down") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Site temporarily down</span>;
   if (health === "rate_limited") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Rate limited</span>;
   if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Blocked / WAF</span>;
   if (health === "parser_failure") return <span className="text-violet-600 dark:text-violet-400 text-xs font-medium">Parser failure</span>;
