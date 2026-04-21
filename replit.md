@@ -224,3 +224,8 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - `SESSION_SECRET`: Session encryption secret
 - `VITE_SUPABASE_URL`: Supabase project URL (frontend)
 - `VITE_SUPABASE_ANON_KEY`: Supabase anon/public API key (frontend)
+- `RESEND_API_KEY`: Resend transactional email API key
+- `IEDISON_API_KEY` *(optional)*: NIH iEdison REST API key. When set, the iEdison scraper
+  uses authenticated JSON API requests (Bearer token + X-API-Key header) enabling full
+  date-range access and higher rate limits. Obtain from https://iedison.nih.gov/iEdison/api/v1/publicInventions.
+  When absent the scraper falls back to the HTML search interface automatically.
