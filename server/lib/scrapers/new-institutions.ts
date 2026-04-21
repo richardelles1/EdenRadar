@@ -1270,23 +1270,35 @@ export const brandeisScraper = createFlintboxScraper(
 export const unhScraper = createStubScraper("University of New Hampshire");
 export const uriScraper = createInPartScraper("uri", "University of Rhode Island");
 export const mountsinaiScraper = createInPartScraper("mountsinai", "Icahn School of Medicine at Mount Sinai");
-// Caltech OTT (ott.caltech.edu): probed 2026-04-21 -- HTTP 000 (connection refused)
-// from Replit egress IPs on all paths (/technologies, /search, /licensing). Not available.
+// Caltech OTT (ott.caltech.edu): re-probed 2026-04-21 -- still HTTP 000 (TCP connection
+// refused on /technologies, /search, /licensing). Replit egress IPs still blocked.
 // RE-PROBE TRIGGER: revisit if Replit egress IPs change.
 export const caltechScraper = createStubScraper("California Institute of Technology");
-// FLC (Federal Lab Consortium) -- probed 2026-04-21:
-//   flcbusiness.net/technologies: HTTP 000 (connection refused from Replit egress IPs)
-//   labs.federallabs.org/technologies: same result
-// Both endpoints TCP-refused from all Replit cloud IPs. Not implemented.
+// FLC (Federal Lab Consortium) -- re-probed 2026-04-21:
+//   flcbusiness.net/technologies: still HTTP 000 (TCP refused from Replit egress IPs)
+//   labs.federallabs.org/technologies: still HTTP 000
+// Both endpoints remain TCP-refused from Replit cloud IPs. Not implemented.
 // RE-PROBE TRIGGER: revisit if Replit egress IPs change.
 export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
 
 // ── International: UK ────────────────────────────────────────────────────
+// Oxford University Innovation — re-probed 2026-04-21:
+//   technology.ox.ac.uk — HTTP 000 (TCP connection refused from Replit egress IPs)
+//   isis.ox.ac.uk        — HTTP 000
+// Both endpoints remain unreachable from Replit cloud IPs. Potential future approaches:
+//   oxford.flintbox.com (check for orgId/accessKey) or sitemap.xml / WP REST API.
+// RE-PROBE TRIGGER: revisit if Replit egress IPs change or a residential proxy is added.
 export const oxfordScraper = createStubScraper("University of Oxford");
 // imperialScraper — real in-part "imperial" implementation is in Batch E section (end of file)
 export const uclScraper = createStubScraper("University College London");
 export const manchesterScraper = createInPartScraper("manchester", "University of Manchester");
-export const edinburghScraper = createStubScraper("University of Edinburgh");
+// University of Edinburgh — handled by edinburghInnovationsScraper (line ~4731) which is
+// registered in ALL_SCRAPERS. Re-probed 2026-04-21: site now returns HTTP 200 (was HTTP 000);
+// pagination fixed in edinburghInnovationsScraper to use /p2, /p3, /p4 pattern.
+export const edinburghScraper = createStubScraper(
+  "University of Edinburgh",
+  "handled by edinburghInnovationsScraper"
+);
 // glasgowScraper: real in-part "gla" implementation is at Task #114 section (end of file)
 // birminghamScraper — real in-part "birmingham" implementation is in Batch E section (end of file)
 // warwickScraper — real in-part "warwick" implementation is in Batch E section (end of file)
@@ -4673,96 +4685,67 @@ export const saarlandScraper = createInPartScraper("saarland", "Saarland Univers
 export const stellenboschScraper = createInPartScraper("sun", "Stellenbosch University");
 export const macquarieScraper = createInPartScraper("mq", "Macquarie University");
 
-// ── Edinburgh Innovations — HTML listing scraper (rewritten Task #135) ────────
-// Old scraper targeted licensing.edinburgh-innovations.ed.ac.uk (Elucid3 SPA) — wrong subdomain.
-// Correct URL: https://edinburgh-innovations.ed.ac.uk/technology
-// Pagination: ?page=N (confirmed via ?page=3 in user-provided URLs)
-// Detail: /technology/{slug}
+// ── Edinburgh Innovations — HTML listing scraper ──────────────────────────────
+// Re-probed 2026-04-21: edinburgh-innovations.ed.ac.uk now returns HTTP 200 (SSR,
+// not JS-rendered). Pagination uses /p2, /p3, /p4 path segments (NOT ?page=N which
+// returns the same page 1 content). Title and short description are embedded in each
+// listing card — no detail-page enrichment needed.
+// Card structure: <a class="group …"> → .line-clamp-4 (title) + .text-base.p-6.pt-0 (desc).
+// Uses fetchHtml (shared utility with retries + concurrency semaphore) for robustness.
 export const edinburghInnovationsScraper: InstitutionScraper = {
   institution: "Edinburgh Innovations",
-  async scrape(): Promise<ScrapedListing[]> {
+  scraperType: "http",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const INST = "Edinburgh Innovations";
     const BASE = "https://edinburgh-innovations.ed.ac.uk";
-    const INDEX = `${BASE}/technology`;
 
-    try {
-      // Fetch page 1 — seeds the results and confirms the site is up.
-      const page1$ = await fetchHtml(INDEX, 20_000);
-      if (!page1$) {
-        console.warn(`[scraper] ${INST}: could not fetch listing page`);
-        return [];
-      }
+    const results: ScrapedListing[] = [];
+    const seen = new Set<string>();
 
-      // Collect links + anchor text (as title) from listing pages
-      const slugTitles = new Map<string, string>();
+    const extractCards = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>) => {
+      $("a.group").each((_, el) => {
+        const href = $(el).attr("href") ?? "";
+        if (!href.includes("/technology/")) return;
+        const url = href.startsWith("http") ? href : `${BASE}${href}`;
+        // Skip pagination links like /technology/p2
+        if (/\/technology\/p\d+/.test(url)) return;
+        if (seen.has(url)) return;
+        seen.add(url);
+        const title = cleanText($(el).find(".line-clamp-4").first().text());
+        const description = cleanText($(el).find(".text-base.p-6.pt-0").first().text());
+        if (!title || title.length < 4) return;
+        results.push({ title, description, url, institution: INST });
+      });
+    };
 
-      const collectFromPage = ($: Awaited<ReturnType<typeof fetchHtml>>) => {
-        if (!$) return 0;
-        let raw = 0;
-        $("a[href*='/technology/']").each((_, el) => {
-          raw++;
-          const href = ($)(el).attr("href") ?? "";
-          if (!href) return;
-          const full = href.startsWith("http") ? href : `${BASE}${href}`;
-          const clean = full.split("?")[0].split("#")[0];
-          if (clean.replace(/\/$/, "") === INDEX.replace(/\/$/, "")) return;
-          if (!/\/technology\/[^?#/]+/.test(clean)) return;
-          if (!slugTitles.has(clean)) {
-            const text = cleanText(($)(el).text());
-            const slug = clean.split("/").pop()?.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "";
-            slugTitles.set(clean, text.length > 5 ? text : slug);
-          }
-        });
-        return raw;
-      };
-
-      collectFromPage(page1$);
-
-      // Adaptive parallel window scan — no pagination-link detection.
-      // Fetch batches of 8 pages; stop when any page returns zero /technology/ links.
-      const BATCH = 8;
-      const EMERGENCY_CEIL = 60;
-      let offset = 2;
-
-      while (offset <= EMERGENCY_CEIL) {
-        const pageNums: number[] = [];
-        for (let i = 0; i < BATCH && offset + i <= EMERGENCY_CEIL; i++) {
-          pageNums.push(offset + i);
-        }
-        const settled = await Promise.allSettled(
-          pageNums.map((p) => fetchHtml(`${INDEX}?page=${p}`, 20_000))
-        );
-        let hitEmpty = false;
-        let fetchFails = 0;
-        for (const r of settled) {
-          if (r.status === "rejected" || !r.value) { fetchFails++; continue; }
-          if (collectFromPage(r.value) === 0) hitEmpty = true;
-        }
-        console.log(`[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1} — ${slugTitles.size} URLs so far`);
-        if (hitEmpty || fetchFails === pageNums.length) break;
-        offset += BATCH;
-      }
-
-      if (slugTitles.size === 0) {
-        console.log(`[scraper] ${INST}: 0 tech URLs found`);
-        return [];
-      }
-
-      console.log(`[scraper] ${INST}: ${slugTitles.size} tech URLs — enriching`);
-
-      // Enrich detail pages for description
-      const enriched = await enrichWithDetailPages(
-        Array.from(slugTitles.entries()).map(([u, t]) => ({ title: t, description: "", url: u, institution: INST })),
-        { description: ["article p", ".field-body p", ".node__content p", "main p"] }
-      );
-
-      console.log(`[scraper] ${INST}: ${enriched.length} listings after enrichment`);
-      return enriched;
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[scraper] ${INST} failed: ${msg}`);
+    // Fetch page 1 — seeds results and reveals /pN pagination links.
+    const page1$ = await fetchHtml(`${BASE}/technology`, 20_000, signal, 2, true);
+    if (!page1$) {
+      console.warn(`[scraper] ${INST}: could not fetch listing page`);
       return [];
     }
+    extractCards(page1$);
+
+    // Discover pagination: links like /technology/p2, /technology/p3 …
+    const pagePaths: string[] = [];
+    page1$("a[href*='/technology/p']").each((_, el) => {
+      const href = page1$(el).attr("href") ?? "";
+      const m = href.match(/\/technology\/p(\d+)/);
+      if (m) pagePaths.push(`/technology/p${m[1]}`);
+    });
+    const uniquePaths = [...new Set(pagePaths)];
+
+    if (uniquePaths.length > 0) {
+      const rest = await Promise.allSettled(
+        uniquePaths.map((p) => fetchHtml(`${BASE}${p}`, 20_000, signal))
+      );
+      for (const r of rest) {
+        if (r.status === "fulfilled" && r.value) extractCards(r.value);
+      }
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings across ${1 + uniquePaths.length} pages`);
+    return results;
   },
 };
 

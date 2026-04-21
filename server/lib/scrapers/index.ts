@@ -903,7 +903,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   saarlandScraper,                // Saarland University — in-part "saarland" — 34 techs
   stellenboschScraper,            // Stellenbosch University — in-part "sun" — 76 techs
   macquarieScraper,               // Macquarie University — in-part "mq" — 11 techs
-  edinburghInnovationsScraper,    // Edinburgh Innovations — Playwright, Elucid3 — 50+ techs
+  edinburghInnovationsScraper,    // Edinburgh Innovations — HTTP SSR, /pN pagination — ~40 techs
   // ── FRIS Belgium pivot (Task #115): FRIS Akamai-blocked; 5 in-part alternatives ──
   nagoyaScraper,                  // Nagoya University (Japan) — in-part "nagoya" — ~72 techs
   oistScraper,                    // OIST (Japan) — in-part "oist" — ~68 techs
