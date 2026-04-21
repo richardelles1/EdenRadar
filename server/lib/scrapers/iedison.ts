@@ -528,3 +528,13 @@ export const iEdisonScraper: InstitutionScraper = {
     return htmlRecords.slice(0, maxResults);
   },
 };
+
+/**
+ * Internal helpers exposed for unit/smoke testing only.
+ * Do NOT import these in production code paths.
+ */
+export const _internal = {
+  getApiKey,
+  mapJsonRecord,
+  BASE_URL,
+};
