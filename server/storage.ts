@@ -26,6 +26,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
+import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { alias } from "drizzle-orm/pg-core";
 
 export type RetrievedAsset = {
@@ -182,6 +183,7 @@ export interface IStorage {
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
+  backfillCompletenessScores(): Promise<{ total: number; updated: number; unchanged: number }>;
 
   getResearchProject(id: number, researcherId: string): Promise<ResearchProject | undefined>;
   getResearchProjects(researcherId: string): Promise<ResearchProject[]>;
@@ -1564,6 +1566,74 @@ export class DatabaseStorage implements IStorage {
       }
     });
     return written;
+  }
+
+  async backfillCompletenessScores(): Promise<{ total: number; updated: number; unchanged: number }> {
+    const rows = await db
+      .select({
+        id: ingestedAssets.id,
+        target: ingestedAssets.target,
+        modality: ingestedAssets.modality,
+        indication: ingestedAssets.indication,
+        developmentStage: ingestedAssets.developmentStage,
+        summary: ingestedAssets.summary,
+        abstract: ingestedAssets.abstract,
+        categories: ingestedAssets.categories,
+        innovationClaim: ingestedAssets.innovationClaim,
+        mechanismOfAction: ingestedAssets.mechanismOfAction,
+        unmetNeed: ingestedAssets.unmetNeed,
+        comparableDrugs: ingestedAssets.comparableDrugs,
+        licensingReadiness: ingestedAssets.licensingReadiness,
+        inventors: ingestedAssets.inventors,
+        patentStatus: ingestedAssets.patentStatus,
+        completenessScore: ingestedAssets.completenessScore,
+      })
+      .from(ingestedAssets)
+      .where(isNotNull(ingestedAssets.completenessScore));
+
+    let updated = 0;
+    let unchanged = 0;
+    const toUpdate: Array<{ id: number; score: number }> = [];
+
+    for (const row of rows) {
+      const newScore = computeCompletenessScore({
+        target: row.target,
+        modality: row.modality,
+        indication: row.indication,
+        developmentStage: row.developmentStage,
+        summary: row.summary,
+        abstract: row.abstract,
+        categories: row.categories,
+        innovationClaim: row.innovationClaim,
+        mechanismOfAction: row.mechanismOfAction,
+        unmetNeed: row.unmetNeed,
+        comparableDrugs: row.comparableDrugs,
+        licensingReadiness: row.licensingReadiness,
+        inventors: row.inventors,
+        patentStatus: row.patentStatus,
+      });
+      const oldScore = row.completenessScore != null ? Number(row.completenessScore) : null;
+      if (oldScore !== newScore) {
+        toUpdate.push({ id: row.id, score: newScore });
+      } else {
+        unchanged++;
+      }
+    }
+
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < toUpdate.length; i += BATCH_SIZE) {
+      const batch = toUpdate.slice(i, i + BATCH_SIZE);
+      await db.transaction(async (tx) => {
+        for (const { id, score } of batch) {
+          await tx.update(ingestedAssets)
+            .set({ completenessScore: score })
+            .where(eq(ingestedAssets.id, id));
+          updated++;
+        }
+      });
+    }
+
+    return { total: rows.length, updated, unchanged };
   }
 
   async createDeepEnrichmentJob(total: number): Promise<EnrichmentJob> {
