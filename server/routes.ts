@@ -1053,7 +1053,7 @@ export async function registerRoutes(
           authorName: displayName,
           content: `Status changed to ${humanNext} by ${displayName}.`,
           isSystemEvent: true,
-        }).catch(() => {});
+        }).catch((e) => console.error(`[system-event-note] Failed for asset ${id}:`, e));
       }
 
       res.json({ asset });

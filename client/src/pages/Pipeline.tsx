@@ -35,11 +35,11 @@ type SavedAssetsResponse = {
 };
 
 const STATUS_CONFIG: Record<string, { label: string; pill: string; select: string }> = {
-  watching:      { label: "Watching",      pill: "bg-sky-500/15 text-sky-400 border-sky-500/30",       select: "text-sky-400" },
-  evaluating:    { label: "Evaluating",    pill: "bg-violet-500/15 text-violet-400 border-violet-500/30", select: "text-violet-400" },
-  in_discussion: { label: "In Discussion", pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",  select: "text-amber-400" },
-  on_hold:       { label: "On Hold",       pill: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",     select: "text-zinc-400" },
-  passed:        { label: "Passed",        pill: "bg-rose-500/15 text-rose-400 border-rose-500/30",     select: "text-rose-400" },
+  watching:      { label: "Watching",      pill: "bg-neutral-500/15 text-neutral-400 border-neutral-500/30",  select: "text-neutral-400" },
+  evaluating:    { label: "Evaluating",    pill: "bg-blue-500/15 text-blue-400 border-blue-500/30",           select: "text-blue-400" },
+  in_discussion: { label: "In Discussion", pill: "bg-emerald-500/15 text-emerald-500 border-emerald-500/30",  select: "text-emerald-500" },
+  on_hold:       { label: "On Hold",       pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",        select: "text-amber-400" },
+  passed:        { label: "Passed",        pill: "bg-red-500/15 text-red-400 border-red-500/30",              select: "text-red-400" },
 };
 
 const STAGES: { key: string; label: string; colorClass: string; dotClass: string }[] = [
