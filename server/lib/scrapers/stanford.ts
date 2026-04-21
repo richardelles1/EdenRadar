@@ -4,12 +4,9 @@ import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
-// Stanford TechFinder has ~1,895 listings across 127 pages as of 2026.
-// The scraper auto-detects the real last page and caps at this constant.
-const MAX_PAGES = 127;
 // Parallel batch size for list-page fetching. Kept at 5 to avoid triggering
 // Stanford's CDN connection throttling (10 caused scattered 20s timeouts).
-const PAGE_BATCH = 5;
+const PAGE_WINDOW = 5;
 // Per-page timeout raised to 20s (CDN cold-start can reach ~15s).
 const PAGE_TIMEOUT_MS = 20_000;
 
@@ -29,21 +26,16 @@ export const stanfordScraper: InstitutionScraper = {
         return [];
       }
 
-      // Detect actual last page from pagination widget.
-      let detectedMax = 0;
-      page0$("a[href*='?page=']").each((_, el) => {
-        const m = (page0$(el).attr("href") ?? "").match(/\?page=(\d+)/);
-        if (m) detectedMax = Math.max(detectedMax, parseInt(m[1], 10));
-      });
-      const lastPage = Math.min(detectedMax || MAX_PAGES, MAX_PAGES);
-      console.log(`[scraper] ${INST}: detected ${lastPage + 1} pages (pages 0–${lastPage})`);
-
       // Extract listings from a parsed page.
+      // Returns the RAW count of matching elements so the adaptive window scan
+      // can detect a genuinely empty page regardless of deduplication.
       // Uses the Drupal 11 class h3.teaser__title a — this is the dedicated
       // title anchor for technology listings and avoids picking up any nav or
       // category links that also happen to start with /technology/.
-      const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void => {
+      const extractListings = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): number => {
+        let raw = 0;
         $("h3.teaser__title a").each((_, el) => {
+          raw++;
           const href = $(el).attr("href") ?? "";
           if (!href.startsWith("/technology/")) return;
           const title = cleanText($(el).text());
@@ -56,29 +48,48 @@ export const stanfordScraper: InstitutionScraper = {
             institution: INST,
           });
         });
+        return raw;
       };
 
       // Extract from page 0 immediately.
       extractListings(page0$);
+      console.log(`[scraper] ${INST}: page 0 — ${results.length} listings`);
 
-      // Step 2: build list of remaining page URLs (1..lastPage).
-      const remaining: string[] = [];
-      for (let p = 1; p <= lastPage; p++) remaining.push(`${BASE}/?page=${p}`);
-
-      // Step 3: fetch remaining pages in parallel batches of PAGE_BATCH.
-      // retries=1 (2 total attempts) — one silent retry handles transient CDN
-      // timeouts without slowing down fast runs.
+      // Step 2: adaptive parallel window scan (no pagination-link detection).
+      // Fetch PAGE_WINDOW pages at once; stop when any page in the batch returns
+      // zero matching elements — that signals we've passed the last real page.
+      // Transient network failures (null returns) are counted separately and never
+      // trigger an early stop. EMERGENCY_CEIL is a runaway-loop guard only.
+      const EMERGENCY_CEIL = 500;
+      let offset = 1;
       let skipped = 0;
-      for (let i = 0; i < remaining.length; i += PAGE_BATCH) {
-        if (signal?.aborted) break;
-        const batch = remaining.slice(i, i + PAGE_BATCH);
-        const pages = await Promise.all(batch.map((u) => fetchHtml(u, PAGE_TIMEOUT_MS, signal, 1)));
-        for (const $ of pages) {
-          if (!$) { skipped++; continue; }
-          extractListings($);
+
+      while (!signal?.aborted && offset < EMERGENCY_CEIL) {
+        const pageNums: number[] = [];
+        for (let i = 0; i < PAGE_WINDOW && offset + i < EMERGENCY_CEIL; i++) {
+          pageNums.push(offset + i);
         }
-        const batchEnd = Math.min(i + PAGE_BATCH, remaining.length);
-        console.log(`[scraper] ${INST}: fetched pages ${i + 1}–${batchEnd} — ${results.length} listings so far`);
+
+        const pages = await Promise.all(
+          pageNums.map((p) => fetchHtml(`${BASE}/?page=${p}`, PAGE_TIMEOUT_MS, signal, 1))
+        );
+
+        let hitEmpty = false;
+        let fetchFails = 0;
+        for (const $ of pages) {
+          if (!$) { fetchFails++; skipped++; continue; }
+          if (extractListings($) === 0) hitEmpty = true;
+        }
+
+        const batchEnd = offset + pageNums.length - 1;
+        console.log(
+          `[scraper] ${INST}: scanned pages ${offset}–${batchEnd}` +
+          ` — ${results.length} listings so far` +
+          (fetchFails ? ` (${fetchFails} page(s) failed to load)` : "")
+        );
+
+        if (hitEmpty || fetchFails === pageNums.length) break;
+        offset += PAGE_WINDOW;
       }
 
       if (skipped > 0) {
@@ -87,7 +98,7 @@ export const stanfordScraper: InstitutionScraper = {
 
       console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details (cap 25)...`);
 
-      // Step 4: enrich detail pages with Drupal 11 selectors — cap 25.
+      // Step 3: enrich detail pages with Drupal 11 selectors — cap 25.
       // Confirmed selectors on live pages (Drupal 11 upgrade, Apr 2026):
       //   description/abstract: .docket__text (main body container)
       //   inventors: .docket__related-people a (Innovators section links)

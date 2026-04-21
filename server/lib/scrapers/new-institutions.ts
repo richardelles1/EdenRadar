@@ -1025,25 +1025,36 @@ export const nmsuScraper: InstitutionScraper = {
       const page1$ = await fetchHtml(INDEX, 20_000);
       collectFrom$(page1$);
 
-      // Detect max page
-      let maxPage = 1;
-      page1$?.("a[href*='/technologies/page/']").each((_, el) => {
-        const m = (page1$!(el).attr("href") ?? "").match(/\/page\/(\d+)/);
-        if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
-      });
-
-      // Fetch remaining pages (WordPress /page/N pagination)
+      // Adaptive parallel window scan for WordPress /page/N pagination.
+      // No pagination-link detection — fetch batches of 6 pages and stop when
+      // any page in the batch returns zero technology links (truly empty page).
       const BATCH = 6;
-      const pageUrls: string[] = [];
-      for (let p = 2; p <= Math.min(maxPage, 30); p++) {
-        pageUrls.push(`${INDEX}page/${p}/`);
-      }
-      for (let i = 0; i < pageUrls.length; i += BATCH) {
-        const batch = pageUrls.slice(i, i + BATCH);
-        const settled = await Promise.allSettled(batch.map((u) => fetchHtml(u, 20_000)));
-        for (const r of settled) {
-          if (r.status === "fulfilled") collectFrom$(r.value);
+      const EMERGENCY_CEIL = 30;
+      let offset = 2;
+
+      while (offset <= EMERGENCY_CEIL) {
+        const pageNums: number[] = [];
+        for (let i = 0; i < BATCH && offset + i <= EMERGENCY_CEIL; i++) {
+          pageNums.push(offset + i);
         }
+        const settled = await Promise.allSettled(
+          pageNums.map((p) => fetchHtml(`${INDEX}page/${p}/`, 20_000))
+        );
+        let hitEmpty = false;
+        let fetchFails = 0;
+        for (const r of settled) {
+          if (r.status === "rejected" || !r.value) { fetchFails++; continue; }
+          const before = seenUrls.size;
+          collectFrom$(r.value);
+          if (seenUrls.size === before) hitEmpty = true;
+        }
+        console.log(
+          `[scraper] New Mexico State University: scanned pages ${offset}–${offset + pageNums.length - 1}` +
+          ` — ${techUrls.length} URLs so far` +
+          (fetchFails ? ` (${fetchFails} page(s) failed)` : "")
+        );
+        if (hitEmpty || fetchFails === pageNums.length) break;
+        offset += BATCH;
       }
 
       // Fallback: WP REST API for pages/posts tagged "technology"
@@ -1173,24 +1184,38 @@ export const warfScraper: InstitutionScraper = {
       console.log(`[scraper] University of Wisconsin (WARF): found ${uniqueCats.length} categories, fetching...`);
 
       const CONCURRENCY = 5;
+      const CAT_PAGE_CEIL = 10; // per-category page ceiling (runaway guard)
       let catIdx = 0;
       const worker = async () => {
         while (catIdx < uniqueCats.length) {
           if (signal?.aborted) return;
           const cat = uniqueCats[catIdx++];
-          const catUrl = `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}`;
           try {
-            const $ = await fetchHtml(catUrl, 12000, signal);
-            if (!$) continue;
-            $('a[href*="/technologies/summary/"]').each((_, el) => {
-              const href = $(el).attr("href") ?? "";
-              const title = cleanText($(el).text());
-              if (!title || title.length < 5) return;
-              const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
-              if (seen.has(fullUrl)) return;
-              seen.add(fullUrl);
-              results.push({ title, description: "", url: fullUrl, institution: "University of Wisconsin" });
-            });
+            // Adaptive pagination per category: fetch pages until an empty page
+            // is returned. Most categories fit on one page (~11 listings avg),
+            // but some may span multiple pages — we scan until empty.
+            for (let page = 1; page <= CAT_PAGE_CEIL; page++) {
+              const catUrl = page === 1
+                ? `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}`
+                : `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}&paged=${page}`;
+              const $ = await fetchHtml(catUrl, 12000, signal);
+              if (!$) break;
+              let rawCount = 0;
+              $('a[href*="/technologies/summary/"]').each((_, el) => {
+                rawCount++;
+                const href = $(el).attr("href") ?? "";
+                const title = cleanText($(el).text());
+                if (!title || title.length < 5) return;
+                const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
+                if (seen.has(fullUrl)) return;
+                seen.add(fullUrl);
+                results.push({ title, description: "", url: fullUrl, institution: "University of Wisconsin" });
+              });
+              if (page > 1) {
+                console.log(`[scraper] University of Wisconsin (WARF): category "${cat}" page ${page} — ${rawCount} links, ${results.length} total`);
+              }
+              if (rawCount === 0) break; // empty page — no more results for this category
+            }
           } catch {
             continue;
           }
@@ -1198,7 +1223,7 @@ export const warfScraper: InstitutionScraper = {
       };
       await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
 
-      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings (${uniqueCats.length} categories)`);
+      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings scanned across ${uniqueCats.length} categories`);
       return results;
     } catch (err: any) {
       console.warn(`[scraper] University of Wisconsin (WARF): ${err?.message}`);
@@ -4637,32 +4662,21 @@ export const edinburghInnovationsScraper: InstitutionScraper = {
     const INDEX = `${BASE}/technology`;
 
     try {
-      // Fetch page 1 and detect max page
+      // Fetch page 1 — seeds the results and confirms the site is up.
       const page1$ = await fetchHtml(INDEX, 20_000);
       if (!page1$) {
         console.warn(`[scraper] ${INST}: could not fetch listing page`);
         return [];
       }
 
-      let maxPage = 1;
-      page1$("a[href*='?page=']").each((_, el) => {
-        const m = (page1$(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
-        if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
-      });
-      console.log(`[scraper] ${INST}: detected ${maxPage} pages`);
-
-      // Collect all page URLs (cap at 60 for safety)
-      const pageUrls = [INDEX];
-      for (let p = 2; p <= Math.min(maxPage, 60); p++) {
-        pageUrls.push(`${INDEX}?page=${p}`);
-      }
-
       // Collect links + anchor text (as title) from listing pages
       const slugTitles = new Map<string, string>();
 
       const collectFromPage = ($: Awaited<ReturnType<typeof fetchHtml>>) => {
-        if (!$) return;
+        if (!$) return 0;
+        let raw = 0;
         $("a[href*='/technology/']").each((_, el) => {
+          raw++;
           const href = ($)(el).attr("href") ?? "";
           if (!href) return;
           const full = href.startsWith("http") ? href : `${BASE}${href}`;
@@ -4670,25 +4684,39 @@ export const edinburghInnovationsScraper: InstitutionScraper = {
           if (clean.replace(/\/$/, "") === INDEX.replace(/\/$/, "")) return;
           if (!/\/technology\/[^?#/]+/.test(clean)) return;
           if (!slugTitles.has(clean)) {
-            // Title from link text; fallback to slug
             const text = cleanText(($)(el).text());
             const slug = clean.split("/").pop()?.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) ?? "";
             slugTitles.set(clean, text.length > 5 ? text : slug);
           }
         });
+        return raw;
       };
 
       collectFromPage(page1$);
 
+      // Adaptive parallel window scan — no pagination-link detection.
+      // Fetch batches of 8 pages; stop when any page returns zero /technology/ links.
       const BATCH = 8;
-      for (let i = 1; i < pageUrls.length; i += BATCH) {
-        const batch = pageUrls.slice(i, i + BATCH);
-        const results = await Promise.allSettled(
-          batch.map((u) => fetchHtml(u, 20_000))
-        );
-        for (const r of results) {
-          if (r.status === "fulfilled" && r.value) collectFromPage(r.value);
+      const EMERGENCY_CEIL = 60;
+      let offset = 2;
+
+      while (offset <= EMERGENCY_CEIL) {
+        const pageNums: number[] = [];
+        for (let i = 0; i < BATCH && offset + i <= EMERGENCY_CEIL; i++) {
+          pageNums.push(offset + i);
         }
+        const settled = await Promise.allSettled(
+          pageNums.map((p) => fetchHtml(`${INDEX}?page=${p}`, 20_000))
+        );
+        let hitEmpty = false;
+        let fetchFails = 0;
+        for (const r of settled) {
+          if (r.status === "rejected" || !r.value) { fetchFails++; continue; }
+          if (collectFromPage(r.value) === 0) hitEmpty = true;
+        }
+        console.log(`[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1} — ${slugTitles.size} URLs so far`);
+        if (hitEmpty || fetchFails === pageNums.length) break;
+        offset += BATCH;
       }
 
       if (slugTitles.size === 0) {
@@ -5231,26 +5259,20 @@ export const imperialScraper: InstitutionScraper = {
     const BASE = "https://www.imperial.ac.uk";
     const INDEX = `${BASE}/for-business/commercialisation/imperial-tech/technology-search/`;
 
-    // Step 1: fetch page 1, detect last page
+    // Step 1: fetch page 1 — seeds results and confirms the site is up.
     const page1$ = await fetchHtml(INDEX, 15_000);
     if (!page1$) { console.warn(`[scraper] ${INST}: could not fetch listing`); return []; }
 
-    let maxPage = 1;
-    page1$("a[href*='?page=']").each((_, el) => {
-      const m = (page1$(el).attr("href") ?? "").match(/\?page=(\d+)/);
-      if (m) maxPage = Math.max(maxPage, parseInt(m[1], 10));
-    });
-
-    // Step 2: collect all page URLs (0 = no param, 1..maxPage = ?page=N)
-    const pageUrls: string[] = [INDEX];
-    for (let p = 1; p <= maxPage; p++) pageUrls.push(`${INDEX}?page=${p}`);
-
-    // Step 3: fetch all pages in parallel (batches of 8)
+    // Step 2: collect listings from pages using adaptive window scan.
+    // No pagination-link detection — fetch batches of 8 pages and stop when
+    // any page returns zero /technology-search/ links (truly empty page).
     const seen = new Set<string>();
     const results: ScrapedListing[] = [];
 
-    function extractFromPage($p: import("cheerio").CheerioAPI): void {
+    function extractFromPage($p: import("cheerio").CheerioAPI): number {
+      let raw = 0;
       $p("a[href*='/technology-search/']").each((_, el) => {
+        raw++;
         const href = ($p(el).attr("href") ?? "").split("?")[0];
         if (!href || href.endsWith("/technology-search/") || seen.has(href)) return;
         const title = cleanText($p(el).text());
@@ -5263,19 +5285,33 @@ export const imperialScraper: InstitutionScraper = {
           institution: INST,
         });
       });
+      return raw;
     }
 
     extractFromPage(page1$);
 
-    const remaining = pageUrls.slice(1);
     const BATCH = 8;
-    for (let i = 0; i < remaining.length; i += BATCH) {
-      const batch = remaining.slice(i, i + BATCH);
-      const pages = await Promise.all(batch.map((u) => fetchHtml(u, 15_000)));
-      for (const $p of pages) { if ($p) extractFromPage($p); }
+    const EMERGENCY_CEIL = 60;
+    let offset = 1;
+
+    while (offset <= EMERGENCY_CEIL) {
+      const pageNums: number[] = [];
+      for (let i = 0; i < BATCH && offset + i <= EMERGENCY_CEIL; i++) {
+        pageNums.push(offset + i);
+      }
+      const pages = await Promise.all(pageNums.map((p) => fetchHtml(`${INDEX}?page=${p}`, 15_000)));
+      let hitEmpty = false;
+      let fetchFails = 0;
+      for (const $p of pages) {
+        if (!$p) { fetchFails++; continue; }
+        if (extractFromPage($p) === 0) hitEmpty = true;
+      }
+      console.log(`[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1} — ${results.length} listings so far`);
+      if (hitEmpty || fetchFails === pageNums.length) break;
+      offset += BATCH;
     }
 
-    console.log(`[scraper] ${INST}: ${results.length} listings (${maxPage + 1} pages), fetching details...`);
+    console.log(`[scraper] ${INST}: ${results.length} listings total, fetching details...`);
 
     await enrichWithDetailPages(
       results,

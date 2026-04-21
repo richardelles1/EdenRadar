@@ -12,6 +12,7 @@ export interface TechPublisherOptions {
 }
 
 const CONCURRENCY = 5;
+const PAGE_WINDOW = 5; // parallel pages per window for adaptive pagination scan
 const FETCH_TIMEOUT_MS = 15_000;
 
 async function runConcurrent<T>(
@@ -64,6 +65,12 @@ export function createTechPublisherScraper(
       seenTitles.add(title);
       out.push({ title, description: "", url: fullUrl, institution });
     });
+  }
+
+  // Count raw link elements on a page — used by the adaptive scan to detect
+  // an empty page without being confused by deduplication.
+  function countRawLinks($: CheerioAPI, techSelector: string): number {
+    return $(techSelector).length;
   }
 
   async function parseSitemap(signal: AbortSignal): Promise<{ techUrls: string[]; catUrls: string[] }> {
@@ -154,19 +161,47 @@ export function createTechPublisherScraper(
     if ($home) {
       harvestLinks($home, techSelector, seenUrls, seenTitles, results);
 
+      // Adaptive parallel window scan for paginated search results.
+      // Fetch PAGE_WINDOW pages at once; stop when any page in the batch returns
+      // zero raw link elements — that signals we've passed the last real page.
+      // opts.maxPg acts as an emergency ceiling (runaway-loop guard), not a preset count.
       if (opts.maxPg != null && opts.maxPg > 1) {
-        for (let pg = 2; pg <= opts.maxPg; pg++) {
-          if (signal.aborted) break;
-          const countBefore = results.length;
-          const $pg = await fetchHtml(
-            `${base}/SearchResults.aspx?type=Tech&q=&page=${pg}`,
-            FETCH_TIMEOUT_MS,
-            signal
+        let offset = 2;
+        const EMERGENCY_CEIL = opts.maxPg;
+
+        while (!signal.aborted && offset <= EMERGENCY_CEIL) {
+          const pageNums: number[] = [];
+          for (let i = 0; i < PAGE_WINDOW && offset + i <= EMERGENCY_CEIL; i++) {
+            pageNums.push(offset + i);
+          }
+
+          const pages = await Promise.all(
+            pageNums.map((pg) =>
+              fetchHtml(`${base}/SearchResults.aspx?type=Tech&q=&page=${pg}`, FETCH_TIMEOUT_MS, signal)
+            )
           );
-          if (!$pg) break;
-          harvestLinks($pg, techSelector, seenUrls, seenTitles, results);
-          if (results.length === countBefore) break;
-          pgCount = pg;
+
+          let hitEmpty = false;
+          let fetchFails = 0;
+          for (const $pg of pages) {
+            if (!$pg) { fetchFails++; continue; }
+            if (countRawLinks($pg, techSelector) === 0) {
+              hitEmpty = true;
+            } else {
+              harvestLinks($pg, techSelector, seenUrls, seenTitles, results);
+            }
+          }
+
+          pgCount = offset + pageNums.length - 1;
+
+          console.log(
+            `[scraper] ${institution}: scanned pages ${offset}–${pgCount}` +
+            ` — ${results.length} listings so far` +
+            (fetchFails ? ` (${fetchFails} page(s) failed)` : "")
+          );
+
+          if (hitEmpty || fetchFails === pageNums.length) break;
+          offset += PAGE_WINDOW;
         }
       }
 
