@@ -2,18 +2,23 @@
  * NIH iEdison Technology Transfer Scraper
  *
  * Strategy:
- *  1. Authenticated JSON API (when IEDISON_API_KEY secret is set):
- *     Uses Bearer token auth on the public REST endpoint for full date-range
- *     access and higher rate limits. Runs in incremental mode -- fromDate is
- *     set to last_success_at from scraper_health (falls back to 12-month cap
- *     on the first run or if health record is unavailable).
- *  2. Public JSON API (no key):
- *     Same REST endpoint without auth. Works for public browsing; some
- *     date-range queries may be restricted depending on NIH access policy.
- *  3. HTML fallback:
- *     Legacy HTML search pagination. Used when the JSON API is unavailable
- *     (401/403/404/network error). Date-range params are forwarded to the URL
- *     in case the HTML interface honours them.
+ *  A. IEDISON_API_KEY is SET:
+ *     1. Authenticated JSON API -- Bearer token + X-API-Key headers sent with
+ *        every request. Full date-range + higher rate limits.
+ *     2. On 401/403: logs prominently, then retries without the key (public
+ *        JSON API) so data continues to flow while the operator investigates.
+ *     3. If JSON API fully unavailable: falls back to HTML scraper.
+ *
+ *  B. IEDISON_API_KEY is NOT SET:
+ *     HTML scraper is used directly (per task spec). Date-range params are
+ *     forwarded to the HTML endpoint in case it honours them.
+ *
+ * Incremental date-range cursor:
+ *  fromDate = MAX(last_seen_at) FROM ingested_assets WHERE source_url LIKE
+ *  '%iedison.nih.gov%', advanced by 1 second to avoid boundary re-pulls.
+ *  Granularity is YYYY-MM-DD (day precision); same-day re-pulls are possible
+ *  but harmless -- the ingestion pipeline deduplicates by fingerprint/contentHash.
+ *  Falls back to a 12-month hard cap when no records exist yet.
  *
  * Configure by setting the `IEDISON_API_KEY` Replit secret (obtain from NIH:
  *   https://iedison.nih.gov/iEdison/api/v1/publicInventions).
@@ -409,40 +414,40 @@ export const iEdisonScraper: InstitutionScraper = {
       (apiKey ? "" : " -- set IEDISON_API_KEY for authenticated access")
     );
 
-    // ── Phase 1: JSON API (authenticated when key present) ─────────────────
-    let apiAvailable = true;
-    let apiAuthFailed = false;
+    let usedPath = "html";
     let page = 0;
 
-    while (page < MAX_PAGES && apiAvailable) {
-      const { records, hasMore, apiAvailable: stillUp, authError } = await fetchJsonPage(
-        page, signal, fromDateStr, toDateStr, undefined, apiKey
-      );
-      if (authError) {
-        // API key was explicitly rejected (401/403) -- log prominently and stop
-        // authenticated attempts. Fall through to public path without silently masking.
-        console.error(
-          `[scraper] ${INST}: IEDISON_API_KEY was rejected (HTTP 401/403). ` +
-          `Check that the key is valid and has not expired. ` +
-          `Falling back to public access -- operator action required.`
-        );
-        apiAuthFailed = true;
-        apiAvailable = false;
-        break;
-      }
-      apiAvailable = stillUp;
-      if (!apiAvailable) break;
-      records.forEach(addUnique);
-      if (!hasMore || records.length === 0) break;
-      page++;
-    }
+    if (apiKey) {
+      // ── Authenticated JSON API path ───────────────────────────────────────
+      // IEDISON_API_KEY is configured: use authenticated REST endpoint.
+      // On auth failure, log prominently and continue with best-effort public
+      // JSON API so data keeps flowing while the operator investigates.
+      let apiAvailable = true;
+      let apiAuthFailed = false;
 
-    if (!apiAvailable) {
+      while (page < MAX_PAGES && apiAvailable) {
+        const { records, hasMore, apiAvailable: stillUp, authError } = await fetchJsonPage(
+          page, signal, fromDateStr, toDateStr, undefined, apiKey
+        );
+        if (authError) {
+          console.error(
+            `[scraper] ${INST}: IEDISON_API_KEY rejected (HTTP 401/403) -- ` +
+            `check the key is valid and not expired. ` +
+            `Attempting public (no-auth) JSON API as fallback.`
+          );
+          apiAuthFailed = true;
+          apiAvailable = false;
+          break;
+        }
+        apiAvailable = stillUp;
+        if (!apiAvailable) break;
+        records.forEach(addUnique);
+        if (!hasMore || records.length === 0) break;
+        page++;
+      }
+
       if (apiAuthFailed) {
-        // ── Phase 1b: Retry without key after auth failure ──────────────────
-        // Best-effort public access so data continues to flow while operator
-        // investigates the key issue. Logs already emitted above.
-        console.log(`[scraper] ${INST}: retrying with public (no-auth) access after key rejection`);
+        // Phase 1b: public JSON API retry after key rejection
         page = 0;
         let publicApiAvailable = true;
         while (page < MAX_PAGES && publicApiAvailable) {
@@ -457,15 +462,25 @@ export const iEdisonScraper: InstitutionScraper = {
         }
         apiAvailable = publicApiAvailable;
       }
+
+      if (apiAvailable || all.length > 0) {
+        usedPath = apiAuthFailed ? "JSON API (public, after key rejection)" : "JSON API (authenticated)";
+      } else {
+        // JSON API fully unavailable -- fall through to HTML
+        console.log(`[scraper] ${INST}: JSON API unavailable -- falling back to HTML scraping`);
+      }
     }
 
-    if (!apiAvailable) {
-      // ── Phase 2: HTML fallback (no auth, public interface only) ──────────
-      console.log(`[scraper] ${INST}: JSON API unavailable -- falling back to HTML scraping`);
+    if (usedPath === "html") {
+      // ── HTML scraper path ─────────────────────────────────────────────────
+      // Used when: (a) no IEDISON_API_KEY configured, OR (b) JSON API fully unavailable.
+      // Per task spec, when no key is configured the HTML interface is the primary path.
+      // Date-range params are forwarded in case the HTML interface honours them.
+      // NOTE: fromDate/toDate are YYYY-MM-DD (day granularity). Records created on
+      // the same day as the cursor may be re-pulled; upsert deduplication in the
+      // ingestion pipeline prevents double-counting.
       page = 0;
       while (page < MAX_PAGES) {
-        // Pass the same date-range params so the HTML endpoint can enforce the
-        // 12-month window if it supports them. Params are silently ignored if not.
         const { records, hasMore } = await fetchHtmlPage(page, signal, undefined, fromDateStr, toDateStr);
         records.forEach(addUnique);
         if (!hasMore || records.length === 0) break;
@@ -475,8 +490,8 @@ export const iEdisonScraper: InstitutionScraper = {
 
     console.log(
       `[scraper] ${INST}: ${all.length} listings from ${page + 1} page(s) ` +
-      `via ${apiAvailable ? `JSON API (${mode})` : "HTML fallback"} ` +
-      `(window: ${fromDateStr} to ${toDateStr})`
+      `via ${usedPath} ` +
+      `(${isIncremental ? "incremental" : "full"} window: ${fromDateStr} to ${toDateStr})`
     );
 
     return all;
