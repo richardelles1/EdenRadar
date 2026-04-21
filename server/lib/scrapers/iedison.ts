@@ -102,13 +102,16 @@ function mapJsonRecord(r: Record<string, any>, baseUrl: string): ScrapedListing 
 
 /**
  * Query the iEdison public JSON API.
- * Supports date-range filtering via `fromDate`/`toDate` (YYYY-MM-DD).
+ * Supports date-range filtering via `fromDate`/`toDate` (YYYY-MM-DD)
+ * and optional institution-aware filtering via `institution` (e.g. "NIH").
+ * When `institution` is omitted the API returns all public institutions.
  */
 async function fetchJsonPage(
   page: number,
   signal?: AbortSignal,
   fromDate?: string,
   toDate?: string,
+  institution?: string,
 ): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean }> {
   const params = new URLSearchParams({
     page: String(page),
@@ -117,6 +120,7 @@ async function fetchJsonPage(
   });
   if (fromDate) params.set("fromDate", fromDate);
   if (toDate) params.set("toDate", toDate);
+  if (institution) params.set("institution", institution);
 
   const url = `${BASE_URL}${API_SEARCH_PATH}?${params.toString()}`;
 
@@ -246,14 +250,16 @@ function parseHtmlResults(html: string, baseUrl: string): ScrapedListing[] {
 async function fetchHtmlPage(
   page: number,
   signal?: AbortSignal,
+  institution?: string,
 ): Promise<{ records: ScrapedListing[]; hasMore: boolean }> {
-  // iEdison HTML search uses a date-range-compatible URL with fromDate/toDate params
+  // iEdison HTML search supports date-range and institution parameters
   const params = new URLSearchParams({
     searchTerm: "",
     page: String(page),
     rows: String(ROWS_PER_PAGE),
     status: "available",
   });
+  if (institution) params.set("institution", institution);
   const url = `${BASE_URL}${HTML_SEARCH_PATH}?${params.toString()}`;
 
   try {
@@ -332,7 +338,8 @@ export const iEdisonScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: JSON API unavailable — falling back to HTML scraping`);
       page = 0;
       while (page < MAX_PAGES) {
-        const { records, hasMore } = await fetchHtmlPage(page, signal);
+        // HTML fallback: no institution filter in default all-institution scrape
+        const { records, hasMore } = await fetchHtmlPage(page, signal, undefined);
         records.forEach(addUnique);
         if (!hasMore || records.length === 0) break;
         page++;
