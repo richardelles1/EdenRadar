@@ -1,5 +1,7 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { iEdisonScraper } from "./iedison";
+// iEdison scraper disabled — iedison.nih.gov blocks all cloud/datacenter hosting IPs.
+// Re-enable only if a residential proxy or API key becomes available.
+// import { iEdisonScraper } from "./iedison";
 import { stanfordScraper } from "./stanford";
 import { mitScraper } from "./mit";
 import { harvardScraper } from "./harvard";
@@ -240,6 +242,7 @@ import {
   uncChapelHillScraper,
   prscienceTrustScraper,
   umassAmherstScraper,
+  umassLowellScraper,
   southAlabamaScraper,
   umbcScraper,
   bostonCollegeScraper,
@@ -616,8 +619,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nyuScraper,
   nihOttScraper,
   nciTtcScraper,
-  // Task #399 — NIH iEdison federal invention disclosures
-  iEdisonScraper,
+  // iEdisonScraper disabled — blocks cloud IPs, no API key available (see import above)
   maxPlanckScraper,
   mskScraper,
   lifeArcScraper,
@@ -822,6 +824,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   uncChapelHillScraper,
   prscienceTrustScraper,
   umassAmherstScraper,
+  umassLowellScraper,
   southAlabamaScraper,
   umbcScraper,
   bostonCollegeScraper,
@@ -967,7 +970,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // Task #364 — Recovered US Flintbox scrapers (re-investigated 2026-04-20)
   texasTechScraper,               // Texas Tech University — Flintbox orgId=23 — 246 techs confirmed
   brandeisScraper,                // Brandeis University — Flintbox orgId=43 — 95 techs confirmed
-  uarkansasScraper,               // University of Arkansas — stub (TTO page JS-rendered, 0 enumerable tech links)
+  uarkansasScraper,               // University of Arkansas — Flintbox orgId=27, 50+ tech listings (upgraded from stub 2026-04-21)
   // US children's hospitals
   seattleChildrensScraper,        // Seattle Children's Research Institute — stub (no enumerable catalog)
   childrensColoradoScraper,       // Children's Hospital Colorado Research Institute — stub (generic pages only)

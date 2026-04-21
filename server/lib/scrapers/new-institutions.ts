@@ -1240,11 +1240,11 @@ export const warfScraper: InstitutionScraper = {
 export const auburnScraper = createInPartScraper("auburn", "Auburn University");
 export const ugaScraper = createInPartScraper("uga", "University of Georgia");
 // University of Arkansas — re-investigated 2026-04-20
-// research.uark.edu/units/techtransfer/available-technologies.html returns 44KB but 0 tech links.
-// No Flintbox, In-Part, or TechPublisher portal found. Portal appears JS-rendered or has no catalog.
-export const uarkansasScraper = createStubScraper(
-  "University of Arkansas",
-  "research.uark.edu TTO page returns 44KB with 0 enumerable tech links; no Flintbox/In-Part/TP portal found"
+// uark.flintbox.com: Flintbox API confirmed working — orgId=27, 50+ tech listings.
+// Verified 2026-04-21 via direct API probe.
+export const uarkansasScraper = createFlintboxScraper(
+  { slug: "uark", orgId: 27, accessKey: "0878634c-ede3-4ec2-8169-5df15f0a6adb" },
+  "University of Arkansas"
 );
 export const uamsScraper = createStubScraper("University of Arkansas for Medical Sciences");
 export const udelScraper = createFlintboxScraper(
@@ -1270,7 +1270,15 @@ export const brandeisScraper = createFlintboxScraper(
 export const unhScraper = createStubScraper("University of New Hampshire");
 export const uriScraper = createInPartScraper("uri", "University of Rhode Island");
 export const mountsinaiScraper = createInPartScraper("mountsinai", "Icahn School of Medicine at Mount Sinai");
+// Caltech OTT (ott.caltech.edu): probed 2026-04-21 -- HTTP 000 (connection refused)
+// from Replit egress IPs on all paths (/technologies, /search, /licensing). Not available.
+// RE-PROBE TRIGGER: revisit if Replit egress IPs change.
 export const caltechScraper = createStubScraper("California Institute of Technology");
+// FLC (Federal Lab Consortium) -- probed 2026-04-21:
+//   flcbusiness.net/technologies: HTTP 000 (connection refused from Replit egress IPs)
+//   labs.federallabs.org/technologies: same result
+// Both endpoints TCP-refused from all Replit cloud IPs. Not implemented.
+// RE-PROBE TRIGGER: revisit if Replit egress IPs change.
 export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
 
 // ── International: UK ────────────────────────────────────────────────────
@@ -2237,6 +2245,12 @@ export const prscienceTrustScraper = createInPartScraper("prsciencetrust", "Puer
 export const umassAmherstScraper = createTechPublisherScraper(
   "tto-umass-amherst",
   "UMass Amherst"
+);
+// uml.flintbox.com: Flintbox API confirmed working — orgId=63, 85 tech listings.
+// Verified 2026-04-21 via direct API probe.
+export const umassLowellScraper = createFlintboxScraper(
+  { slug: "uml", orgId: 63, accessKey: "1c47d988-c205-4200-ac92-33dbb3af6600" },
+  "UMass Lowell"
 );
 export const southAlabamaScraper = createTechPublisherScraper(
   "southalabama",
@@ -3975,39 +3989,14 @@ export const uclbScraper: InstitutionScraper = createStubScraper(
 
 // ── KU Leuven Research & Development ─────────────────────────────────────────
 // TTO site: lrd.kuleuven.be/en/ip/which-technologies-do-we-offer/technology-offers
-// All outbound requests time out (server-side IP block or firewall). Returns empty.
-export const kuLeuvenScraper: InstitutionScraper = {
-  institution: "KU Leuven R&D",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "KU Leuven R&D";
-    const URL = "https://lrd.kuleuven.be/en/ip/which-technologies-do-we-offer/technology-offers";
-    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-    try {
-      const res = await fetch(URL, {
-        headers: { "User-Agent": UA },
-        signal: AbortSignal.timeout(15_000),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const html = await res.text();
-      // Extract any technology-offer links
-      const linkRe = /href="(https?:\/\/lrd\.kuleuven\.be[^"]*(?:technolog|offer|licens)[^"]*)"/gi;
-      const results: ScrapedListing[] = [];
-      const seen = new Set<string>();
-      let m: RegExpExecArray | null;
-      while ((m = linkRe.exec(html)) !== null) {
-        const url = m[1];
-        if (seen.has(url)) continue;
-        seen.add(url);
-        results.push({ title: url.split("/").pop() ?? url, description: "", url, institution: INST });
-      }
-      console.log(`[scraper] ${INST}: ${results.length} listings`);
-      return results;
-    } catch (err: any) {
-      console.warn(`[scraper] ${INST}: unreachable (${err?.message}) — server-side IP block suspected`);
-      return [];
-    }
-  },
-};
+// Re-probed 2026-04-21: page returns HTTP 200 (34KB), but the only "tech offer" link
+// on the page is a Shibboleth SSO login redirect — the actual technology catalog is
+// behind authentication. No public enumerable listing found.
+// epfl.flintbox.com and similar platform subdomains: TCP refused (GeoIP block).
+export const kuLeuvenScraper: InstitutionScraper = createStubScraper(
+  "KU Leuven R&D",
+  "technology-offers page requires Shibboleth SSO login (2026-04-21); no public catalog accessible"
+);
 
 // ── Ghent University Technology Transfer ─────────────────────────────────────
 // Site: techtransfer.ugent.be — informational Drupal site, no enumerable tech listing.

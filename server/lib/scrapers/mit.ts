@@ -82,6 +82,7 @@ export const mitScraper: InstitutionScraper = {
           )
         );
 
+        const countBefore = results.length;
         let hitEmpty = false;
         let fetchFails = 0;
         for (const $ of pages) {
@@ -96,15 +97,23 @@ export const mitScraper: InstitutionScraper = {
           }
         }
 
+        const successFetches = pageNums.length - fetchFails;
+        const newListings = results.length - countBefore;
+
         console.log(
           `[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1}` +
           ` — ${results.length} listings so far` +
           (fetchFails ? ` (${fetchFails} page(s) failed to load)` : "")
         );
 
-        // Stop only when a successful fetch confirmed there are no more listings.
-        // If the entire window failed (all null) we stop to avoid spinning forever.
-        if (hitEmpty || fetchFails === pageNums.length) break;
+        // Stop when:
+        //   (a) a successful fetch returned 0 rows — genuine end of catalog, OR
+        //   (b) the entire window failed — avoid infinite loop on network outage, OR
+        //   (c) we got successful fetches but zero new listings — server is ignoring the
+        //       page parameter and returning the same content for every page number
+        //       (MIT TLO does this: page 0 == page 1 == page N, so without this check
+        //       the loop would spin to EMERGENCY_CEIL returning only duplicates).
+        if (hitEmpty || fetchFails === pageNums.length || (successFetches > 0 && newListings === 0)) break;
         offset += PAGE_WINDOW;
       }
 
@@ -131,7 +140,7 @@ export const mitScraper: InstitutionScraper = {
           ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
-      }, 100, signal);
+      }, 500, signal);
 
       console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;
