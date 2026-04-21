@@ -57,15 +57,19 @@ export const mitScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: page 0 — ${results.length} listings`);
 
       // Step 2: adaptive parallel window scan.
-      // Launch PAGE_WINDOW pages at once. Stop as soon as any page in the window
-      // returns zero new listings — that means we have scanned past the last page.
-      // No pagination detection needed; no cap other than the safety ceiling below.
-      const MAX_PAGES = 500; // hard safety ceiling (far beyond any real TTO catalog)
+      // Launch PAGE_WINDOW pages at once. Only stop when a fetch SUCCEEDS and returns
+      // zero listings — that signals we've passed the last real page.
+      // Transient network failures (null returns) are counted separately and never
+      // trigger an early stop; a subsequent window will still probe beyond the failure.
+      // Self-terminating: no pagination detection, no preset page count.
+      // EMERGENCY_CEIL is not a design limit — it's a runaway-loop guard that should
+      // never be reached for any real TTO catalog.
+      const EMERGENCY_CEIL = 1000;
       let offset = 1;
 
-      while (!signal?.aborted && offset < MAX_PAGES) {
+      while (!signal?.aborted && offset < EMERGENCY_CEIL) {
         const pageNums: number[] = [];
-        for (let i = 0; i < PAGE_WINDOW && offset + i < MAX_PAGES; i++) {
+        for (let i = 0; i < PAGE_WINDOW && offset + i < EMERGENCY_CEIL; i++) {
           pageNums.push(offset + i);
         }
 
@@ -76,15 +80,28 @@ export const mitScraper: InstitutionScraper = {
         );
 
         let hitEmpty = false;
+        let fetchFails = 0;
         for (const $ of pages) {
-          if (!$ || extractListings($) === 0) {
+          if (!$) {
+            // Network failure — treat as unknown, not as empty page.
+            // The window will still check subsequent pages.
+            fetchFails++;
+            continue;
+          }
+          if (extractListings($) === 0) {
             hitEmpty = true;
           }
         }
 
-        console.log(`[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1} — ${results.length} listings so far`);
+        console.log(
+          `[scraper] ${INST}: scanned pages ${offset}–${offset + pageNums.length - 1}` +
+          ` — ${results.length} listings so far` +
+          (fetchFails ? ` (${fetchFails} page(s) failed to load)` : "")
+        );
 
-        if (hitEmpty) break;
+        // Stop only when a successful fetch confirmed there are no more listings.
+        // If the entire window failed (all null) we stop to avoid spinning forever.
+        if (hitEmpty || fetchFails === pageNums.length) break;
         offset += PAGE_WINDOW;
       }
 
