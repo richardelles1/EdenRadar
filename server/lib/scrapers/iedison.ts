@@ -226,13 +226,20 @@ async function fetchJsonPage(
     return { records, hasMore, apiAvailable: true };
   } catch (err: unknown) {
     const errName = err instanceof Error ? err.name : "";
-    const isTimeout = errName === "AbortError" || errName === "TimeoutError";
-    if (isTimeout) {
+    // Distinguish true transport/network errors from parser/logic errors:
+    //   AbortError / TimeoutError  -- request timed out or was aborted
+    //   TypeError                  -- fetch() threw (DNS, connection refused, etc.)
+    //   SyntaxError / other        -- HTTP response received but body is invalid JSON
+    //                                  or record-mapping threw -- NOT a network failure.
+    const isNetworkErr = errName === "AbortError" || errName === "TimeoutError" || errName === "TypeError";
+    if (errName === "AbortError" || errName === "TimeoutError") {
       console.warn(`[scraper] ${INST}: JSON API page ${page} timed out (network unreachable)`);
-    } else {
+    } else if (isNetworkErr) {
       console.warn(`[scraper] ${INST}: JSON API page ${page} network error: ${err instanceof Error ? err.message : String(err)}`);
+    } else {
+      console.warn(`[scraper] ${INST}: JSON API page ${page} parse/format error: ${err instanceof Error ? err.message : String(err)}`);
     }
-    return { records: [], hasMore: false, apiAvailable: false, networkError: true };
+    return { records: [], hasMore: false, apiAvailable: false, networkError: isNetworkErr };
   }
 }
 
