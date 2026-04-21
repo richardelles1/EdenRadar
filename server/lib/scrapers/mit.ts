@@ -13,7 +13,7 @@ const LIST_PATH = "/industry-entrepreneurs/available-technologies";
 const LIST_FILTER = "search_api_fulltext=";
 
 // How many pages to probe in parallel per window.
-// MIT fits in one window (page 0 + window 1-20). Large sites need 2-3 windows.
+// MIT TLO has 50+ pages (20 items/page, ~1000 listings) — multiple windows will fire.
 // The global semaphore already caps concurrent HTTP requests, so a large window
 // does not overwhelm the target — it just queues within that semaphore pool.
 const PAGE_WINDOW = 20;
@@ -114,10 +114,10 @@ export const mitScraper: InstitutionScraper = {
         // Stop when:
         //   (a) a successful fetch returned 0 rows — genuine end of catalog, OR
         //   (b) the entire window failed — avoid infinite loop on network outage, OR
-        //   (c) we got successful fetches but zero new listings — server is ignoring the
-        //       page parameter and returning the same content for every page number
-        //       (MIT TLO does this: page 0 == page 1 == page N, so without this check
-        //       the loop would spin to EMERGENCY_CEIL returning only duplicates).
+        //   (c) we got successful fetches but zero new listings — safety net for CDNs
+        //       that return cached page-0 content for all ?page=N values. MIT TLO
+        //       correctly serves unique content per page (verified 2026-04-21), so this
+        //       guard fires only at the true end of the catalog when all titles repeat.
         if (hitEmpty || fetchFails === pageNums.length || (successFetches > 0 && newListings === 0)) break;
         offset += PAGE_WINDOW;
       }
