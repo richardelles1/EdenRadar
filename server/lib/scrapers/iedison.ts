@@ -2,9 +2,21 @@
  * NIH iEdison Technology Transfer Scraper
  *
  * Strategy:
- *  1. Attempt the iEdison public JSON API endpoint (no auth required for browsing).
- *     Supports date-range filtering and institution-aware pagination.
- *  2. Fall back to HTML search pagination if the JSON API is unavailable.
+ *  1. Authenticated JSON API (when IEDISON_API_KEY secret is set):
+ *     Uses Bearer token auth on the public REST endpoint for full date-range
+ *     access and higher rate limits. Runs in incremental mode -- fromDate is
+ *     set to last_success_at from scraper_health (falls back to 12-month cap
+ *     on the first run or if health record is unavailable).
+ *  2. Public JSON API (no key):
+ *     Same REST endpoint without auth. Works for public browsing; some
+ *     date-range queries may be restricted depending on NIH access policy.
+ *  3. HTML fallback:
+ *     Legacy HTML search pagination. Used when the JSON API is unavailable
+ *     (401/403/404/network error). Date-range params are forwarded to the URL
+ *     in case the HTML interface honours them.
+ *
+ * Configure by setting the `IEDISON_API_KEY` Replit secret (obtain from NIH:
+ *   https://iedison.nih.gov/iEdison/api/v1/publicInventions).
  *
  * Field mapping priority (first non-empty wins):
  *   title          — title | technologyTitle | name
@@ -18,18 +30,31 @@
 
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { cleanText } from "./utils";
+import { loadAllScraperHealth } from "../scraperState";
 
 const INST = "NIH iEdison";
 const BASE_URL = "https://iedison.nih.gov";
 
 // iEdison public search endpoint (HTML fallback)
 const HTML_SEARCH_PATH = "/iEdison/pubsite/search/doSearch";
-// iEdison public API (JSON-first, returns structured records; no auth for public browse)
+// iEdison public API -- public browse works without a key; authenticated
+// requests with IEDISON_API_KEY unlock full date-range and higher rate limits.
 const API_SEARCH_PATH = "/iEdison/api/v1/publicInventions";
 
 const PAGE_TIMEOUT_MS = 30_000;
 const ROWS_PER_PAGE = 50;
 const MAX_PAGES = 20;
+
+// Hard cap on how far back we look when there is no prior run on record.
+const MAX_LOOKBACK_MONTHS = 12;
+
+/**
+ * Return the API key from the environment, or undefined if not configured.
+ * Both `IEDISON_API_KEY` (Replit secret) and the plain env var are accepted.
+ */
+function getApiKey(): string | undefined {
+  return process.env.IEDISON_API_KEY || undefined;
+}
 
 // ── Shared field normalisation ────────────────────────────────────────────────
 
@@ -101,10 +126,12 @@ function mapJsonRecord(r: Record<string, any>, baseUrl: string): ScrapedListing 
 // ── JSON API fetch ─────────────────────────────────────────────────────────────
 
 /**
- * Query the iEdison public JSON API.
+ * Query the iEdison JSON API.
  * Supports date-range filtering via `fromDate`/`toDate` (YYYY-MM-DD)
  * and optional institution-aware filtering via `institution` (e.g. "NIH").
  * When `institution` is omitted the API returns all public institutions.
+ * When `apiKey` is provided it is sent as a Bearer token (authenticated mode
+ * unlocks full date-range access and higher rate limits).
  */
 async function fetchJsonPage(
   page: number,
@@ -112,6 +139,7 @@ async function fetchJsonPage(
   fromDate?: string,
   toDate?: string,
   institution?: string,
+  apiKey?: string,
 ): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean }> {
   const params = new URLSearchParams({
     page: String(page),
@@ -124,17 +152,30 @@ async function fetchJsonPage(
 
   const url = `${BASE_URL}${API_SEARCH_PATH}?${params.toString()}`;
 
+  const headers: Record<string, string> = {
+    "Accept": "application/json",
+    "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0; +https://edenradar.com)",
+  };
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+    headers["X-API-Key"] = apiKey;
+  }
+
   try {
     const res = await fetch(url, {
-      headers: {
-        "Accept": "application/json",
-        "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0; +https://edenradar.com)",
-      },
+      headers,
       signal: signal ?? AbortSignal.timeout(PAGE_TIMEOUT_MS),
     });
 
-    if (res.status === 404 || res.status === 401 || res.status === 403) {
-      // API not publicly accessible — signal HTML fallback
+    if (res.status === 404) {
+      // Endpoint not found -- signal HTML fallback
+      return { records: [], hasMore: false, apiAvailable: false };
+    }
+    if (res.status === 401 || res.status === 403) {
+      // Auth required and no/invalid key -- signal HTML fallback only if no key was provided
+      if (!apiKey) return { records: [], hasMore: false, apiAvailable: false };
+      // With a key, treat auth errors as a hard failure (wrong key, not missing key)
+      console.warn(`[scraper] ${INST}: API auth error ${res.status} -- check IEDISON_API_KEY`);
       return { records: [], hasMore: false, apiAvailable: false };
     }
 
@@ -318,20 +359,50 @@ export const iEdisonScraper: InstitutionScraper = {
       if (!seen.has(key)) { seen.add(key); all.push(listing); }
     };
 
-    // Date-range constraint: last 12 months only (no unbounded backfill)
+    const apiKey = getApiKey();
+
+    // ── Compute date-range ──────────────────────────────────────────────────
+    // Default cap: last MAX_LOOKBACK_MONTHS months (no unbounded backfill).
     const toDate = new Date();
-    const fromDate = new Date(toDate);
-    fromDate.setFullYear(fromDate.getFullYear() - 1);
+    const hardCap = new Date(toDate);
+    hardCap.setMonth(hardCap.getMonth() - MAX_LOOKBACK_MONTHS);
+
+    // Incremental mode: if we have a prior successful run recorded in
+    // scraper_health, use the last success timestamp as fromDate so we only
+    // pull inventions disclosed since the last ingest cycle.
+    let fromDate = hardCap;
+    try {
+      const healthMap = await loadAllScraperHealth();
+      const iEdisonHealth = healthMap.get(INST);
+      if (iEdisonHealth?.lastSuccessAt) {
+        const lastSuccess = iEdisonHealth.lastSuccessAt;
+        // Use lastSuccessAt only if it's more recent than the hard cap and in the past
+        if (lastSuccess > hardCap && lastSuccess < toDate) {
+          fromDate = lastSuccess;
+        }
+      }
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: could not load scraper health for incremental date -- using hard cap: ${err?.message}`);
+    }
+
     const fromDateStr = fromDate.toISOString().slice(0, 10);  // YYYY-MM-DD
     const toDateStr = toDate.toISOString().slice(0, 10);
+    const mode = apiKey ? "authenticated" : "public";
+    const isIncremental = fromDate > hardCap;
 
-    // ── Phase 1: Try JSON API ───────────────────────────────────────────────
+    console.log(
+      `[scraper] ${INST}: starting ${mode} scrape ` +
+      `(${isIncremental ? "incremental" : "full"} window: ${fromDateStr} to ${toDateStr})` +
+      (apiKey ? "" : " -- set IEDISON_API_KEY for authenticated access")
+    );
+
+    // ── Phase 1: JSON API (authenticated when key present) ─────────────────
     let apiAvailable = true;
     let page = 0;
 
     while (page < MAX_PAGES && apiAvailable) {
       const { records, hasMore, apiAvailable: stillUp } = await fetchJsonPage(
-        page, signal, fromDateStr, toDateStr
+        page, signal, fromDateStr, toDateStr, undefined, apiKey
       );
       apiAvailable = stillUp;
       if (!apiAvailable) break;
@@ -341,12 +412,12 @@ export const iEdisonScraper: InstitutionScraper = {
     }
 
     if (!apiAvailable) {
-      // ── Phase 2: HTML fallback ────────────────────────────────────────────
-      console.log(`[scraper] ${INST}: JSON API unavailable — falling back to HTML scraping`);
+      // ── Phase 2: HTML fallback (no auth, public interface only) ──────────
+      console.log(`[scraper] ${INST}: JSON API unavailable -- falling back to HTML scraping`);
       page = 0;
       while (page < MAX_PAGES) {
         // Pass the same date-range params so the HTML endpoint can enforce the
-        // 12-month window if it supports them. If not, params are ignored.
+        // 12-month window if it supports them. Params are silently ignored if not.
         const { records, hasMore } = await fetchHtmlPage(page, signal, undefined, fromDateStr, toDateStr);
         records.forEach(addUnique);
         if (!hasMore || records.length === 0) break;
@@ -356,7 +427,7 @@ export const iEdisonScraper: InstitutionScraper = {
 
     console.log(
       `[scraper] ${INST}: ${all.length} listings from ${page + 1} page(s) ` +
-      `via ${apiAvailable ? "JSON API" : "HTML fallback"} ` +
+      `via ${apiAvailable ? `JSON API (${mode})` : "HTML fallback"} ` +
       `(window: ${fromDateStr} to ${toDateStr})`
     );
 
