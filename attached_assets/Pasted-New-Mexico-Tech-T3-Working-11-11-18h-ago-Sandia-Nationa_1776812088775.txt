@@ -1,0 +1,1671 @@
+New Mexico Tech
+T3
+Working
+11	11	18h ago	—	
+
+Sandia National Laboratories
+T3
+Working
+21	21	18h ago	—	
+
+Roswell Park Comprehensive Cancer Center
+T3
+Working
+9	9	18h ago	—	
+
+Lawrence Berkeley National Laboratory
+T3
+Working
+247	215	18h ago	—	
+
+NCATS (NIH)
+T3
+Working
+135	135	18h ago	—	
+
+Cincinnati Children's Hospital Medical Center
+T3
+Working
+34	34	18h ago	—	
+
+Nationwide Children's Hospital
+T3
+Working
+2	2	18h ago	—	
+
+Fox Chase Cancer Center
+T3
+Working
+59	59	18h ago	—	
+
+Nemours Children's Health
+T3
+Working
+5	5	18h ago	—	
+
+St. Jude Children's Research Hospital
+T3
+Working
+103	103	18h ago	—	
+
+Oxford University Innovation
+T3
+Working
+46	46	18h ago	—	
+
+Yissum (Hebrew University of Jerusalem)
+T3
+Working
+128	125	18h ago	—	
+
+University of Bristol
+T3
+Working
+6	6	18h ago	—	
+
+CERN Knowledge Transfer
+T3
+Working
+1	1	18h ago	—	
+
+Edinburgh Innovations
+T3
+Working
+7	7	18h ago	—	
+
+University of Sheffield
+T3
+Working
+3	2	17h ago	—	
+
+Imperial College London
+T3
+Working
+53	53	17h ago	—	
+
+University of Ljubljana
+T3
+Working
+17	17	17h ago	—	
+
+Virginia Commonwealth University
+T3
+Working
+74	74	17h ago	—	
+
+University of Waterloo
+T3
+Working
+18	17	17h ago	—	
+
+University of Bath
+T3
+Working
+1	1	17h ago	—	
+
+University of the West Indies, St. Augustine
+T3
+Working
+1	1	17h ago	—	
+
+Ontario Tech University
+T3
+Working
+2	2	17h ago	—	
+
+McMaster University
+T3
+Working
+106	100	17h ago	—	
+
+Mass General Brigham
+T3
+Working
+10	10	17h ago	—	
+
+Lawrence Livermore National Laboratory
+T3
+Working
+36	36	17h ago	—	
+
+OHSU
+T3
+Working
+115	115	17h ago	—	
+
+Georgia Institute of Technology
+T4
+Working
+153	152	17h ago	—	
+
+Case Western Reserve University
+T4
+Working
+42	41	17h ago	—	
+
+Oak Ridge National Laboratory
+T3
+Parser failure
+—	—	17h ago	—	
+
+Argonne National Laboratory
+T3
+Parser failure
+—	—	17h ago	—	
+
+University of Leeds
+T4
+Working
+12	12	17h ago	—	
+
+Fred Hutchinson Cancer Center
+T4
+Working
+58	58	17h ago	—	
+
+Moffitt Cancer Center
+T4
+Working
+148	148	17h ago	—	
+
+TechLink (DoD Technology Transfer)
+T4
+Working
+1,243	1,243	17h ago	—	
+
+Cancer Research Horizons
+T4
+Working
+25	25	17h ago	—	
+
+Gladstone Institutes
+T4
+Working
+86	86	17h ago	—	
+
+University of Texas El Paso
+T4
+Working
+25	25	17h ago	—	
+
+TechLink (VA Technology Transfer)
+T4
+Working
+937	937	17h ago	—	
+
+NCI Technology Transfer Center
+T1
+Working
+391	391	17h ago	—	
+
+NIH Office of Technology Transfer
+T1
+Working
+1,177	1,175	17h ago	—	
+
+University of Houston
+T1
+Working
+1	1	17h ago	—	
+
+University of Arizona
+T1
+Working
+1,824	596	17h ago	—	
+
+University of Central Florida
+T1
+Working
+179	129	17h ago	—	
+
+Florida International University
+T1
+Working
+227	151	17h ago	—	
+
+Rice University
+T1
+Working
+332	133	17h ago	—	
+
+Utah State University
+T1
+Working
+44	4	17h ago	—	
+
+Auburn University
+T1
+Working
+57	16	17h ago	—	
+
+University of Georgia
+T1
+Working
+262	181	17h ago	—	
+
+University of Connecticut
+T1
+Working
+384	250	17h ago	—	
+
+University of British Columbia
+T1
+Working
+90	34	17h ago	—	
+
+University of Victoria
+T1
+Working
+45	12	17h ago	—	
+
+Monash University
+T1
+Working
+43	23	17h ago	—	
+
+Dana-Farber Cancer Institute
+T1
+Working
+71	71	17h ago	—	
+
+Children's Hospital Los Angeles
+T1
+Working
+24	24	17h ago	—	
+
+Lurie Children's Hospital
+T1
+Working
+20	20	17h ago	—	
+
+Baylor College of Medicine
+T1
+Working
+36	35	17h ago	—	
+
+Children's National
+T1
+Working
+61	61	17h ago	—	
+
+Children's Hospital of Philadelphia
+T1
+Working
+57	57	17h ago	—	
+
+University of Glasgow
+T1
+Working
+15	15	17h ago	—	
+
+University of Southern Denmark
+T1
+Working
+14	14	17h ago	—	
+
+University of East Anglia
+T1
+Working
+11	11	17h ago	—	
+
+University of Sussex
+T1
+Working
+9	8	17h ago	—	
+
+Newcastle University
+T1
+Working
+18	18	17h ago	—	
+
+University of Plymouth
+T1
+Working
+5	5	17h ago	—	
+
+Saarland University
+T1
+Working
+9	9	17h ago	—	
+
+Macquarie University
+T1
+Working
+4	4	17h ago	—	
+
+Stellenbosch University
+T1
+Working
+35	33	17h ago	—	
+
+Okinawa Institute of Science and Technology
+T1
+Working
+27	25	17h ago	—	
+
+Nagoya University
+T1
+Working
+37	36	17h ago	—	
+
+Hokkaido University
+T1
+Working
+24	24	17h ago	—	
+
+University of St Andrews
+T1
+Working
+8	8	17h ago	—	
+
+University of Salford
+T1
+Working
+—	—	17h ago	—	
+
+University of Birmingham
+T1
+Working
+3	3	17h ago	—	
+
+University of Dundee
+T1
+Working
+6	5	17h ago	—	
+
+Princeton Plasma Physics Laboratory
+T1
+Working
+1	1	17h ago	—	
+
+Nevada National Security Site
+T1
+Working
+2	2	17h ago	—	
+
+McGill University
+T1
+Working
+227	141	17h ago	—	
+
+Princeton University
+T2
+Working
+426	157	17h ago	—	
+
+Brown University
+T2
+Working
+160	94	17h ago	—	
+
+UC Santa Barbara
+T2
+Working
+129	83	17h ago	—	
+
+University of Rochester
+T2
+Working
+311	142	17h ago	—	
+
+UC Riverside
+T2
+Working
+—	—	17h ago	—	
+
+UC Santa Cruz
+T2
+Working
+191	139	17h ago	—	
+
+Colorado State University
+T2
+Working
+68	22	17h ago	—	
+
+University of Virginia
+T2
+Working
+115	90	17h ago	—	
+
+University of Oregon
+T2
+Working
+50	13	17h ago	—	
+
+University of Utah
+T2
+Working
+285	109	17h ago	—	
+
+Virginia Tech
+T2
+Working
+182	38	17h ago	—	
+
+Wayne State University
+T2
+Working
+67	39	17h ago	—	
+
+University of South Florida
+T2
+Working
+663	307	17h ago	—	
+
+University of Calgary
+T1
+Working
+63	34	17h ago	—	
+
+University of South Carolina
+T2
+Working
+519	173	17h ago	—	
+
+Lehigh University
+T2
+Working
+71	15	17h ago	—	
+
+Clemson University
+T2
+Working
+156	43	17h ago	—	
+
+George Washington University
+T2
+Working
+166	79	17h ago	—	
+
+Iowa State University
+T2
+Working
+190	51	17h ago	—	
+
+UT Dallas
+T2
+Working
+57	25	17h ago	—	
+
+Washington State University
+T2
+Working
+234	65	17h ago	—	
+
+Stevens Institute of Technology
+T2
+Working
+24	10	17h ago	—	
+
+Rensselaer Polytechnic Institute
+T2
+Working
+261	42	17h ago	—	
+
+Rowan University
+T2
+Working
+56	28	17h ago	—	
+
+University of Cincinnati
+T2
+Working
+189	107	17h ago	—	
+
+University of Maine
+T2
+Working
+80	6	17h ago	—	
+
+University at Buffalo
+T2
+Working
+96	38	17h ago	—	
+
+George Mason University
+T2
+Working
+19	4	17h ago	—	
+
+Mississippi State University
+T2
+Working
+95	14	17h ago	—	
+
+Binghamton University
+T2
+Working
+110	21	17h ago	—	
+
+Oregon State University
+T2
+Working
+157	46	17h ago	—	
+
+Georgia State University
+T2
+Working
+40	36	17h ago	—	
+
+University of Vermont
+T2
+Working
+61	34	17h ago	—	
+
+University of Southern California
+T2
+Working
+331	135	17h ago	—	
+
+Texas State University
+T2
+Working
+82	11	17h ago	—	
+
+Northeastern University
+T2
+Working
+294	96	17h ago	—	
+
+University of Miami
+T2
+Working
+1	1	17h ago	—	
+
+University of Alabama
+T2
+Working
+119	18	17h ago	—	
+
+Cleveland Clinic
+T2
+Working
+116	113	17h ago	—	
+
+Texas A&M University
+T2
+Working
+138	136	17h ago	—	
+
+SUNY Upstate Medical University
+T2
+Working
+24	19	17h ago	—	
+
+University of Wyoming
+T2
+Working
+23	6	17h ago	—	
+
+University of Iowa
+T2
+Working
+77	77	17h ago	—	
+
+University of Alaska Fairbanks
+T2
+Working
+23	4	17h ago	—	
+
+Drexel University
+T2
+Working
+212	81	17h ago	—	
+
+University of Louisville
+T2
+Working
+176	175	17h ago	—	
+
+Cedars-Sinai
+T2
+Working
+50	50	17h ago	—	
+
+West Virginia University
+T2
+Working
+9	8	17h ago	—	
+
+University of Alabama in Huntsville
+T2
+Working
+18	18	17h ago	—	
+
+Louisiana State University
+T2
+Working
+26	25	17h ago	—	
+
+UT San Antonio
+T2
+Working
+16	16	17h ago	—	
+
+Tulane University
+T2
+Working
+69	69	17h ago	—	
+
+Florida Atlantic University
+T2
+Working
+31	31	17h ago	—	
+
+University of Toledo
+T2
+Working
+172	114	17h ago	—	
+
+University of Idaho
+T2
+Working
+1	—	17h ago	—	
+
+University of Southampton
+T2
+Working
+1	—	17h ago	—	
+
+Northumbria University
+T2
+Working
+2	1	17h ago	—	
+
+University of Saskatchewan
+T2
+Working
+12	5	17h ago	—	
+
+Carnegie Mellon University
+T2
+Working
+9	9	17h ago	—	
+
+Kansas State University
+T2
+Working
+25	23	17h ago	—	
+
+Children's Mercy Hospital
+T2
+Working
+11	10	17h ago	—	
+
+University of Strathclyde
+T2
+Working
+2	2	17h ago	—	
+
+Syracuse University
+T2
+Working
+30	27	17h ago	—	
+
+Swansea University
+T2
+Working
+1	1	17h ago	—	
+
+NC State University
+T2
+Working
+2	2	17h ago	—	
+
+Dalhousie University
+T2
+Working
+3	2	17h ago	—	
+
+UC Merced
+T2
+Working
+12	12	17h ago	—	
+
+San Diego State University
+T2
+Working
+11	11	17h ago	—	
+
+University of Southern Mississippi
+T2
+Working
+23	23	17h ago	—	
+
+University of Denver
+T2
+Working
+7	7	17h ago	—	
+
+Michigan State University
+T2
+Working
+80	78	17h ago	—	
+
+University of Kansas
+T2
+Working
+112	112	17h ago	—	
+
+University of Kentucky
+T2
+Working
+127	125	17h ago	—	
+
+UNC Chapel Hill
+T2
+Working
+163	163	17h ago	—	
+
+University of Florida
+T2
+Working
+321	312	17h ago	—	
+
+Northern Arizona University
+T2
+Working
+41	41	17h ago	—	
+
+Boise State University
+T2
+Working
+—	—	17h ago	—	
+
+Morgan State University
+T2
+Working
+15	15	17h ago	—	
+
+University of Tennessee
+T2
+Working
+9	9	17h ago	—	
+
+Howard University
+T2
+Working
+25	25	17h ago	—	
+
+University of South Alabama
+T2
+Working
+29	29	17h ago	—	
+
+Boston College
+T2
+Working
+51	45	17h ago	—	
+
+UMass Amherst
+T2
+Working
+41	41	17h ago	—	
+
+Cal Poly San Luis Obispo
+T2
+Working
+29	1	17h ago	—	
+
+Boston Children's Hospital
+T2
+Working
+140	139	17h ago	—	
+
+University of New South Wales
+T2
+Working
+14	14	17h ago	—	
+
+Loughborough University
+T2
+Working
+2	2	17h ago	—	
+
+University of Ottawa
+T2
+Working
+11	11	17h ago	—	
+
+University of Nottingham
+T2
+Working
+8	8	17h ago	—	
+
+University of Surrey
+T2
+Working
+2	2	17h ago	—	
+
+Yeda Research and Development
+T3
+Working
+106	105	17h ago	—	
+
+CSIRO
+T4
+Working
+—	—	17h ago	—	
+
+Pacific Northwest National Laboratory
+T3
+Parser failure
+—	—	17h ago	—	
+
+Vanderbilt University
+T2
+Working
+106	106	17h ago	—	
+
+Saint Louis University
+T2
+Working
+127	106	17h ago	—	
+
+Cornell University
+T3
+Working
+1,570	1,012	17h ago	—	
+
+UC Davis
+T2
+Working
+1,276	623	17h ago	—	
+
+Columbia University
+T3
+Working
+1,259	448	17h ago	—	
+
+UC Irvine
+T2
+Working
+637	320	17h ago	—	
+
+University of Pennsylvania
+T3
+Working
+422	277	17h ago	—	
+
+Purdue University
+T3
+Working
+1,611	459	17h ago	—	
+
+Northwestern University
+T3
+Working
+768	403	17h ago	—	
+
+CZ Biohub
+T2
+Working
+146	124	17h ago	—	
+
+Arizona State University
+T3
+Working
+1,270	344	17h ago	—	
+
+La Trobe University
+T2
+Working
+1	1	5h ago	—	
+
+Queen's University Belfast
+T2
+Working
+—	—	5h ago	—	
+
+Walter and Eliza Hall Institute of Medical Research
+T1
+Working
+5	5	5h ago	—	
+
+University of Guelph
+T1
+Working
+10	10	5h ago	—	
+
+Institut Curie
+T1
+Working
+32	32	5h ago	—	
+
+Kansas City National Security Campus
+T1
+Working
+1	1	5h ago	—	
+
+National Renewable Energy Laboratory
+T1
+Working
+40	40	5h ago	—	
+
+Washington University in St. Louis
+T3
+Working
+666	508	4h ago	—	
+
+National Energy Technology Laboratory
+T1
+Working
+2	2	4h ago	—	
+
+SLAC National Accelerator Laboratory
+T1
+Working
+4	4	4h ago	—	
+
+Savannah River National Laboratory
+T1
+Working
+9	9	4h ago	—	
+
+University of Washington
+T3
+Working
+435	14	4h ago	—	
+
+University of Michigan
+T3
+Working
+387	382	4h ago	—	
+
+Johns Hopkins University
+T3
+Working
+2,343	1,695	4h ago	—	
+
+Fermi National Accelerator Laboratory
+T1
+Working
+1	1	4h ago	—	
+
+Ames Laboratory
+T1
+Working
+6	6	4h ago	—	
+
+Thomas Jefferson National Accelerator Facility
+T1
+Working
+8	8	4h ago	—	
+
+Y-12 National Security Complex
+T1
+Working
+—	—	4h ago	—	
+
+University of New Mexico
+T3
+Working
+210	210	4h ago	—	
+
+UC San Francisco
+T3
+Working
+1	1	4h ago	—	
+
+Houston Methodist Research Institute
+T3
+Working
+22	22	4h ago	—	
+
+The Hospital for Sick Children (SickKids)
+T3
+Working
+17	17	4h ago	—	
+
+Oklahoma State University
+T3
+Working
+65	65	4h ago	—	
+
+University of Vienna
+T3
+Working
+8	8	4h ago	—	
+
+University of Rhode Island
+T3
+Working
+45	16	4h ago	—	
+
+Norinnova
+T3
+Working
+9	9	4h ago	—	
+
+EMBLEM Technology Transfer (EMBL)
+T3
+Working
+18	18	4h ago	—	
+
+University of Delaware
+T3
+Working
+220	90	4h ago	—	
+
+University of North Texas Health Science Center
+T3
+Working
+9	9	4h ago	—	
+
+Qatar University
+T3
+Working
+9	9	4h ago	—	
+
+Holland Bloorview Kids Rehabilitation Hospital
+T3
+Working
+—	—	4h ago	—	
+
+Benaroya Research Institute
+T3
+Working
+6	6	4h ago	—	
+
+La Jolla Institute for Immunology
+T3
+Working
+17	17	4h ago	—	
+
+Henry M. Jackson Foundation for the Advancement of Military Medicine
+T3
+Working
+41	41	4h ago	—	
+
+Dartmouth College
+T1
+Parser failure
+16	9	4h ago	—	
+
+Duke University
+T3
+Parser failure
+7	7	4h ago	—	
+
+Lankenau Institute for Medical Research
+T3
+Working
+29	29	4h ago	—	
+
+University of Pittsburgh
+T3
+Working
+1,235	894	4h ago	—	
+
+MD Anderson Cancer Center
+T3
+Parser failure
+—	—	4h ago	—	
+
+Sanford Health Innovation
+T1
+Working
+8	8	4h ago	—	
+
+University of Chicago
+T3
+Working
+255	204	4h ago	—	
+
+University of Texas
+T3
+Working
+226	224	4h ago	—	
+
+University of Colorado
+T3
+Working
+7	—	4h ago	—	
+
+Emory University
+T3
+Working
+452	371	4h ago	—	
+
+University of Minnesota
+T3
+Working
+776	302	4h ago	—	
+
+University of Illinois
+T3
+Working
+503	131	4h ago	—	
+
+University of Cambridge
+T3
+Working
+21	4	4h ago	—	
+
+UT Health
+T3
+Working
+56	46	4h ago	—	
+
+Florida State University
+T3
+Working
+86	59	4h ago	—	
+
+New Jersey Institute of Technology
+T3
+Working
+110	37	4h ago	—	
+
+Yale University
+T3
+Working
+243	166	4h ago	—	
+
+Medical University of South Carolina
+T3
+Working
+55	48	4h ago	—	
+
+Penn State University
+T3
+Working
+421	157	3h ago	—	
+
+IMEC
+T3
+Working
+—	—	3h ago	—	
+
+Brandeis University
+T1
+Working
+143	103	3h ago	—	
+
+Scripps Research
+T3
+Working
+22	15	3h ago	—	
+
+Translational Genomics Research Institute
+T3
+Working
+32	32	3h ago	—	
+
+University of South Dakota
+T3
+Working
+17	4	3h ago	—	
+
+Universidad Complutense de Madrid
+T3
+Working
+59	59	3h ago	—	
+
+Tufts University
+T2
+Working
+113	62	3h ago	—	
+
+Harvard University
+T3
+Working
+266	143	3h ago	—	
+
+Max Planck Innovation
+T1
+Working
+63	60	3h ago	—	
+
+Ohio State University
+T3
+Working
+40	39	3h ago	—	
+
+SUNY System
+T3
+Working
+743	280	3h ago	—	
+
+University of Arkansas
+T3
+Working
+173	62	1h ago	—	
+
+UMass Lowell
+T3
+Working
+18	18	1h ago	—	
+
+University of Illinois Chicago
+T3
+Working
+102	102	1h ago	—	
+
+Queen Mary University of London
+T3
+Working
+16	16	1h ago	—	
+
+UNC Charlotte
+T3
+Working
+14	14	1h ago	—	
+
+UMass Medical School
+T3
+Working
+62	62	1h ago	—	
+
+Polytechnic University of Valencia
+T3
+Working
+13	13	1h ago	—	
+
+Brock University
+T3
+Working
+3	3	1h ago	—	
+
+NOVA University Lisbon
+T3
+Working
+12	12	1h ago	—	
+
+Salk Institute for Biological Studies
+T3
+Working
+19	19	1h ago	—	
+
+Rutgers University
+T2
+Working
+591	323	1h ago	—	
+
+UCLA
+T2
+Working
+1,563	1,300	1h ago	—	
+
+Stony Brook University
+T2
+Working
+258	80	1h ago	—	
+
+MIT
+T3
+Working
+897	688	1h ago	—	
+
+Memorial Sloan Kettering Cancer Center
+T3
+Working
+48	48	1h ago	—	
+
+Montana State University
+T3
+Working
+17	2	1h ago	—	
+
+University of Nevada, Las Vegas
+T3
+Working
+144	36	1h ago	—	
+
+North Dakota State University
+T3
+Working
+195	14	1h ago	—	
+
+Icahn School of Medicine at Mount Sinai
+T3
+Working
+108	95	1h ago	—	
+
+Indiana University
+T3
+Working
+344	244	1h ago	—	
+
+Texas Tech University
+T1
+Working
+245	110	1h ago	—	
+
+University of North Dakota
+T3
+Working
+22	3	1h ago	—	
+
+Simon Fraser University
+T3
+Working
+15	—	1h ago	—	
+
+LaunchTN
+T3
+Working
+4	4	1h ago	—	
+
+Thomas Jefferson University
+T3
+Working
+43	43	1h ago	—	
+
+Portland State University
+T3
+Working
+24	5	1h ago	—	
+
+University of Notre Dame
+T3
+Working
+116	56	1h ago	—	
+
+University of Manitoba
+T3
+Working
+48	22	1h ago	—	
+
+University of Manchester
+T3
+Working
+15	6	1h ago	—	
+
+ETH Zurich
+T3
+Working
+28	10	1h ago	—	
+
+University of Helsinki
+T3
+Working
+27	19	1h ago	—	
+
+Aalto University
+T3
+Working
+27	2	1h ago	—	
+
+Tampere University
+T3
+Working
+28	9	1h ago	—	
+
+Ludwig Maximilian University of Munich
+T3
+Working
+17	15	1h ago	—	
+
+RWTH Aachen University
+T3
+Working
+48	14	1h ago	—	
+
+University of Toronto
+T3
+Working
+72	45	1h ago	—	
+
+Western University
+T3
+Working
+53	20	1h ago	—	
+
+Queen's University
+T3
+Working
+54	31	1h ago	—	
+
+University of Alberta
+T3
+Working
+51	21	1h ago	—	
+
+Beth Israel Deaconess Medical Center
+T3
+Working
+231	230	1h ago	—	
+
+Mayo Clinic
+T3
+Working
+1	1	1h ago	—	
+
+South Dakota State University
+T2
+Working
+1	1	1h ago	—	
+
+UC Berkeley
+T3
+Working
+819	522	40m ago	—	
+
+UC San Diego
+T3
+Working
+1,204	805	40m ago	—	
+
+Georgetown University
+T3
+Working
+176	140	39m ago	—	
+
+Albert Einstein College of Medicine
+T1
+Working
+90	90	39m ago	—	
+
+University of Wisconsin
+T3
+Working
+1,513	713	17m ago	—	
+
+Boston University
+T3
+Working
+52	52	17m ago	—	
+
+NYU Langone
+T3
+Working
+214	213	16m ago	—	
+
+Kyoto University (TLO)
+T3
+Working
+21	21	16m ago	—	
+
+University of Liverpool
+T3
+Working
+47	23	16m ago	—	
+
+King's College London
+T3
+Working
+55	39	16m ago	—	
+
+Durham University
+T3
+Working
+18	11	16m ago	—	
+
+Southern Methodist University
+T3
+Working
+12	11	16m ago	—	
+
+Griffith University
+T3
+Working
+30	24	16m ago	—	
+
+University of Alabama at Birmingham
+T3
+Working
+240	239	16m ago	—	
+
+Southern Illinois University System
+T3
+Working
+26	23	16m ago	—	
+
+LSU Innovation and Technology Commercialization
+T3
+Working
+35	29	16m ago	—	
+
+CERCA
+T3
+Working
+75	75	16m ago	—	
+
+University of Hawaii
+T3
+Working
+41	16	16m ago	—	
+
+Trinity College Dublin
+T3
+Working
+28	16	16m ago	—	
+
+Université Libre de Bruxelles
+T3
+Working
+5	4	15m ago	—	
+
+Nottingham Trent University
+T3
+Working
+17	8	15m ago	—	
+
+University Health Network (Toronto)
+T3
+Working
+46	45	15m ago	—	
+
+King Abdullah University of Science and Technology
+T3
+Working
+21	21	15m ago	—	
+
+KCV
+T3
+Working
+9	9	15m ago	—	
+
+NC A&T State University
+T3
+Working
+5	5	15m ago	—	
+
+Puerto Rico Science Trust
+T3
+Working
+39	39	15m ago	—	
+
+University of Maryland Baltimore County (UMBC)
+T3
+Working
+3	3	15m ago	—	
+
+Sacramento State (CSUS)
+T3
+Working
+1	1	15m ago	—	
+
+Loyola University Chicago
+T3
+Working
+3	3	15m ago	—	
+
+University of Missouri – Kansas City (UMKC)
+T3
+Working
+11	11	15m ago	—	
+
+Florida A&M University (FAMU)
+T3
+Working
+10	10	15m ago	—	
+
+University of Nebraska (UNeTech)
+T3
+Working
+—	—	15m ago	—	
+
+Ohio University
+T3
+Working
+7	7	15m ago	—	
+
+University of Memphis
+T3
+Working
+11	10	15m ago	—	
+
+University of Maryland (UMVentures)
+T3
+Working
+90	90	15m ago	—	
+
+University of Texas Rio Grande Valley (UTRGV)
+T3
+Working
+12	12	15m ago	—	
+
+Jackson State University
+T3
+Working
+—	—	15m ago	—	
+
+NIDDK (NIH)
+T3
+Working
+42	42	15m ago	—	
+
+Ferris State University
+T3
+Working
+—	—	15m ago	—	
+
+University of Nebraska Medical Center (UNEMED)
+T3
+Working
+44	44	14m ago	—	
+
+Brookhaven National Laboratory
+T3
+Working
+16	13	13m ago	—	
+
+Stanford University
+T3
+2x failed
+Syncing
+1,060	1,053	scraping	
+scraping
+Cancel
+UWM Research Foundation (UWMRF)
+T3
+Working
+12	11	3m ago	—	
+
+LifeArc
+T1
+Working
+9	9	2m ago	—	
+
+Los Alamos National Laboratory
+T3
+Parser failure
+—	—	just now	—	
+
+Rochester Institute of Technology (RIT)
+T3
+Working
+1	1	just now	—
