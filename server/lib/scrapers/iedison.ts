@@ -30,7 +30,8 @@
 
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { cleanText } from "./utils";
-import { loadAllScraperHealth } from "../scraperState";
+import { scraperDb as db } from "../../scraperDb";
+import { sql } from "drizzle-orm";
 
 const INST = "NIH iEdison";
 const BASE_URL = "https://iedison.nih.gov";
@@ -140,7 +141,7 @@ async function fetchJsonPage(
   toDate?: string,
   institution?: string,
   apiKey?: string,
-): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean }> {
+): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean; authError?: boolean }> {
   const params = new URLSearchParams({
     page: String(page),
     size: String(ROWS_PER_PAGE),
@@ -168,14 +169,16 @@ async function fetchJsonPage(
     });
 
     if (res.status === 404) {
-      // Endpoint not found -- signal HTML fallback
+      // Endpoint not found -- signal fallback
       return { records: [], hasMore: false, apiAvailable: false };
     }
     if (res.status === 401 || res.status === 403) {
-      // Auth required and no/invalid key -- signal HTML fallback only if no key was provided
-      if (!apiKey) return { records: [], hasMore: false, apiAvailable: false };
-      // With a key, treat auth errors as a hard failure (wrong key, not missing key)
-      console.warn(`[scraper] ${INST}: API auth error ${res.status} -- check IEDISON_API_KEY`);
+      if (apiKey) {
+        // Key was provided but rejected -- signal auth failure so the caller
+        // can handle it explicitly (logged + propagated, not silently dropped).
+        return { records: [], hasMore: false, apiAvailable: false, authError: true };
+      }
+      // No key -- API requires auth; signal fallback
       return { records: [], hasMore: false, apiAvailable: false };
     }
 
@@ -367,22 +370,27 @@ export const iEdisonScraper: InstitutionScraper = {
     const hardCap = new Date(toDate);
     hardCap.setMonth(hardCap.getMonth() - MAX_LOOKBACK_MONTHS);
 
-    // Incremental mode: if we have a prior successful run recorded in
-    // scraper_health, use the last success timestamp as fromDate so we only
-    // pull inventions disclosed since the last ingest cycle.
+    // Incremental mode: use MAX(last_seen_at) from ingested_assets for records
+    // from this institution as the fromDate. This is the most accurate cursor
+    // since it reflects actual ingested records, not just scrape operation
+    // timestamps. Falls back to the hard cap on the first run or on DB error.
     let fromDate = hardCap;
     try {
-      const healthMap = await loadAllScraperHealth();
-      const iEdisonHealth = healthMap.get(INST);
-      if (iEdisonHealth?.lastSuccessAt) {
-        const lastSuccess = iEdisonHealth.lastSuccessAt;
-        // Use lastSuccessAt only if it's more recent than the hard cap and in the past
-        if (lastSuccess > hardCap && lastSuccess < toDate) {
-          fromDate = lastSuccess;
+      const result = await db.execute(
+        sql`SELECT MAX(last_seen_at) AS max_last_seen
+            FROM ingested_assets
+            WHERE institution = ${INST}`
+      );
+      const maxLastSeen = (result.rows as any[])[0]?.max_last_seen;
+      if (maxLastSeen) {
+        const lastIngest = new Date(maxLastSeen);
+        // Use lastIngest only if it's more recent than the hard cap and in the past
+        if (lastIngest > hardCap && lastIngest < toDate) {
+          fromDate = lastIngest;
         }
       }
     } catch (err: any) {
-      console.warn(`[scraper] ${INST}: could not load scraper health for incremental date -- using hard cap: ${err?.message}`);
+      console.warn(`[scraper] ${INST}: could not query last_seen_at for incremental date -- using hard cap: ${err?.message}`);
     }
 
     const fromDateStr = fromDate.toISOString().slice(0, 10);  // YYYY-MM-DD
@@ -398,17 +406,52 @@ export const iEdisonScraper: InstitutionScraper = {
 
     // ── Phase 1: JSON API (authenticated when key present) ─────────────────
     let apiAvailable = true;
+    let apiAuthFailed = false;
     let page = 0;
 
     while (page < MAX_PAGES && apiAvailable) {
-      const { records, hasMore, apiAvailable: stillUp } = await fetchJsonPage(
+      const { records, hasMore, apiAvailable: stillUp, authError } = await fetchJsonPage(
         page, signal, fromDateStr, toDateStr, undefined, apiKey
       );
+      if (authError) {
+        // API key was explicitly rejected (401/403) -- log prominently and stop
+        // authenticated attempts. Fall through to public path without silently masking.
+        console.error(
+          `[scraper] ${INST}: IEDISON_API_KEY was rejected (HTTP 401/403). ` +
+          `Check that the key is valid and has not expired. ` +
+          `Falling back to public access -- operator action required.`
+        );
+        apiAuthFailed = true;
+        apiAvailable = false;
+        break;
+      }
       apiAvailable = stillUp;
       if (!apiAvailable) break;
       records.forEach(addUnique);
       if (!hasMore || records.length === 0) break;
       page++;
+    }
+
+    if (!apiAvailable) {
+      if (apiAuthFailed) {
+        // ── Phase 1b: Retry without key after auth failure ──────────────────
+        // Best-effort public access so data continues to flow while operator
+        // investigates the key issue. Logs already emitted above.
+        console.log(`[scraper] ${INST}: retrying with public (no-auth) access after key rejection`);
+        page = 0;
+        let publicApiAvailable = true;
+        while (page < MAX_PAGES && publicApiAvailable) {
+          const { records, hasMore, apiAvailable: stillUp } = await fetchJsonPage(
+            page, signal, fromDateStr, toDateStr, undefined, undefined
+          );
+          publicApiAvailable = stillUp;
+          if (!publicApiAvailable) break;
+          records.forEach(addUnique);
+          if (!hasMore || records.length === 0) break;
+          page++;
+        }
+        apiAvailable = publicApiAvailable;
+      }
     }
 
     if (!apiAvailable) {
