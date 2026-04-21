@@ -125,17 +125,21 @@ function CollapsedSummary({ value }: { value: BuyerProfile }) {
   const visible = chips.slice(0, CHIP_LIMIT);
   const overflow = chips.length - visible.length;
   return (
-    <div className="flex flex-wrap gap-1 mt-1.5 px-0.5">
+    <div className="flex flex-wrap gap-1 mt-1.5 px-0.5" data-testid="deal-focus-summary">
       {visible.map((chip) => (
         <span
           key={chip}
+          data-testid={`chip-focus-${chip.replace(/\s+/g, "-").toLowerCase()}`}
           className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize font-medium"
         >
           {chip}
         </span>
       ))}
       {overflow > 0 && (
-        <span className="text-[10px] px-2 py-0.5 rounded-full bg-card border border-card-border text-muted-foreground">
+        <span
+          className="text-[10px] px-2 py-0.5 rounded-full bg-card border border-card-border text-muted-foreground"
+          data-testid="chip-focus-overflow"
+        >
           +{overflow} more
         </span>
       )}
