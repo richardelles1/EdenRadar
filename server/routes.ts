@@ -2549,17 +2549,18 @@ export async function registerRoutes(
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
-      const [coverage, embeddingCoverage, latest, needingDeepEnrich] = await Promise.all([
+      const [coverage, embeddingCoverage, latest, breakdown] = await Promise.all([
         storage.getDeepEnrichmentCoverage(),
         storage.getEmbeddingCoverage(),
         storage.getLatestDeepEnrichmentJob(),
-        storage.getAssetsNeedingDeepEnrichCount(),
+        storage.getAssetsNeedingDeepEnrichBreakdown(),
       ]);
       res.json({
         coverage,
         embeddingCoverage,
         latestJob: latest ?? null,
-        needingDeepEnrich,
+        needingDeepEnrich: breakdown.total,
+        breakdown,
         live: edenRunning ? { processed: edenProcessed, total: edenTotal } : null,
       });
     } catch (err: any) {
@@ -2572,8 +2573,11 @@ export async function registerRoutes(
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
-      const assets = await storage.getAssetsNeedingDeepEnrich();
-      if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0 });
+      const [assets, breakdown] = await Promise.all([
+        storage.getAssetsNeedingDeepEnrich(),
+        storage.getAssetsNeedingDeepEnrichBreakdown(),
+      ]);
+      if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0, breakdown: { fresh: 0, legacy: 0, lowQualityRetry: 0, total: 0 } });
 
       edenTotal = assets.length;
       edenProcessed = 0;
@@ -2586,7 +2590,7 @@ export async function registerRoutes(
       const job = await storage.createDeepEnrichmentJob(assets.length);
       edenJobId = job.id;
 
-      res.json({ message: "Deep enrichment started", jobId: job.id, total: assets.length });
+      res.json({ message: "Deep enrichment started", jobId: job.id, total: assets.length, breakdown });
 
       deepEnrichBatch(
         assets.map((a) => ({

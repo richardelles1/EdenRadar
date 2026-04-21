@@ -1398,23 +1398,37 @@ export class DatabaseStorage implements IStorage {
         sourceUrl: ingestedAssets.sourceUrl,
       })
       .from(ingestedAssets)
-      // Re-enrichment contract: enrichedAt IS NULL is the single signal that drives re-enrichment.
-      // It is reset to null by: (1) URL-dedup update path when contentHash changes,
-      // (2) changedFps update block when contentHash changes, (3) fresh inserts (default null).
-      // No separate needs_enrichment flag is used — enrichedAt IS NULL covers all cases.
+      // Three finite, non-overlapping selection buckets. Each asset will only ever
+      // fall into one bucket; once it exits all three it is never re-selected.
+      //
+      // Bucket A — fresh/reset (enrichedAt IS NULL):
+      //   Covers: new inserts (default null) and content-change resets
+      //   (bulkUpsertIngestedAssets clears enrichedAt when contentHash changes).
+      //
+      // Bucket B — legacy (completenessScore IS NULL AND enrichedAt IS NOT NULL):
+      //   Covers: assets enriched before completeness scoring was introduced.
+      //   These have enrichedAt set but no score recorded.
+      //
+      // Bucket C — low-quality retry (completenessScore < 15 AND enrichedAt IS NOT NULL):
+      //   Covers: assets that received enrichedAt but produced a near-zero score
+      //   (e.g., thin-content stub that later gained an abstract).
+      //   Threshold: score < 15 means not even one standard field was filled
+      //   (target/modality/indication each contribute 15 pts; a legitimate result
+      //   that extracted one field cleanly will score >= 15 and exit this bucket).
       .where(
         and(
           eq(ingestedAssets.relevant, true),
           or(
-            // Content changed and enrichedAt was reset → re-enrich even if deep fields are populated
             isNull(ingestedAssets.enrichedAt),
-            isNull(ingestedAssets.completenessScore),
-            sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
-            sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
-            sql`(${ingestedAssets.unmetNeed} IS NULL OR ${ingestedAssets.unmetNeed} = '')`,
-            sql`(${ingestedAssets.comparableDrugs} IS NULL OR ${ingestedAssets.comparableDrugs} = '')`,
-            sql`(${ingestedAssets.ipType} IS NULL OR ${ingestedAssets.ipType} = 'unknown')`,
-            sql`(${ingestedAssets.licensingReadiness} IS NULL OR ${ingestedAssets.licensingReadiness} = 'unknown')`,
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              isNull(ingestedAssets.completenessScore),
+            ),
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              sql`${ingestedAssets.completenessScore} IS NOT NULL`,
+              sql`${ingestedAssets.completenessScore} < 15`,
+            ),
           ),
         ),
       );
@@ -1428,18 +1442,44 @@ export class DatabaseStorage implements IStorage {
         and(
           eq(ingestedAssets.relevant, true),
           or(
-            isNull(ingestedAssets.enrichedAt), // Aligns with getAssetsNeedingDeepEnrich enqueue criteria
-            isNull(ingestedAssets.completenessScore),
-            sql`(${ingestedAssets.mechanismOfAction} IS NULL OR ${ingestedAssets.mechanismOfAction} = '')`,
-            sql`(${ingestedAssets.innovationClaim} IS NULL OR ${ingestedAssets.innovationClaim} = '')`,
-            sql`(${ingestedAssets.unmetNeed} IS NULL OR ${ingestedAssets.unmetNeed} = '')`,
-            sql`(${ingestedAssets.comparableDrugs} IS NULL OR ${ingestedAssets.comparableDrugs} = '')`,
-            sql`(${ingestedAssets.ipType} IS NULL OR ${ingestedAssets.ipType} = 'unknown')`,
-            sql`(${ingestedAssets.licensingReadiness} IS NULL OR ${ingestedAssets.licensingReadiness} = 'unknown')`,
+            isNull(ingestedAssets.enrichedAt),
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              isNull(ingestedAssets.completenessScore),
+            ),
+            and(
+              sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
+              sql`${ingestedAssets.completenessScore} IS NOT NULL`,
+              sql`${ingestedAssets.completenessScore} < 15`,
+            ),
           ),
         ),
       );
     return row?.count ?? 0;
+  }
+
+  async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; total: number }> {
+    const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; total: number }>(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                AS fresh,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int             AS legacy,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15)::int AS low_quality_retry,
+        COUNT(*)::int                                                                                   AS total
+      FROM ingested_assets
+      WHERE relevant = true
+        AND (
+          enriched_at IS NULL
+          OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15)
+        )
+    `);
+    const row = result.rows[0];
+    return {
+      fresh: Number(row?.fresh ?? 0),
+      legacy: Number(row?.legacy ?? 0),
+      lowQualityRetry: Number(row?.low_quality_retry ?? 0),
+      total: Number(row?.total ?? 0),
+    };
   }
 
   async updateIngestedAssetDeepEnrichment(id: number, data: {

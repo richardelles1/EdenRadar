@@ -1,3 +1,50 @@
+// ── LLM pipeline overview ──────────────────────────────────────────────────
+//
+// This module is the primary orchestrator for all AI calls in the data pipeline.
+// There are exactly FOUR LLM call-sites; each is documented with its model, cost
+// tier, and trigger condition.
+//
+// PATH 1 — Staging pre-filter  (gpt-4o-mini, CHEAP)
+//   Location : relevancePreFilter.ts :: preFilterBatch()
+//   Trigger  : Called from runIngestionPipeline() on the raw scraper output
+//              BEFORE any data is written to the database.
+//   Purpose  : Coarse binary gate — removes obviously non-biotech listings
+//              (IT software, administrative posts, real-estate, etc.).
+//   Cost     : ~$0.00002 / asset (mini-tier, single yes/no classification).
+//
+// PATH 2 — Ingestion classifier  (gpt-4o-mini, CHEAP)
+//   Location : classifyAsset.ts :: classifyBatch()
+//   Trigger  : Called inside runIngestionPipeline() for ONLY the net-new assets
+//              returned by bulkUpsertIngestedAssets (i.e. assets not yet in DB).
+//   Purpose  : Enriches new assets with target, modality, indication,
+//              developmentStage, biotechRelevant flag, and completenessScore.
+//              Marks irrelevant assets so fingerprints are retained and the asset
+//              is never re-discovered and re-enriched on subsequent scans.
+//   Cost     : ~$0.00005 / asset (mini-tier, structured extraction).
+//
+// PATH 3 — Sync enrichment  (gpt-4o-mini, CHEAP)
+//   Location : enrichAsset.ts :: enrichBatch()
+//   Trigger  : Called inside runInstitutionSync() for net-new staging rows only.
+//   Purpose  : Lightweight relevance + field extraction for the sync preview
+//              (shown in the sync panel before the operator pushes to the index).
+//   Cost     : ~$0.00005 / asset (mini-tier, same structured extraction).
+//
+// PATH 4 — Deep enrichment  (gpt-4o, EXPENSIVE)
+//   Location : deepEnrichBatch.ts :: deepEnrichBatch()
+//   Trigger  : Manually triggered by the operator via POST /api/admin/eden/enrich.
+//              Only selects assets in one of three finite buckets:
+//              (A) enrichedAt IS NULL — fresh inserts and content-change resets,
+//              (B) completenessScore IS NULL AND enrichedAt IS NOT NULL — legacy,
+//              (C) completenessScore < 15 AND enrichedAt IS NOT NULL — thin-content.
+//              Once an asset has enrichedAt set AND completenessScore >= 15 it is
+//              NEVER re-selected unless content changes reset enrichedAt to NULL.
+//   Purpose  : Extracts MoA, innovationClaim, unmetNeed, comparableDrugs,
+//              licensingReadiness, ipType, and overwrites the mini-tier fields
+//              with higher-fidelity extraction.
+//   Cost     : ~$0.001 / asset (4o-tier, full structured extraction with context).
+//
+// ────────────────────────────────────────────────────────────────────────────
+
 import { storage } from "../storage";
 import { runAllScrapers, ALL_SCRAPERS, type ScrapedListing } from "./scrapers/index";
 import { enrichBatch } from "./scrapers/enrichAsset";

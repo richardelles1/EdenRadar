@@ -4928,11 +4928,19 @@ type EdenEmbeddingCoverage = {
   totalEmbedded: number;
 };
 
+type EnrichBreakdown = {
+  fresh: number;
+  legacy: number;
+  lowQualityRetry: number;
+  total: number;
+};
+
 type EdenStatsResponse = {
   coverage: EdenCoverage;
   embeddingCoverage: EdenEmbeddingCoverage;
   latestJob: { id: number; total: number; processed: number; status: string; startedAt: string; completedAt: string | null } | null;
   needingDeepEnrich?: number;
+  breakdown?: EnrichBreakdown;
   live: { processed: number; total: number } | null;
 };
 
@@ -5254,7 +5262,8 @@ function EdenTab({ pw }: { pw: string }) {
   const live = status?.running ? status : stats?.live ? { running: true, processed: stats.live.processed, total: stats.live.total, succeeded: 0, failed: 0 } : null;
   const pct = live && live.total > 0 ? Math.round((live.processed / live.total) * 100) : null;
   const deepPct = cov && cov.totalRelevant > 0 ? Math.round((cov.deepEnriched / cov.totalRelevant) * 100) : 0;
-  const remaining = stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
+  const breakdown = stats?.breakdown;
+  const remaining = breakdown?.total ?? stats?.needingDeepEnrich ?? (cov ? cov.totalRelevant - cov.deepEnriched : 0);
   const estCostUsd = remaining > 0 ? (remaining * 0.0012).toFixed(0) : "0";
   const embPct = emb && emb.totalRelevant > 0 ? Math.round((emb.totalEmbedded / emb.totalRelevant) * 100) : 0;
   const embRemaining = emb ? emb.totalRelevant - emb.totalEmbedded : 0;
@@ -5757,10 +5766,33 @@ function EdenTab({ pw }: { pw: string }) {
             {/* Run enrichment */}
             <div data-testid="card-eden-run">
               <h4 className="text-xs font-semibold text-foreground mb-1">Deep Enrichment Blitz</h4>
-              <p className="text-xs text-muted-foreground mb-3">
-                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs &amp; Licensing Readiness for {remaining.toLocaleString()} assets with incomplete deep-enrichment fields.
-                Estimated cost: <span className="font-semibold text-foreground">~${estCostUsd}</span>.
+              <p className="text-xs text-muted-foreground mb-2">
+                GPT-4o extracts MoA, Innovation Claim, Unmet Need, Comparable Drugs and Licensing Readiness.
+                <span className="ml-1 font-semibold text-foreground">{remaining.toLocaleString()} assets</span> queued
+                {remaining > 0 && <> at <span className="font-semibold text-foreground">~$0.001/asset</span> = ~<span className="font-semibold text-foreground">${estCostUsd}</span></>}.
               </p>
+              {breakdown && remaining > 0 && (
+                <div className="flex flex-wrap gap-2 mb-3" data-testid="enrich-breakdown">
+                  {breakdown.fresh > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-blue-500/8 border-blue-500/20 text-blue-700 dark:text-blue-400" data-testid="breakdown-fresh">
+                      <span className="h-1.5 w-1.5 rounded-full bg-blue-500 inline-block" />
+                      {breakdown.fresh.toLocaleString()} fresh
+                    </span>
+                  )}
+                  {breakdown.legacy > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-amber-500/8 border-amber-500/20 text-amber-700 dark:text-amber-400" data-testid="breakdown-legacy">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-400 inline-block" />
+                      {breakdown.legacy.toLocaleString()} legacy
+                    </span>
+                  )}
+                  {breakdown.lowQualityRetry > 0 && (
+                    <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border bg-orange-500/8 border-orange-500/20 text-orange-700 dark:text-orange-400" data-testid="breakdown-low-quality">
+                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400 inline-block" />
+                      {breakdown.lowQualityRetry.toLocaleString()} low-score retry
+                    </span>
+                  )}
+                </div>
+              )}
               {!confirming ? (
                 <Button onClick={() => setConfirming(true)} disabled={live != null || remaining === 0} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-run">
                   <PlayCircle className="h-3.5 w-3.5 mr-1.5" />
@@ -5768,7 +5800,7 @@ function EdenTab({ pw }: { pw: string }) {
                 </Button>
               ) : (
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="text-xs font-semibold text-amber-600">Consume ~${estCostUsd}? Confirm?</p>
+                  <p className="text-xs font-semibold text-amber-600">Use ~${estCostUsd} of GPT-4o budget?</p>
                   <Button onClick={() => startMutation.mutate()} disabled={startMutation.isPending} className="bg-emerald-600 hover:bg-emerald-700 text-white h-8 text-xs" data-testid="button-eden-confirm">
                     {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
                     Yes, Run
