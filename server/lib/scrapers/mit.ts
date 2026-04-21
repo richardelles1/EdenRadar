@@ -5,7 +5,12 @@ import { enrichWithDetailPages } from "./detailFetcher";
 const BASE = "https://tlo.mit.edu";
 const INST = "MIT";
 const LIST_PATH = "/industry-entrepreneurs/available-technologies";
-const LIST_FILTER = "search_api_fulltext=&license_status%5BU%5D=U";
+// Do NOT add license_status filter here — it restricts to ~100 items (status "U" only)
+// and cuts ~90% of the MIT TLO catalog. Probed 2026-04-21: without filter the catalog
+// has 800+ listings across 40+ pages of 20 items each; all statuses (available,
+// negotiating, licensed, etc.) are useful for discovery. Status labels are enriched
+// from detail pages by enrichWithDetailPages below.
+const LIST_FILTER = "search_api_fulltext=";
 
 // How many pages to probe in parallel per window.
 // MIT fits in one window (page 0 + window 1-20). Large sites need 2-3 windows.
@@ -120,6 +125,8 @@ export const mitScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings total, enriching details...`);
 
       // Step 3: enrich detail pages for listings that lack a good description.
+      // MIT TLO catalog verified 2026-04-21: ~800+ listings across 40+ pages
+      // (20 items/page, no filter). Cap at 1000 to stay within scrape budget.
       await enrichWithDetailPages(results, {
         description: [
           ".tech-brief-body__inner",
@@ -140,7 +147,7 @@ export const mitScraper: InstitutionScraper = {
           ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
-      }, 500, signal);
+      }, 1000, signal);
 
       console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;
