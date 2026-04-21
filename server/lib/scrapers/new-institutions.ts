@@ -1,7 +1,7 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
-import { fetchHtml, fetchHtmlViaProxy, cleanText, SiteHttpError } from "./utils";
+import { fetchHtml, fetchHtmlViaProxy, fetchJson, cleanText, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
@@ -629,8 +629,62 @@ export const idahoScraper = createTechPublisherScraper(
 
 // ── New US: verified working TechPublisher slugs ─────────────────────────
 export const uafScraper = createTechPublisherScraper("uaf", "University of Alaska Fairbanks", { maxPg: 20 });
-export const sdstateScraper = createTechPublisherScraper("sdstate", "South Dakota State University", { maxPg: 30 });
-export const olemissScraper = createTechPublisherScraper("olemiss", "University of Mississippi", { maxPg: 30 });
+
+// South Dakota State University — re-investigated 2026-04-21
+// TechPublisher slug "sdstate" returns 0 results (slug uses non-standard /site/tXXXXX.html
+// pages not /tech/ links that createTechPublisherScraper expects).
+// SDSU's TTO site at sdstate.technologypublisher.com/site/summaryoftechnologies.html lists
+// all available technologies with absolute HTTP links to /site/tXXXXX.html detail pages.
+// 4 confirmed listings: t00006, t00017, t00134, t00139.
+export const sdstateScraper: InstitutionScraper = {
+  institution: "South Dakota State University",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const indexUrl = "https://sdstate.technologypublisher.com/site/summaryoftechnologies.html";
+    const $ = await fetchHtml(indexUrl, 15000, signal, 1, true);
+    if (!$) return [];
+
+    // Links use absolute HTTP URLs: http://sdstate.technologypublisher.com/site/t00006.html
+    const stubs: Array<{ url: string }> = [];
+    const seen = new Set<string>();
+    $('a[href]').each((_, el) => {
+      const href = $(el).attr("href") ?? "";
+      // Match absolute or relative URLs pointing to individual tech pages (t00006, t00017…)
+      if (!/\/site\/t\d+\.html/.test(href)) return;
+      // Normalise to HTTPS
+      const fullUrl = href.replace(/^http:\/\//i, "https://").replace(/^\//, "https://sdstate.technologypublisher.com/");
+      if (seen.has(fullUrl)) return;
+      seen.add(fullUrl);
+      stubs.push({ url: fullUrl });
+    });
+
+    const results: ScrapedListing[] = [];
+    await Promise.all(stubs.map(async (s) => {
+      const detail = await fetchHtml(s.url, 12000, signal, 1);
+      if (!detail) return;
+      // Title is in the <h2> anchor (e.g. "T-00006: Carbohydrate Ruminant Feed...")
+      const rawTitle = cleanText(detail("h2 a").first().text() || detail("h1, h2").first().text());
+      if (!rawTitle || rawTitle.length < 5) return;
+      // Strip the "T-XXXXX: " prefix to get a clean title
+      const title = rawTitle.replace(/^T-\d+:\s*/i, "");
+      const desc = cleanText(detail("p").first().text()).slice(0, 1000);
+      results.push({ title, description: desc, url: s.url, institution: "South Dakota State University" });
+    }));
+
+    console.log(`[scraper] South Dakota State University: ${results.length} listings`);
+    return results;
+  },
+};
+
+// University of Mississippi — re-investigated 2026-04-21
+// TechPublisher slug "olemiss" returns 0 results (no active listings).
+// All In-Part subdomain variants probed (olemiss, um, universityofmississippi, mississippi,
+// otcom) return HTTP 404 — no active In-Part portal exists.
+// olemiss.technologypublisher.com returns empty results (no listings).
+// No public enumerable tech-transfer listing portal found.
+export const olemissScraper = createStubScraper(
+  "University of Mississippi",
+  "no public TTO listing portal found — TechPublisher and In-Part portals both inactive (verified 2026-04-21)",
+);
 
 // ── New US: verified working TechPublisher slugs (international) ─────────
 // Leeds licensing storefront: https://licensing.leeds.ac.uk
@@ -1161,75 +1215,60 @@ export const indianaScraper = createFlintboxScraper(
   "Indiana University"
 );
 export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
-// WARF HTML crawl: /wp-json/warf/v1/technologies returns 404 — no REST API exists.
-// This approach scrapes category options from /commercialize/technologies/ then
-// concurrently fetches search results per-category. Verified: 1,525 listings (140 categories).
+// WARF — rewritten 2026-04-21 after site redesign removed the search endpoint
+// (/search-results/?search-technology=1 no longer returns tech-listing anchor links).
+// The WP REST API pages endpoint now serves curated technology portfolio pages
+// (42 pages) under /commercialize/technologies/ with title + excerpt available.
+// These are "WARF Advances" and Tech-Connect featured innovations — not the full
+// historical catalog of ~1,500 patents, but the only publicly accessible set.
+const WARF_SKIP_SLUGS = new Set([
+  "technologies",
+  "tech-connect",
+  "warf-advances-uw-madison-technology",
+]);
+
 export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
-    const base = "https://www.warf.org";
-    const techPageUrl = `${base}/commercialize/technologies/`;
-    const searchUrl = `${base}/search-results/?searchwp=&search-technology=1`;
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
+
     try {
-      const $index = await fetchHtml(techPageUrl, 15000, signal);
-      if (!$index) {
-        console.warn(`[scraper] University of Wisconsin (WARF): failed to load technologies page`);
-        return [];
+      // Enumerate all WP pages (3 pages × 100/page = up to 300 pages total)
+      for (let pg = 1; pg <= 3; pg++) {
+        if (signal?.aborted) break;
+        const data = await fetchJson<any[]>(
+          `https://www.warf.org/wp-json/wp/v2/pages?per_page=100&page=${pg}`,
+          20000,
+          signal,
+        );
+        if (!data || !Array.isArray(data) || data.length === 0) break;
+
+        for (const page of data) {
+          if (!page.link?.includes("/commercialize/technologies/")) continue;
+          if (WARF_SKIP_SLUGS.has(page.slug)) continue;
+          if (seen.has(page.link)) continue;
+          seen.add(page.link);
+
+          const title = cleanText((page.title?.rendered ?? "").replace(/<[^>]+>/g, ""));
+          if (!title || title.length < 3) continue;
+
+          // Prefer excerpt (short summary); fall back to first 400 chars of content
+          const rawExcerpt = (page.excerpt?.rendered ?? "").replace(/<[^>]+>/g, "");
+          const rawContent = (page.content?.rendered ?? "").replace(/<[^>]+>/g, "");
+          let description = cleanText(rawExcerpt || rawContent).replace(/Read More\s*$/, "").trim();
+          description = description.slice(0, 1000);
+
+          results.push({
+            title,
+            url: page.link,
+            description,
+            institution: "University of Wisconsin",
+          });
+        }
       }
-      const categories: string[] = [];
-      $index("select option").each((_, el) => {
-        const val = $index(el).attr("value") ?? "";
-        if (val && val.length > 2) {
-          categories.push(val);
-        }
-      });
-      const catSet = new Set(categories);
-      const uniqueCats = Array.from(catSet);
-      console.log(`[scraper] University of Wisconsin (WARF): found ${uniqueCats.length} categories, fetching...`);
 
-      const CONCURRENCY = 5;
-      const CAT_PAGE_CEIL = 10; // per-category page ceiling (runaway guard)
-      let catIdx = 0;
-      const worker = async () => {
-        while (catIdx < uniqueCats.length) {
-          if (signal?.aborted) return;
-          const cat = uniqueCats[catIdx++];
-          try {
-            // Adaptive pagination per category: fetch pages until an empty page
-            // is returned. Most categories fit on one page (~11 listings avg),
-            // but some may span multiple pages — we scan until empty.
-            for (let page = 1; page <= CAT_PAGE_CEIL; page++) {
-              const catUrl = page === 1
-                ? `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}`
-                : `${searchUrl}&s_tech_category=${encodeURIComponent(cat)}&paged=${page}`;
-              const $ = await fetchHtml(catUrl, 12000, signal);
-              if (!$) break;
-              let rawCount = 0;
-              $('a[href*="/technologies/summary/"]').each((_, el) => {
-                rawCount++;
-                const href = $(el).attr("href") ?? "";
-                const title = cleanText($(el).text());
-                if (!title || title.length < 5) return;
-                const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
-                if (seen.has(fullUrl)) return;
-                seen.add(fullUrl);
-                results.push({ title, description: "", url: fullUrl, institution: "University of Wisconsin" });
-              });
-              if (page > 1) {
-                console.log(`[scraper] University of Wisconsin (WARF): category "${cat}" page ${page} — ${rawCount} links, ${results.length} total`);
-              }
-              if (rawCount === 0) break; // empty page — no more results for this category
-            }
-          } catch {
-            continue;
-          }
-        }
-      };
-      await Promise.all(Array.from({ length: CONCURRENCY }, () => worker()));
-
-      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings scanned across ${uniqueCats.length} categories`);
+      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via WP REST API`);
       return results;
     } catch (err: any) {
       console.warn(`[scraper] University of Wisconsin (WARF): ${err?.message}`);
@@ -2481,65 +2520,60 @@ export const brookhavenScraper: InstitutionScraper = {
   },
 };
 
-// 4. LaunchTN
+// 4. LaunchTN — re-investigated 2026-04-21
 // available-technologies page (with curl UA to bypass WAF) embeds static First Ignite
 // (app.firstignite.com/public/listings/{UUID}) anchor pairs: (title, institution) per tech.
-// Fetches detail page at app.firstignite.com for description field.
+// First Ignite detail pages are JavaScript SPAs — fetchHtml gets an empty shell, so
+// description fetching is skipped. The 27 static pairs on the page are returned as-is.
+// A JetElements AJAX "load more" endpoint exists (?jkit-ajax-request=jkit_elements) but
+// requires JS execution — those additional listings are not included here.
 export const launchTNScraper: InstitutionScraper = {
   institution: "LaunchTN",
-  async scrape(): Promise<ScrapedListing[]> {
-    // Must use curl UA to bypass WAF; Chrome/Firefox UA gets 403
-    const cheerio = await import("cheerio");
-    const res = await fetch("https://launchtn.org/available-technologies/", {
-      signal: AbortSignal.timeout(15000),
-      redirect: "follow",
-      headers: { "User-Agent": "curl/7.88.1", "Accept": "text/html,*/*" },
-    });
-    if (!res.ok) return [];
-    const $ = cheerio.load(await res.text());
-    // Collect First Ignite listing links — every pair (even idx = title, odd idx = institution)
-    const links: Array<{ href: string; text: string }> = [];
-    $('a[href*="app.firstignite.com/public/listings/"]').each((_, el) => {
-      links.push({ href: $(el).attr("href") ?? "", text: cleanText($(el).text()) });
-    });
-    // Deduplicate by UUID — validate pairing: both links in a pair must share the same href
-    // (title-link and institution-link for each tech both point to the same UUID URL)
-    const seen = new Set<string>();
-    const stubs: Array<{ title: string; institution: string; url: string }> = [];
-    for (let i = 0; i + 1 < links.length; i += 2) {
-      const href = links[i].href;
-      const pairHref = links[i + 1]?.href ?? "";
-      // Guard: if pair hrefs differ, the alternating assumption is broken — skip
-      if (!href || seen.has(href) || href !== pairHref) continue;
-      const title = links[i].text;
-      const institution = links[i + 1].text || "LaunchTN";
-      if (!title || title.length < 5) continue;
-      seen.add(href);
-      stubs.push({ title, institution, url: href });
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    try {
+      // LaunchTN WAF blocks Chrome/Firefox UA; curl/7.88.1 passes (verified 2026-04-21)
+      const combinedSignal = signal
+        ? AbortSignal.any([AbortSignal.timeout(20000), signal])
+        : AbortSignal.timeout(20000);
+      const res = await fetch("https://launchtn.org/available-technologies/", {
+        signal: combinedSignal,
+        redirect: "follow",
+        headers: { "User-Agent": "curl/7.88.1", Accept: "text/html,*/*" },
+      });
+      if (!res.ok) {
+        console.warn(`[scraper] LaunchTN: HTTP ${res.status}`);
+        return [];
+      }
+      const { load } = await import("cheerio");
+      const $ = load(await res.text());
+      if (!$) return [];
+
+      // Collect First Ignite listing links — every pair (even idx = title, odd idx = institution)
+      const links: Array<{ href: string; text: string }> = [];
+      $('a[href*="app.firstignite.com/public/listings/"]').each((_, el) => {
+        links.push({ href: $(el).attr("href") ?? "", text: cleanText($(el).text()) });
+      });
+
+      // Deduplicate by UUID — validate pairing: both links in a pair must share the same href
+      const seen = new Set<string>();
+      const results: ScrapedListing[] = [];
+      for (let i = 0; i + 1 < links.length; i += 2) {
+        const href = links[i].href;
+        const pairHref = links[i + 1]?.href ?? "";
+        if (!href || seen.has(href) || href !== pairHref) continue;
+        const title = links[i].text;
+        const institution = links[i + 1].text || "LaunchTN";
+        if (!title || title.length < 5) continue;
+        seen.add(href);
+        results.push({ title, description: "", url: href, institution: `LaunchTN (${institution})` });
+      }
+
+      console.log(`[scraper] LaunchTN: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] LaunchTN: ${err?.message}`);
+      return [];
     }
-    // Fetch First Ignite detail pages for description (limit 5 concurrent)
-    const CONC = 5;
-    const results: ScrapedListing[] = [];
-    for (let i = 0; i < stubs.length; i += CONC) {
-      const batch = stubs.slice(i, i + CONC);
-      const settled = await Promise.allSettled(
-        batch.map(async (s) => {
-          const detail = await fetchHtml(s.url, 10000);
-          let description = "";
-          if (detail) {
-            detail("p").each((_, el) => {
-              const txt = cleanText(detail(el).text());
-              if (txt.length > description.length && txt.length > 30) description = txt;
-            });
-            description = description.slice(0, 400);
-          }
-          return { title: s.title, description, url: s.url, institution: `LaunchTN (${s.institution})` };
-        })
-      );
-      settled.forEach((r) => { if (r.status === "fulfilled") results.push(r.value); });
-    }
-    console.log(`[scraper] LaunchTN: ${results.length} listings`);
-    return results;
   },
 };
 
