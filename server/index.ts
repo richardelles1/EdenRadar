@@ -285,6 +285,7 @@ async function runStartupMigrations() {
     await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS technology_id TEXT`);
     await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS abstract TEXT`);
     await mdb.execute(sql`ALTER TABLE ingestion_runs ADD COLUMN IF NOT EXISTS relevant_new_count INTEGER NOT NULL DEFAULT 0`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS deep_enrich_attempts INTEGER NOT NULL DEFAULT 0`);
     log("[startup] ingested_assets enrichment columns ready", "startup");
   } catch (err: any) {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");

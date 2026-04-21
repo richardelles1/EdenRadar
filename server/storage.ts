@@ -1414,15 +1414,21 @@ export class DatabaseStorage implements IStorage {
       //   These have enrichedAt set but no score recorded.
       //
       // Bucket C — low-quality retry (completenessScore < 15 AND enrichedAt IS NOT NULL
-      //           AND deepEnrichAttempts = 0):
-      //   Covers: assets that received enrichedAt but produced a near-zero score
+      //           AND deepEnrichAttempts <= 1):
+      //   Covers: assets that produced a near-zero score on their first GPT-4o pass
       //   (e.g., thin-content stub that later gained an abstract).
       //   Threshold: score < 15 means not even one standard field was filled
       //   (target/modality/indication each contribute 15 pts; a legitimate result
       //   that extracted one field cleanly will score >= 15 and exit this bucket).
-      //   deepEnrichAttempts = 0 gate ensures each asset gets exactly ONE retry —
-      //   after processing, deepEnrichAttempts is incremented to 1 so this bucket
-      //   never re-selects the same asset even if score stays below 15.
+      //
+      //   Why <= 1 and not = 0:
+      //     - Every deep-enrich write (bucket A or B) increments deepEnrichAttempts (0→1).
+      //     - After the first pass, deepEnrichAttempts = 1.  If score is still < 15,
+      //       the asset enters bucket C (attempts = 1, which satisfies <= 1) for ONE retry.
+      //     - The retry increments deepEnrichAttempts to 2, permanently excluding the asset
+      //       (2 > 1).  Total: at most TWO GPT-4o calls per asset.
+      //     - Content-change resets both enrichedAt and deepEnrichAttempts to 0/null,
+      //       restarting the two-pass lifecycle for updated content.
       .where(
         and(
           eq(ingestedAssets.relevant, true),
@@ -1436,7 +1442,7 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              eq(ingestedAssets.deepEnrichAttempts, 0),
+              sql`${ingestedAssets.deepEnrichAttempts} <= 1`,
             ),
           ),
         ),
@@ -1460,7 +1466,7 @@ export class DatabaseStorage implements IStorage {
               sql`${ingestedAssets.enrichedAt} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} IS NOT NULL`,
               sql`${ingestedAssets.completenessScore} < 15`,
-              eq(ingestedAssets.deepEnrichAttempts, 0),
+              sql`${ingestedAssets.deepEnrichAttempts} <= 1`,
             ),
           ),
         ),
@@ -1471,16 +1477,16 @@ export class DatabaseStorage implements IStorage {
   async getAssetsNeedingDeepEnrichBreakdown(): Promise<{ fresh: number; legacy: number; lowQualityRetry: number; total: number }> {
     const result = await db.execute<{ fresh: number; legacy: number; low_quality_retry: number; total: number }>(sql`
       SELECT
-        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                              AS fresh,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                           AS legacy,
-        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts = 0)::int AS low_quality_retry,
-        COUNT(*)::int                                                                                                                  AS total
+        COUNT(*) FILTER (WHERE enriched_at IS NULL)::int                                                                               AS fresh,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NULL)::int                                            AS legacy,
+        COUNT(*) FILTER (WHERE enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 1)::int AS low_quality_retry,
+        COUNT(*)::int                                                                                                                   AS total
       FROM ingested_assets
       WHERE relevant = true
         AND (
           enriched_at IS NULL
           OR (enriched_at IS NOT NULL AND completeness_score IS NULL)
-          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts = 0)
+          OR (enriched_at IS NOT NULL AND completeness_score IS NOT NULL AND completeness_score < 15 AND deep_enrich_attempts <= 1)
         )
     `);
     const row = result.rows[0];

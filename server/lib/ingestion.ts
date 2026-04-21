@@ -36,12 +36,14 @@
 //              (A) enrichedAt IS NULL — fresh inserts and content-change resets,
 //              (B) completenessScore IS NULL AND enrichedAt IS NOT NULL — legacy,
 //              (C) completenessScore < 15 AND enrichedAt IS NOT NULL AND
-//                  deepEnrichAttempts = 0 — thin-content one-time retry.
-//              Bucket C assets get exactly ONE retry; deepEnrichAttempts is
-//              incremented to 1 after processing, permanently exiting the bucket.
-//              Once an asset exits all three buckets it is never re-selected
-//              unless content changes reset enrichedAt to NULL (and resets
-//              deepEnrichAttempts to 0 to allow fresh bucket-C eligibility).
+//                  deepEnrichAttempts <= 1 — low-score, at most one retry.
+//              Every deep-enrich write increments deepEnrichAttempts (0→1).
+//              After the first pass deepEnrichAttempts = 1, satisfying <= 1,
+//              so an asset with score < 15 enters bucket C for exactly ONE
+//              retry.  The retry increments to 2, permanently exiting bucket C.
+//              Total: at most 2 GPT-4o calls per asset lifetime.
+//              Content-change resets enrichedAt to NULL AND deepEnrichAttempts
+//              to 0, restarting the two-pass lifecycle for new content.
 //   Purpose  : Extracts MoA, innovationClaim, unmetNeed, comparableDrugs,
 //              licensingReadiness, ipType, and overwrites the mini-tier fields
 //              with higher-fidelity extraction.
