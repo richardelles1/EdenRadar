@@ -305,12 +305,21 @@ export const iEdisonScraper: InstitutionScraper = {
       if (!seen.has(key)) { seen.add(key); all.push(listing); }
     };
 
+    // Date-range constraint: last 12 months only (no unbounded backfill)
+    const toDate = new Date();
+    const fromDate = new Date(toDate);
+    fromDate.setFullYear(fromDate.getFullYear() - 1);
+    const fromDateStr = fromDate.toISOString().slice(0, 10);  // YYYY-MM-DD
+    const toDateStr = toDate.toISOString().slice(0, 10);
+
     // ── Phase 1: Try JSON API ───────────────────────────────────────────────
     let apiAvailable = true;
     let page = 0;
 
     while (page < MAX_PAGES && apiAvailable) {
-      const { records, hasMore, apiAvailable: stillUp } = await fetchJsonPage(page, signal);
+      const { records, hasMore, apiAvailable: stillUp } = await fetchJsonPage(
+        page, signal, fromDateStr, toDateStr
+      );
       apiAvailable = stillUp;
       if (!apiAvailable) break;
       records.forEach(addUnique);
@@ -332,7 +341,8 @@ export const iEdisonScraper: InstitutionScraper = {
 
     console.log(
       `[scraper] ${INST}: ${all.length} listings from ${page + 1} page(s) ` +
-      `via ${apiAvailable ? "JSON API" : "HTML fallback"}`
+      `via ${apiAvailable ? "JSON API" : "HTML fallback"} ` +
+      `(window: ${fromDateStr} to ${toDateStr})`
     );
 
     return all;

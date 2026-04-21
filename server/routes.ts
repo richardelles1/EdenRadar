@@ -1688,6 +1688,20 @@ export async function registerRoutes(
 
       const scheduler = getSchedulerStatus();
 
+      // ── FDA designation enrichment job health ────────────────────────────
+      const fdaHealth = await loadFdaDesignationHealth().catch(() => null);
+      const fdaDesignationJob = fdaHealth ? {
+        lastRunAt: fdaHealth.lastSuccessAt,
+        lastTaggedCount: fdaHealth.lastSuccessNewCount,
+        consecutiveFailures: fdaHealth.consecutiveFailures,
+        lastFailureReason: fdaHealth.lastFailureReason,
+        lastFailureAt: fdaHealth.lastFailureAt,
+        health: fdaHealth.consecutiveFailures >= 3 ? "failing"
+              : fdaHealth.consecutiveFailures >= 1 ? "warning"
+              : fdaHealth.lastSuccessAt ? "ok"
+              : "never",
+      } : { lastRunAt: null, lastTaggedCount: null, consecutiveFailures: 0, lastFailureReason: null, lastFailureAt: null, health: "never" };
+
       res.json({
         rows,
         activeSearchRows,
@@ -1699,6 +1713,7 @@ export async function registerRoutes(
         syncingCount,
         syncedToday,
         scheduler,
+        fdaDesignationJob,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch collector health" });
