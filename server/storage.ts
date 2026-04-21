@@ -75,7 +75,7 @@ export interface IStorage {
   deleteSavedAsset(id: number): Promise<void>;
 
   createAssetNote(data: InsertSavedAssetNote): Promise<SavedAssetNote>;
-  getAssetNotes(savedAssetId: number): Promise<SavedAssetNote[]>;
+  getAssetNotes(savedAssetId: number, limit?: number, offset?: number): Promise<SavedAssetNote[]>;
   getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>>;
 
   getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
@@ -456,12 +456,14 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getAssetNotes(savedAssetId: number): Promise<SavedAssetNote[]> {
+  async getAssetNotes(savedAssetId: number, limit = 50, offset = 0): Promise<SavedAssetNote[]> {
     return db
       .select()
       .from(savedAssetNotes)
       .where(eq(savedAssetNotes.savedAssetId, savedAssetId))
-      .orderBy(savedAssetNotes.createdAt);
+      .orderBy(savedAssetNotes.createdAt)
+      .limit(limit)
+      .offset(offset);
   }
 
   async getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>> {

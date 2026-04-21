@@ -917,7 +917,12 @@ export async function registerRoutes(
         }
         const memberId = req.query.memberId as string | undefined;
         const result = await storage.getSavedAssetsForTeam(userOrg.id, memberId || undefined);
-        return res.json({ assets: result.assets, members: result.members });
+        const teamIds = result.assets.map((a) => a.id);
+        const teamNoteCounts = await storage.getAssetNoteCounts(teamIds);
+        return res.json({
+          assets: result.assets.map((a) => ({ ...a, noteCount: teamNoteCounts[a.id] ?? 0 })),
+          members: result.members,
+        });
       }
 
       const rawPl = req.query.pipelineListId;
@@ -928,7 +933,9 @@ export async function registerRoutes(
         if (!isNaN(parsed)) pipelineListId = parsed;
       }
       const assets = await storage.getSavedAssets(pipelineListId, userId);
-      res.json({ assets });
+      const assetIds = assets.map((a) => a.id);
+      const noteCounts = await storage.getAssetNoteCounts(assetIds);
+      res.json({ assets: assets.map((a) => ({ ...a, noteCount: noteCounts[a.id] ?? 0 })) });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch saved assets" });
     }
@@ -973,6 +980,29 @@ export async function registerRoutes(
     }
   });
 
+  // ── Saved asset access guard ─────────────────────────────────────────────
+  async function canAccessSavedAsset(asset: { userId: string | null }, requestUserId: string | null): Promise<boolean> {
+    if (!requestUserId) return false;
+    if (asset.userId === requestUserId) return true;
+    // Allow access for teammates in the same org
+    if (asset.userId) {
+      const [assetOwnerOrg, requesterOrg] = await Promise.all([
+        storage.getOrgForUser(asset.userId),
+        storage.getOrgForUser(requestUserId),
+      ]);
+      if (assetOwnerOrg && requesterOrg && assetOwnerOrg.id === requesterOrg.id) return true;
+    }
+    return false;
+  }
+
+  const STATUS_LABELS: Record<string, string> = {
+    watching: "Watching",
+    evaluating: "Evaluating",
+    in_discussion: "In Discussion",
+    on_hold: "On Hold",
+    passed: "Passed",
+  };
+
   app.patch("/api/saved-assets/:id/status", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -985,28 +1015,22 @@ export async function registerRoutes(
 
       const before = await storage.getSavedAsset(id);
       if (!before) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(before, userId ?? null)) return res.status(403).json({ error: "Access denied" });
 
       const asset = await storage.updateSavedAssetStatus(id, status);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
 
-      // Auto-log a system event note when status changes
-      const prevLabel = before.status ?? "none";
-      const nextLabel = status ?? "none";
-      if (prevLabel !== nextLabel) {
-        const STATUS_LABELS: Record<string, string> = {
-          watching: "Watching",
-          evaluating: "Evaluating",
-          in_discussion: "In Discussion",
-          on_hold: "On Hold",
-          passed: "Passed",
-          none: "None",
-        };
+      // Auto-log a system event note on status change
+      const prevLabel = before.status ?? null;
+      const nextLabel = status ?? null;
+      if (prevLabel !== nextLabel && nextLabel) {
         const displayName = authorName ?? "Someone";
+        const humanNext = STATUS_LABELS[nextLabel] ?? nextLabel;
         await storage.createAssetNote({
           savedAssetId: id,
           userId: userId ?? null,
           authorName: displayName,
-          content: `Status changed from ${STATUS_LABELS[prevLabel] ?? prevLabel} to ${STATUS_LABELS[nextLabel] ?? nextLabel}`,
+          content: `Status changed to ${humanNext} by ${displayName}.`,
           isSystemEvent: true,
         }).catch(() => {});
       }
@@ -1021,8 +1045,16 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
-      const notes = await storage.getAssetNotes(id);
-      res.json({ notes });
+      const userId = await tryGetUserId(req);
+
+      const asset = await storage.getSavedAsset(id);
+      if (!asset) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(asset, userId ?? null)) return res.status(403).json({ error: "Access denied" });
+
+      const limit = Math.min(parseInt(req.query.limit as string || "50", 10), 200);
+      const offset = parseInt(req.query.offset as string || "0", 10);
+      const notes = await storage.getAssetNotes(id, limit, offset);
+      res.json({ notes, limit, offset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch notes" });
     }
@@ -1040,6 +1072,7 @@ export async function registerRoutes(
 
       const asset = await storage.getSavedAsset(id);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(asset, userId ?? null)) return res.status(403).json({ error: "Access denied" });
 
       const note = await storage.createAssetNote({
         savedAssetId: id,

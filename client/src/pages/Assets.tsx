@@ -52,7 +52,7 @@ type PipelinesResponse = {
   uncategorisedCount: number;
 };
 
-type TeamSavedAsset = SavedAsset & { saverName?: string | null };
+type TeamSavedAsset = SavedAsset & { saverName?: string | null; noteCount?: number };
 type TeamMember = { userId: string; displayName: string | null };
 
 type SavedAssetsResponse = {
@@ -123,7 +123,8 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
   const { data: notesData, isLoading: notesLoading } = useQuery<{ notes: SavedAssetNote[] }>({
     queryKey: ["/api/saved-assets", asset.id, "notes"],
     enabled: notesOpen,
-    staleTime: 30000,
+    staleTime: 10000,
+    refetchInterval: notesOpen ? 15000 : false,
   });
 
   const notes = notesData?.notes ?? [];
@@ -317,7 +318,10 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
             data-testid={`button-notes-toggle-${asset.id}`}
           >
             <MessageSquare className="w-2.5 h-2.5" />
-            {notes.length > 0 ? `${notes.length} note${notes.length !== 1 ? "s" : ""}` : "Notes"}
+            {(() => {
+              const count = notesOpen ? notes.length : (asset.noteCount ?? 0);
+              return count > 0 ? `${count} note${count !== 1 ? "s" : ""}` : "Notes";
+            })()}
             {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
           </button>
         </div>

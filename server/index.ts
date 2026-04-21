@@ -778,6 +778,28 @@ async function runPostStartupTasks(): Promise<void> {
   }
 }
 
+// ── Ensure saved_asset_notes table exists ─────────────────────────────────────
+// Created here (idempotent CREATE TABLE IF NOT EXISTS) so it survives any
+// environment where db:push was not run manually (e.g. fresh deploys).
+async function createSavedAssetNotesTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS saved_asset_notes (
+        id          SERIAL PRIMARY KEY,
+        saved_asset_id INTEGER NOT NULL REFERENCES saved_assets(id) ON DELETE CASCADE,
+        user_id     TEXT,
+        author_name TEXT NOT NULL DEFAULT 'Unknown',
+        content     TEXT NOT NULL,
+        is_system_event BOOLEAN NOT NULL DEFAULT FALSE,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    log("[startup] saved_asset_notes table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] saved_asset_notes table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── One-time migration: relabel old saved_asset status values ─────────────────
 // Old constraint: ('viewing', 'evaluating', 'contacted')
 // New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
@@ -794,7 +816,8 @@ async function migrateAssetStatusValues() {
     const r2 = await db.execute(sql`
       UPDATE saved_assets SET status = 'in_discussion' WHERE status = 'contacted'
     `);
-    const migrated = ((r1 as any).rowCount ?? 0) + ((r2 as any).rowCount ?? 0);
+    type PgResult = { rowCount: number | null };
+    const migrated = ((r1 as unknown as PgResult).rowCount ?? 0) + ((r2 as unknown as PgResult).rowCount ?? 0);
     if (migrated > 0) {
       log(`[startup] Migrated ${migrated} saved_asset status row(s) to new vocabulary`, "startup");
     }
@@ -866,6 +889,8 @@ async function migrateAssetStatusValues() {
       });
       // ── runStartupMigrations: no-op (migrations skipped; use db:push) ───
       runStartupMigrations().catch(() => {});
+      // ── Ensure saved_asset_notes table exists (idempotent) ────────────
+      createSavedAssetNotesTable().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────
