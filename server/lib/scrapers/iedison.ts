@@ -404,17 +404,7 @@ export const iEdisonScraper: InstitutionScraper = {
         .select({ maxLastSeen: max(ingestedAssets.lastSeenAt) })
         .from(ingestedAssets)
         .where(like(ingestedAssets.sourceUrl, `%${iEdisonDomain}%`));
-      const maxLastSeen = row?.maxLastSeen;
-      if (maxLastSeen) {
-        const lastIngest = new Date(maxLastSeen);
-        // Advance by one second to avoid re-pulling records at the exact
-        // same timestamp boundary on back-to-back runs.
-        lastIngest.setSeconds(lastIngest.getSeconds() + 1);
-        // Use lastIngest only if it's more recent than the hard cap and in the past
-        if (lastIngest > hardCap && lastIngest < toDate) {
-          fromDate = lastIngest;
-        }
-      }
+      fromDate = computeFromDate(row?.maxLastSeen, hardCap, toDate);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       console.warn(`[scraper] ${INST}: could not query last_seen_at for incremental date -- using hard cap: ${msg}`);
@@ -528,6 +518,40 @@ export const iEdisonScraper: InstitutionScraper = {
     return htmlRecords.slice(0, maxResults);
   },
 };
+
+/**
+ * Determines which scrape path will be taken based on env configuration.
+ * "authenticated" -- IEDISON_API_KEY is set; JSON API with auth headers is tried first.
+ * "html"          -- No key; HTML scraper is used directly (per task spec).
+ * Exported for smoke testing only.
+ */
+export function selectScrapeMode(): "authenticated" | "html" {
+  return getApiKey() ? "authenticated" : "html";
+}
+
+/**
+ * Computes the `fromDate` cursor for an incremental scrape window.
+ * Pure function -- no side effects, no DB access.
+ * Exported for smoke testing only.
+ *
+ * @param maxLastSeen -- The most-recent `last_seen_at` from `ingested_assets` for
+ *                       iEdison source URLs, or null/undefined on first run.
+ * @param hardCap     -- Earliest date to go back to if no history exists (12-month default).
+ * @param toDate      -- Upper bound of the query window (typically `now()`).
+ * @returns           -- The resolved `fromDate` (advanced by 1 second when derived from DB).
+ */
+export function computeFromDate(
+  maxLastSeen: Date | string | null | undefined,
+  hardCap: Date,
+  toDate: Date,
+): Date {
+  if (!maxLastSeen) return hardCap;
+  const lastIngest = new Date(maxLastSeen);
+  if (isNaN(lastIngest.getTime())) return hardCap;
+  // Advance by one second to avoid re-pulling boundary records.
+  lastIngest.setSeconds(lastIngest.getSeconds() + 1);
+  return lastIngest > hardCap && lastIngest < toDate ? lastIngest : hardCap;
+}
 
 /**
  * Internal helpers exposed for unit/smoke testing only.
