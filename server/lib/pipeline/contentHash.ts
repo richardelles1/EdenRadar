@@ -10,7 +10,7 @@ export function computeContentHash(title: string, description: string, abstract?
   return createHash("sha256").update(normalized).digest("hex").slice(0, 32);
 }
 
-type CompletenessAsset = {
+export type CompletenessAsset = {
   target?: string | null;
   modality?: string | null;
   indication?: string | null;
@@ -20,6 +20,9 @@ type CompletenessAsset = {
   categories?: string[] | null;
   innovationClaim?: string | null;
   mechanismOfAction?: string | null;
+  unmetNeed?: string | null;
+  comparableDrugs?: string | null;
+  licensingReadiness?: string | null;
   inventors?: string[] | null;
   patentStatus?: string | null;
 };
@@ -31,13 +34,16 @@ export function computeCompletenessScore(asset: CompletenessAsset): number {
     ["modality", 15],
     ["indication", 15],
     ["developmentStage", 10],
-    ["summary", 10],
-    ["abstract", 10],
-    ["categories", 5],
+    ["summary", 5],
+    ["abstract", 5],
+    ["mechanismOfAction", 10],
     ["innovationClaim", 5],
-    ["mechanismOfAction", 5],
-    ["inventors", 5],
-    ["patentStatus", 5],
+    ["unmetNeed", 5],
+    ["comparableDrugs", 3],
+    ["licensingReadiness", 2],
+    ["categories", 5],
+    ["inventors", 3],
+    ["patentStatus", 2],
   ];
 
   for (const [field, weight] of checks) {

@@ -1,4 +1,5 @@
 import { classifyAsset, MIN_CONTENT_CHARS, type AssetContext } from "./classifyAsset";
+import { computeCompletenessScore } from "./contentHash";
 
 export interface DeepEnrichResult {
   id: number;
@@ -18,29 +19,6 @@ export interface DeepEnrichResult {
   completenessScore: number;
 }
 
-export function computeCompletenessScore(fields: {
-  target: string;
-  modality: string;
-  indication: string;
-  developmentStage: string;
-  mechanismOfAction: string;
-  innovationClaim: string;
-  unmetNeed: string;
-  comparableDrugs: string;
-  licensingReadiness: string;
-}): number {
-  let score = 0;
-  if (fields.target && fields.target !== "unknown") score += 15;
-  if (fields.modality && fields.modality !== "unknown") score += 15;
-  if (fields.indication && fields.indication !== "unknown") score += 15;
-  if (fields.developmentStage && fields.developmentStage !== "unknown") score += 10;
-  if (fields.mechanismOfAction && fields.mechanismOfAction.length > 5) score += 15;
-  if (fields.innovationClaim && fields.innovationClaim.length > 5) score += 10;
-  if (fields.unmetNeed && fields.unmetNeed.length > 5) score += 10;
-  if (fields.comparableDrugs && fields.comparableDrugs.length > 2) score += 5;
-  if (fields.licensingReadiness && fields.licensingReadiness !== "unknown") score += 5;
-  return score;
-}
 
 export interface DeepEnrichAssetInput {
   id: number;
@@ -168,6 +146,11 @@ export async function deepEnrichBatch(
           unmetNeed: classification.unmetNeed,
           comparableDrugs: classification.comparableDrugs,
           licensingReadiness: classification.licensingReadiness,
+          summary: asset.summary,
+          abstract: asset.abstract,
+          categories: asset.ctx?.categories ?? null,
+          inventors: asset.ctx?.inventors ?? null,
+          patentStatus: asset.ctx?.patentStatus ?? null,
         });
 
         const result: DeepEnrichResult = {
