@@ -22,7 +22,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, loadFdaDesignationHealth } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -2957,8 +2957,12 @@ export async function registerRoutes(
     try {
       const result = await runFdaDesignationMatch();
       console.log("[admin] FDA designation match complete:", result);
+      const { recordFdaDesignationHealth } = await import("./lib/scraperState");
+      await recordFdaDesignationHealth(result.tagged, result.errors).catch(() => {});
     } catch (err: any) {
       console.error("[admin] FDA designation match failed:", err?.message);
+      const { recordFdaDesignationHealth } = await import("./lib/scraperState");
+      await recordFdaDesignationHealth(0, 1).catch(() => {});
     } finally {
       fdaDesignationRunning = false;
     }
@@ -2967,7 +2971,15 @@ export async function registerRoutes(
   app.get("/api/admin/fda-designations/status", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    res.json({ running: fdaDesignationRunning });
+    const health = await loadFdaDesignationHealth().catch(() => null);
+    res.json({
+      running: fdaDesignationRunning,
+      lastRunAt: health?.lastSuccessAt ?? null,
+      lastTaggedCount: health?.lastSuccessNewCount ?? null,
+      consecutiveFailures: health?.consecutiveFailures ?? 0,
+      lastFailureReason: health?.lastFailureReason ?? null,
+      lastFailureAt: health?.lastFailureAt ?? null,
+    });
   });
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────

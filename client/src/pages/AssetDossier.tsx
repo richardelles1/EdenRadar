@@ -10,10 +10,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  ArrowLeft, Building2, ExternalLink, FileText, Key,
+  ArrowLeft, Building2, ExternalLink, FileText, Key, Shield,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
   Beaker, Tag, FlaskConical, Lightbulb, Mail,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import type { ScoredAsset, DossierPayload } from "@/lib/types";
 
 const STAGE_COLORS: Record<string, string> = {
@@ -339,6 +345,37 @@ export default function AssetDossier() {
                     <Key className="w-3 h-3" />
                     Available for Licensing
                   </span>
+                )}
+                {asset.fda_designation && (
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span
+                          className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-md font-semibold border ${
+                            asset.fda_designation.toLowerCase().includes("orphan")
+                              ? "bg-purple-50 dark:bg-purple-950/40 border-purple-300/60 dark:border-purple-700/40 text-purple-700 dark:text-purple-300"
+                              : asset.fda_designation.toLowerCase().includes("breakthrough")
+                              ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300/60 dark:border-amber-700/40 text-amber-700 dark:text-amber-300"
+                              : "bg-sky-50 dark:bg-sky-950/40 border-sky-300/60 dark:border-sky-700/40 text-sky-700 dark:text-sky-300"
+                          }`}
+                          data-testid="badge-fda-designation"
+                        >
+                          <Shield className="w-3 h-3" />
+                          FDA {asset.fda_designation}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom" className="text-xs max-w-56">
+                        {asset.fda_designation.toLowerCase().includes("orphan")
+                          ? "FDA Orphan Drug Designation -- granted for drugs targeting rare diseases affecting fewer than 200,000 people."
+                          : asset.fda_designation.toLowerCase().includes("breakthrough")
+                          ? "FDA Breakthrough Therapy Designation -- expedited development and review for serious conditions."
+                          : "FDA Fast Track Designation -- expedited review to treat serious conditions with unmet medical needs."}
+                        {asset.fda_designation_date && (
+                          <span className="block mt-1 opacity-70">Designated {asset.fda_designation_date}</span>
+                        )}
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
                 )}
               </div>
               <p className={`text-sm font-bold mb-1.5 ${scoreVerdict.color}`} data-testid="score-verdict-label">

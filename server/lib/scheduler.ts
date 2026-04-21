@@ -6,8 +6,11 @@ import {
   loadSchedulerState,
   loadAllScraperHealth,
   updateScraperHealth,
+  recordFdaDesignationHealth,
+  loadFdaDesignationHealth,
   type ScraperHealthRow,
 } from "./scraperState";
+import { runFdaDesignationMatch } from "./fda-designations";
 import { storage } from "../storage";
 
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
@@ -602,8 +605,29 @@ function scheduleNext(): void {
     persistState(true).catch(() => {});
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+
+    // ── Post-cycle: FDA designation enrichment ────────────────────────────────
+    // Runs asynchronously after each full scraper cycle completes; results are
+    // stored in scraper_health under "__fda_designation__" for health tracking.
+    (async () => {
+      try {
+        console.log("[scheduler] Post-cycle: running FDA designation match...");
+        const fdaResult = await runFdaDesignationMatch();
+        await recordFdaDesignationHealth(fdaResult.tagged, fdaResult.errors);
+        console.log(
+          `[scheduler] Post-cycle: FDA designation match complete — ` +
+          `tagged=${fdaResult.tagged} errors=${fdaResult.errors}`
+        );
+      } catch (err: any) {
+        console.warn(`[scheduler] Post-cycle: FDA designation match failed: ${err?.message}`);
+        await recordFdaDesignationHealth(0, 1).catch(() => {});
+      }
+    })();
   }
 }
+
+/** Expose FDA designation health for the admin status endpoint. */
+export { loadFdaDesignationHealth };
 
 /** Returns true when the error comes from the database connection pool being exhausted,
  * the Supabase connection being dropped, or our own server restarting mid-sync —

@@ -291,6 +291,15 @@ async function runStartupMigrations() {
     log(`[startup] ingested_assets enrichment column migration failed: ${err?.message}`, "startup");
   }
 
+  // ── FDA designation columns ───────────────────────────────────────────────
+  try {
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS fda_designation TEXT`);
+    await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS fda_designation_date TEXT`);
+    log("[startup] ingested_assets fda_designation columns ready", "startup");
+  } catch (err: any) {
+    log(`[startup] fda_designation column migration failed: ${err?.message}`, "startup");
+  }
+
   // ── saved_assets status column ────────────────────────────────────────────
   try {
     await mdb.execute(sql`ALTER TABLE saved_assets ADD COLUMN IF NOT EXISTS status TEXT`);
