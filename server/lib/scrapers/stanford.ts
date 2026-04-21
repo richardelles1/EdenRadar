@@ -12,7 +12,7 @@ const PAGE_TIMEOUT_MS = 20_000;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,
-  scraperTimeoutMs: 10 * 60 * 1000, // 10 min — headroom for slow CDN days
+  scraperTimeoutMs: 20 * 60 * 1000, // 20 min — manual syncs; CDN worst-case is ~320s list scan
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
@@ -71,7 +71,7 @@ export const stanfordScraper: InstitutionScraper = {
         }
 
         const pages = await Promise.all(
-          pageNums.map((p) => fetchHtml(`${BASE}/?page=${p}`, PAGE_TIMEOUT_MS, signal, 1))
+          pageNums.map((p) => fetchHtml(`${BASE}/?page=${p}`, PAGE_TIMEOUT_MS, signal, 0))
         );
 
         let hitEmpty = false;
@@ -88,7 +88,10 @@ export const stanfordScraper: InstitutionScraper = {
           (fetchFails ? ` (${fetchFails} page(s) failed to load)` : "")
         );
 
-        if (hitEmpty || fetchFails === pageNums.length) break;
+        // Break when we hit an empty page OR when ≥2 pages failed (CDN partial throttle).
+        // Requiring ALL pages to fail before stopping would let a partially-throttled
+        // CDN keep the loop running through all batches, each taking the full timeout.
+        if (hitEmpty || fetchFails > 1) break;
         offset += PAGE_WINDOW;
       }
 

@@ -12,10 +12,10 @@ export class SiteHttpError extends Error {
 }
 
 // ── Global outbound-HTTP semaphore ────────────────────────────────────────────
-// Caps the total number of concurrent outbound fetch() calls across ALL scrapers
-// so that running two institutions simultaneously (MAX_HTTP_CONCURRENT=2) does
-// not generate 20+ simultaneous connections and trigger rate-limiting at TTO sites.
-const MAX_CONCURRENT_FETCH = 8;
+// Caps the total number of concurrent outbound fetch() calls across ALL scrapers.
+// Set to 20 to support up to 3 simultaneous manual syncs (each using up to 5
+// concurrent slots) without fetch-slot contention adding invisible queue latency.
+const MAX_CONCURRENT_FETCH = 20;
 let _fetchSlots = MAX_CONCURRENT_FETCH;
 const _fetchQueue: Array<{ resolve: () => void; reject: (e: unknown) => void }> = [];
 
