@@ -36,7 +36,8 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
 import { cleanText } from "./utils";
 import { scraperDb as db } from "../../scraperDb";
-import { sql } from "drizzle-orm";
+import { max, like } from "drizzle-orm";
+import { ingestedAssets } from "@shared/schema";
 
 const INST = "NIH iEdison";
 const BASE_URL = "https://iedison.nih.gov";
@@ -93,38 +94,46 @@ function parseInventors(raw: unknown): string[] | undefined {
   return undefined;
 }
 
-function mapJsonRecord(r: Record<string, any>, baseUrl: string): ScrapedListing | null {
+function mapJsonRecord(r: Record<string, unknown>, baseUrl: string): ScrapedListing | null {
+  // Safe string extractor: returns the value only when it is a non-empty string.
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim().length > 0 ? v.trim() : undefined;
+
+  const raw = (key: string) => r[key];
+
   const title = cleanText(
-    pickFirst(r.technologyTitle, r.title, r.name, r.docketNumber)
+    str(raw("technologyTitle")) ?? str(raw("title")) ?? str(raw("name")) ?? str(raw("docketNumber")) ?? ""
   );
   if (!title || title.length < 5) return null;
 
-  const urlPath = pickFirst(r.detailUrl, r.url, r.publicUrl);
-  const url = urlPath
-    ? (urlPath.startsWith("http") ? urlPath : `${baseUrl}${urlPath}`)
+  const rawUrl = str(raw("detailUrl")) ?? str(raw("url")) ?? str(raw("publicUrl"));
+  const url = rawUrl
+    ? (rawUrl.startsWith("http") ? rawUrl : `${baseUrl}${rawUrl}`)
     : `${baseUrl}${HTML_SEARCH_PATH}`;
 
   const description = cleanText(
-    pickFirst(r.briefDescription, r.abstract, r.summary, r.description, title)
+    str(raw("briefDescription")) ?? str(raw("abstract")) ?? str(raw("summary")) ?? str(raw("description")) ?? title
   ) || title;
 
   const institution = cleanText(
-    pickFirst(r.assigneeInstitution, r.organizationName, r.institutionName, r.institution)
+    str(raw("assigneeInstitution")) ?? str(raw("organizationName")) ?? str(raw("institutionName")) ?? str(raw("institution")) ?? ""
   ) || INST;
 
   const inventors = parseInventors(
-    pickFirst(r.inventorNames, r.inventors, r.inventorList)
+    raw("inventorNames") ?? raw("inventors") ?? raw("inventorList")
   );
 
   const patentStatus = cleanText(
-    pickFirst(r.patentStatus, r.patentApplicationStatus, r.ipStatus)
+    str(raw("patentStatus")) ?? str(raw("patentApplicationStatus")) ?? str(raw("ipStatus")) ?? ""
   );
 
   const technologyId = cleanText(
-    pickFirst(r.technologyId, r.docketNumber, r.serialNumber, r.referenceNumber)
+    str(raw("technologyId")) ?? str(raw("docketNumber")) ?? str(raw("serialNumber")) ?? str(raw("referenceNumber")) ?? ""
   );
 
-  const stage = cleanText(pickFirst(r.developmentStage, r.stage, r.trlLevel));
+  const stage = cleanText(
+    str(raw("developmentStage")) ?? str(raw("stage")) ?? str(raw("trlLevel")) ?? ""
+  );
 
   return { title, description, url, institution, inventors, patentStatus, technologyId, stage };
 }
@@ -194,28 +203,33 @@ async function fetchJsonPage(
 
     const data = await res.json();
 
-    // Handle both paginated wrapper objects and bare arrays
-    const rawList: any[] = Array.isArray(data)
+    // Handle both paginated wrapper objects and bare arrays.
+    // The API response shape is not known at compile time; cast to unknown[] first,
+    // then mapJsonRecord guards each entry.
+    const anyData = data as Record<string, unknown>;
+    const rawList: unknown[] = Array.isArray(data)
       ? data
-      : Array.isArray(data.content)
-      ? data.content
-      : Array.isArray(data.results)
-      ? data.results
-      : Array.isArray(data.technologies)
-      ? data.technologies
+      : Array.isArray(anyData["content"])
+      ? (anyData["content"] as unknown[])
+      : Array.isArray(anyData["results"])
+      ? (anyData["results"] as unknown[])
+      : Array.isArray(anyData["technologies"])
+      ? (anyData["technologies"] as unknown[])
       : [];
 
     const records: ScrapedListing[] = rawList
-      .map((r) => mapJsonRecord(r as Record<string, any>, BASE_URL))
+      .filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null && !Array.isArray(r))
+      .map((r) => mapJsonRecord(r, BASE_URL))
       .filter((r): r is ScrapedListing => r !== null);
 
     const hasMore = rawList.length >= ROWS_PER_PAGE;
     return { records, hasMore, apiAvailable: true };
-  } catch (err: any) {
-    if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+  } catch (err: unknown) {
+    const errName = err instanceof Error ? err.name : "";
+    if (errName === "AbortError" || errName === "TimeoutError") {
       console.warn(`[scraper] ${INST}: JSON API page ${page} timed out`);
     }
-    // Network error or unexpected format — fall through to HTML
+    // Network error or unexpected format -- fall through to HTML
     return { records: [], hasMore: false, apiAvailable: false };
   }
 }
@@ -340,11 +354,13 @@ async function fetchHtmlPage(
     }
 
     return { records, hasMore: records.length >= ROWS_PER_PAGE };
-  } catch (err: any) {
-    if (err?.name === "AbortError" || err?.name === "TimeoutError") {
+  } catch (err: unknown) {
+    const errName = err instanceof Error ? err.name : "";
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (errName === "AbortError" || errName === "TimeoutError") {
       console.warn(`[scraper] ${INST}: HTML page ${page} timed out`);
     } else {
-      console.warn(`[scraper] ${INST}: HTML page ${page} error: ${err?.message}`);
+      console.warn(`[scraper] ${INST}: HTML page ${page} error: ${errMsg}`);
     }
     return { records: [], hasMore: false };
   }
@@ -383,12 +399,12 @@ export const iEdisonScraper: InstitutionScraper = {
     // Falls back to the hard cap on the first run or on DB error.
     let fromDate = hardCap;
     try {
-      const result = await db.execute(
-        sql`SELECT MAX(last_seen_at) AS max_last_seen
-            FROM ingested_assets
-            WHERE source_url LIKE ${`%${BASE_URL.replace("https://", "")}%`}`
-      );
-      const maxLastSeen = (result.rows as any[])[0]?.max_last_seen;
+      const iEdisonDomain = BASE_URL.replace("https://", ""); // "iedison.nih.gov"
+      const [row] = await db
+        .select({ maxLastSeen: max(ingestedAssets.lastSeenAt) })
+        .from(ingestedAssets)
+        .where(like(ingestedAssets.sourceUrl, `%${iEdisonDomain}%`));
+      const maxLastSeen = row?.maxLastSeen;
       if (maxLastSeen) {
         const lastIngest = new Date(maxLastSeen);
         // Advance by one second to avoid re-pulling records at the exact
@@ -399,8 +415,9 @@ export const iEdisonScraper: InstitutionScraper = {
           fromDate = lastIngest;
         }
       }
-    } catch (err: any) {
-      console.warn(`[scraper] ${INST}: could not query last_seen_at for incremental date -- using hard cap: ${err?.message}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.warn(`[scraper] ${INST}: could not query last_seen_at for incremental date -- using hard cap: ${msg}`);
     }
 
     const fromDateStr = fromDate.toISOString().slice(0, 10);  // YYYY-MM-DD
