@@ -2521,12 +2521,13 @@ export const brookhavenScraper: InstitutionScraper = {
 };
 
 // 4. LaunchTN — re-investigated 2026-04-21
-// available-technologies page (with curl UA to bypass WAF) embeds static First Ignite
+// available-technologies page (with curl UA to bypass WAF) embeds First Ignite
 // (app.firstignite.com/public/listings/{UUID}) anchor pairs: (title, institution) per tech.
+// 27 unique listings confirmed as the complete catalog — the page uses a single Elementor
+// icon-box grid with no AJAX pagination; the jkit_ajax_url global var is the JEG Elementor
+// Kit's general AJAX handler (present on all JEG pages, not an active load-more for this list).
 // First Ignite detail pages are JavaScript SPAs — fetchHtml gets an empty shell, so
-// description fetching is skipped. The 27 static pairs on the page are returned as-is.
-// A JetElements AJAX "load more" endpoint exists (?jkit-ajax-request=jkit_elements) but
-// requires JS execution — those additional listings are not included here.
+// description fetching is skipped (descriptions are empty).
 export const launchTNScraper: InstitutionScraper = {
   institution: "LaunchTN",
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
