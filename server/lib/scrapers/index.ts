@@ -74,6 +74,10 @@ import {
   warwickScraper,
   // Task #366 — BGN Technologies (previously unregistered stub)
   bgnScraper,
+  // Task #412 — Flintbox data moat expansion
+  uicFlintboxScraper,
+  qmulScraper,
+  unccScraper,
 } from "./new-institutions";
 
 import {
@@ -399,6 +403,11 @@ import {
   pekingUniversityScraper,
   zhejiangUniversityScraper,
   shanghaiTechScraper,
+  // Task #412 — in-part data moat expansion
+  umassmedScraper,
+  upvScraper,
+  brockScraper,
+  novaLisbonScraper,
 } from "./new-institutions";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
@@ -828,6 +837,14 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   southAlabamaScraper,
   umbcScraper,
   bostonCollegeScraper,
+  // ── Task #412 — Data moat expansion new scrapers ──────────────────────────
+  uicFlintboxScraper,
+  qmulScraper,
+  unccScraper,
+  umassmedScraper,
+  upvScraper,
+  brockScraper,
+  novaLisbonScraper,
   // ── Bespoke scrapers batch 2A (Task #104) + 2B (Task #105, March 2026) ────
   csusScraper,
   loyolaChicagoScraper,

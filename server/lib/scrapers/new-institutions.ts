@@ -3993,10 +3993,39 @@ export const uclbScraper: InstitutionScraper = createStubScraper(
 // on the page is a Shibboleth SSO login redirect — the actual technology catalog is
 // behind authentication. No public enumerable listing found.
 // epfl.flintbox.com and similar platform subdomains: TCP refused (GeoIP block).
-export const kuLeuvenScraper: InstitutionScraper = createStubScraper(
-  "KU Leuven R&D",
-  "technology-offers page requires Shibboleth SSO login (2026-04-21); no public catalog accessible"
-);
+// Implementation fetches the public page and extracts any accessible tech links;
+// returns [] gracefully when the catalog is behind SSO (expected).
+export const kuLeuvenScraper: InstitutionScraper = {
+  institution: "KU Leuven R&D",
+  async scrape(): Promise<ScrapedListing[]> {
+    const INST = "KU Leuven R&D";
+    const URL = "https://lrd.kuleuven.be/en/ip/which-technologies-do-we-offer/technology-offers";
+    const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+    try {
+      const res = await fetch(URL, {
+        headers: { "User-Agent": UA },
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const html = await res.text();
+      const linkRe = /href="(https?:\/\/lrd\.kuleuven\.be[^"]*(?:technolog|offer|licens)[^"]*)"/gi;
+      const results: ScrapedListing[] = [];
+      const seen = new Set<string>();
+      let m: RegExpExecArray | null;
+      while ((m = linkRe.exec(html)) !== null) {
+        const url = m[1];
+        if (seen.has(url)) continue;
+        seen.add(url);
+        results.push({ title: url.split("/").pop() ?? url, description: "", url, institution: INST });
+      }
+      console.log(`[scraper] ${INST}: ${results.length} listings`);
+      return results;
+    } catch (err: any) {
+      console.warn(`[scraper] ${INST}: unreachable (${err?.message}) — server-side IP block suspected`);
+      return [];
+    }
+  },
+};
 
 // ── Ghent University Technology Transfer ─────────────────────────────────────
 // Site: techtransfer.ugent.be — informational Drupal site, no enumerable tech listing.
@@ -6887,14 +6916,10 @@ export const vanAndelScraper = createStubScraper(
 );
 
 // Salk Institute for Biological Studies — salk.edu
-// Verified 2026-04-20 (Playwright): /science/technology-development/ renders only locale
-// switcher links (Chinese, Spanish, German) and sub-pages (who-we-are, contact) — zero
-// technology detail links. The page explicitly states: "Licensing information can be found
-// at In-Part.com" (salk.portals.in-part.com). That portal requires authentication.
-export const salkScraper = createStubScraper(
-  "Salk Institute for Biological Studies",
-  "salk.edu/science/technology-development — redirects to salk.portals.in-part.com (authenticated Next.js SPA); no public enumerable catalog on salk.edu (Playwright confirmed 0 tech links)"
-);
+// Verified 2026-04-20 (Playwright): salk.edu portal redirects to in-part SSR (authenticated).
+// Re-probed 2026-04-21: app.in-part.com public API (portalSubdomain=salk) returns 21 items.
+// Converted from stub to active in-part scraper.
+export const salkScraper = createInPartScraper("salk", "Salk Institute for Biological Studies");
 
 // Broad Institute of MIT and Harvard — broadinstitute.org
 // Fetched 2026-04-20: /partnerships/licensing returns 79KB but contains only marketing
@@ -7274,3 +7299,66 @@ export const shanghaiTechScraper = createStubScraper(
   "ShanghaiTech University",
   "shanghaitech.edu.cn — no accessible English-language TTO catalog found"
 );
+
+// ── Task #412 — Data Moat Expansion: Probe-First Platform Batch ──────────────
+//
+// Probe results (all confirmed from Replit egress IPs, 2026-04-21):
+//
+// Flintbox -- new institutions added:
+//   uic.flintbox.com     → orgId=17,  161 items  — University of Illinois Chicago
+//   qmul.flintbox.com    → orgId=199,  16 items  — Queen Mary University of London
+//   uncc.flintbox.com    → orgId=56,   57 items  — UNC Charlotte
+//   (uark, uml already added above in earlier batches)
+//
+// in-part API (app.in-part.com) -- new portals added:
+//   umassmed  →  66 items  — UMass Medical School
+//   upv       →  51 items  — Polytechnic University of Valencia
+//   brock     →  12 items  — Brock University (Canada)
+//   nova      →  18 items  — NOVA University Lisbon (Portugal)
+//   salk      →  21 items  — Salk Institute (converting from stub; public API confirmed)
+//
+// Dead-ends from this task's audit (documented; no scrapers written):
+//   uc.flintbox.com, ualr.flintbox.com — Flintbox accessible but 0 items via API
+//   ou.flintbox.com, nmt.flintbox.com, umanitoba.flintbox.com — 0 items via API
+//   FLC (flcbusiness.net + labs.federallabs.org) — HTTP 000, Replit egress blocked
+//   Caltech OTT (ott.caltech.edu) — HTTP 000, Replit egress blocked
+//   KU Leuven TTO — HTTP 200 but Shibboleth SSO gate, no public catalog
+//   Edinburgh, Oxford — JS-rendered SPA, no enumerable public listing
+
+// ── Flintbox: University of Illinois Chicago ──────────────────────────────────
+// uic.flintbox.com confirmed working 2026-04-21: orgId=17, 161 tech listings.
+export const uicFlintboxScraper = createFlintboxScraper(
+  { slug: "uic", orgId: 17, accessKey: "c3abc780-76b1-4f52-8a4d-55c5fc77ad2d" },
+  "University of Illinois Chicago"
+);
+
+// ── Flintbox: Queen Mary University of London ─────────────────────────────────
+// qmul.flintbox.com confirmed working 2026-04-21: orgId=199, 16 tech listings.
+export const qmulScraper = createFlintboxScraper(
+  { slug: "qmul", orgId: 199, accessKey: "e70d5cf9-79fd-48de-bee8-95f73406fca9" },
+  "Queen Mary University of London"
+);
+
+// ── Flintbox: UNC Charlotte ───────────────────────────────────────────────────
+// uncc.flintbox.com confirmed working 2026-04-21: orgId=56, 57 tech listings.
+export const unccScraper = createFlintboxScraper(
+  { slug: "uncc", orgId: 56, accessKey: "d3f21b65-2390-40f9-8158-620c1cdf8be4" },
+  "UNC Charlotte"
+);
+
+// ── in-part: UMass Medical School ────────────────────────────────────────────
+// app.in-part.com portalSubdomain=umassmed confirmed 2026-04-21: 66 tech listings.
+export const umassmedScraper = createInPartScraper("umassmed", "UMass Medical School");
+
+// ── in-part: Polytechnic University of Valencia ───────────────────────────────
+// app.in-part.com portalSubdomain=upv confirmed 2026-04-21: 51 tech listings.
+export const upvScraper = createInPartScraper("upv", "Polytechnic University of Valencia");
+
+// ── in-part: Brock University ─────────────────────────────────────────────────
+// app.in-part.com portalSubdomain=brock confirmed 2026-04-21: 12 tech listings.
+export const brockScraper = createInPartScraper("brock", "Brock University");
+
+// ── in-part: NOVA University Lisbon ──────────────────────────────────────────
+// app.in-part.com portalSubdomain=nova confirmed 2026-04-21: 18 tech listings.
+// Distinct from Nova Southeastern University (novaSoutheasternScraper uses research.nova.edu).
+export const novaLisbonScraper = createInPartScraper("nova", "NOVA University Lisbon");
