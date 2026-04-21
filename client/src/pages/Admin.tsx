@@ -156,10 +156,10 @@ interface CollectorHealthData {
 function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "ok") return <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid="health-ok" />;
   if (health === "syncing") return <Loader2 className="h-4 w-4 text-blue-500 animate-spin" data-testid="health-syncing" />;
-  if (health === "site_down") return <AlertTriangle className="h-4 w-4 text-red-500" data-testid="health-site-down" />;
+  if (health === "site_down") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-site-down" />;
   if (health === "rate_limited") return <AlertTriangle className="h-4 w-4 text-orange-500" data-testid="health-rate-limited" />;
   if (health === "blocked") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-blocked" />;
-  if (health === "parser_failure") return <AlertCircle className="h-4 w-4 text-violet-500" data-testid="health-parser-failure" />;
+  if (health === "parser_failure") return <XCircle className="h-4 w-4 text-red-500" data-testid="health-parser-failure" />;
   if (health === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-warning" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
   if (health === "stale") return <AlertCircle className="h-4 w-4 text-orange-500" data-testid="health-stale" />;
@@ -170,10 +170,10 @@ function HealthDot({ health }: { health: HealthStatus }) {
 function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "ok") return <span className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Working</span>;
   if (health === "syncing") return <span className="text-blue-600 dark:text-blue-400 text-xs font-medium">Syncing</span>;
-  if (health === "site_down") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Site temporarily down</span>;
+  if (health === "site_down") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Site temporarily down</span>;
   if (health === "rate_limited") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Rate limited</span>;
   if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Blocked / WAF</span>;
-  if (health === "parser_failure") return <span className="text-violet-600 dark:text-violet-400 text-xs font-medium">Parser failure</span>;
+  if (health === "parser_failure") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Parser failure</span>;
   if (health === "warning") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Warning</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
   if (health === "stale") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Stale</span>;
