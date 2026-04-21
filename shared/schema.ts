@@ -192,8 +192,11 @@ export const ingestedAssets = pgTable("ingested_assets", {
   // Similarity score stored when near-duplicate is flagged (0.0–1.0)
   dedupeSimilarity: real("dedupe_similarity"),
   // Tracks how many times the GPT-4o deep enrichment job has processed this asset.
-  // Bucket C (low-quality retry) only selects assets with deepEnrichAttempts = 0,
-  // so each asset gets at most one retry if its score was still below threshold.
+  // Bucket C (low-quality retry) selects assets with deepEnrichAttempts <= 1:
+  //   - First deep-enrich pass increments 0 → 1.
+  //   - If score < 15 after the first pass, the asset re-enters bucket C (attempts = 1 satisfies <= 1).
+  //   - The retry increments 1 → 2, permanently excluding the asset (2 > 1).
+  //   - Maximum 2 GPT-4o calls per asset; reset to 0 on content change.
   deepEnrichAttempts: integer("deep_enrich_attempts").default(0).notNull(),
 });
 

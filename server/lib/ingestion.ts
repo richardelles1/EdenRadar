@@ -22,7 +22,16 @@
 //              is never re-discovered and re-enriched on subsequent scans.
 //   Cost     : ~$0.00005 / asset (mini-tier, structured extraction).
 //
-// PATH 3 — Sync enrichment  (gpt-4o-mini, CHEAP)
+// PATH 3a — Re-enrich unknowns  (gpt-4o-mini, CHEAP)
+//   Location : enrichAsset.ts :: reEnrichAsset()
+//   Trigger  : Admin POST /api/admin/standard-enrich — targets existing assets
+//              where at least one of target/modality/indication/developmentStage
+//              is still "unknown", attempting to fill those fields with a fresh call.
+//   Purpose  : Targeted field-fill for sparsely-enriched corpus assets without
+//              touching fields that already have non-unknown values.
+//   Cost     : ~$0.00005 / asset (mini-tier, targeted field extraction).
+//
+// PATH 3b — Sync enrichment  (gpt-4o-mini, CHEAP)
 //   Location : enrichAsset.ts :: enrichBatch()
 //   Trigger  : Called inside runInstitutionSync() for net-new staging rows only.
 //   Purpose  : Lightweight relevance + field extraction for the sync preview
