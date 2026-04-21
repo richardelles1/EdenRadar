@@ -1,5 +1,16 @@
 import * as cheerio from "cheerio";
 
+/** Thrown when the target site returns a non-OK HTTP status on a critical fetch.
+ * Unlike generic network errors, this carries the exact HTTP status code so
+ * the ingestion pipeline can record a specific failure reason (e.g. "HTTP 503")
+ * and the health dashboard can show "Site down" vs "Rate limited" vs "Blocked". */
+export class SiteHttpError extends Error {
+  constructor(public readonly status: number, url: string) {
+    super(`HTTP ${status} for ${url}`);
+    this.name = "SiteHttpError";
+  }
+}
+
 // ── Global outbound-HTTP semaphore ────────────────────────────────────────────
 // Caps the total number of concurrent outbound fetch() calls across ALL scrapers
 // so that running two institutions simultaneously (MAX_HTTP_CONCURRENT=2) does
@@ -56,6 +67,7 @@ async function withRetry<T>(
     } catch (err: any) {
       lastError = err;
       if (err?.name === "AbortError") throw err;
+      if (err instanceof SiteHttpError) throw err;
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
         console.warn(`[scraper] Retry ${attempt + 1}/${maxRetries} for ${label} after ${Math.round(delay)}ms: ${err?.message}`);
@@ -66,11 +78,16 @@ async function withRetry<T>(
   throw lastError;
 }
 
+/** Fetch and parse HTML from a URL.
+ * @param strict - When true, throws SiteHttpError for non-OK HTTP responses
+ *   instead of returning null. Use on first-page / critical fetches where a
+ *   non-OK status should be surfaced as a named failure reason. */
 export async function fetchHtml(
   url: string,
   timeoutMs = 8000,
   externalSignal?: AbortSignal,
-  retries = 2
+  retries = 2,
+  strict = false
 ): Promise<cheerio.CheerioAPI | null> {
   if (externalSignal?.aborted) return null;
   try {
@@ -88,9 +105,10 @@ export async function fetchHtml(
           },
         });
         if (res.status === 429) {
-          throw new Error(`HTTP 429 rate limited`);
+          throw new SiteHttpError(429, url);
         }
         if (!res.ok) {
+          if (strict) throw new SiteHttpError(res.status, url);
           console.warn(`[scraper] HTTP ${res.status} for ${url}`);
           return null;
         }
@@ -102,6 +120,7 @@ export async function fetchHtml(
       }
     }, retries, 1000, url);
   } catch (err: any) {
+    if (err instanceof SiteHttpError) throw err;
     if (err?.name !== "AbortError") {
       console.warn(`[scraper] Fetch failed for ${url}: ${err?.message ?? err}`);
     }

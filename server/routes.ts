@@ -1462,7 +1462,18 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        let health: "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked";
+        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited";
+
+        function classifyByError(errMsg: string | null | undefined): HealthStatus {
+          if (!errMsg) return "blocked";
+          const m = errMsg.toLowerCase();
+          if (m.includes(" 503") || m.includes(" 502") || m.includes(" 500") || m.includes("service unavailable") || m.includes("maintenance")) return "site_down";
+          if (m.includes(" 429") || m.includes("rate limit") || m.includes("rate-limit") || m.includes("too many request")) return "rate_limited";
+          if (m.includes(" 403") || m.includes("cloudflare") || m.includes("blocked") || m.includes("bot challenge") || m.includes("access denied") || m.includes(" 401")) return "blocked";
+          return "blocked";
+        }
+
+        let health: HealthStatus;
         // Live lock takes precedence: if ingestion is actively holding a lock for this
         // institution, it's definitively "syncing" regardless of DB session state.
         if (liveActiveSyncs.has(name)) {
@@ -1474,15 +1485,30 @@ export async function registerRoutes(
           const elapsed = now - new Date(heartbeat).getTime();
           health = elapsed > STALE_THRESHOLD_MS ? "stale" : "syncing";
         } else if (session.status === "enriched" || session.status === "completed" || session.status === "pushed") {
-          health = (session.rawCount ?? 0) === 0 ? "blocked" : "ok";
+          if ((session.rawCount ?? 0) === 0) {
+            health = classifyByError(session.errorMessage);
+          } else {
+            health = "ok";
+          }
         } else if (session.status === "failed") {
-          // consecutiveFailures is maintained by the scheduler and correctly
-          // excludes transient events (server restart, DB blip) via isTransientDbError().
-          // When it's 0, the last failure was transient — don't show Warning.
-          health = consecutiveFailures >= 4 ? "failing" :
-                   consecutiveFailures >= 2 ? "degraded" :
-                   consecutiveFailures >= 1 ? "warning" :
-                   "ok";
+          const errMsg = session.errorMessage ?? "";
+          const m = errMsg.toLowerCase();
+          if (m.includes(" 503") || m.includes(" 502") || m.includes(" 500") || m.includes("service unavailable") || m.includes("maintenance")) {
+            health = "site_down";
+          } else if (m.includes(" 429") || m.includes("rate limit") || m.includes("rate-limit") || m.includes("too many request")) {
+            health = "rate_limited";
+          } else if (m.includes(" 403") || m.includes("cloudflare") || m.includes("bot challenge") || m.includes("access denied")) {
+            health = "blocked";
+          } else {
+            // Generic failure — use consecutiveFailures for severity.
+            // consecutiveFailures is maintained by the scheduler and correctly
+            // excludes transient events (server restart, DB blip) via isTransientDbError().
+            // When it's 0, the last failure was transient — don't show Warning.
+            health = consecutiveFailures >= 4 ? "failing" :
+                     consecutiveFailures >= 2 ? "degraded" :
+                     consecutiveFailures >= 1 ? "warning" :
+                     "ok";
+          }
         } else {
           health = "degraded";
         }
@@ -1493,7 +1519,7 @@ export async function registerRoutes(
           biotechRelevant,
           lastSyncAt: session?.completedAt ?? session?.createdAt ?? null,
           lastSyncStatus: session?.status ?? null,
-          lastSyncError: consecutiveFailures === 0 ? null : (session?.errorMessage ?? null),
+          lastSyncError: (health !== "ok" && health !== "syncing" && health !== "never") ? (session?.errorMessage ?? null) : null,
           rawCount: session?.rawCount ?? 0,
           newCount: session?.newCount ?? 0,
           relevantCount: session?.relevantCount ?? 0,

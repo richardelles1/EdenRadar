@@ -1,5 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText, resolveUrl, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techfinder.stanford.edu";
@@ -20,7 +20,7 @@ export const stanfordScraper: InstitutionScraper = {
 
       // Step 1: fetch page 0 with retries=2 (default) and 20s timeout.
       // Page 0 is required — if it fails the run produces 0 listings.
-      const page0$ = await fetchHtml(`${BASE}/`, PAGE_TIMEOUT_MS, signal);
+      const page0$ = await fetchHtml(`${BASE}/`, PAGE_TIMEOUT_MS, signal, 2, true);
       if (!page0$) {
         console.warn(`[scraper] ${INST}: could not fetch listing page 0`);
         return [];
@@ -126,6 +126,7 @@ export const stanfordScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: unknown) {
+      if (err instanceof SiteHttpError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scraper] ${INST} failed: ${msg}`);
       return [];

@@ -1,5 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText, resolveUrl } from "./utils";
+import { fetchHtml, cleanText, resolveUrl, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://tlo.mit.edu";
@@ -51,7 +51,7 @@ export const mitScraper: InstitutionScraper = {
 
       // Step 1: fetch page 0 synchronously — seeds the results and confirms the site is up.
       const page0Url = `${BASE}${LIST_PATH}?${LIST_FILTER}`;
-      const page0$ = await fetchHtml(page0Url, PAGE_TIMEOUT_MS, signal);
+      const page0$ = await fetchHtml(page0Url, PAGE_TIMEOUT_MS, signal, 2, true);
       if (!page0$) {
         console.warn(`[scraper] ${INST}: could not fetch listing page 0`);
         return [];
@@ -136,6 +136,7 @@ export const mitScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;
     } catch (err: unknown) {
+      if (err instanceof SiteHttpError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scraper] ${INST} failed: ${msg}`);
       return [];

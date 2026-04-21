@@ -1,6 +1,6 @@
 import type { CheerioAPI } from "cheerio";
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText } from "./utils";
+import { fetchHtml, cleanText, SiteHttpError } from "./utils";
 
 export interface TechPublisherOptions {
   baseUrl?: string;
@@ -150,7 +150,7 @@ export function createTechPublisherScraper(
         ? "a[href*='/tech/'],a[href*='/technology/']"
         : "a[href*='/technology/']");
 
-    const $home = await fetchHtml(`${base}/SearchResults.aspx?type=Tech&q=`, FETCH_TIMEOUT_MS, signal);
+    const $home = await fetchHtml(`${base}/SearchResults.aspx?type=Tech&q=`, FETCH_TIMEOUT_MS, signal, 2, true);
     if (signal.aborted) {
       console.log(`[scraper] ${institution}: ${results.length} listings (aborted after RSS: ${rssCount})`);
       return results;
@@ -272,6 +272,7 @@ export function createTechPublisherScraper(
       try {
         return await scrapeInner(controller.signal);
       } catch (err: any) {
+        if (err instanceof SiteHttpError) throw err;
         if (err?.name !== "AbortError") {
           console.error(`[scraper] ${institution} failed: ${err?.message}`);
         }

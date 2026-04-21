@@ -1,5 +1,5 @@
 import type { InstitutionScraper, ScrapedListing } from "./types";
-import { fetchHtml, cleanText } from "./utils";
+import { fetchHtml, cleanText, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://tech.wustl.edu";
@@ -17,7 +17,7 @@ export const wustlScraper: InstitutionScraper = {
         const url = page === 1
           ? `${BASE}/basic-tech-summary-search/`
           : `${BASE}/basic-tech-summary-search/?wpv_view_count=107390&wpv_paged=${page}`;
-        const $ = await fetchHtml(url, 15_000);
+        const $ = await fetchHtml(url, 15_000, undefined, 2, page === 1);
         if (!$) break;
 
         let pageNew = 0;
@@ -57,6 +57,7 @@ export const wustlScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings (detail-enriched)`);
       return results;
     } catch (err: any) {
+      if (err instanceof SiteHttpError) throw err;
       console.error(`[scraper] ${INST} failed: ${err?.message}`);
       return [];
     }
