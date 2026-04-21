@@ -37,7 +37,9 @@ export const mitScraper: InstitutionScraper = {
         const m = (page0$(el).attr("href") ?? "").match(/[?&]page=(\d+)/);
         if (m) detectedMax = Math.max(detectedMax, parseInt(m[1], 10));
       });
-      const lastPage = Math.min(detectedMax || MAX_PAGES, MAX_PAGES);
+      // If no pagination links found the whole catalog fits on page 0 — don't
+      // blindly fetch MAX_PAGES more pages. Only expand when links are detected.
+      const lastPage = detectedMax > 0 ? Math.min(detectedMax, MAX_PAGES) : 0;
       console.log(`[scraper] ${INST}: detected ${lastPage + 1} pages (pages 0–${lastPage})`);
 
       // Helper: extract all technology listings from a parsed page.
@@ -47,7 +49,7 @@ export const mitScraper: InstitutionScraper = {
             .find("a.tech-brief-teaser__link, .tech-brief-teaser__heading a, h3 a, h2 a")
             .first();
           const title = cleanText(linkEl.text());
-          if (!title || title.length < 5 || seen.has(title)) return;
+          if (!title || seen.has(title)) return;
           seen.add(title);
           const href = linkEl.attr("href") ?? "";
           results.push({
