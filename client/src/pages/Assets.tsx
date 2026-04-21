@@ -174,6 +174,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
     onSuccess: () => {
       setNoteText("");
       qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
     },
     onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
   });
