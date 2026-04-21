@@ -1264,10 +1264,13 @@ export const warfScraper: InstitutionScraper = {
         const $link = $article.find("h2.entry-title a");
         const url = $link.attr("href")?.trim() ?? "";
         if (!url.includes("/technologies/summary/") || seen.has(url)) return;
-        seen.add(url);
 
         const title = cleanText($link.text());
         if (!title || title.length < 3) return;
+
+        // Mark as seen only after required fields pass validation, so a malformed
+        // listing in one category doesn't block a valid listing in another.
+        seen.add(url);
 
         // Clone the summary div so we can remove the "Learn More" anchor without
         // mutating the shared DOM, then extract plain text description.
@@ -1279,11 +1282,13 @@ export const warfScraper: InstitutionScraper = {
       });
     };
 
+    let firstPageErrors = 0;
     for (const cat of WARF_PARENT_CATEGORIES) {
       if (signal?.aborted) break;
 
       try {
-        // Fetch page 1 — strict mode surfaces HTTP errors to the health dashboard
+        // Fetch page 1 — strict mode throws SiteHttpError on 4xx/5xx so a
+        // complete-site outage isn't silently swallowed as "0 new listings."
         const $first = await fetchHtml(`${WARF_SEARCH_BASE}${cat}`, 25000, signal, 2, true);
         if (!$first) continue;
         parsePage($first);
@@ -1310,8 +1315,15 @@ export const warfScraper: InstitutionScraper = {
           }
         }
       } catch (err: any) {
+        firstPageErrors++;
         console.warn(`[scraper] University of Wisconsin (WARF) [${cat}]: ${err?.message}`);
       }
+    }
+
+    // If every category's first-page fetch threw an error the site is likely down.
+    // Re-throw so the health dashboard records a failure status instead of "0 new."
+    if (firstPageErrors === WARF_PARENT_CATEGORIES.length && results.length === 0) {
+      throw new SiteHttpError(503, `${WARF_SEARCH_BASE}${WARF_PARENT_CATEGORIES[0]}`);
     }
 
     console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via category search`);
