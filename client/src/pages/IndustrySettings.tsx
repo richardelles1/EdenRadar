@@ -203,6 +203,22 @@ export function SimplifiedSettings() {
   );
 }
 
+function formatRelativeTime(dateStr: string): string {
+  try {
+    const elapsed = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(elapsed / 60000);
+    if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    if (days < 7) return `${days}d ago`;
+    const weeks = Math.floor(days / 7);
+    return `${weeks}w ago`;
+  } catch {
+    return "";
+  }
+}
+
 function formatJoinDate(dateStr: string): string {
   try {
     const d = new Date(dateStr);
@@ -230,6 +246,7 @@ export default function IndustrySettings() {
   const [frequency, setFrequency] = useState<Frequency>("daily");
   const [freqLoading, setFreqLoading] = useState(false);
   const [pwModalOpen, setPwModalOpen] = useState(false);
+  const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
 
   useEffect(() => {
     setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
@@ -247,6 +264,9 @@ export default function IndustrySettings() {
           if (freq === "realtime" || freq === "daily" || freq === "weekly") {
             setFrequency(freq as Frequency);
           }
+        }
+        if (p?.lastAlertSentAt) {
+          setLastAlertSentAt(p.lastAlertSentAt);
         }
       })
       .catch(() => {});
@@ -344,8 +364,13 @@ export default function IndustrySettings() {
         <div className="space-y-5">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-sm font-medium text-foreground">Email digest</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Receive a summary of new TTO assets matching your interests</p>
+              <p className="text-sm font-medium text-foreground">Email alerts when new assets match your focus areas</p>
+              <p className="text-xs text-muted-foreground mt-0.5">Get a digest of newly indexed TTO assets that match your therapeutic areas and modalities</p>
+              {lastAlertSentAt && (
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1" data-testid="text-last-alert-sent">
+                  Last sent: {formatRelativeTime(lastAlertSentAt)}
+                </p>
+              )}
             </div>
             <Switch checked={emailDigest} onCheckedChange={handleDigestToggle}
               disabled={digestLoading} data-testid="toggle-email-digest" />
