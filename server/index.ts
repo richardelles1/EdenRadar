@@ -794,6 +794,10 @@ async function createSavedAssetNotesTable() {
         created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       )
     `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS saved_asset_notes_asset_created_idx
+        ON saved_asset_notes (saved_asset_id, created_at)
+    `);
     log("[startup] saved_asset_notes table ensured", "startup");
   } catch (err: any) {
     log(`[startup] saved_asset_notes table check: ${err?.message}`, "startup");

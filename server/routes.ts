@@ -1046,14 +1046,16 @@ export async function registerRoutes(
       // Auto-log a system event note on status change (author resolved server-side)
       const prevLabel = before.status ?? null;
       const nextLabel = status ?? null;
-      if (prevLabel !== nextLabel && nextLabel) {
+      if (prevLabel !== nextLabel) {
         const displayName = await resolveAuthorName(userId ?? null);
-        const humanNext = STATUS_LABELS[nextLabel] ?? nextLabel;
+        const content = nextLabel
+          ? `Status changed to ${STATUS_LABELS[nextLabel] ?? nextLabel} by ${displayName}.`
+          : `Status cleared by ${displayName}.`;
         await storage.createAssetNote({
           savedAssetId: id,
           userId: userId ?? null,
           authorName: displayName,
-          content: `Status changed to ${humanNext} by ${displayName}.`,
+          content,
           isSystemEvent: true,
         }).catch((e) => console.error(`[system-event-note] Failed for asset ${id}:`, e));
       }
