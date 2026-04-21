@@ -497,38 +497,42 @@ export const iEdisonScraper: InstitutionScraper = {
 
     if (usedPath === "html") {
       // ── No-key path: public JSON API first, then HTML fallback ────────────
-      // Even without IEDISON_API_KEY the public REST endpoint is available and
-      // is more reliable than HTML scraping.  Attempt it first; fall back to
-      // HTML whenever JSON yields 0 results for any reason (network error, 404,
-      // malformed response, etc.).  If both are network-unreachable we throw a
-      // specific error so the orchestrator records the real cause instead of the
-      // misleading "Parser failure" label.
+      // When apiKey IS set and JSON failed entirely, usedPath remains "html"
+      // but authenticated + public JSON were already tried in the block above --
+      // skip the public JSON re-attempt and go straight to HTML (guard: !apiKey).
+      // When no key is configured, try public JSON first; fall back to HTML
+      // whenever JSON yields 0 results for any reason (network error, 404,
+      // malformed response, empty body, etc.).
       page = 0;
       let publicJsonNetworkError = false;
 
-      while (page < MAX_PAGES) {
-        const { records, hasMore, apiAvailable, networkError } = await fetchJsonPage(
-          page, signal, fromDateStr, toDateStr, undefined, undefined
-        );
-        if (networkError) {
-          publicJsonNetworkError = true;
-          break;
+      if (!apiKey) {
+        while (page < MAX_PAGES) {
+          const { records, hasMore, apiAvailable, networkError } = await fetchJsonPage(
+            page, signal, fromDateStr, toDateStr, undefined, undefined
+          );
+          if (networkError) {
+            publicJsonNetworkError = true;
+            break;
+          }
+          if (!apiAvailable) break;
+          records.forEach(addUnique);
+          if (!hasMore || records.length === 0) break;
+          page++;
         }
-        if (!apiAvailable) break;
-        records.forEach(addUnique);
-        if (!hasMore || records.length === 0) break;
-        page++;
-      }
 
-      if (all.length > 0) {
-        usedPath = "JSON API (public, no key)";
-      } else {
-        // JSON produced 0 results -- always try HTML regardless of reason
-        if (publicJsonNetworkError) {
+        if (all.length > 0) {
+          usedPath = "JSON API (public, no key)";
+        } else if (publicJsonNetworkError) {
           console.log(`[scraper] ${INST}: public JSON API unreachable (cloud IP likely blocked) -- trying HTML fallback`);
         } else {
           console.log(`[scraper] ${INST}: public JSON API returned no records -- trying HTML fallback`);
         }
+      }
+
+      if (all.length === 0) {
+        // HTML scrape: used when no-key JSON returned nothing, or when key-present
+        // JSON path failed entirely and fell through to usedPath === "html".
         page = 0;
         let htmlNetworkError = false;
         while (page < MAX_PAGES) {
