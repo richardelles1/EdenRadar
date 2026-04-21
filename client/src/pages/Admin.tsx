@@ -79,7 +79,7 @@ function timeAgo(iso: string) {
   return `${days}d ago`;
 }
 
-type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited" | "parser_failure";
+type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
 
 type ErrorType = "all" | "Timeout" | "Blocked" | "Network" | "Parsing" | "Unknown";
 
@@ -170,6 +170,7 @@ function HealthDot({ health }: { health: HealthStatus }) {
   if (health === "site_down") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-site-down" />;
   if (health === "rate_limited") return <AlertTriangle className="h-4 w-4 text-orange-500" data-testid="health-rate-limited" />;
   if (health === "blocked") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-blocked" />;
+  if (health === "network_blocked") return <AlertTriangle className="h-4 w-4 text-orange-500" data-testid="health-network-blocked" />;
   if (health === "parser_failure") return <XCircle className="h-4 w-4 text-red-500" data-testid="health-parser-failure" />;
   if (health === "warning") return <AlertTriangle className="h-4 w-4 text-yellow-500" data-testid="health-warning" />;
   if (health === "degraded") return <AlertTriangle className="h-4 w-4 text-amber-500" data-testid="health-degraded" />;
@@ -184,6 +185,7 @@ function HealthLabel({ health }: { health: HealthStatus }) {
   if (health === "site_down") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Site temporarily down</span>;
   if (health === "rate_limited") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Rate limited</span>;
   if (health === "blocked") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Blocked / WAF</span>;
+  if (health === "network_blocked") return <span className="text-orange-600 dark:text-orange-400 text-xs font-medium">Network blocked</span>;
   if (health === "parser_failure") return <span className="text-red-600 dark:text-red-400 text-xs font-medium">Parser failure</span>;
   if (health === "warning") return <span className="text-yellow-600 dark:text-yellow-400 text-xs font-medium">Warning</span>;
   if (health === "degraded") return <span className="text-amber-600 dark:text-amber-400 text-xs font-medium">Degraded</span>;
@@ -1011,7 +1013,7 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, parser_failure: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
+  const healthOrder: Record<HealthStatus, number> = { stale: 0, failing: 1, site_down: 1, rate_limited: 2, degraded: 2, parser_failure: 2, network_blocked: 2, warning: 3, blocked: 3, syncing: 4, never: 5, ok: 6 };
 
   const sortedRowsForFreeze = React.useMemo(() => {
     if (!data) return [];
@@ -1389,8 +1391,9 @@ function DataHealth({ pw }: { pw: string }) {
                   { key: "warning",  label: "Warning",      activeClass: "bg-yellow-500 text-white border-yellow-500" },
                   { key: "degraded", label: "Degraded",     activeClass: "bg-amber-500 text-white border-amber-500" },
                   { key: "stale",    label: "Stale",        activeClass: "bg-orange-500 text-white border-orange-500" },
-                  { key: "failing",  label: "Failing",      activeClass: "bg-red-600 text-white border-red-600" },
-                  { key: "never",    label: "Never synced", activeClass: "bg-muted text-foreground border-border" },
+                  { key: "failing",         label: "Failing",        activeClass: "bg-red-600 text-white border-red-600" },
+                  { key: "network_blocked", label: "Network blocked", activeClass: "bg-orange-600 text-white border-orange-600" },
+                  { key: "never",           label: "Never synced",   activeClass: "bg-muted text-foreground border-border" },
                 ] as { key: "all" | HealthStatus; label: string; activeClass: string }[]).map(({ key, label, activeClass }) => {
                   const count = key === "all" ? sortedRows.length : sortedRows.filter((r) => r.health === key).length;
                   return (

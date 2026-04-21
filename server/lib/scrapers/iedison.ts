@@ -489,13 +489,13 @@ export const iEdisonScraper: InstitutionScraper = {
     }
 
     if (usedPath === "html") {
-      // ── No-key path: try public JSON API first, then HTML ─────────────────
+      // ── No-key path: public JSON API first, then HTML fallback ────────────
       // Even without IEDISON_API_KEY the public REST endpoint is available and
-      // is more reliable than HTML scraping. Try it first; only fall back to
-      // HTML parsing if the JSON API is network-unreachable.
-      // NOTE: iedison.nih.gov blocks cloud/datacenter IPs, so both paths may
-      // timeout in hosted deployments. The error messaging distinguishes network
-      // unreachability from a genuine parser failure.
+      // is more reliable than HTML scraping.  Attempt it first; fall back to
+      // HTML whenever JSON yields 0 results for any reason (network error, 404,
+      // malformed response, etc.).  If both are network-unreachable we throw a
+      // specific error so the orchestrator records the real cause instead of the
+      // misleading "Parser failure" label.
       page = 0;
       let publicJsonNetworkError = false;
 
@@ -515,11 +515,13 @@ export const iEdisonScraper: InstitutionScraper = {
 
       if (all.length > 0) {
         usedPath = "JSON API (public, no key)";
-      } else if (publicJsonNetworkError) {
-        // JSON API is network-unreachable -- fall back to HTML
-        console.log(
-          `[scraper] ${INST}: public JSON API unreachable (cloud IP likely blocked) -- trying HTML fallback`
-        );
+      } else {
+        // JSON produced 0 results -- always try HTML regardless of reason
+        if (publicJsonNetworkError) {
+          console.log(`[scraper] ${INST}: public JSON API unreachable (cloud IP likely blocked) -- trying HTML fallback`);
+        } else {
+          console.log(`[scraper] ${INST}: public JSON API returned no records -- trying HTML fallback`);
+        }
         page = 0;
         let htmlNetworkError = false;
         while (page < MAX_PAGES) {
@@ -532,12 +534,11 @@ export const iEdisonScraper: InstitutionScraper = {
           if (!hasMore || records.length === 0) break;
           page++;
         }
-        if (htmlNetworkError && all.length === 0) {
-          console.warn(
-            `[scraper] ${INST}: both JSON API and HTML endpoints are network-unreachable. ` +
-            `iedison.nih.gov likely blocks cloud/datacenter IPs. ` +
-            `Set IEDISON_API_KEY for authenticated access which may bypass this restriction, ` +
-            `or run the scraper from an on-premises host.`
+        if (all.length === 0 && publicJsonNetworkError && htmlNetworkError) {
+          throw new Error(
+            "Network unreachable -- iedison.nih.gov blocks cloud/datacenter hosting IPs. " +
+            "Set IEDISON_API_KEY for authenticated access which may bypass this restriction, " +
+            "or run the scraper from an on-premises host."
           );
         }
       }

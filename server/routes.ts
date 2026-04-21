@@ -1597,7 +1597,7 @@ export async function registerRoutes(
         const scraperHealth = scraperHealthMap.get(name);
         const consecutiveFailures = scraperHealth?.consecutiveFailures ?? 0;
 
-        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "site_down" | "rate_limited" | "parser_failure";
+        type HealthStatus = "ok" | "warning" | "degraded" | "failing" | "stale" | "syncing" | "never" | "blocked" | "network_blocked" | "site_down" | "rate_limited" | "parser_failure";
 
         function classifyByError(errMsg: string | null | undefined): HealthStatus {
           if (!errMsg) return "parser_failure";
@@ -1605,8 +1605,9 @@ export async function registerRoutes(
           if (/\b5\d{2}\b/.test(errMsg) || m.includes("service unavailable") || m.includes("maintenance")) return "site_down";
           if (m.includes(" 429") || m.includes("rate limit") || m.includes("rate-limit") || m.includes("too many request")) return "rate_limited";
           if (m.includes(" 403") || m.includes("cloudflare") || m.includes("bot challenge") || m.includes("access denied") || m.includes(" 401")) return "blocked";
+          if (m.includes("network unreachable") || m.includes("blocks cloud") || m.includes("cloud/datacenter")) return "network_blocked";
           // Unrecognised error text on a completed session = scraper ran but
-          // produced no listings — treat as a parser / selector issue.
+          // produced no listings -- treat as a parser / selector issue.
           return "parser_failure";
         }
 
