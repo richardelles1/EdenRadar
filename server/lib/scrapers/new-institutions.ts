@@ -1669,38 +1669,47 @@ export const ukyScraper = createFlintboxScraper(
 
 // ── Bespoke HTML scrapers (Task #101, March 2026) ───────────────────────────
 
+// Boise State OTT available-technologies page uses TablePress (table.tablepress).
+// The first page of data is rendered statically (SEO fallback); DataTables enriches
+// it client-side for filtering.  Columns: [0] BSU File# | [1] Inventors | [2] Title+link.
+// We link directly to Google Patents from col[2] rather than the listing page anchor.
 export const boiseStateScraper: InstitutionScraper = {
   institution: "Boise State University",
   async scrape(): Promise<ScrapedListing[]> {
     const pageUrl = "https://www.boisestate.edu/research-ott/available-technologies/";
-    const $ = await fetchHtml(pageUrl, 15000);
+    const $ = await fetchHtml(pageUrl, 20000);
     if (!$) return [];
     const results: ScrapedListing[] = [];
     const seenBsu = new Set<string>();
     let currentCategory = "";
-    $("h2.wp-block-heading, table.tablepress").each((_, el) => {
-      const tag = $(el).prop("tagName");
+    // Walk h2 headings (category labels) and tablepress tables together in DOM order
+    $("h2, table.tablepress").each((_, el) => {
+      const tag = $(el).prop("tagName")?.toUpperCase();
       if (tag === "H2") {
         currentCategory = cleanText($(el).text());
         return;
       }
+      if (tag !== "TABLE") return;
       $(el).find("tbody tr").each((__, row) => {
         const cols = $(row).find("td");
-        if (cols.length < 3) return;
+        if (cols.length < 2) return;
         const bsuFile = cleanText($(cols[0]).text());
-        const inventors = cleanText($(cols[1]).text());
-        const linkEl = $(cols[2]).find("a");
-        const patentUrl = linkEl.attr("href") ?? "";
         if (!bsuFile || seenBsu.has(bsuFile)) return;
         seenBsu.add(bsuFile);
-        const title = currentCategory
-          ? `BSU-${bsuFile}: ${currentCategory} (${inventors})`
-          : `BSU-${bsuFile}: ${inventors}`;
-        const anchorId = currentCategory.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+        const inventors = cols.length >= 2 ? cleanText($(cols[1]).text()) : "";
+        // col[2] = technology title (link text) + Google Patents href
+        const linkEl = cols.length >= 3 ? $(cols[2]).find("a") : $();
+        const patentUrl = linkEl.attr("href") ?? "";
+        const linkTitle = cleanText(linkEl.text());
+        // Build a descriptive title: prefer explicit title text, else use category/inventors
+        const baseName = linkTitle && !/^BSU[\s-]+\d+\s+Patent$/i.test(linkTitle)
+          ? linkTitle
+          : currentCategory || inventors || `File ${bsuFile}`;
+        const title = `BSU-${bsuFile}: ${baseName}${inventors && baseName !== inventors ? ` (${inventors})` : ""}`;
         results.push({
           title,
           description: patentUrl ? `Google Patents: ${patentUrl}` : "",
-          url: anchorId ? `${pageUrl}#h-${anchorId}` : pageUrl,
+          url: patentUrl || pageUrl,
           institution: "Boise State University",
           inventors: inventors ? inventors.split(/,\s*/).filter(Boolean) : undefined,
           technologyId: `BSU-${bsuFile}`,
@@ -2133,28 +2142,92 @@ export const famuScraper: InstitutionScraper = {
   },
 };
 
-// 4. UNeTech (University of Nebraska)
+// 4. NUtech Ventures (University of Nebraska TTO)
+// unetech.org was a startup incubator with no patent/license catalog.
+// The actual University of Nebraska TTO is NUtech Ventures (nutechventures.org).
+// Strategy A: WP REST API pages endpoint — enumerates plant-germplasm variety pages
+//   and other technology pages that are statically rendered.
+// Strategy B (fallback): Static HTML scrape of /plant-germplasm/ category links.
+// The /search-technologies/ page is JS-rendered and not accessible without Playwright.
 export const unetechScraper: InstitutionScraper = {
   institution: "University of Nebraska (UNeTech)",
   async scrape(): Promise<ScrapedListing[]> {
-    const base = "https://www.unetech.org";
-    const listUrl = `${base}/portfolio/`;
-    const $ = await fetchHtml(listUrl, 15000);
-    if (!$) return [];
+    const INST = "University of Nebraska (UNeTech)";
+    const BASE = "https://www.nutechventures.org";
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
-    $('a[href*="/portfolio/"]').each((_, el) => {
-      const href = $(el).attr("href") ?? "";
-      const title = cleanText($(el).text());
-      if (!title || title.length < 5) return;
-      const fullUrl = href.startsWith("http") ? href : `${base}${href}`;
-      // Exclude the listing page itself and non-tech pages
-      if (fullUrl === listUrl || seen.has(fullUrl)) return;
-      if (/summit|investor|corps|steam|event/i.test(fullUrl)) return;
-      seen.add(fullUrl);
-      results.push({ title, description: "", url: fullUrl, institution: "University of Nebraska (UNeTech)" });
-    });
-    console.log(`[scraper] UNeTech: ${results.length} listings`);
+
+    // Slugs that identify actual technology/germplasm listing pages
+    const TECH_SLUG_PATTERNS = [
+      /^(soybeans?|glyphosate|conventional-soy|dry.beans?|sorghum|ornamental|small.grains?|wheat|barley|triticale|plant.germplasm|germplasm|seed|variety|varieties|crop)$/i,
+    ];
+    const EXCLUDE_SLUGS = new Set([
+      "about-us", "who-we-are", "contact-us", "contact-us-2", "privacy-policy",
+      "terms-and-conditions-of-use", "campusfaq", "disclosures", "nuexpress-license",
+      "mta-cda", "college-contacts", "commercialization-process", "search-technologies",
+      "entrepreneurship", "internship-program", "intern-program", "resources",
+      "guide-to-startup-companies", "nebraska-i-corps", "about-i-corps",
+      "apply-to-nebraska-i-corps", "apply-to-nebraska-i-corps-2",
+      "preparing-to-apply-for-i-corps-national-program", "success-stories",
+      "news-events", "newsevents", "annual-reports", "innovator-celebrations",
+      "understanding-ip", "licensing", "marketing", "evaluation", "industry",
+      "for-industry", "for-campus", "university-innovators", "startups",
+      "request-agreements", "join-our-mailing-list", "nutech-intern-alumni",
+      "intern-alumni-qa-luke-lacy", "intern-alumni-qa-jessie-sadlon",
+      "connie-edmonds-2", "a-system-to-support-innovation",
+    ]);
+
+    try {
+      // Strategy A: WP REST API — pages endpoint
+      const apiUrl = `${BASE}/wp-json/wp/v2/pages?per_page=100&_fields=id,title,link,slug,parent`;
+      const res = await fetch(apiUrl, {
+        signal: AbortSignal.timeout(20_000),
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+      });
+      if (res.ok) {
+        const pages = await res.json() as Array<{ id: number; title: { rendered: string }; link: string; slug: string; parent: number }>;
+        // First pass: identify germplasm parent page IDs
+        const germplasmIds = new Set<number>();
+        for (const p of pages) {
+          if (/plant.germplasm|germplasm|soybeans?|small.grains?|sorghum|ornamental|dry.beans?/i.test(p.slug)) {
+            germplasmIds.add(p.id);
+          }
+        }
+        // Second pass: include germplasm pages and their children
+        for (const p of pages) {
+          const slug = p.slug;
+          if (EXCLUDE_SLUGS.has(slug)) continue;
+          const isTechSlug = TECH_SLUG_PATTERNS.some(rx => rx.test(slug));
+          const isChildOfGermplasm = germplasmIds.has(p.parent);
+          if (!isTechSlug && !isChildOfGermplasm) continue;
+          const url = p.link;
+          if (seen.has(url)) continue;
+          seen.add(url);
+          const title = p.title.rendered.replace(/&#\d+;/g, c => String.fromCharCode(parseInt(c.slice(2, -1)))).trim();
+          if (!title || title.length < 3) continue;
+          results.push({ title, description: "", url, institution: INST });
+        }
+      }
+    } catch {
+      // API failed — fall through to Strategy B
+    }
+
+    // Strategy B: static HTML scrape of /plant-germplasm/ for category links
+    if (results.length === 0) {
+      const $ = await fetchHtml(`${BASE}/plant-germplasm/`, 15000);
+      if ($) {
+        $(`a[href*="${BASE}"]`).each((_, el) => {
+          const href = $(el).attr("href") ?? "";
+          const title = cleanText($(el).text());
+          if (!title || title.length < 3 || title.length > 120) return;
+          if (seen.has(href) || !/nutechventures\.org\/(soybeans?|wheat|barley|triticale|sorghum|ornamental|dry.beans?|small.grains?|germplasm|conventional|glyphosate)/i.test(href)) return;
+          seen.add(href);
+          results.push({ title, description: "", url: href, institution: INST });
+        });
+      }
+    }
+
+    console.log(`[scraper] ${INST}: ${results.length} listings (NUtech Ventures WP API)`);
     return results;
   },
 };
@@ -2757,102 +2830,17 @@ export const sandiaScraper: InstitutionScraper = {
   },
 };
 
-// ── Los Alamos National Laboratory — CDX-only (Task #136) ─────────────────────
-// All lanl.gov IPs are blocked from Replit — every direct HTTP fetch returns 404
-// (including the homepage). Direct Playwright would also fail.
-// Strategy: Wayback Machine CDX to discover historically-archived technology URLs,
-// then attempt to load those archived URLs. CDX is queried with a short timeout
-// and gracefully returns [] if the CDX server is slow or the query yields nothing.
-// Multiple URL patterns tried because LANL has reorganised its TTO paths over time.
-export const losAlamosScraper: InstitutionScraper = {
-  institution: "Los Alamos National Laboratory",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "Los Alamos National Laboratory";
-
-    // CDX URL patterns to probe — ordered most-likely-to-have-results first
-    const CDX_PATTERNS = [
-      "lanl.gov/technology-transfer/available-technologies/*",
-      "lanl.gov/business/technology-transfer/available-technologies/*",
-      "lanl.gov/partnerships/technology-transfer/*",
-      "lanl.gov/industry/technology-transfer/*",
-    ];
-
-    const seenUrls = new Set<string>();
-    const techUrls: string[] = [];
-
-    for (const pattern of CDX_PATTERNS) {
-      try {
-        const cdxRes = await fetch(
-          `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(pattern)}&output=json&limit=300&fl=original&collapse=urlkey&filter=statuscode:200`,
-          {
-            signal: AbortSignal.timeout(25_000),
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-          }
-        );
-        if (!cdxRes.ok) continue;
-        const rows = await cdxRes.json() as string[][];
-        for (const row of rows.slice(1)) {
-          const url = row[0];
-          if (!url) continue;
-          const clean = url.split("?")[0].split("#")[0];
-          // Must be a detail page (has a slug after the known directory paths)
-          const isDetail =
-            /\/available-technologies\/[^/]+$/.test(clean) ||
-            /\/technology-transfer\/[a-z0-9-]{10,}$/.test(clean);
-          if (!isDetail || seenUrls.has(clean)) continue;
-          seenUrls.add(clean);
-          techUrls.push(clean);
-        }
-        if (techUrls.length > 0) break; // Found results from this pattern — stop
-      } catch {
-        // CDX timeout or network error for this pattern — try next
-      }
-    }
-
-    if (techUrls.length === 0) {
-      console.log(`[scraper] ${INST}: 0 tech URLs from CDX — lanl.gov blocks Replit IPs; will retry when proxy is available`);
-      return [];
-    }
-
-    // Validate discovered URLs against the live site — only keep listings that respond.
-    // lanl.gov currently blocks Replit IPs so all live checks will likely fail;
-    // in that case return [] gracefully rather than emitting stale/unresolvable listings.
-    const toTitle = (u: string) =>
-      (u.split("/").pop() ?? "").replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
-
-    const liveResults: ScrapedListing[] = [];
-    const CHECK_TIMEOUT = 8_000;
-    const BATCH = 10; // Concurrent HEAD requests
-
-    for (let i = 0; i < techUrls.length; i += BATCH) {
-      const batch = techUrls.slice(i, i + BATCH);
-      const checks = await Promise.allSettled(
-        batch.map(async (u) => {
-          const res = await fetch(u, {
-            method: "HEAD",
-            signal: AbortSignal.timeout(CHECK_TIMEOUT),
-            headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
-            redirect: "follow",
-          });
-          return res.ok ? u : null;
-        })
-      );
-      for (const r of checks) {
-        const url = r.status === "fulfilled" ? r.value : null;
-        if (!url) continue;
-        liveResults.push({ title: toTitle(url), description: "", url, institution: INST });
-      }
-    }
-
-    if (liveResults.length === 0) {
-      console.log(`[scraper] ${INST}: CDX found ${techUrls.length} historical URLs but none are live (lanl.gov blocks Replit IPs)`);
-      return [];
-    }
-
-    console.log(`[scraper] ${INST}: ${liveResults.length} live listings`);
-    return liveResults;
-  },
-};
+// ── Los Alamos National Laboratory — proxy required ────────────────────────────
+// lanl.gov blocks all Replit datacenter IPs — every direct HTTP/HEAD fetch returns
+// 404 or times out, including the homepage.  The Wayback Machine CDX API
+// (web.archive.org/cdx) also times out from Replit, so the previous CDX-fallback
+// strategy no longer works.  Both approaches require an outbound residential proxy
+// (SCRAPER_PROXY_URL) to unblock.  Converted to stub until proxy infrastructure
+// is in place.
+export const losAlamosScraper = createStubScraper(
+  "Los Alamos National Laboratory",
+  "lanl.gov and web.archive.org CDX both time out from Replit datacenter IPs — requires SCRAPER_PROXY_URL"
+);
 
 // Flintbox portals
 export const umbcScraper = createFlintboxScraper(
@@ -7143,33 +7131,47 @@ export const csiroScraper: InstitutionScraper = {
         "Accept-Language": "en-US,en;q=0.9",
       });
 
-      // Intercept API calls the CSIRO Marketplace SPA fires for the technology catalog
+      // Intercept ALL JSON responses — CSIRO's SPA may use Sitecore fusion-search
+      // or a custom filter API fired by style.csiro.au/CSIRO2020/*/js/filter.min.js.
+      // We widen the URL filter to catch any JSON response that contains title/name arrays.
       const apiItems: { title: string; description: string; url: string }[] = [];
       page.on("response", async (resp) => {
-        const url = resp.url();
-        if (!url.includes("api") && !url.includes("search") && !url.includes("marketplace") && !url.includes("commercialis")) return;
         try {
           const ct = resp.headers()["content-type"] ?? "";
           if (!ct.includes("json")) return;
           const data = await resp.json().catch(() => null);
-          if (!data) return;
-          const items: unknown[] = Array.isArray(data) ? data
-            : (data.data ?? data.items ?? data.results ?? data.technologies ?? []);
-          for (const item of items) {
+          if (!data || typeof data !== "object") return;
+          // Try to find an array of technology records anywhere in the response
+          const candidates: unknown[] = Array.isArray(data) ? data
+            : (data.data ?? data.items ?? data.results ?? data.technologies
+              ?? data.Documents ?? data.documents ?? data.hits ?? []);
+          if (!Array.isArray(candidates) || candidates.length === 0) return;
+          for (const item of candidates) {
             const i = item as Record<string, unknown>;
-            const title = String(i.title ?? i.name ?? "").trim();
+            const meta = (i.MetaData ?? {}) as Record<string, unknown>;
+            const title = String(
+              i.title ?? i.Title ?? i.name ?? i.Name ?? meta.Title ?? ""
+            ).trim();
             if (!title || title.length < 5) continue;
-            const slug = String(i.slug ?? i.id ?? i.url ?? "").trim();
+            const slug = String(i.slug ?? i.id ?? i.Id ?? i.url ?? i.Url ?? "").trim();
             const techUrl = slug.startsWith("http") ? slug
               : slug ? `${BASE}/en/work-with-us/ip-commercialisation/Marketplace/${slug}` : LISTING_URL;
-            apiItems.push({ title, description: String(i.description ?? i.summary ?? "").slice(0, 500), url: techUrl });
+            const desc = String(
+              i.description ?? i.Description ?? i.summary ?? i.Summary ?? ""
+            ).slice(0, 500);
+            apiItems.push({ title, description: desc, url: techUrl });
           }
         } catch { /* ignore */ }
       });
 
       await page.goto(LISTING_URL, { timeout: 60_000, waitUntil: "networkidle" });
-      await page.waitForTimeout(5_000);
+      // Allow SPA JavaScript time to fire its catalog API requests
+      await page.waitForTimeout(8_000);
+      // Scroll to trigger any lazy-load or pagination-trigger
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(3_000);
+      // Scroll back to top and wait once more (some SPAs reload on scroll-back)
+      await page.evaluate(() => window.scrollTo(0, 0));
       await page.waitForTimeout(2_000);
 
       if (apiItems.length > 0) {
