@@ -57,9 +57,9 @@ export const stanfordScraper: InstitutionScraper = {
 
       // Step 2: adaptive parallel window scan (no pagination-link detection).
       // Fetch PAGE_WINDOW pages at once; stop when any page in the batch returns
-      // zero matching elements — that signals we've passed the last real page.
-      // Transient network failures (null returns) are counted separately and never
-      // trigger an early stop. EMERGENCY_CEIL is a runaway-loop guard only.
+      // zero matching elements (end of results), OR when ≥2 pages in the batch
+      // fail to load (CDN partial throttle — continuing would just burn time).
+      // EMERGENCY_CEIL is a runaway-loop guard only.
       const EMERGENCY_CEIL = 500;
       let offset = 1;
       let skipped = 0;
