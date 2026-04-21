@@ -76,7 +76,7 @@ export interface IStorage {
 
   createAssetNote(data: InsertSavedAssetNote): Promise<SavedAssetNote>;
   getAssetNotes(savedAssetId: number, limit?: number, offset?: number): Promise<SavedAssetNote[]>;
-  getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>>;
+  getAssetNoteMeta(savedAssetIds: number[]): Promise<Record<number, { count: number; lastNoteAt: Date | null }>>;
 
   getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
   getPipelineList(id: number): Promise<PipelineList | undefined>;
@@ -466,17 +466,18 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
   }
 
-  async getAssetNoteCounts(savedAssetIds: number[]): Promise<Record<number, number>> {
+  async getAssetNoteMeta(savedAssetIds: number[]): Promise<Record<number, { count: number; lastNoteAt: Date | null }>> {
     if (savedAssetIds.length === 0) return {};
     const rows = await db
       .select({
         savedAssetId: savedAssetNotes.savedAssetId,
         count: sql<number>`count(*)::int`,
+        lastNoteAt: sql<Date | null>`max(${savedAssetNotes.createdAt})`,
       })
       .from(savedAssetNotes)
       .where(inArray(savedAssetNotes.savedAssetId, savedAssetIds))
       .groupBy(savedAssetNotes.savedAssetId);
-    return Object.fromEntries(rows.map((r) => [r.savedAssetId, r.count]));
+    return Object.fromEntries(rows.map((r) => [r.savedAssetId, { count: r.count, lastNoteAt: r.lastNoteAt }]));
   }
 
   async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {

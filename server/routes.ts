@@ -918,9 +918,13 @@ export async function registerRoutes(
         const memberId = req.query.memberId as string | undefined;
         const result = await storage.getSavedAssetsForTeam(userOrg.id, memberId || undefined);
         const teamIds = result.assets.map((a) => a.id);
-        const teamNoteCounts = await storage.getAssetNoteCounts(teamIds);
+        const teamNoteMeta = await storage.getAssetNoteMeta(teamIds);
         return res.json({
-          assets: result.assets.map((a) => ({ ...a, noteCount: teamNoteCounts[a.id] ?? 0 })),
+          assets: result.assets.map((a) => ({
+            ...a,
+            noteCount: teamNoteMeta[a.id]?.count ?? 0,
+            lastNoteAt: teamNoteMeta[a.id]?.lastNoteAt ?? null,
+          })),
           members: result.members,
         });
       }
@@ -934,8 +938,14 @@ export async function registerRoutes(
       }
       const assets = await storage.getSavedAssets(pipelineListId, userId);
       const assetIds = assets.map((a) => a.id);
-      const noteCounts = await storage.getAssetNoteCounts(assetIds);
-      res.json({ assets: assets.map((a) => ({ ...a, noteCount: noteCounts[a.id] ?? 0 })) });
+      const noteMeta = await storage.getAssetNoteMeta(assetIds);
+      res.json({
+        assets: assets.map((a) => ({
+          ...a,
+          noteCount: noteMeta[a.id]?.count ?? 0,
+          lastNoteAt: noteMeta[a.id]?.lastNoteAt ?? null,
+        })),
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch saved assets" });
     }

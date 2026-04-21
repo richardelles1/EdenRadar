@@ -816,11 +816,18 @@ async function migrateAssetStatusValues() {
     const r2 = await db.execute(sql`
       UPDATE saved_assets SET status = 'in_discussion' WHERE status = 'contacted'
     `);
+    // Add replacement constraint covering the 5 new values (NULL is allowed)
+    await db.execute(sql`
+      ALTER TABLE saved_assets
+        ADD CONSTRAINT saved_assets_status_check
+        CHECK (status IS NULL OR status IN ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed'))
+    `);
     type PgResult = { rowCount: number | null };
     const migrated = ((r1 as unknown as PgResult).rowCount ?? 0) + ((r2 as unknown as PgResult).rowCount ?? 0);
     if (migrated > 0) {
       log(`[startup] Migrated ${migrated} saved_asset status row(s) to new vocabulary`, "startup");
     }
+    log("[startup] saved_assets status constraint updated to 5-value vocabulary", "startup");
   } catch (err: any) {
     log(`[startup] Asset status migration note: ${err?.message}`, "startup");
   }

@@ -52,7 +52,7 @@ type PipelinesResponse = {
   uncategorisedCount: number;
 };
 
-type TeamSavedAsset = SavedAsset & { saverName?: string | null; noteCount?: number };
+type TeamSavedAsset = SavedAsset & { saverName?: string | null; noteCount?: number; lastNoteAt?: string | Date | null };
 type TeamMember = { userId: string; displayName: string | null };
 
 type SavedAssetsResponse = {
@@ -105,12 +105,13 @@ function formatNoteTime(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserName }: {
+function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUserName }: {
   asset: TeamSavedAsset;
   onDelete: (id: number) => void;
   onMove: (id: number, pipelineListId: number | null) => void;
   pipelines: PipelineWithCount[];
-  readOnly?: boolean;
+  /** When true, hides the delete button and pipeline move select (team view) */
+  restrictMeta?: boolean;
   currentUserName?: string | null;
 }) {
   const qc = useQueryClient();
@@ -122,6 +123,11 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
 
   const { data: notesData, isLoading: notesLoading } = useQuery<{ notes: SavedAssetNote[] }>({
     queryKey: ["/api/saved-assets", asset.id, "notes"],
+    queryFn: () =>
+      fetch(`/api/saved-assets/${asset.id}/notes`).then((r) => {
+        if (!r.ok) throw new Error("Failed to load notes");
+        return r.json();
+      }),
     enabled: notesOpen,
     staleTime: 10000,
     refetchInterval: notesOpen ? 15000 : false,
@@ -206,7 +212,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
                 <span className="truncate max-w-[80px]">{asset.saverName ?? "Unknown"}</span>
               </span>
             )}
-            {!readOnly && (
+            {!restrictMeta && (
               <button
                 onClick={() => onDelete(asset.id)}
                 className="w-6 h-6 rounded flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive hover:bg-destructive/10 transition-all duration-150"
@@ -262,7 +268,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
                 View
               </a>
             )}
-            {pipelines.length > 0 && !readOnly && (
+            {pipelines.length > 0 && !restrictMeta && (
               <select
                 value={asset.pipelineListId ?? "null"}
                 onChange={(e) => {
@@ -283,7 +289,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          {!readOnly ? (
+          {!restrictMeta ? (
             <div className="flex items-center gap-1.5">
               {statusCfg && (
                 <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
@@ -322,6 +328,11 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
               const count = notesOpen ? notes.length : (asset.noteCount ?? 0);
               return count > 0 ? `${count} note${count !== 1 ? "s" : ""}` : "Notes";
             })()}
+            {!notesOpen && asset.lastNoteAt && (
+              <span className="text-muted-foreground/70 text-[9px] hidden sm:inline">
+                · {formatNoteTime(asset.lastNoteAt as string)}
+              </span>
+            )}
             {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
           </button>
         </div>
@@ -367,7 +378,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, readOnly, currentUserNa
             )}
             <div ref={notesEndRef} />
           </div>
-          {!readOnly && (
+          {!restrictMeta && (
             <div className="flex items-end gap-1.5 px-3 pb-2.5 pt-1.5 border-t border-card-border/50">
               <Textarea
                 value={noteText}
@@ -1070,7 +1081,7 @@ export default function Assets() {
                       onDelete={(id) => deleteMutation.mutate(id)}
                       onMove={(id, pipelineListId) => moveMutation.mutate({ id, pipelineListId })}
                       pipelines={pipelines}
-                      readOnly={teamScope}
+                      restrictMeta={teamScope}
                       currentUserName={currentUserName}
                     />
                   ))}
