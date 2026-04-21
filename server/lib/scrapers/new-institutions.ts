@@ -1215,17 +1215,42 @@ export const indianaScraper = createFlintboxScraper(
   "Indiana University"
 );
 export const notredameScraper = createInPartScraper("nd", "University of Notre Dame");
-// WARF — rewritten 2026-04-21 after site redesign removed the search endpoint
-// (/search-results/?search-technology=1 no longer returns tech-listing anchor links).
-// The WP REST API pages endpoint now serves curated technology portfolio pages
-// (42 pages) under /commercialize/technologies/ with title + excerpt available.
-// These are "WARF Advances" and Tech-Connect featured innovations — not the full
-// historical catalog of ~1,500 patents, but the only publicly accessible set.
-const WARF_SKIP_SLUGS = new Set([
-  "technologies",
-  "tech-connect",
-  "warf-advances-uw-madison-technology",
-]);
+// WARF — rewritten 2026-04-21 (v1: WP REST API, 42 pages) and again 2026-04-21 (v2, below).
+//
+// v2 approach: WARF's search-results page (/search-results/?search-technology=1) renders
+// technology listings server-side when a `s_tech_category` filter is provided. Each of the
+// 18 parent technology categories returns up to 25 results per page (paginated with &pag=N).
+// All ~1,500 WARF patents are accessible this way — no Playwright needed. URL pattern:
+//   https://www.warf.org/technologies/summary/{patent_id}
+//
+// Deduplication by URL handles patents that appear across multiple categories.
+
+const WARF_SEARCH_BASE = "https://www.warf.org/search-results/?search-technology=1&s_tech_category=";
+const WARF_MAX_PAGES_PER_CAT = 40;
+
+// 18 parent categories (options without "-- " prefix in the s_tech_category dropdown
+// at https://www.warf.org/commercialize/technologies/). Subcategories are subsets of
+// their parent, so scraping parents only avoids duplicate requests.
+const WARF_PARENT_CATEGORIES = [
+  "analytical-instrumentation-methods-materials",
+  "animals-agriculture-food",
+  "clean-technology",
+  "diagnostics-biomarkers",
+  "drug-delivery",
+  "drug-discovery-development",
+  "education-training",
+  "engineering",
+  "information-technology",
+  "materials-chemicals",
+  "medical-devices",
+  "medical-imaging",
+  "miscellaneous",
+  "pluripotent-stem-cells",
+  "radiation-therapy",
+  "research-tools",
+  "semiconductors-integrated-circuits",
+  "therapeutics-vaccines",
+] as const;
 
 export const warfScraper: InstitutionScraper = {
   institution: "University of Wisconsin",
@@ -1233,47 +1258,64 @@ export const warfScraper: InstitutionScraper = {
     const results: ScrapedListing[] = [];
     const seen = new Set<string>();
 
-    try {
-      // Enumerate all WP pages (3 pages × 100/page = up to 300 pages total)
-      for (let pg = 1; pg <= 3; pg++) {
-        if (signal?.aborted) break;
-        const data = await fetchJson<any[]>(
-          `https://www.warf.org/wp-json/wp/v2/pages?per_page=100&page=${pg}`,
-          20000,
-          signal,
-        );
-        if (!data || !Array.isArray(data) || data.length === 0) break;
+    const parsePage = ($: NonNullable<Awaited<ReturnType<typeof fetchHtml>>>): void => {
+      $("article.technology-entry").each((_, el) => {
+        const $article = $(el);
+        const $link = $article.find("h2.entry-title a");
+        const url = $link.attr("href")?.trim() ?? "";
+        if (!url.includes("/technologies/summary/") || seen.has(url)) return;
+        seen.add(url);
 
-        for (const page of data) {
-          if (!page.link?.includes("/commercialize/technologies/")) continue;
-          if (WARF_SKIP_SLUGS.has(page.slug)) continue;
-          if (seen.has(page.link)) continue;
-          seen.add(page.link);
+        const title = cleanText($link.text());
+        if (!title || title.length < 3) return;
 
-          const title = cleanText((page.title?.rendered ?? "").replace(/<[^>]+>/g, ""));
-          if (!title || title.length < 3) continue;
+        // Clone the summary div so we can remove the "Learn More" anchor without
+        // mutating the shared DOM, then extract plain text description.
+        const $summary = $article.find("div.entry-summary").clone();
+        $summary.find("a").remove();
+        const description = cleanText($summary.text()).replace(/\s*\.\.\.\s*$/, "...").slice(0, 1000);
 
-          // Prefer excerpt (short summary); fall back to first 400 chars of content
-          const rawExcerpt = (page.excerpt?.rendered ?? "").replace(/<[^>]+>/g, "");
-          const rawContent = (page.content?.rendered ?? "").replace(/<[^>]+>/g, "");
-          let description = cleanText(rawExcerpt || rawContent).replace(/Read More\s*$/, "").trim();
-          description = description.slice(0, 1000);
+        results.push({ title, url, description, institution: "University of Wisconsin" });
+      });
+    };
 
-          results.push({
-            title,
-            url: page.link,
-            description,
-            institution: "University of Wisconsin",
-          });
+    for (const cat of WARF_PARENT_CATEGORIES) {
+      if (signal?.aborted) break;
+
+      try {
+        // Fetch page 1 — strict mode surfaces HTTP errors to the health dashboard
+        const $first = await fetchHtml(`${WARF_SEARCH_BASE}${cat}`, 25000, signal, 2, true);
+        if (!$first) continue;
+        parsePage($first);
+
+        // Determine total pages from "PAGE 1 OF N" header rendered in the HTML
+        const bodyHtml = $first("body").html() ?? "";
+        const pageCountMatch = bodyHtml.match(/PAGE\s+1\s+OF\s+(\d+)/i);
+        const totalPages = pageCountMatch
+          ? Math.min(parseInt(pageCountMatch[1], 10), WARF_MAX_PAGES_PER_CAT)
+          : 1;
+
+        // Fetch remaining pages in parallel batches of 5 to stay within rate limits
+        for (let pg = 2; pg <= totalPages; pg += 5) {
+          if (signal?.aborted) break;
+          const batch = Array.from(
+            { length: Math.min(5, totalPages - pg + 1) },
+            (_, i) => pg + i,
+          );
+          const pages = await Promise.all(
+            batch.map((p) => fetchHtml(`${WARF_SEARCH_BASE}${cat}&pag=${p}`, 25000, signal)),
+          );
+          for (const $ of pages) {
+            if ($) parsePage($);
+          }
         }
+      } catch (err: any) {
+        console.warn(`[scraper] University of Wisconsin (WARF) [${cat}]: ${err?.message}`);
       }
-
-      console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via WP REST API`);
-      return results;
-    } catch (err: any) {
-      console.warn(`[scraper] University of Wisconsin (WARF): ${err?.message}`);
-      return results;
     }
+
+    console.log(`[scraper] University of Wisconsin (WARF): ${results.length} listings via category search`);
+    return results;
   },
 };
 export const auburnScraper = createInPartScraper("auburn", "Auburn University");
