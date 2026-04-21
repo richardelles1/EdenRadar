@@ -1292,7 +1292,10 @@ function DataHealth({ pw }: { pw: string }) {
                 )}
               </div>
             </div>
-            <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">Runs automatically after each full scraper cycle</span>
+            <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
+              <span className="text-[10px] text-muted-foreground/60">Runs automatically after each full scraper cycle</span>
+              <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">BT/FT coverage: approved labels only (pre-approval gap)</span>
+            </div>
           </div>
         )}
 
