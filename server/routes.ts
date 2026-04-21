@@ -990,6 +990,16 @@ export async function registerRoutes(
     }
   });
 
+  // ── Resolve display name from authenticated userId ────────────────────────
+  async function resolveAuthorName(userId: string | null): Promise<string> {
+    if (!userId) return "Team Member";
+    try {
+      const profile = await storage.getIndustryProfileByUserId(userId);
+      if (profile?.userName?.trim()) return profile.userName.trim();
+    } catch { /* fall through */ }
+    return "Team Member";
+  }
+
   // ── Saved asset access guard ─────────────────────────────────────────────
   async function canAccessSavedAsset(asset: { userId: string | null }, requestUserId: string | null): Promise<boolean> {
     if (!requestUserId) return false;
@@ -1017,9 +1027,8 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
-      const { status, authorName } = z.object({
+      const { status } = z.object({
         status: z.enum(SAVED_ASSET_STATUSES).nullable(),
-        authorName: z.string().optional(),
       }).parse(req.body);
       const userId = await tryGetUserId(req);
 
@@ -1030,11 +1039,11 @@ export async function registerRoutes(
       const asset = await storage.updateSavedAssetStatus(id, status);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
 
-      // Auto-log a system event note on status change
+      // Auto-log a system event note on status change (author resolved server-side)
       const prevLabel = before.status ?? null;
       const nextLabel = status ?? null;
       if (prevLabel !== nextLabel && nextLabel) {
-        const displayName = authorName ?? "Someone";
+        const displayName = await resolveAuthorName(userId ?? null);
         const humanNext = STATUS_LABELS[nextLabel] ?? nextLabel;
         await storage.createAssetNote({
           savedAssetId: id,
@@ -1074,9 +1083,8 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
-      const { content, authorName } = z.object({
+      const { content } = z.object({
         content: z.string().min(1).max(2000),
-        authorName: z.string().default("Unknown"),
       }).parse(req.body);
       const userId = await tryGetUserId(req);
 
@@ -1084,10 +1092,11 @@ export async function registerRoutes(
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       if (!await canAccessSavedAsset(asset, userId ?? null)) return res.status(403).json({ error: "Access denied" });
 
+      const resolvedAuthor = await resolveAuthorName(userId ?? null);
       const note = await storage.createAssetNote({
         savedAssetId: id,
         userId: userId ?? null,
-        authorName,
+        authorName: resolvedAuthor,
         content,
         isSystemEvent: false,
       });

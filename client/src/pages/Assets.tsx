@@ -105,14 +105,13 @@ function formatNoteTime(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUserName }: {
+function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
   asset: TeamSavedAsset;
   onDelete: (id: number) => void;
   onMove: (id: number, pipelineListId: number | null) => void;
   pipelines: PipelineWithCount[];
   /** When true, hides the delete button and pipeline move select (team view) */
   restrictMeta?: boolean;
-  currentUserName?: string | null;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -145,7 +144,6 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUs
     mutationFn: async (status: string | null) => {
       const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, {
         status,
-        authorName: currentUserName ?? "Team Member",
       });
       return res.json();
     },
@@ -161,7 +159,6 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUs
     mutationFn: async (content: string) => {
       const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, {
         content,
-        authorName: currentUserName ?? "Team Member",
       });
       return res.json();
     },
@@ -289,35 +286,25 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUs
         </div>
 
         <div className="flex items-center justify-between gap-2 pt-0.5">
-          {!restrictMeta ? (
-            <div className="flex items-center gap-1.5">
-              {statusCfg && (
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
-                  {statusCfg.label}
-                </span>
-              )}
-              <select
-                value={localStatus ?? "none"}
-                onChange={(e) => handleStatusChange(e.target.value)}
-                disabled={statusMutation.isPending}
-                className={`text-[10px] bg-transparent border border-card-border rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
-                data-testid={`select-status-${asset.id}`}
-              >
-                <option value="none">Set stage</option>
-                {SAVED_ASSET_STATUSES.map((s) => (
-                  <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div>
-              {statusCfg && (
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
-                  {statusCfg.label}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-1.5">
+            {statusCfg && (
+              <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
+                {statusCfg.label}
+              </span>
+            )}
+            <select
+              value={localStatus ?? "none"}
+              onChange={(e) => handleStatusChange(e.target.value)}
+              disabled={statusMutation.isPending}
+              className={`text-[10px] bg-transparent border border-card-border rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
+              data-testid={`select-status-${asset.id}`}
+            >
+              <option value="none">Set stage</option>
+              {SAVED_ASSET_STATUSES.map((s) => (
+                <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => setNotesOpen((o) => !o)}
             className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${notesOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-card-border text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
@@ -697,13 +684,6 @@ export default function Assets() {
   const { data: org } = useOrg();
   const hasTeamOrg = !!(org && org.planTier !== "individual");
 
-  const { data: profileData } = useQuery<{ profile?: { userName?: string | null } }>({
-    queryKey: ["/api/industry/profile"],
-    staleTime: 300000,
-    retry: false,
-  });
-  const currentUserName = profileData?.profile?.userName ?? null;
-
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
     queryKey: ["/api/pipelines"],
     staleTime: 30000,
@@ -737,6 +717,8 @@ export default function Assets() {
       if (!res.ok) throw new Error("Failed to load assets");
       return res.json();
     },
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const deleteMutation = useMutation({
@@ -1082,7 +1064,6 @@ export default function Assets() {
                       onMove={(id, pipelineListId) => moveMutation.mutate({ id, pipelineListId })}
                       pipelines={pipelines}
                       restrictMeta={teamScope}
-                      currentUserName={currentUserName}
                     />
                   ))}
                 </div>

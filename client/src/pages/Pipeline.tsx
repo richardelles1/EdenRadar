@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,11 +19,27 @@ import {
   Copy,
   Check,
   Printer,
+  MessageSquare,
+  ChevronDown,
+  ChevronUp,
+  Send,
 } from "lucide-react";
 import type { SavedAsset } from "@shared/schema";
+import { SAVED_ASSET_STATUSES } from "@shared/schema";
+
+type AssetNote = { id: number; authorName: string; content: string; createdAt: string; isSystemEvent: boolean };
+type NotesResponse = { notes: AssetNote[]; total: number };
 
 type SavedAssetsResponse = {
-  assets: SavedAsset[];
+  assets: (SavedAsset & { noteCount?: number; lastNoteAt?: string | null })[];
+};
+
+const STATUS_CONFIG: Record<string, { label: string; pill: string; select: string }> = {
+  watching:      { label: "Watching",      pill: "bg-sky-500/15 text-sky-400 border-sky-500/30",       select: "text-sky-400" },
+  evaluating:    { label: "Evaluating",    pill: "bg-violet-500/15 text-violet-400 border-violet-500/30", select: "text-violet-400" },
+  in_discussion: { label: "In Discussion", pill: "bg-amber-500/15 text-amber-400 border-amber-500/30",  select: "text-amber-400" },
+  on_hold:       { label: "On Hold",       pill: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",     select: "text-zinc-400" },
+  passed:        { label: "Passed",        pill: "bg-rose-500/15 text-rose-400 border-rose-500/30",     select: "text-rose-400" },
 };
 
 const STAGES: { key: string; label: string; colorClass: string; dotClass: string }[] = [
@@ -70,16 +86,98 @@ const STAGE_ABBREV: Record<string, string> = {
   approved: "AP",
 };
 
-function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: number) => void }) {
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  return parts.length >= 2
+    ? (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+    : name.slice(0, 2).toUpperCase();
+}
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
+}
+
+type PipelineAsset = SavedAsset & { noteCount?: number; lastNoteAt?: string | null };
+
+function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id: number) => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
   const cardRef = useRef<HTMLDivElement>(null);
+  const notesEndRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
   const [pressed, setPressed] = useState(false);
   const [hovered, setHovered] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+
   const modalityClass = getBadgeClass(MODALITY_COLORS, asset.modality);
-  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "—";
+  const stageAbbr = STAGE_ABBREV[asset.developmentStage?.toLowerCase().trim()] ?? "unknown";
+  const statusCfg = localStatus ? STATUS_CONFIG[localStatus] : null;
+
+  const { data: notesData } = useQuery<NotesResponse>({
+    queryKey: ["/api/saved-assets", asset.id, "notes"],
+    queryFn: async () => {
+      const res = await fetch(`/api/saved-assets/${asset.id}/notes?limit=50`);
+      if (!res.ok) throw new Error("Failed to load notes");
+      return res.json();
+    },
+    enabled: notesOpen,
+    staleTime: 10000,
+    refetchInterval: notesOpen ? 15000 : false,
+  });
+  const notes = notesData?.notes ?? [];
+
+  useEffect(() => {
+    if (notesOpen && notesEndRef.current) {
+      notesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [notesOpen, notes.length]);
+
+  const statusMutation = useMutation({
+    mutationFn: async (status: string | null) => {
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/status`, { status });
+      return res.json();
+    },
+    onSuccess: (_, newStatus) => {
+      setLocalStatus(newStatus);
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Status update failed", description: err.message, variant: "destructive" }),
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await apiRequest("POST", `/api/saved-assets/${asset.id}/notes`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      setNoteText("");
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
+  });
+
+  const handleStatusChange = (value: string) => {
+    statusMutation.mutate(value === "none" ? null : value);
+  };
+
+  const handleNoteSubmit = () => {
+    const trimmed = noteText.trim();
+    if (!trimmed || noteMutation.isPending) return;
+    noteMutation.mutate(trimmed);
+  };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
+    if (!cardRef.current || notesOpen) return;
     const rect = cardRef.current.getBoundingClientRect();
     const relX = (e.clientX - rect.left) / rect.width;
     const relY = (e.clientY - rect.top) / rect.height;
@@ -91,6 +189,9 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
     setTilt({ x: 0, y: 0, active: false });
     setPressed(false);
   };
+
+  const noteCount = asset.noteCount ?? notes.length;
+  const lastNoteAt = asset.lastNoteAt ?? (notes.length > 0 ? notes[notes.length - 1]?.createdAt : null);
 
   return (
     <div style={{ perspective: "1000px" }} data-testid={`pipeline-card-${asset.id}`}>
@@ -145,7 +246,7 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
         >
           <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
           <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
-            {stageAbbr !== "—" ? stageAbbr : <span className="opacity-40">—</span>}
+            {stageAbbr !== "unknown" ? STAGE_ABBREV[stageAbbr] ?? stageAbbr : <span className="opacity-40">?</span>}
           </span>
         </div>
 
@@ -185,7 +286,47 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
             </div>
           </div>
 
-          <div className="flex items-center justify-between pt-1.5 border-t border-white/20 dark:border-white/10">
+          {/* Status + Notes toggle row */}
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/20 dark:border-white/10">
+            <div className="flex items-center gap-1">
+              {statusCfg && (
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${statusCfg.pill}`}>
+                  {statusCfg.label}
+                </span>
+              )}
+              <select
+                value={localStatus ?? "none"}
+                onChange={(e) => handleStatusChange(e.target.value)}
+                disabled={statusMutation.isPending}
+                className={`text-[10px] bg-transparent border border-white/20 dark:border-white/10 rounded px-1.5 py-0.5 focus:outline-none cursor-pointer hover:border-primary/30 transition-colors ${statusCfg ? statusCfg.select : "text-muted-foreground"}`}
+                data-testid={`select-pipeline-status-${asset.id}`}
+              >
+                <option value="none">CRM stage</option>
+                {SAVED_ASSET_STATUSES.map((s) => (
+                  <option key={s} value={s}>{STATUS_CONFIG[s]?.label ?? s}</option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              onClick={() => setNotesOpen((o) => !o)}
+              className={`flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded border transition-colors ${notesOpen ? "border-primary/30 bg-primary/5 text-primary" : "border-white/20 dark:border-white/10 text-muted-foreground hover:border-primary/20 hover:text-foreground"}`}
+              data-testid={`button-pipeline-notes-toggle-${asset.id}`}
+            >
+              <MessageSquare className="w-2.5 h-2.5" />
+              <span>{noteCount > 0 ? noteCount : "Notes"}</span>
+              {notesOpen ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+            </button>
+          </div>
+
+          {lastNoteAt && !notesOpen && (
+            <p className="text-[9px] text-muted-foreground -mt-1.5">
+              Last note {timeAgo(lastNoteAt)}
+            </p>
+          )}
+
+          {/* Inline source / dossier links */}
+          <div className="flex items-center justify-between -mt-1">
             <p className="text-[10px] text-muted-foreground truncate">
               {asset.sourceJournal} · {asset.publicationYear}
             </p>
@@ -213,6 +354,65 @@ function PipelineCard({ asset, onDelete }: { asset: SavedAsset; onDelete: (id: n
               )}
             </div>
           </div>
+
+          {/* Notes panel */}
+          {notesOpen && (
+            <div className="border-t border-white/20 dark:border-white/10 pt-2.5 -mx-0 flex flex-col gap-2">
+              <div className="max-h-40 overflow-y-auto flex flex-col gap-1.5 pr-0.5">
+                {notes.length === 0 ? (
+                  <p className="text-[10px] text-muted-foreground text-center py-2">No notes yet</p>
+                ) : (
+                  notes.map((note) => (
+                    <div
+                      key={note.id}
+                      className={`flex gap-1.5 ${note.isSystemEvent ? "opacity-60" : ""}`}
+                      data-testid={`note-pipeline-${note.id}`}
+                    >
+                      {!note.isSystemEvent && (
+                        <div className="w-4 h-4 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[7px] font-bold shrink-0 mt-0.5">
+                          {getInitials(note.authorName)}
+                        </div>
+                      )}
+                      <div className={`flex-1 min-w-0 ${note.isSystemEvent ? "pl-5.5" : ""}`}>
+                        {!note.isSystemEvent && (
+                          <div className="flex items-center gap-1 mb-0.5">
+                            <span className="font-medium text-foreground text-[10px]">{note.authorName}</span>
+                            <span className="text-[9px] text-muted-foreground">{timeAgo(note.createdAt)}</span>
+                          </div>
+                        )}
+                        <p className={`text-[10px] leading-relaxed break-words ${note.isSystemEvent ? "text-muted-foreground italic" : "text-foreground"}`}>
+                          {note.content}
+                        </p>
+                      </div>
+                    </div>
+                  ))
+                )}
+                <div ref={notesEndRef} />
+              </div>
+
+              <div className="flex gap-1.5 items-end">
+                <textarea
+                  value={noteText}
+                  onChange={(e) => setNoteText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleNoteSubmit(); }
+                  }}
+                  placeholder="Add a note..."
+                  rows={2}
+                  className="flex-1 text-[10px] resize-none rounded border border-white/20 dark:border-white/10 bg-muted/20 px-2 py-1.5 focus:outline-none focus:border-primary/30 placeholder:text-muted-foreground"
+                  data-testid={`textarea-pipeline-note-${asset.id}`}
+                />
+                <button
+                  onClick={handleNoteSubmit}
+                  disabled={!noteText.trim() || noteMutation.isPending}
+                  className="w-6 h-6 rounded flex items-center justify-center bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all active:scale-90 shrink-0 mb-0.5"
+                  data-testid={`button-pipeline-note-submit-${asset.id}`}
+                >
+                  {noteMutation.isPending ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Send className="w-2.5 h-2.5" />}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -230,6 +430,8 @@ export default function Pipeline() {
 
   const { data, isLoading } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
+    refetchInterval: 30000,
+    refetchOnWindowFocus: true,
   });
 
   const briefMutation = useMutation({
