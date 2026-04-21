@@ -18,6 +18,7 @@ interface BuyerProfile {
 interface BuyerProfileFormProps {
   value: BuyerProfile;
   onChange: (profile: BuyerProfile) => void;
+  onClear?: () => void;
 }
 
 const THERAPEUTIC_AREAS = [
@@ -159,7 +160,7 @@ const EMPTY_PROFILE: BuyerProfile = {
   notes: "",
 };
 
-export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
+export function BuyerProfileForm({ value, onChange, onClear }: BuyerProfileFormProps) {
   const [open, setOpen] = useState(false);
 
   const set = <K extends keyof BuyerProfile>(key: K, val: BuyerProfile[K]) =>
@@ -174,6 +175,7 @@ export function BuyerProfileForm({ value, onChange }: BuyerProfileFormProps) {
 
   const handleClear = () => {
     onChange(EMPTY_PROFILE);
+    onClear?.();
     setOpen(false);
   };
 

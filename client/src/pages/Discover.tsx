@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
@@ -40,6 +40,20 @@ type SavedAssetsResponse = {
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
 
 const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
+
+const BUYER_PROFILE_KEY = "edenradar:buyer-profile";
+
+function loadBuyerProfile(): BuyerProfile {
+  try {
+    const stored = localStorage.getItem(BUYER_PROFILE_KEY);
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return { ...DEFAULT_BUYER_PROFILE, ...parsed };
+    }
+  } catch {
+  }
+  return DEFAULT_BUYER_PROFILE;
+}
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 const MODALITIES = [
@@ -143,8 +157,29 @@ export default function Discover() {
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [dateFilter, setDateFilter] = useState<string>("all");
   const [minScore, setMinScore] = useState<number>(0);
-  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(DEFAULT_BUYER_PROFILE);
+  const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const [selectedSources, setSelectedSources] = useState<string[]>(ALL_SOURCE_KEYS);
+
+  const skipNextPersist = useRef(false);
+
+  useEffect(() => {
+    if (skipNextPersist.current) {
+      skipNextPersist.current = false;
+      return;
+    }
+    try {
+      localStorage.setItem(BUYER_PROFILE_KEY, JSON.stringify(buyerProfile));
+    } catch {
+    }
+  }, [buyerProfile]);
+
+  function handleClearProfile() {
+    skipNextPersist.current = true;
+    try {
+      localStorage.removeItem(BUYER_PROFILE_KEY);
+    } catch {
+    }
+  }
 
   const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
@@ -402,7 +437,7 @@ export default function Discover() {
               </TooltipProvider>
             </div>
 
-            <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} />
+            <BuyerProfileForm value={buyerProfile} onChange={setBuyerProfile} onClear={handleClearProfile} />
 
             <SourceSelector sources={sources} selected={selectedSources} onToggle={handleToggleSource} />
 
