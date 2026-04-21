@@ -1003,6 +1003,8 @@ export async function registerRoutes(
   // ── Saved asset access guard ─────────────────────────────────────────────
   async function canAccessSavedAsset(asset: { userId: string | null }, requestUserId: string | null): Promise<boolean> {
     if (!requestUserId) return false;
+    // Legacy rows with no owner are visible to any authenticated user and can be acted on
+    if (asset.userId === null) return true;
     if (asset.userId === requestUserId) return true;
     // Allow access for teammates in the same org
     if (asset.userId) {
