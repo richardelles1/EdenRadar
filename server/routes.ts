@@ -1003,7 +1003,9 @@ export async function registerRoutes(
   // ── Saved asset access guard ─────────────────────────────────────────────
   async function canAccessSavedAsset(asset: { userId: string | null }, requestUserId: string | null): Promise<boolean> {
     if (!requestUserId) return false;
-    // Legacy rows with no owner are visible to any authenticated user and can be acted on
+    // Legacy rows with no owner are visible to all authenticated industry users (backward compat).
+    // These are historical TTO assets not yet associated with a specific org/user; any buyer
+    // who can see them in their list query may also update status/notes on them.
     if (asset.userId === null) return true;
     if (asset.userId === requestUserId) return true;
     // Allow access for teammates in the same org
@@ -1072,8 +1074,10 @@ export async function registerRoutes(
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       if (!await canAccessSavedAsset(asset, userId ?? null)) return res.status(403).json({ error: "Access denied" });
 
-      const limit = Math.min(parseInt(req.query.limit as string || "50", 10), 200);
-      const offset = parseInt(req.query.offset as string || "0", 10);
+      const limitRaw = parseInt(req.query.limit as string || "50", 10);
+      const offsetRaw = parseInt(req.query.offset as string || "0", 10);
+      const limit = Math.min(isNaN(limitRaw) ? 50 : limitRaw, 200);
+      const offset = isNaN(offsetRaw) || offsetRaw < 0 ? 0 : offsetRaw;
       const notes = await storage.getAssetNotes(id, limit, offset);
       res.json({ notes, limit, offset });
     } catch (err: any) {
