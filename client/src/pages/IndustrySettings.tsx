@@ -204,19 +204,17 @@ export function SimplifiedSettings() {
 }
 
 function formatRelativeTime(dateStr: string): string {
-  try {
-    const elapsed = Date.now() - new Date(dateStr).getTime();
-    const mins = Math.floor(elapsed / 60000);
-    if (mins < 60) return mins <= 1 ? "just now" : `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    const weeks = Math.floor(days / 7);
-    return `${weeks}w ago`;
-  } catch {
-    return "";
-  }
+  const ts = new Date(dateStr).getTime();
+  if (!Number.isFinite(ts)) return "";
+  const elapsed = Date.now() - ts;
+  const mins = Math.floor(elapsed / 60000);
+  if (mins < 60) return mins <= 1 ? "just now" : `${mins} min ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} hour${hours !== 1 ? "s" : ""} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days} day${days !== 1 ? "s" : ""} ago`;
+  const weeks = Math.floor(days / 7);
+  return `${weeks} week${weeks !== 1 ? "s" : ""} ago`;
 }
 
 function formatJoinDate(dateStr: string): string {
@@ -265,9 +263,7 @@ export default function IndustrySettings() {
             setFrequency(freq as Frequency);
           }
         }
-        if (p?.lastAlertSentAt) {
-          setLastAlertSentAt(p.lastAlertSentAt);
-        }
+        setLastAlertSentAt(p?.lastAlertSentAt ?? null);
       })
       .catch(() => {});
   }, [session?.access_token, isIndustry]);
