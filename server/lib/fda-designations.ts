@@ -6,16 +6,22 @@
  *
  *   1. Orphan Drug — openFDA `other/orphan_drug.json`
  *      Official orphan drug designation list. generic_name + trade_name fields.
+ *      Full coverage of all granted ODD designations (pre- and post-approval).
  *
- *   2. Breakthrough Therapy — openFDA `drug/label.json`
- *      Searches approved drug labels where `indications_and_usage` contains
- *      "breakthrough therapy" designation language. Covers all FDA-approved drugs
- *      whose labels reflect BT designation from the FDA.
+ *   2. Breakthrough Therapy -- openFDA `drug/label.json` (approved interim)
+ *      Searches approved drug labels where `indications_and_usage` or
+ *      `clinical_pharmacology` fields contain "breakthrough therapy" text.
+ *      COVERAGE NOTE: Only covers drugs with an approved label that mentions
+ *      BT designation. Pre-approval BT designations are excluded because the
+ *      FDA/CDER does not publish a public structured endpoint for pre-approval
+ *      BT designation lists. When the FDA publishes a public BT designation
+ *      dataset (e.g., via openFDA or data.gov), this should be replaced.
  *
- *   3. Fast Track — openFDA `drug/label.json`
+ *   3. Fast Track -- openFDA `drug/label.json` (approved interim)
  *      Same approach as BT: label text search for "fast track" designation.
- *      Pre-approval FT-designated drugs without approved labels are not covered
- *      since no public structured API exposes the CDER pre-approval designation list.
+ *      COVERAGE NOTE: Same pre-approval gap as BT. No public structured FDA API
+ *      exposes the CDER Fast Track designation list. Label-text search is the
+ *      highest-fidelity public source available.
  *
  * Matching: normalised drug name tokens are indexed in a single-pass Map so
  * asset name lookups are O(assets × tokens_per_name) rather than O(assets × FDA_records).

@@ -63,6 +63,8 @@ type IntelligenceData = {
     institution: string;
     summary: string;
     sourceUrl: string | null;
+    fdaDesignation: string | null;
+    fdaDesignationDate: string | null;
   } | null;
   enriched: {
     mechanismOfAction: string | null;
@@ -226,6 +228,8 @@ export default function AssetDossier() {
         matching_tags: base?.matching_tags ?? [],
         confidence: base?.confidence ?? "low",
         signals: base?.signals ?? [],
+        fda_designation: rec.fdaDesignation ?? base?.fda_designation ?? null,
+        fda_designation_date: rec.fdaDesignationDate ?? base?.fda_designation_date ?? null,
       };
       setAsset(dbAsset);
     } else if (base) {

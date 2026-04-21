@@ -251,8 +251,13 @@ async function fetchHtmlPage(
   page: number,
   signal?: AbortSignal,
   institution?: string,
+  fromDate?: string,
+  toDate?: string,
 ): Promise<{ records: ScrapedListing[]; hasMore: boolean }> {
-  // iEdison HTML search supports date-range and institution parameters
+  // iEdison HTML search -- include date-range params so the server can honour
+  // them if supported; params are silently ignored by older HTML endpoints but
+  // still present so no out-of-window records are returned when the server does
+  // honour them.
   const params = new URLSearchParams({
     searchTerm: "",
     page: String(page),
@@ -260,6 +265,8 @@ async function fetchHtmlPage(
     status: "available",
   });
   if (institution) params.set("institution", institution);
+  if (fromDate) params.set("fromDate", fromDate);
+  if (toDate) params.set("toDate", toDate);
   const url = `${BASE_URL}${HTML_SEARCH_PATH}?${params.toString()}`;
 
   try {
@@ -338,8 +345,9 @@ export const iEdisonScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: JSON API unavailable — falling back to HTML scraping`);
       page = 0;
       while (page < MAX_PAGES) {
-        // HTML fallback: no institution filter in default all-institution scrape
-        const { records, hasMore } = await fetchHtmlPage(page, signal, undefined);
+        // Pass the same date-range params so the HTML endpoint can enforce the
+        // 12-month window if it supports them. If not, params are ignored.
+        const { records, hasMore } = await fetchHtmlPage(page, signal, undefined, fromDateStr, toDateStr);
         records.forEach(addUnique);
         if (!hasMore || records.length === 0) break;
         page++;

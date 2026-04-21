@@ -864,6 +864,8 @@ export async function registerRoutes(
               institution: enrichedRecord.institution,
               summary: enrichedRecord.summary,
               sourceUrl: enrichedRecord.sourceUrl,
+              fdaDesignation: enrichedRecord.fdaDesignation ?? null,
+              fdaDesignationDate: enrichedRecord.fdaDesignationDate ?? null,
             }
           : null,
         enriched: enrichedRecord
