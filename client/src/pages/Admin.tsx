@@ -141,6 +141,15 @@ interface ActiveSearchRow {
   biotechRelevant: number;
 }
 
+interface FdaDesignationJobHealth {
+  lastRunAt: string | null;
+  lastTaggedCount: number | null;
+  consecutiveFailures: number;
+  lastFailureReason: string | null;
+  lastFailureAt: string | null;
+  health: "ok" | "warning" | "failing" | "never";
+}
+
 interface CollectorHealthData {
   rows: CollectorHealthRow[];
   activeSearchRows: ActiveSearchRow[];
@@ -152,6 +161,7 @@ interface CollectorHealthData {
   syncingCount: number;
   syncedToday: number;
   scheduler: SchedulerStatus;
+  fdaDesignationJob?: FdaDesignationJobHealth;
 }
 
 function HealthDot({ health }: { health: HealthStatus }) {
@@ -1233,6 +1243,58 @@ function DataHealth({ pw }: { pw: string }) {
             </div>
           </div>
         </div>
+
+        {/* ── FDA Designation Job strip ──────────────────────── */}
+        {data.fdaDesignationJob && (
+          <div className="px-4 py-3 border-b border-border bg-muted/10 flex items-center justify-between gap-4 flex-wrap" data-testid="fda-designation-job-strip">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <Shield className="w-4 h-4 text-purple-500" />
+                <span className="font-semibold text-foreground text-sm">FDA Designation Matcher</span>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 flex-shrink-0 border ${
+                  data.fdaDesignationJob.health === "ok"
+                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+                    : data.fdaDesignationJob.health === "warning"
+                    ? "text-yellow-700 dark:text-yellow-400 bg-yellow-500/10 border-yellow-500/20"
+                    : data.fdaDesignationJob.health === "failing"
+                    ? "text-red-700 dark:text-red-400 bg-red-500/10 border-red-500/20"
+                    : "text-muted-foreground bg-muted/50 border-border"
+                }`}
+                data-testid="badge-fda-designation-health"
+              >
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  data.fdaDesignationJob.health === "ok" ? "bg-emerald-500" :
+                  data.fdaDesignationJob.health === "warning" ? "bg-yellow-500" :
+                  data.fdaDesignationJob.health === "failing" ? "bg-red-500 animate-pulse" :
+                  "bg-muted-foreground/40"
+                }`} />
+                {data.fdaDesignationJob.health === "ok" ? "OK" :
+                 data.fdaDesignationJob.health === "warning" ? "Warning" :
+                 data.fdaDesignationJob.health === "failing" ? "Failing" : "Never run"}
+              </span>
+              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                {data.fdaDesignationJob.lastRunAt && (
+                  <span data-testid="text-fda-last-run">
+                    Last run: <span className="text-foreground font-medium">{relativeTime(data.fdaDesignationJob.lastRunAt)}</span>
+                  </span>
+                )}
+                {data.fdaDesignationJob.lastTaggedCount != null && (
+                  <span data-testid="text-fda-tagged-count">
+                    Tagged: <span className="text-foreground font-medium">{data.fdaDesignationJob.lastTaggedCount}</span> assets
+                  </span>
+                )}
+                {data.fdaDesignationJob.consecutiveFailures > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400" data-testid="text-fda-failures">
+                    {data.fdaDesignationJob.consecutiveFailures} consecutive failure{data.fdaDesignationJob.consecutiveFailures !== 1 ? "s" : ""}
+                  </span>
+                )}
+              </div>
+            </div>
+            <span className="text-[10px] text-muted-foreground/60 flex-shrink-0">Runs automatically after each full scraper cycle</span>
+          </div>
+        )}
 
         {/* ── Live Connections section ───────────────────────── */}
         <button
