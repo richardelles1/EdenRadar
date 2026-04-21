@@ -155,7 +155,7 @@ async function fetchJsonPage(
   toDate?: string,
   institution?: string,
   apiKey?: string,
-): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean; authError?: boolean }> {
+): Promise<{ records: ScrapedListing[]; hasMore: boolean; apiAvailable: boolean; authError?: boolean; networkError?: boolean }> {
   const params = new URLSearchParams({
     page: String(page),
     size: String(ROWS_PER_PAGE),
@@ -226,11 +226,13 @@ async function fetchJsonPage(
     return { records, hasMore, apiAvailable: true };
   } catch (err: unknown) {
     const errName = err instanceof Error ? err.name : "";
-    if (errName === "AbortError" || errName === "TimeoutError") {
-      console.warn(`[scraper] ${INST}: JSON API page ${page} timed out`);
+    const isTimeout = errName === "AbortError" || errName === "TimeoutError";
+    if (isTimeout) {
+      console.warn(`[scraper] ${INST}: JSON API page ${page} timed out (network unreachable)`);
+    } else {
+      console.warn(`[scraper] ${INST}: JSON API page ${page} network error: ${err instanceof Error ? err.message : String(err)}`);
     }
-    // Network error or unexpected format -- fall through to HTML
-    return { records: [], hasMore: false, apiAvailable: false };
+    return { records: [], hasMore: false, apiAvailable: false, networkError: true };
   }
 }
 
@@ -316,7 +318,7 @@ async function fetchHtmlPage(
   institution?: string,
   fromDate?: string,
   toDate?: string,
-): Promise<{ records: ScrapedListing[]; hasMore: boolean }> {
+): Promise<{ records: ScrapedListing[]; hasMore: boolean; networkError?: boolean }> {
   // iEdison HTML search -- include date-range params so the server can honour
   // them if supported; params are silently ignored by older HTML endpoints but
   // still present so no out-of-window records are returned when the server does
@@ -357,12 +359,13 @@ async function fetchHtmlPage(
   } catch (err: unknown) {
     const errName = err instanceof Error ? err.name : "";
     const errMsg = err instanceof Error ? err.message : String(err);
-    if (errName === "AbortError" || errName === "TimeoutError") {
-      console.warn(`[scraper] ${INST}: HTML page ${page} timed out`);
+    const isTimeout = errName === "AbortError" || errName === "TimeoutError";
+    if (isTimeout) {
+      console.warn(`[scraper] ${INST}: HTML page ${page} timed out (network unreachable -- iedison.nih.gov blocks cloud IPs)`);
     } else {
-      console.warn(`[scraper] ${INST}: HTML page ${page} error: ${errMsg}`);
+      console.warn(`[scraper] ${INST}: HTML page ${page} network error: ${errMsg}`);
     }
-    return { records: [], hasMore: false };
+    return { records: [], hasMore: false, networkError: true };
   }
 }
 
@@ -486,19 +489,57 @@ export const iEdisonScraper: InstitutionScraper = {
     }
 
     if (usedPath === "html") {
-      // ── HTML scraper path ─────────────────────────────────────────────────
-      // Used when: (a) no IEDISON_API_KEY configured, OR (b) JSON API fully unavailable.
-      // Per task spec, when no key is configured the HTML interface is the primary path.
-      // Date-range params are forwarded in case the HTML interface honours them.
-      // NOTE: fromDate/toDate are YYYY-MM-DD (day granularity). Records created on
-      // the same day as the cursor may be re-pulled; upsert deduplication in the
-      // ingestion pipeline prevents double-counting.
+      // ── No-key path: try public JSON API first, then HTML ─────────────────
+      // Even without IEDISON_API_KEY the public REST endpoint is available and
+      // is more reliable than HTML scraping. Try it first; only fall back to
+      // HTML parsing if the JSON API is network-unreachable.
+      // NOTE: iedison.nih.gov blocks cloud/datacenter IPs, so both paths may
+      // timeout in hosted deployments. The error messaging distinguishes network
+      // unreachability from a genuine parser failure.
       page = 0;
+      let publicJsonNetworkError = false;
+
       while (page < MAX_PAGES) {
-        const { records, hasMore } = await fetchHtmlPage(page, signal, undefined, fromDateStr, toDateStr);
+        const { records, hasMore, apiAvailable, networkError } = await fetchJsonPage(
+          page, signal, fromDateStr, toDateStr, undefined, undefined
+        );
+        if (networkError) {
+          publicJsonNetworkError = true;
+          break;
+        }
+        if (!apiAvailable) break;
         records.forEach(addUnique);
         if (!hasMore || records.length === 0) break;
         page++;
+      }
+
+      if (all.length > 0) {
+        usedPath = "JSON API (public, no key)";
+      } else if (publicJsonNetworkError) {
+        // JSON API is network-unreachable -- fall back to HTML
+        console.log(
+          `[scraper] ${INST}: public JSON API unreachable (cloud IP likely blocked) -- trying HTML fallback`
+        );
+        page = 0;
+        let htmlNetworkError = false;
+        while (page < MAX_PAGES) {
+          const { records, hasMore, networkError } = await fetchHtmlPage(page, signal, undefined, fromDateStr, toDateStr);
+          if (networkError) {
+            htmlNetworkError = true;
+            break;
+          }
+          records.forEach(addUnique);
+          if (!hasMore || records.length === 0) break;
+          page++;
+        }
+        if (htmlNetworkError && all.length === 0) {
+          console.warn(
+            `[scraper] ${INST}: both JSON API and HTML endpoints are network-unreachable. ` +
+            `iedison.nih.gov likely blocks cloud/datacenter IPs. ` +
+            `Set IEDISON_API_KEY for authenticated access which may bypass this restriction, ` +
+            `or run the scraper from an on-premises host.`
+          );
+        }
       }
     }
 
@@ -521,12 +562,12 @@ export const iEdisonScraper: InstitutionScraper = {
 
 /**
  * Determines which scrape path will be taken based on env configuration.
- * "authenticated" -- IEDISON_API_KEY is set; JSON API with auth headers is tried first.
- * "html"          -- No key; HTML scraper is used directly (per task spec).
+ * "authenticated"         -- IEDISON_API_KEY is set; authenticated JSON API is tried first.
+ * "public-json-fallback"  -- No key; public JSON API is tried first, HTML is the fallback.
  * Exported for smoke testing only.
  */
-export function selectScrapeMode(): "authenticated" | "html" {
-  return getApiKey() ? "authenticated" : "html";
+export function selectScrapeMode(): "authenticated" | "public-json-fallback" {
+  return getApiKey() ? "authenticated" : "public-json-fallback";
 }
 
 /**

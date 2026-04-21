@@ -922,6 +922,54 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const [fdaPolling, setFdaPolling] = useState(false);
+  const { data: fdaStatus, refetch: refetchFdaStatus } = useQuery<{
+    running: boolean;
+    lastRunAt: string | null;
+    lastTaggedCount: number | null;
+    consecutiveFailures: number;
+    lastFailureReason: string | null;
+    lastFailureAt: string | null;
+  }>({
+    queryKey: ["/api/admin/fda-designations/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/fda-designations/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load FDA designation status");
+      return res.json();
+    },
+    refetchInterval: fdaPolling ? 3000 : false,
+    retry: 2,
+  });
+
+  useEffect(() => {
+    if (fdaStatus?.running) {
+      setFdaPolling(true);
+    } else if (fdaPolling && fdaStatus && !fdaStatus.running) {
+      setFdaPolling(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/fda-designations/status", pw] });
+    }
+  }, [fdaStatus?.running, fdaPolling, pw]);
+
+  const runFdaMatch = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/fda-designations/run", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (res.status === 409) throw new Error("Job already running");
+      if (!res.ok) throw new Error("Failed to start FDA designation match");
+      return res.json();
+    },
+    onSuccess: () => {
+      setFdaPolling(true);
+      refetchFdaStatus();
+      toast({ title: "FDA Designation Match started", description: "Matching assets against Orphan Drug, Breakthrough Therapy and Fast Track registries..." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
+    },
+  });
+
   type ScraperHealthRow = {
     institution: string;
     consecutiveFailures: number;
@@ -1292,9 +1340,26 @@ function DataHealth({ pw }: { pw: string }) {
                 )}
               </div>
             </div>
-            <div className="flex flex-col items-end gap-0.5 flex-shrink-0">
-              <span className="text-[10px] text-muted-foreground/60">Runs automatically after each full scraper cycle</span>
-              <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">BT/FT coverage: approved labels only (pre-approval gap)</span>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="flex flex-col items-end gap-0.5">
+                <span className="text-[10px] text-muted-foreground/60">Runs automatically after each full scraper cycle</span>
+                <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">BT/FT coverage: approved labels only (pre-approval gap)</span>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => runFdaMatch.mutate()}
+                disabled={fdaStatus?.running || runFdaMatch.isPending}
+                data-testid="button-run-fda-match-strip"
+                className="shrink-0"
+              >
+                {(fdaStatus?.running || runFdaMatch.isPending) ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                ) : (
+                  <Shield className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                {fdaStatus?.running ? "Running..." : "Run FDA Match"}
+              </Button>
             </div>
           </div>
         )}

@@ -19,7 +19,7 @@ const { getApiKey, mapJsonRecord, BASE_URL } = _internal;
 
 delete process.env.IEDISON_API_KEY;
 assert.equal(getApiKey(), undefined, "getApiKey() returns undefined when env var absent");
-assert.equal(selectScrapeMode(), "html", "No key → HTML path selected");
+assert.equal(selectScrapeMode(), "public-json-fallback", "No key → public JSON API (then HTML fallback) path selected");
 
 process.env.IEDISON_API_KEY = "test-key-abc";
 assert.equal(getApiKey(), "test-key-abc", "getApiKey() returns value when env var set");
@@ -102,7 +102,7 @@ assert.equal(nonStringValues, null, "Non-string field values handled safely");
 
 // ── Results ───────────────────────────────────────────────────────────────────
 
-console.log("✓ selectScrapeMode() -- no key -> html, key present -> authenticated");
+console.log("✓ selectScrapeMode() -- no key -> public-json-fallback, key present -> authenticated");
 console.log("✓ computeFromDate() -- null/undefined/ancient/invalid -> hard cap; recent -> +1s cursor; ISO string parsed");
 console.log("✓ mapJsonRecord() -- full/minimal/too-short/empty/non-string handled");
 console.log("\niEdison smoke tests PASSED");
