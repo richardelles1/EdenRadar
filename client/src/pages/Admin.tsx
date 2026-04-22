@@ -1556,10 +1556,10 @@ function DataHealth({ pw }: { pw: string }) {
                             </div>
                           </td>
                           <td className={`text-center py-2 px-3 tabular-nums ${row.totalInDb === 0 ? "text-muted-foreground/40" : "text-foreground font-medium"}`}>
-                            {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : "\u2014"}
+                            {row.totalInDb > 0 ? row.totalInDb.toLocaleString() : row.health === "never" ? "\u2014" : "0"}
                           </td>
                           <td className={`text-center py-2 px-3 tabular-nums ${row.biotechRelevant === 0 ? "text-muted-foreground/40" : "text-primary font-medium"}`}>
-                            {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : "\u2014"}
+                            {row.biotechRelevant > 0 ? row.biotechRelevant.toLocaleString() : row.health === "never" ? "\u2014" : "0"}
                           </td>
                           <td className={`text-center py-2 px-3 text-xs ${!row.lastSyncAt ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
                             {row.health === "syncing" ? (
