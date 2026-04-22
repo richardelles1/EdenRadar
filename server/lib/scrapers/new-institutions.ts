@@ -2830,17 +2830,94 @@ export const sandiaScraper: InstitutionScraper = {
   },
 };
 
-// ── Los Alamos National Laboratory — proxy required ────────────────────────────
-// lanl.gov blocks all Replit datacenter IPs — every direct HTTP/HEAD fetch returns
-// 404 or times out, including the homepage.  The Wayback Machine CDX API
-// (web.archive.org/cdx) also times out from Replit, so the previous CDX-fallback
-// strategy no longer works.  Both approaches require an outbound residential proxy
-// (SCRAPER_PROXY_URL) to unblock.  Converted to stub until proxy infrastructure
-// is in place.
-export const losAlamosScraper = createStubScraper(
-  "Los Alamos National Laboratory",
-  "lanl.gov and web.archive.org CDX both time out from Replit datacenter IPs — requires SCRAPER_PROXY_URL"
-);
+// ── Los Alamos National Laboratory — Wayback Machine CDX strategy ──────────────
+// lanl.gov blocks Replit datacenter IPs but the Wayback Machine CDX API and
+// archived page fetches work fine from Replit.
+// Strategy: query CDX for archived Feynman Center technology pages, then fetch
+// each from web.archive.org and parse the technology listings.
+//
+// Main page: h3[data-testid="card-title"] (featured tech cards)
+// Sub-pages: button.lanl-accordion-item-button (highlighted technology areas)
+//
+// Verified 2024-2025 archived snapshots exist for 6 pages:
+//   technologies-and-capabilities (main + 5 sector sub-pages)
+export const losAlamosScraper: InstitutionScraper = {
+  institution: "Los Alamos National Laboratory",
+  async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
+    const CDX_BASE = "https://web.archive.org/cdx/search/cdx";
+    const FEYNMAN_TECH_URL = "lanl.gov/engage/collaboration/feynman-center/technologies-and-capabilities";
+    const WAYBACK = "https://web.archive.org/web";
+
+    // Step 1: Discover archived URLs via CDX (returns JSON array-of-arrays)
+    const cdxUrl = `${CDX_BASE}?url=${FEYNMAN_TECH_URL}*&output=json&limit=20&fl=original,timestamp&collapse=urlkey&filter=statuscode:200`;
+    const cdxData = await fetchJson<string[][]>(cdxUrl, 30_000, signal, 1);
+    if (!cdxData) throw new Error("CDX API unreachable or returned null");
+
+    // CDX rows: first element is the header ["original","timestamp"]
+    const cdxRows = cdxData.slice(1) as [string, string][];
+
+    if (cdxRows.length === 0) {
+      throw new Error("CDX returned 0 archived URLs for LANL Feynman Center tech pages");
+    }
+
+    const results: ScrapedListing[] = [];
+
+    // Step 2: Fetch and parse each archived page
+    await Promise.all(
+      cdxRows.map(async ([originalUrl, timestamp]) => {
+        if (signal?.aborted) return;
+        const waybackUrl = `${WAYBACK}/${timestamp}/${originalUrl}`;
+        const $ = await fetchHtml(waybackUrl, 30_000, signal, 1);
+        if (!$) return;
+
+        const isMainPage = !originalUrl.includes("/technologies-and-capabilities/");
+
+        if (isMainPage) {
+          // Main page: parse featured tech cards
+          $("h3[data-testid='card-title']").each((_, el) => {
+            const title = $(el).text().trim();
+            if (!title) return;
+            // Description: nearest sibling or parent containing description text
+            const card = $(el).closest("[class*='card'], [class*='Card'], article, section").first();
+            const desc = card.find("p").first().text().trim();
+            results.push({
+              title,
+              description: desc,
+              url: "https://www.lanl.gov/engage/collaboration/feynman-center/technologies-and-capabilities",
+              institution: "Los Alamos National Laboratory",
+              categories: ["Featured Technology"],
+            });
+          });
+        } else {
+          // Sub-pages: parse highlighted technology area accordion items
+          $("button.lanl-accordion-item-button").each((_, el) => {
+            const raw = $(el).text().trim().replace(/[\s\u00a0]+/g, " ");
+            // Strip icon text (fa-chevron etc. render as empty but leave whitespace)
+            const title = raw.replace(/\s*$/, "").trim();
+            if (!title || title.length < 3) return;
+            // Description from the adjacent accordion content
+            const item = $(el).closest(".lanl-accordion-item, [id]").first();
+            const desc = item.find("p").first().text().trim();
+            // Derive sector from URL path
+            const sector = originalUrl
+              .split("/technologies-and-capabilities/")[1]
+              ?.replace(/-/g, " ")
+              ?.replace(/\b\w/g, (c) => c.toUpperCase()) ?? "";
+            results.push({
+              title,
+              description: desc,
+              url: "https://www.lanl.gov/engage/collaboration/feynman-center/technologies-and-capabilities",
+              institution: "Los Alamos National Laboratory",
+              categories: sector ? [sector] : [],
+            });
+          });
+        }
+      })
+    );
+
+    return results;
+  },
+};
 
 // Flintbox portals
 export const umbcScraper = createFlintboxScraper(
