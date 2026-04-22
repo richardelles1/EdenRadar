@@ -7401,7 +7401,7 @@ If multiple assets appear, return each as a separate array item.`;
       const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
       const baseUrl = origin || `https://${req.headers.host}`;
 
-      const portalSession = await (stripe as any).billingPortal.sessions.create({
+      const portalSession = await stripe.billingPortal.sessions.create({
         customer: org.stripeCustomerId,
         return_url: `${baseUrl}/industry/settings`,
       });

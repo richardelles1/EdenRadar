@@ -512,7 +512,7 @@ export default function IndustrySettings() {
               {billingMethodLabel(org?.billingMethod ?? "stripe")}
             </p>
           </div>
-          {org?.stripeCustomerId ? (
+          {org?.stripeCustomerId && (org.stripeStatus === "active" || org.stripeStatus === "trialing" || org.stripeStatus === "past_due") ? (
             <Button
               size="sm"
               variant="outline"
