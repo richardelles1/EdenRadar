@@ -316,6 +316,8 @@ export interface IStorage {
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
+  markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
+  releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void>;
 
   // Org Members
   getOrgMembers(orgId: number): Promise<OrgMember[]>;
@@ -2796,6 +2798,28 @@ export class DatabaseStorage implements IStorage {
       .where(eq(organizations.id, orgId))
       .returning();
     return row;
+  }
+
+  async markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean> {
+    const rows = await db
+      .update(organizations)
+      .set({ welcomeEmailSentSubId: subId, updatedAt: new Date() })
+      .where(and(
+        eq(organizations.id, orgId),
+        sql`welcome_email_sent_sub_id IS DISTINCT FROM ${subId}`,
+      ))
+      .returning({ id: organizations.id });
+    return rows.length > 0;
+  }
+
+  async releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void> {
+    await db
+      .update(organizations)
+      .set({ welcomeEmailSentSubId: null, updatedAt: new Date() })
+      .where(and(
+        eq(organizations.id, orgId),
+        eq(organizations.welcomeEmailSentSubId, subId),
+      ));
   }
 
   // ── Org Members ──────────────────────────────────────────────────────────────

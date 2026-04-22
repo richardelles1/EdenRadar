@@ -63,7 +63,7 @@ function baseHtml(bodyContent: string): string {
 </html>`;
 }
 
-export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+export async function sendEmail(to: string, subject: string, html: string, from?: string): Promise<void> {
   if (!RESEND_API_KEY) {
     console.warn("[email] RESEND_API_KEY not configured — skipping email to", to);
     return;
@@ -75,16 +75,16 @@ export async function sendEmail(to: string, subject: string, html: string): Prom
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: FROM_ADDRESS, to, subject, html }),
+      body: JSON.stringify({ from: from ?? FROM_ADDRESS, to, subject, html }),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "(unreadable)");
-      console.error("[email] Resend rejected the request", res.status, text);
-    } else {
-      console.log("[email] Sent:", subject, "->", to);
+      throw new Error(`[email] Resend rejected (${res.status}): ${text}`);
     }
+    console.log("[email] Sent:", subject, "->", to);
   } catch (err) {
-    console.error("[email] Network error sending to", to, err);
+    console.error("[email] Failed to send to", to, err);
+    throw err;
   }
 }
 
@@ -226,6 +226,47 @@ export function sendThesisAlertEmail(
     </p>
   `);
   return sendEmail(to, `${assets.length} new asset${assets.length !== 1 ? "s" : ""} match your deal focus — EdenRadar`, html);
+}
+
+export function sendSubscriptionWelcomeEmail(
+  to: string,
+  orgName: string,
+  planTier: string,
+  seatCount: number,
+  nextBillingDate: string,
+): Promise<void> {
+  const label = planLabel(planTier);
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Welcome to EdenScout!</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      Thanks for subscribing${orgName ? `, ${orgName}` : ""}. Your <strong>${label}</strong> plan is now active.
+    </p>
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 28px;border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;">
+      <tr style="background:#f9fafb;">
+        <td style="padding:12px 16px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;width:50%;">Plan</td>
+        <td style="padding:12px 16px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;width:50%;">Seats</td>
+      </tr>
+      <tr>
+        <td style="padding:12px 16px;font-size:15px;color:#111827;">${label}</td>
+        <td style="padding:12px 16px;font-size:15px;color:#111827;">${seatCount}</td>
+      </tr>
+      <tr style="background:#f9fafb;">
+        <td colspan="2" style="padding:12px 16px;font-size:13px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">Next billing date</td>
+      </tr>
+      <tr>
+        <td colspan="2" style="padding:12px 16px;font-size:15px;color:#111827;">${nextBillingDate}</td>
+      </tr>
+    </table>
+    <a href="${APP_URL}"
+       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open EdenScout
+    </a>
+    <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Need help getting started? Reply to this email or reach us at
+      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+    </p>
+  `);
+  return sendEmail(to, "Welcome to EdenScout — your subscription is active.", html, "EdenScout <onboarding@edenradar.com>");
 }
 
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {

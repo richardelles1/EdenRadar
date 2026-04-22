@@ -32,7 +32,7 @@ import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, 
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -7326,6 +7326,59 @@ If multiple assets appear, return each as a separate array item.`;
               planTier: planTierC,
             }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
             console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}`);
+
+            if (subC) {
+              try {
+                const org = await storage.getOrganization(orgId);
+                const billingEmail = org?.billingEmail
+                  ?? (sess["customer_details"] as Record<string, unknown> | null)?.["email"] as string | undefined
+                  ?? undefined;
+                if (!billingEmail) {
+                  console.warn(`[stripe/webhook] No billing email for org ${orgId} — skipping welcome email`);
+                } else {
+                  // Atomically claim the send slot before sending to prevent concurrent duplicate sends.
+                  // markWelcomeEmailSent uses WHERE welcome_email_sent_sub_id IS DISTINCT FROM subC,
+                  // so only one concurrent webhook delivery wins (returns true); others skip.
+                  const claimed = await storage.markWelcomeEmailSent(orgId, subC);
+                  if (!claimed) {
+                    console.log(`[stripe/webhook] Welcome email already sent for sub ${subC} — skipping`);
+                  } else {
+                    const seatCount = isStripePlanId(rawPlanIdC) ? PLAN_SEAT_MAP[rawPlanIdC] : 1;
+                    let nextBillingDate = "—";
+                    try {
+                      const stripeInstance = getStripe();
+                      if (stripeInstance) {
+                        const stripeSub = await stripeInstance.subscriptions.retrieve(subC);
+                        const periodEnd: number = stripeSub.current_period_end;
+                        nextBillingDate = new Date(periodEnd * 1000).toLocaleDateString("en-US", {
+                          year: "numeric", month: "long", day: "numeric",
+                        });
+                      }
+                    } catch (subErr: unknown) {
+                      console.warn("[stripe/webhook] Could not retrieve subscription for billing date:", (subErr as Error)?.message);
+                    }
+                    try {
+                      await sendSubscriptionWelcomeEmail(
+                        billingEmail,
+                        org?.name ?? "",
+                        planTierC,
+                        seatCount,
+                        nextBillingDate,
+                      );
+                      console.log(`[stripe/webhook] Welcome email sent to ${billingEmail} for org ${orgId}, sub ${subC}`);
+                    } catch (sendErr: unknown) {
+                      // Release the claim so the next Stripe retry can attempt delivery again.
+                      console.error("[stripe/webhook] Welcome email delivery failed — releasing claim:", (sendErr as Error)?.message);
+                      await storage.releaseWelcomeEmailClaim(orgId, subC).catch((e: unknown) =>
+                        console.error("[stripe/webhook] Failed to release welcome email claim:", (e as Error)?.message)
+                      );
+                    }
+                  }
+                }
+              } catch (emailErr: unknown) {
+                console.error("[stripe/webhook] Error preparing welcome email:", (emailErr as Error)?.message);
+              }
+            }
           }
           break;
         }

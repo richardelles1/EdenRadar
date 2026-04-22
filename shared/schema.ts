@@ -658,6 +658,9 @@ export const organizations = pgTable("organizations", {
   stripePriceId: text("stripe_price_id"),
   stripeCurrentPeriodEnd: timestamp("stripe_current_period_end"), // next renewal date (null until subscribed)
   stripeCancelAt: timestamp("stripe_cancel_at"), // scheduled cancellation date, if any
+  // Idempotency guard: set to the subscription ID after welcome email is sent.
+  // Prevents duplicate welcome emails on Stripe webhook retries or server restarts.
+  welcomeEmailSentSubId: text("welcome_email_sent_sub_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
