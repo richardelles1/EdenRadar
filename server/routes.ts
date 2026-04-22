@@ -1827,8 +1827,8 @@ export async function registerRoutes(
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { concurrency } = req.body ?? {};
-    if (concurrency !== 1 && concurrency !== 2) return res.status(400).json({ error: "concurrency must be 1 or 2" });
-    setConcurrency(concurrency as 1 | 2);
+    if (concurrency !== 1 && concurrency !== 2 && concurrency !== 3) return res.status(400).json({ error: "concurrency must be 1, 2, or 3" });
+    setConcurrency(concurrency as 1 | 2 | 3);
     res.json({ ok: true, message: `Concurrency set to ${concurrency}`, concurrency });
   });
 

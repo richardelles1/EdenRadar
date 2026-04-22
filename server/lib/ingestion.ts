@@ -326,7 +326,7 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
 let _maxHttpConcurrent = 1;
 
 export function getMaxHttpConcurrent(): number { return _maxHttpConcurrent; }
-export function setConcurrency(n: 1 | 2): void { _maxHttpConcurrent = n; }
+export function setConcurrency(n: 1 | 2 | 3): void { _maxHttpConcurrent = n; }
 
 /** @deprecated Use getMaxHttpConcurrent() — kept for compatibility with scheduler import */
 export const MAX_HTTP_CONCURRENT = 1;

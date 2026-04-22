@@ -1,5 +1,5 @@
 import { ALL_SCRAPERS, getScraperTier } from "./scrapers/index";
-import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs, getMaxHttpConcurrent, setConcurrency } from "./ingestion";
+import { runInstitutionSync, tryAcquireSyncLock, isIngestionRunning, getActiveSyncs, getMaxHttpConcurrent, setConcurrency, releaseSyncLock } from "./ingestion";
 export { setConcurrency, getMaxHttpConcurrent };
 import {
   saveSchedulerState,
@@ -35,6 +35,8 @@ export interface SchedulerStatus {
   concurrentSyncs: number;
   maxConcurrency: number;
   currentTier: 1 | 2 | 3 | 4 | null;
+  /** Non-null when the scheduler is running a tier-only scan (not a full cycle). */
+  tierOnly: number | null;
 }
 
 let schedulerState: "idle" | "running" | "paused" = "idle";
@@ -58,6 +60,8 @@ let tieredQueue: string[] = [];
 /** Monotonically increasing. Incremented on every reset so in-flight batch
  * callbacks can detect they belong to a superseded cycle and no-op. */
 let runGeneration = 0;
+/** Set when the scheduler is running a tier-only scan. Null during full-cycle runs. */
+let tierOnlyActive: number | null = null;
 
 let scraperHealthCache: Map<string, ScraperHealthRow> = new Map();
 
@@ -71,11 +75,12 @@ const institutionDispatchedAt = new Map<string, number>();
 /** Handle for the 90-second watchdog timer. */
 let watchdogTimer: ReturnType<typeof setTimeout> | null = null;
 
-/** Max wall-clock time per scraper type before the watchdog force-evicts (belt + suspenders). */
+/** Max wall-clock time per scraper type before the watchdog force-evicts (belt + suspenders).
+ * http limit raised to 22 min to accommodate Stanford (scraperTimeoutMs = 20 min). */
 const WATCHDOG_EVICT_MS: Record<string, number> = {
   playwright: 15 * 60 * 1000,
   api:        8 * 60 * 1000,
-  http:      12 * 60 * 1000,
+  http:      22 * 60 * 1000,
 };
 
 function startWatchdog() {
@@ -105,6 +110,7 @@ function watchdogTick() {
       console.warn(`[scheduler] WATCHDOG: ${institution} stuck for ${elapsedMin} min (limit ${maxMs / 60000} min) — force-evicting`);
       currentInstitutions = currentInstitutions.filter((i) => i !== institution);
       institutionDispatchedAt.delete(institution);
+      releaseSyncLock(institution);
       failedThisCycle++;
       evicted = true;
     }
@@ -252,6 +258,7 @@ export function getSchedulerStatus(): SchedulerStatus {
     concurrentSyncs: activeSyncs.length,
     maxConcurrency: getMaxHttpConcurrent(),
     currentTier,
+    tierOnly: tierOnlyActive,
   };
 }
 
@@ -310,9 +317,20 @@ export function startScheduler(): { ok: boolean; message: string } {
   persistState(true).catch(() => {});
 
   if (cycleStartedAt && queueIndex < getInstitutionQueue().length) {
-    console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
+    // Resuming a paused run. If it was a tier-only scan, rebuild the tier queue so
+    // tieredQueue still matches what we paused mid-way through.
+    if (tierOnlyActive !== null) {
+      const tier = tierOnlyActive as 1 | 2 | 3 | 4;
+      const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
+      for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
+      tieredQueue = buckets[tier];
+      console.log(`[scheduler] Resumed Tier-${tier} scan at position ${queueIndex}/${tieredQueue.length} (cycle #${cycleCount})`);
+    } else {
+      console.log(`[scheduler] Resumed at position ${queueIndex}/${getInstitutionQueue().length} (cycle #${cycleCount})`);
+    }
   } else {
     tieredQueue = buildTieredQueue();
+    tierOnlyActive = null;
     queueIndex = 0;
     completedThisCycle = 0;
     failedThisCycle = 0;
@@ -339,6 +357,7 @@ export function resetAndStartScheduler(): { ok: boolean; message: string } {
     schedulerTimer = null;
   }
   tieredQueue = buildTieredQueue();
+  tierOnlyActive = null;
   queueIndex = 0;
   completedThisCycle = 0;
   failedThisCycle = 0;
@@ -405,6 +424,7 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   priorityQueue = [];
   institutionDispatchedAt.clear();
   schedulerState = "running";
+  tierOnlyActive = tier;
   persistState().catch(() => {});
   console.log(`[scheduler] Tier-${tier} only scan (gen=${runGeneration}) — ${tieredQueue.length} institutions`);
   loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
@@ -599,6 +619,7 @@ function scheduleNext(): void {
     );
     lastCycleCompletedAt = new Date();
     schedulerState = "idle";
+    tierOnlyActive = null;
     persistState(true).catch(() => {});
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});

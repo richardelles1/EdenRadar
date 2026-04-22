@@ -132,6 +132,7 @@ interface SchedulerStatus {
   concurrentSyncs: number;
   maxConcurrency: number;
   currentTier: 1 | 2 | 3 | 4 | null;
+  tierOnly: number | null;
 }
 
 interface ActiveSearchRow {
@@ -935,7 +936,7 @@ function DataHealth({ pw }: { pw: string }) {
   };
 
   const setConcurrencyMutation = useMutation({
-    mutationFn: async (concurrency: 1 | 2) => {
+    mutationFn: async (concurrency: 1 | 2 | 3) => {
       const res = await fetch("/api/ingest/scheduler/concurrency", {
         method: "POST",
         headers: { "x-admin-password": pw, "Content-Type": "application/json" },
@@ -948,7 +949,8 @@ function DataHealth({ pw }: { pw: string }) {
       return res.json();
     },
     onSuccess: (d: { ok: boolean; concurrency: number }) => {
-      toast({ title: `Concurrency set to ${d.concurrency}`, description: d.concurrency === 1 ? "Serial mode: one institution at a time" : "Parallel mode: two simultaneous syncs" });
+      const desc = d.concurrency === 1 ? "Serial mode: one institution at a time" : d.concurrency === 2 ? "Parallel mode: two simultaneous syncs" : "High-speed mode: three simultaneous syncs";
+      toast({ title: `Concurrency set to ${d.concurrency}`, description: desc });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
     },
     onError: (err: Error) => {
@@ -1240,7 +1242,7 @@ function DataHealth({ pw }: { pw: string }) {
                   ) : (
                     <Zap className="w-3 h-3 mr-1" />
                   )}
-                  {schedPaused ? "Resume" : "Start"}
+                  {schedPaused ? (sched.tierOnly != null ? `Resume T${sched.tierOnly}` : "Resume") : "Start"}
                 </Button>
               )}
               <div className="flex items-center border border-border rounded-md overflow-hidden h-8 text-xs flex-shrink-0" data-testid="concurrency-selector">
@@ -1258,6 +1260,13 @@ function DataHealth({ pw }: { pw: string }) {
                   title="Parallel: two simultaneous syncs"
                   data-testid="button-concurrency-2"
                 >2x</button>
+                <button
+                  className={`px-2.5 h-full font-medium border-l border-border transition-colors ${(sched.maxConcurrency ?? 1) === 3 ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted"}`}
+                  onClick={() => setConcurrencyMutation.mutate(3)}
+                  disabled={setConcurrencyMutation.isPending || (sched.maxConcurrency ?? 1) === 3}
+                  title="High-speed: three simultaneous syncs"
+                  data-testid="button-concurrency-3"
+                >3x</button>
               </div>
               <Button
                 size="sm"
@@ -1312,6 +1321,20 @@ function DataHealth({ pw }: { pw: string }) {
                 </Button>
               );
             })}
+            {sched.tierOnly != null && schedRunning && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs font-medium px-3 border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50 transition-colors ml-auto"
+                onClick={() => schedulerPauseMutation.mutate()}
+                disabled={schedulerPauseMutation.isPending}
+                data-testid="button-pause-tier-scan"
+                title={`Pause the Tier ${sched.tierOnly} scan`}
+              >
+                {schedulerPauseMutation.isPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <AlertCircle className="w-3 h-3 mr-1" />}
+                Pause T{sched.tierOnly}
+              </Button>
+            )}
           </div>
         </div>
 
