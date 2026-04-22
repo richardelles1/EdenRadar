@@ -27,7 +27,6 @@ import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from ".
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
-import { runFdaDesignationMatch } from "./lib/fda-designations";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
@@ -2820,6 +2819,10 @@ export async function registerRoutes(
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const latest = await storage.getLatestDeepEnrichmentJob();
+      // staleJobDetected: a job was in-progress when the server last restarted and
+      // has not been resumed or completed. The admin must explicitly resume it.
+      const staleJob = !edenRunning ? await storage.getRunningDeepEnrichmentJob() : null;
+      const staleJobDetected = staleJob !== null && staleJob !== undefined;
       res.json({
         running: edenRunning,
         paused: edenPaused,
@@ -2831,6 +2834,8 @@ export async function registerRoutes(
         lastCycleCount: edenLastCycleCount,
         lastCycleDeferred: edenLastCycleDeferred,
         job: latest ?? null,
+        staleJobDetected,
+        staleJobId: staleJob?.id ?? null,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -2861,77 +2866,6 @@ export async function registerRoutes(
     standardEnrichShouldStop = true;
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
   });
-
-  // Delay so the migration client and scheduler restoration queries finish
-  // before we hit the pool with startup enrichment-job checks.
-  const edenStartupDelay = 15_000;
-  setTimeout(async () => {
-    try {
-      const staleDeepJob = await storage.getRunningDeepEnrichmentJob();
-      if (staleDeepJob) {
-        const remaining = await storage.getAssetsNeedingDeepEnrich();
-        if (remaining.length > 0) {
-          console.log(`[EDEN] Resuming deep enrichment job ${staleDeepJob.id}: ${remaining.length} assets remaining`);
-          edenTotal = remaining.length;
-          edenProcessed = staleDeepJob.processed ?? 0;
-          edenImproved = staleDeepJob.improved ?? 0;
-          edenFailed = 0;
-          edenRunning = true;
-          edenShouldStop = false;
-          edenJobId = staleDeepJob.id;
-
-          deepEnrichBatch(
-            remaining.map((a) => ({
-              id: a.id,
-              assetName: a.assetName,
-              summary: a.summary,
-              abstract: a.abstract,
-              ctx: {
-                categories: a.categories,
-                patentStatus: a.patentStatus,
-                licensingStatus: a.licensingStatus,
-                inventors: a.inventors,
-                sourceUrl: a.sourceUrl,
-              },
-            })),
-            20,
-            async (batch) => storage.bulkUpdateIngestedAssetsDeepEnrichment(batch),
-            (processed, _total, succeeded, failed) => {
-              edenProcessed = (staleDeepJob.processed ?? 0) + processed;
-              edenImproved = (staleDeepJob.improved ?? 0) + succeeded;
-              edenFailed = failed;
-              storage.updateEnrichmentJob(staleDeepJob.id, { processed: edenProcessed, improved: edenImproved }).catch(() => {});
-            },
-            () => edenShouldStop,
-          ).then(async (batchResult) => {
-            edenRunning = false;
-            await storage.updateEnrichmentJob(staleDeepJob.id, {
-              status: edenShouldStop ? "stopped" : "done",
-              completedAt: new Date(),
-              processed: (staleDeepJob.processed ?? 0) + batchResult.succeeded + batchResult.failed,
-              improved: (staleDeepJob.improved ?? 0) + batchResult.succeeded,
-            }).catch(() => {});
-            console.log(`[EDEN] Resumed job ${edenShouldStop ? "stopped" : "complete"}: ${batchResult.succeeded} succeeded, ${batchResult.failed} failed`);
-            // Automatically trigger near-duplicate detection after enrichment completes
-            if (!edenShouldStop) {
-              storage.runNearDuplicateDetection((msg) => console.log(`[dedup/post-enrich] ${msg}`))
-                .then((r) => console.log(`[dedup/post-enrich] Done: ${r.flagged} flagged, ${r.embedded} embedded`))
-                .catch((e: any) => console.error("[dedup/post-enrich] Failed:", e?.message));
-            }
-          }).catch(async (e) => {
-            edenRunning = false;
-            await storage.updateEnrichmentJob(staleDeepJob.id, { status: "failed", completedAt: new Date(), processed: edenProcessed, improved: edenImproved }).catch(() => {});
-            console.error("[EDEN] Resumed job failed:", e);
-          });
-        } else {
-          await storage.updateEnrichmentJob(staleDeepJob.id, { status: "done", completedAt: new Date() });
-          console.log(`[EDEN] Stale deep job ${staleDeepJob.id} had no remaining work — marked done`);
-        }
-      }
-    } catch (e) {
-      console.error("[EDEN] Failed to check for resumable deep enrichment jobs:", e);
-    }
-  }, edenStartupDelay);
 
   // ── EDEN embedding routes ────────────────────────────────────────────────
 
@@ -2985,44 +2919,6 @@ export async function registerRoutes(
       total: embedTotal,
       succeeded: embedSucceeded,
       failed: embedFailed,
-    });
-  });
-
-  // ── FDA Designation enrichment ────────────────────────────────────────────
-
-  let fdaDesignationRunning = false;
-
-  app.post("/api/admin/fda-designations/run", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    if (fdaDesignationRunning) return res.status(409).json({ error: "FDA designation job already running" });
-    fdaDesignationRunning = true;
-    res.json({ message: "FDA designation match started" });
-    try {
-      const result = await runFdaDesignationMatch();
-      console.log("[admin] FDA designation match complete:", result);
-      const { recordFdaDesignationHealth } = await import("./lib/scraperState");
-      await recordFdaDesignationHealth(result.tagged, result.errors).catch(() => {});
-    } catch (err: any) {
-      console.error("[admin] FDA designation match failed:", err?.message);
-      const { recordFdaDesignationHealth } = await import("./lib/scraperState");
-      await recordFdaDesignationHealth(0, 1).catch(() => {});
-    } finally {
-      fdaDesignationRunning = false;
-    }
-  });
-
-  app.get("/api/admin/fda-designations/status", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    const health = await loadFdaDesignationHealth().catch(() => null);
-    res.json({
-      running: fdaDesignationRunning,
-      lastRunAt: health?.lastSuccessAt ?? null,
-      lastTaggedCount: health?.lastSuccessNewCount ?? null,
-      consecutiveFailures: health?.consecutiveFailures ?? 0,
-      lastFailureReason: health?.lastFailureReason ?? null,
-      lastFailureAt: health?.lastFailureAt ?? null,
     });
   });
 

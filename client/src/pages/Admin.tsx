@@ -977,6 +977,8 @@ function DataHealth({ pw }: { pw: string }) {
     lastCycleCount: number;
     lastCycleDeferred: number;
     job: { status: string; completedAt: string | null } | null;
+    staleJobDetected: boolean;
+    staleJobId: number | null;
   }>({
     queryKey: ["/api/admin/eden/enrich/status", pw],
     queryFn: async () => {
@@ -1003,54 +1005,6 @@ function DataHealth({ pw }: { pw: string }) {
     },
     onError: (err: Error) => {
       toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
-    },
-  });
-
-  const [fdaPolling, setFdaPolling] = useState(false);
-  const { data: fdaStatus, refetch: refetchFdaStatus } = useQuery<{
-    running: boolean;
-    lastRunAt: string | null;
-    lastTaggedCount: number | null;
-    consecutiveFailures: number;
-    lastFailureReason: string | null;
-    lastFailureAt: string | null;
-  }>({
-    queryKey: ["/api/admin/fda-designations/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/fda-designations/status", { headers: { "x-admin-password": pw } });
-      if (!res.ok) throw new Error("Failed to load FDA designation status");
-      return res.json();
-    },
-    refetchInterval: fdaPolling ? 3000 : false,
-    retry: 2,
-  });
-
-  useEffect(() => {
-    if (fdaStatus?.running) {
-      setFdaPolling(true);
-    } else if (fdaPolling && fdaStatus && !fdaStatus.running) {
-      setFdaPolling(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/fda-designations/status", pw] });
-    }
-  }, [fdaStatus?.running, fdaPolling, pw]);
-
-  const runFdaMatch = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/fda-designations/run", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (res.status === 409) throw new Error("Job already running");
-      if (!res.ok) throw new Error("Failed to start FDA designation match");
-      return res.json();
-    },
-    onSuccess: () => {
-      setFdaPolling(true);
-      refetchFdaStatus();
-      toast({ title: "FDA Designation Match started", description: "Matching assets against Orphan Drug, Breakthrough Therapy and Fast Track registries..." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1410,139 +1364,6 @@ function DataHealth({ pw }: { pw: string }) {
               );
             })}
           </div>
-        </div>
-
-        {/* ── FDA Designation Job strip ──────────────────────── */}
-        {data.fdaDesignationJob && (
-          <div className="px-4 py-3 border-b border-border bg-muted/10 flex items-center justify-between gap-4 flex-wrap" data-testid="fda-designation-job-strip">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="flex items-center gap-2 flex-shrink-0">
-                <Shield className="w-4 h-4 text-purple-500" />
-                <span className="font-semibold text-foreground text-sm">FDA Designation Matcher</span>
-              </div>
-              <span
-                className={`inline-flex items-center gap-1.5 text-xs font-medium rounded-full px-2.5 py-1 flex-shrink-0 border ${
-                  data.fdaDesignationJob.health === "ok"
-                    ? "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
-                    : data.fdaDesignationJob.health === "warning"
-                    ? "text-yellow-700 dark:text-yellow-400 bg-yellow-500/10 border-yellow-500/20"
-                    : data.fdaDesignationJob.health === "failing"
-                    ? "text-red-700 dark:text-red-400 bg-red-500/10 border-red-500/20"
-                    : "text-muted-foreground bg-muted/50 border-border"
-                }`}
-                data-testid="badge-fda-designation-health"
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${
-                  data.fdaDesignationJob.health === "ok" ? "bg-emerald-500" :
-                  data.fdaDesignationJob.health === "warning" ? "bg-yellow-500" :
-                  data.fdaDesignationJob.health === "failing" ? "bg-red-500 animate-pulse" :
-                  "bg-muted-foreground/40"
-                }`} />
-                {data.fdaDesignationJob.health === "ok" ? "OK" :
-                 data.fdaDesignationJob.health === "warning" ? "Warning" :
-                 data.fdaDesignationJob.health === "failing" ? "Failing" : "Never run"}
-              </span>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                {data.fdaDesignationJob.lastRunAt && (
-                  <span data-testid="text-fda-last-run">
-                    Last run: <span className="text-foreground font-medium">{relativeTime(data.fdaDesignationJob.lastRunAt)}</span>
-                  </span>
-                )}
-                {data.fdaDesignationJob.lastTaggedCount != null && (
-                  <span data-testid="text-fda-tagged-count">
-                    Tagged: <span className="text-foreground font-medium">{data.fdaDesignationJob.lastTaggedCount}</span> assets
-                  </span>
-                )}
-                {data.fdaDesignationJob.consecutiveFailures > 0 && (
-                  <span className="text-amber-600 dark:text-amber-400" data-testid="text-fda-failures">
-                    {data.fdaDesignationJob.consecutiveFailures} consecutive failure{data.fdaDesignationJob.consecutiveFailures !== 1 ? "s" : ""}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="flex items-center gap-3 flex-shrink-0">
-              <div className="flex flex-col items-end gap-0.5">
-                <span className="text-[10px] text-muted-foreground/60">Runs automatically after each full scraper cycle</span>
-                <span className="text-[10px] text-amber-600/70 dark:text-amber-400/60">BT/FT coverage: approved labels only (pre-approval gap)</span>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => runFdaMatch.mutate()}
-                disabled={fdaStatus?.running || runFdaMatch.isPending}
-                data-testid="button-run-fda-match-strip"
-                className="shrink-0"
-              >
-                {(fdaStatus?.running || runFdaMatch.isPending) ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-                ) : (
-                  <Shield className="h-3.5 w-3.5 mr-1.5" />
-                )}
-                {fdaStatus?.running ? "Running..." : "Run FDA Match"}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* ── Deep Enrichment control strip ──────────────────── */}
-        <div className="px-4 py-3 border-b border-border bg-muted/10 flex items-center justify-between gap-4 flex-wrap" data-testid="enrichment-control-strip">
-          <div className="flex items-center gap-3 min-w-0 flex-wrap">
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <BrainCircuit className="w-4 h-4 text-violet-500" />
-              <span className="font-semibold text-foreground text-sm">Deep Enrichment</span>
-            </div>
-            {enrichStatus ? (
-              enrichStatus.running ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-running">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
-                  Running ({enrichStatus.processed}/{enrichStatus.total})
-                </span>
-              ) : enrichStatus.paused ? (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-paused">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                  Paused
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-active">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                  Active
-                </span>
-              )
-            ) : null}
-            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-              <span data-testid="text-enrich-cap">
-                Cap: <span className="text-foreground font-medium">{enrichStatus?.capPerCycle?.toLocaleString() ?? 500}</span>/cycle
-              </span>
-              <span data-testid="text-enrich-cost">
-                Est. cost: <span className="text-foreground font-medium">${((enrichStatus?.capPerCycle ?? 500) * 0.01).toFixed(2)}</span>/cycle (GPT-4o)
-              </span>
-              {(enrichStatus?.lastCycleCount ?? 0) > 0 && (
-                <span data-testid="text-enrich-last-cycle">
-                  Last cycle: <span className="text-foreground font-medium">{enrichStatus!.lastCycleCount.toLocaleString()}</span> enriched
-                  {(enrichStatus?.lastCycleDeferred ?? 0) > 0 && (
-                    <span className="text-amber-600 dark:text-amber-400 ml-1">({enrichStatus!.lastCycleDeferred.toLocaleString()} deferred)</span>
-                  )}
-                </span>
-              )}
-            </div>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => enrichTogglePauseMutation.mutate()}
-            disabled={enrichTogglePauseMutation.isPending || enrichStatus?.running}
-            data-testid="button-toggle-enrichment-pause"
-            className={`h-8 text-xs font-medium shrink-0 ${enrichStatus?.paused
-              ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
-              : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"}`}
-          >
-            {enrichTogglePauseMutation.isPending
-              ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
-              : enrichStatus?.paused
-              ? <><Zap className="w-3 h-3 mr-1" />Resume Enrichment</>
-              : <><AlertCircle className="w-3 h-3 mr-1" />Pause Enrichment</>
-            }
-          </Button>
         </div>
 
         {/* ── Live Connections section ───────────────────────── */}
@@ -2756,55 +2577,6 @@ function Enrichment({ pw }: { pw: string }) {
     setTimeout(() => browserRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
   };
 
-  const [fdaPolling, setFdaPolling] = useState(false);
-
-  const { data: fdaStatus, refetch: refetchFdaStatus, isError: fdaStatusError } = useQuery<{
-    running: boolean;
-    lastRunAt: string | null;
-    lastTaggedCount: number | null;
-    consecutiveFailures: number;
-    lastFailureReason: string | null;
-    lastFailureAt: string | null;
-  }>({
-    queryKey: ["/api/admin/fda-designations/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/fda-designations/status", { headers: { "x-admin-password": pw } });
-      if (!res.ok) throw new Error("Failed to load FDA designation status");
-      return res.json();
-    },
-    refetchInterval: fdaPolling ? 3000 : false,
-    retry: 2,
-  });
-
-  useEffect(() => {
-    if (fdaStatus?.running) {
-      setFdaPolling(true);
-    } else if (fdaPolling && fdaStatus && !fdaStatus.running) {
-      setFdaPolling(false);
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/fda-designations/status", pw] });
-    }
-  }, [fdaStatus?.running, fdaPolling, pw]);
-
-  const runFdaMatch = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/fda-designations/run", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (res.status === 409) throw new Error("Job already running");
-      if (!res.ok) throw new Error("Failed to start FDA designation match");
-      return res.json();
-    },
-    onSuccess: () => {
-      setFdaPolling(true);
-      refetchFdaStatus();
-      toast({ title: "FDA Designation Match started", description: "Matching assets against Orphan Drug, Breakthrough Therapy and Fast Track registries..." });
-    },
-    onError: (err: Error) => {
-      toast({ title: "Failed to start", description: err.message, variant: "destructive" });
-    },
-  });
-
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
     queryFn: async () => {
@@ -3331,78 +3103,6 @@ function Enrichment({ pw }: { pw: string }) {
         )}
       </div>
 
-      {/* ── FDA Designation Match card ── */}
-      <div className="border border-border rounded-xl bg-card overflow-hidden" data-testid="fda-designation-card">
-        <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-2">
-          <Shield className="h-4 w-4 text-purple-500" />
-          <h3 className="text-sm font-semibold text-foreground">FDA Designation Match</h3>
-          {fdaStatus?.running && (
-            <span className="text-xs font-normal text-primary ml-1">(running...)</span>
-          )}
-        </div>
-        <div className="px-5 py-4 space-y-4">
-          <p className="text-xs text-muted-foreground">
-            Tags assets with FDA designations (Orphan Drug, Breakthrough Therapy, Fast Track) by matching asset names against openFDA registries.
-          </p>
-
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-3 text-xs text-muted-foreground">
-              {fdaStatus?.running ? (
-                <span className="flex items-center gap-1.5 text-primary font-medium" data-testid="fda-status-running">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  Running...
-                </span>
-              ) : fdaStatus?.lastRunAt ? (
-                <span data-testid="fda-status-last-run">
-                  Last run: <span className="text-foreground font-medium">{relativeTime(fdaStatus.lastRunAt)}</span>
-                </span>
-              ) : (
-                <span className="text-muted-foreground/60" data-testid="fda-status-never">Never run</span>
-              )}
-              {!fdaStatus?.running && fdaStatus?.lastTaggedCount != null && (
-                <span data-testid="fda-status-tagged-count">
-                  Tagged: <span className="text-foreground font-medium">{fdaStatus.lastTaggedCount}</span> assets
-                </span>
-              )}
-              {!fdaStatus?.running && (fdaStatus?.consecutiveFailures ?? 0) > 0 && (
-                <span className="text-amber-600 dark:text-amber-400" data-testid="fda-status-failures">
-                  {fdaStatus!.consecutiveFailures} consecutive failure{fdaStatus!.consecutiveFailures !== 1 ? "s" : ""}
-                </span>
-              )}
-            </div>
-
-            <Button
-              size="sm"
-              variant="outline"
-              className="ml-auto"
-              onClick={() => runFdaMatch.mutate()}
-              disabled={fdaStatus?.running || runFdaMatch.isPending}
-              data-testid="button-run-fda-match"
-            >
-              {(fdaStatus?.running || runFdaMatch.isPending) ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
-              ) : (
-                <Shield className="h-3.5 w-3.5 mr-1.5" />
-              )}
-              {fdaStatus?.running ? "Running..." : "Run FDA Match"}
-            </Button>
-          </div>
-
-          {!fdaStatus?.running && (fdaStatus?.consecutiveFailures ?? 0) > 0 && fdaStatus?.lastFailureReason && (
-            <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30 text-xs" data-testid="fda-failure-reason">
-              <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0 mt-0.5" />
-              <span className="text-amber-700 dark:text-amber-400 break-all">{fdaStatus.lastFailureReason}</span>
-            </div>
-          )}
-
-          {fdaStatusError && (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground" data-testid="fda-status-error">
-              <AlertCircle className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
-              <span>Could not load status — <button className="underline" onClick={() => refetchFdaStatus()}>retry</button></span>
-            </div>
-          )}
-        </div>
-      </div>
     </div>
   );
 }
@@ -5385,6 +5085,8 @@ type EdenStatusResponse = {
   succeeded: number;
   failed: number;
   job: { id: number; total: number; processed: number; improved: number; status: string; startedAt: string; completedAt: string | null } | null;
+  staleJobDetected: boolean;
+  staleJobId: number | null;
 };
 
 type EdenEmbedStatusResponse = {
@@ -6183,6 +5885,20 @@ function EdenTab({ pw }: { pw: string }) {
               </div>
             )}
 
+            {/* Stale-job resume banner — shown when server restarted with an in-progress job */}
+            {!live && status?.staleJobDetected && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
+                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
+                  <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+                    A deep enrichment job (#{status.staleJobId}) was in progress when the server last restarted and has not resumed.
+                    Click &ldquo;Start Deep Enrichment&rdquo; below to resume where it left off.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Live embedding status */}
             {embedLive && (
               <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
@@ -6276,7 +5992,7 @@ function EdenTab({ pw }: { pw: string }) {
 
 export default function Admin() {
   const [authed, setAuthed] = useState(() => localStorage.getItem(ADMIN_KEY) === "eden");
-  const [activeTab, setActiveTab] = useState("data-health");
+  const [activeTab, setActiveTab] = useState("data-pipeline");
   const { theme, setTheme } = useTheme();
 
   if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
@@ -8869,24 +8585,14 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Data Controls</p>
             </div>
             <button
-              onClick={() => setActiveTab("data-health")}
+              onClick={() => setActiveTab("data-pipeline")}
               className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "data-health" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                activeTab === "data-pipeline" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
               }`}
-              data-testid="nav-data-health"
+              data-testid="nav-data-pipeline"
             >
               <Activity className="h-4 w-4" />
-              Data Health
-            </button>
-            <button
-              onClick={() => setActiveTab("enrichment")}
-              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
-                activeTab === "enrichment" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
-              }`}
-              data-testid="nav-enrichment"
-            >
-              <BarChart3 className="h-4 w-4" />
-              Data Quality
+              Data Pipeline
             </button>
             <button
               onClick={() => setActiveTab("manual-import")}
@@ -9051,14 +8757,15 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             </>
           )}
 
-          {activeTab === "data-health" && (
-            <DataHealth pw={pw} />
-          )}
-
-          {activeTab === "enrichment" && (
+          {activeTab === "data-pipeline" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Quality</h2>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Pipeline</h2>
+                <p className="text-sm text-muted-foreground mt-1">Scraper health, live connections, dataset quality, field coverage, enrichment controls, CSV import, and duplicate detection — all in one place.</p>
+              </div>
+              <DataHealth pw={pw} />
+              <div className="mt-8 mb-6">
+                <h3 className="text-lg font-semibold text-foreground" data-testid="text-quality-section-title">Data Quality &amp; Enrichment</h3>
                 <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets. Enrichment controls at the bottom.</p>
               </div>
               <Enrichment pw={pw} />
