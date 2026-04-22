@@ -315,7 +315,7 @@ export interface IStorage {
   updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
-  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string }): Promise<Organization | undefined>;
+  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
 
   // Org Members
   getOrgMembers(orgId: number): Promise<OrgMember[]>;
@@ -2788,7 +2788,7 @@ export class DatabaseStorage implements IStorage {
 
   async applyStripeSubscription(
     orgId: number,
-    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string },
+    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null },
   ): Promise<Organization | undefined> {
     const [row] = await db
       .update(organizations)

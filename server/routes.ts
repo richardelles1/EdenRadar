@@ -7243,12 +7243,15 @@ If multiple assets appear, return each as a separate array item.`;
       const stripePriceId = sub?.items?.data?.[0]?.price?.id ?? "";
 
       // Write Stripe fields + grant plan access
+      const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null;
       const updatedOrg = await storage.applyStripeSubscription(org.id, {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscriptionId,
         stripeStatus,
         stripePriceId,
         planTier,
+        stripeCurrentPeriodEnd: periodEnd,
+        stripeCancelAt: null,
       });
 
       // Ensure industry_profile.orgId is linked so subsequent getOrgForUser calls succeed
@@ -7339,12 +7342,16 @@ If multiple assets appear, return each as a separate array item.`;
           const priceId = items?.data?.[0]?.price?.id ?? org.stripePriceId ?? "";
           const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0];
           const planTierU = matchedPlanId && isStripePlanId(matchedPlanId) ? PLAN_TIER_MAP[matchedPlanId] : org.planTier;
+          const periodEndU = typeof sub["current_period_end"] === "number" ? new Date(sub["current_period_end"] * 1000) : null;
+          const cancelAtU = typeof sub["cancel_at"] === "number" ? new Date(sub["cancel_at"] * 1000) : null;
           await storage.applyStripeSubscription(org.id, {
             stripeCustomerId,
             stripeSubscriptionId: String(sub["id"] ?? ""),
             stripeStatus: String(sub["status"] ?? "active"),
             stripePriceId: priceId,
             planTier: planTierU,
+            stripeCurrentPeriodEnd: periodEndU,
+            stripeCancelAt: cancelAtU,
           }).catch((e: unknown) => console.error("[stripe/webhook] subscription.updated write failed:", (e as Error)?.message));
           console.log(`[stripe/webhook] Updated org ${org.id} → planTier=${planTierU}, status=${sub["status"]}`);
           break;
@@ -7366,6 +7373,8 @@ If multiple assets appear, return each as a separate array item.`;
             stripeStatus: "canceled",
             stripePriceId: items?.data?.[0]?.price?.id ?? "",
             planTier: "none",
+            stripeCurrentPeriodEnd: null,
+            stripeCancelAt: null,
           }).catch((e: unknown) => console.error("[stripe/webhook] subscription.deleted write failed:", (e as Error)?.message));
           console.log(`[stripe/webhook] Org ${org.id} subscription canceled — planTier set to "none", access revoked`);
           break;

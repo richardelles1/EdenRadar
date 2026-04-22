@@ -656,6 +656,8 @@ export const organizations = pgTable("organizations", {
   stripeSubscriptionId: text("stripe_subscription_id"),
   stripeStatus: text("stripe_status"), // active | past_due | canceled | null
   stripePriceId: text("stripe_price_id"),
+  stripeCurrentPeriodEnd: timestamp("stripe_current_period_end"), // next renewal date (null until subscribed)
+  stripeCancelAt: timestamp("stripe_cancel_at"), // scheduled cancellation date, if any
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

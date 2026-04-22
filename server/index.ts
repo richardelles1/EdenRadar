@@ -307,6 +307,15 @@ async function runStartupMigrations() {
     log(`[startup] saved_assets status column migration failed: ${err?.message}`, "startup");
   }
 
+  // ── Stripe billing date columns ───────────────────────────────────────────
+  try {
+    await mdb.execute(sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_current_period_end TIMESTAMP`);
+    await mdb.execute(sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_cancel_at TIMESTAMP`);
+    log("[startup] organizations stripe billing date columns ready", "startup");
+  } catch (err: any) {
+    log(`[startup] organizations stripe billing date column migration failed: ${err?.message}`, "startup");
+  }
+
   // ── Near-duplicate detection columns ─────────────────────────────────────
   try {
     await mdb.execute(sql`ALTER TABLE ingested_assets ADD COLUMN IF NOT EXISTS duplicate_flag BOOLEAN NOT NULL DEFAULT false`);
