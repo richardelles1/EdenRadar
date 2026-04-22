@@ -410,6 +410,10 @@ import {
   novaLisbonScraper,
 } from "./new-institutions";
 
+// ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
+import { ostiScraper } from "./osti";
+import { nasaTtScraper } from "./nasatt";
+
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
 import {
   nrelVipsScraper,
@@ -629,6 +633,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nihOttScraper,
   nciTtcScraper,
   // iEdisonScraper disabled — blocks cloud IPs, no API key available (see import above)
+  // ── Task #444 — public government API scrapers (no proxy, no key) ──────────
+  ostiScraper,   // DOE patents via OSTI.gov (covers ORNL, ANL, PNNL, BNL, etc.)
+  nasaTtScraper, // NASA patent portfolio available for licensing
+  // ────────────────────────────────────────────────────────────────────────────
   maxPlanckScraper,
   mskScraper,
   lifeArcScraper,
