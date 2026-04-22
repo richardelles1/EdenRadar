@@ -1149,6 +1149,7 @@ function DataHealth({ pw }: { pw: string }) {
           <div className="text-center">
             <div className="text-2xl font-bold text-primary tabular-nums" data-testid="stat-biotech-relevant">{data.totalBiotechRelevant.toLocaleString()}</div>
             <div className="text-xs text-muted-foreground">Biotech Relevant</div>
+            <div className="text-[10px] text-muted-foreground/60">same count as Relevant Assets</div>
           </div>
           <div className="text-center">
             <div className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-synced-today">{syncedToday}</div>
@@ -2689,6 +2690,7 @@ function Enrichment({ pw }: { pw: string }) {
           <div className="rounded-xl border border-border bg-card p-4 text-center">
             <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-relevant-total">{totalRelevant.toLocaleString()}</div>
             <div className="text-xs text-muted-foreground mt-1">Relevant Assets</div>
+            <div className="text-[10px] text-muted-foreground/60 mt-0.5">same as Biotech Relevant above</div>
           </div>
           <div className="rounded-xl border border-border bg-card p-4 text-center">
             <div className="text-2xl font-bold tabular-nums text-primary" data-testid="stat-scored-pct">{scoredPct}%</div>
