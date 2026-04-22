@@ -902,6 +902,48 @@ function DataHealth({ pw }: { pw: string }) {
     }
   };
 
+  const [pendingTier, setPendingTier] = useState<1 | 2 | 3 | 4 | null>(null);
+  const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const schedulerTierMutation = useMutation({
+    mutationFn: async (tier: 1 | 2 | 3 | 4) => {
+      const res = await fetch("/api/ingest/scheduler/run-tier", {
+        method: "POST",
+        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        body: JSON.stringify({ tier }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({ error: "Request failed" }));
+        throw new Error(d.error || `HTTP ${res.status}`);
+      }
+      return res.json();
+    },
+    onSuccess: (d: { ok: boolean; message?: string }, tier) => {
+      setPendingTier(null);
+      if (d.ok) {
+        toast({ title: `Tier ${tier} sync started`, description: d.message });
+      } else {
+        toast({ title: `Cannot start T${tier}`, description: d.message, variant: "destructive" });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/collector-health"] });
+    },
+    onError: (err: Error) => {
+      setPendingTier(null);
+      toast({ title: "Tier sync failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
+    if (pendingTier !== tier) {
+      setPendingTier(tier);
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      tierConfirmTimer.current = setTimeout(() => setPendingTier(null), 4000);
+    } else {
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      schedulerTierMutation.mutate(tier);
+    }
+  };
+
   const setConcurrencyMutation = useMutation({
     mutationFn: async (concurrency: 1 | 2) => {
       const res = await fetch("/api/ingest/scheduler/concurrency", {
@@ -1291,6 +1333,42 @@ function DataHealth({ pw }: { pw: string }) {
                 {resetConfirm ? "Confirm Reset & Restart?" : "Reset & Restart"}
               </Button>
             </div>
+          </div>
+
+          {/* ── Tier sync buttons ───────────────────────────── */}
+          <div className="flex items-center gap-2 mt-2.5 pt-2.5 border-t border-border/40 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium flex-shrink-0 mr-0.5">Sync tier:</span>
+            {([1, 2, 3, 4] as const).map((tier) => {
+              const isConfirming = pendingTier === tier;
+              const isThisTierRunning = schedRunning && sched.currentTier === tier;
+              const anyRunning = schedRunning || schedulerTierMutation.isPending;
+              return (
+                <Button
+                  key={tier}
+                  size="sm"
+                  variant="outline"
+                  className={`h-7 text-xs font-medium px-3 transition-colors ${
+                    isThisTierRunning
+                      ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                      : isConfirming
+                      ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
+                  }`}
+                  onClick={() => handleTierClick(tier)}
+                  disabled={anyRunning}
+                  data-testid={`button-sync-tier-${tier}`}
+                  title={isThisTierRunning ? `Tier ${tier} is currently syncing` : `Start a sequential sync of all Tier ${tier} institutions only`}
+                >
+                  {isThisTierRunning ? (
+                    <><Loader2 className="w-3 h-3 mr-1 animate-spin" />T{tier} running</>
+                  ) : isConfirming ? (
+                    `Confirm T${tier}?`
+                  ) : (
+                    `Sync T${tier}`
+                  )}
+                </Button>
+              );
+            })}
           </div>
         </div>
 
