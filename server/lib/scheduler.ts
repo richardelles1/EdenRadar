@@ -7,7 +7,6 @@ import {
   loadAllScraperHealth,
   updateScraperHealth,
   recordFdaDesignationHealth,
-  loadFdaDesignationHealth,
   type ScraperHealthRow,
 } from "./scraperState";
 import { runFdaDesignationMatch } from "./fda-designations";
@@ -634,9 +633,6 @@ function scheduleNext(): void {
     }
   }
 }
-
-/** Expose FDA designation health for the admin status endpoint. */
-export { loadFdaDesignationHealth };
 
 /** Returns true when the error comes from the database connection pool being exhausted,
  * the Supabase connection being dropped, or our own server restarting mid-sync —

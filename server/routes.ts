@@ -22,7 +22,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, loadFdaDesignationHealth } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -1690,20 +1690,6 @@ export async function registerRoutes(
 
       const scheduler = getSchedulerStatus();
 
-      // ── FDA designation enrichment job health ────────────────────────────
-      const fdaHealth = await loadFdaDesignationHealth().catch(() => null);
-      const fdaDesignationJob = fdaHealth ? {
-        lastRunAt: fdaHealth.lastSuccessAt,
-        lastTaggedCount: fdaHealth.lastSuccessNewCount,
-        consecutiveFailures: fdaHealth.consecutiveFailures,
-        lastFailureReason: fdaHealth.lastFailureReason,
-        lastFailureAt: fdaHealth.lastFailureAt,
-        health: fdaHealth.consecutiveFailures >= 3 ? "failing"
-              : fdaHealth.consecutiveFailures >= 1 ? "warning"
-              : fdaHealth.lastSuccessAt ? "ok"
-              : "never",
-      } : { lastRunAt: null, lastTaggedCount: null, consecutiveFailures: 0, lastFailureReason: null, lastFailureAt: null, health: "never" };
-
       res.json({
         rows,
         activeSearchRows,
@@ -1715,7 +1701,6 @@ export async function registerRoutes(
         syncingCount,
         syncedToday,
         scheduler,
-        fdaDesignationJob,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch collector health" });

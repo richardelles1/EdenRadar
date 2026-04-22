@@ -141,15 +141,6 @@ interface ActiveSearchRow {
   biotechRelevant: number;
 }
 
-interface FdaDesignationJobHealth {
-  lastRunAt: string | null;
-  lastTaggedCount: number | null;
-  consecutiveFailures: number;
-  lastFailureReason: string | null;
-  lastFailureAt: string | null;
-  health: "ok" | "warning" | "failing" | "never";
-}
-
 interface CollectorHealthData {
   rows: CollectorHealthRow[];
   activeSearchRows: ActiveSearchRow[];
@@ -161,7 +152,6 @@ interface CollectorHealthData {
   syncingCount: number;
   syncedToday: number;
   scheduler: SchedulerStatus;
-  fdaDesignationJob?: FdaDesignationJobHealth;
 }
 
 function HealthDot({ health }: { health: HealthStatus }) {
