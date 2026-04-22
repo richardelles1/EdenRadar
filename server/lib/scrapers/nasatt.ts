@@ -140,6 +140,9 @@ async function fetchAllForKeyword(
 
   // Walk additional pages if the API signals more results exist
   if (total > page0Items.length) {
+    console.log(
+      `[scraper] ${ADMIN_INST}: keyword="${keyword}" api total=${total} > page0 results=${page0Items.length} — walking additional pages`
+    );
     let pageNum = 1;
     while (allItems.length < total && pageNum <= MAX_PAGES) {
       if (signal?.aborted) break;
@@ -171,10 +174,18 @@ async function fetchAllForKeyword(
       }
     }
 
-    console.log(
-      `[scraper] ${ADMIN_INST}: keyword="${keyword}" walked ${pageNum} page(s): ` +
-      `${allItems.length} unique (api total=${total})`
-    );
+    const shortfall = total - allItems.length;
+    if (shortfall > 0) {
+      console.warn(
+        `[scraper] ${ADMIN_INST}: keyword="${keyword}" total discrepancy — ` +
+        `api reported ${total} but collected only ${allItems.length} unique after ${pageNum} page(s)`
+      );
+    } else {
+      console.log(
+        `[scraper] ${ADMIN_INST}: keyword="${keyword}" walked ${pageNum} page(s) — ` +
+        `${allItems.length}/${total} collected ✓`
+      );
+    }
   }
 
   return allItems;
@@ -243,10 +254,16 @@ export const nasaTtScraper: InstitutionScraper = {
     const dedupeRate = totalApiSum > 0
       ? Math.round((1 - results.length / totalApiSum) * 100)
       : 0;
+    const discrepancy = totalApiSum - results.length;
+    if (discrepancy > 0) {
+      console.log(
+        `[scraper] ${ADMIN_INST}: cross-keyword dedup removed ${discrepancy} duplicates ` +
+        `(${dedupeRate}% of ${totalApiSum} fetched — ${results.length} unique retained)`
+      );
+    }
     console.log(
-      `[scraper] ${ADMIN_INST}: DONE — ${results.length} unique patents | ` +
-      `${totalApiSum} fetched across ${keywordsRun}/${BIOTECH_KEYWORDS.length} keywords | ` +
-      `${dedupeRate}% cross-keyword duplicates removed`
+      `[scraper] ${ADMIN_INST}: DONE — ${results.length} unique patents across ` +
+      `${keywordsRun}/${BIOTECH_KEYWORDS.length} keywords`
     );
     return results;
   },
@@ -281,12 +298,3 @@ export const nasaTtScraper: InstitutionScraper = {
     return sample;
   },
 };
-
-// ── Startup self-test (logs results to console for verification) ──────────────
-(async () => {
-  try {
-    await nasaTtScraper.probe!(3);
-  } catch (err: any) {
-    console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
-  }
-})();

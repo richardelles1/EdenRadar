@@ -293,8 +293,17 @@ export const ostiScraper: InstitutionScraper = {
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
     const results: ScrapedListing[] = [];
     const seen = new Set<number>();
-    // Probe using the first query — guaranteed to have results
-    await fetchQuery(BIOTECH_QUERIES[0], seen, results);
+    // Quick single-page probe — only page 0 of the first query
+    const { records } = await fetchPage(BIOTECH_QUERIES[0], 0);
+    for (const rec of records) {
+      if (!rec.osti_id || seen.has(rec.osti_id)) continue;
+      seen.add(rec.osti_id);
+      const listing = recordToListing(rec);
+      if (listing) {
+        results.push(listing);
+        if (results.length >= maxResults) break;
+      }
+    }
     const sample = results.slice(0, maxResults);
     const ok = sample.length >= 3 && sample.every((r) => r.title && r.url && r.institution);
     console.log(
@@ -304,12 +313,3 @@ export const ostiScraper: InstitutionScraper = {
     return sample;
   },
 };
-
-// ── Startup self-test (logs results to console for verification) ──────────────
-(async () => {
-  try {
-    await ostiScraper.probe!(3);
-  } catch (err: any) {
-    console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
-  }
-})();
