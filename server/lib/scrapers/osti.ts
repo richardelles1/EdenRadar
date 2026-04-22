@@ -296,7 +296,7 @@ export const ostiScraper: InstitutionScraper = {
     // Probe using the first query — guaranteed to have results
     await fetchQuery(BIOTECH_QUERIES[0], seen, results);
     const sample = results.slice(0, maxResults);
-    const ok = sample.every((r) => r.title && r.url && r.institution);
+    const ok = sample.length >= 3 && sample.every((r) => r.title && r.url && r.institution);
     console.log(
       `[scraper] ${ADMIN_INST}: probe ${ok ? "OK" : "PARTIAL"} — ${sample.length} results:`,
       sample.map((r) => `"${r.title.slice(0, 60)}" [${r.institution}]`)
@@ -304,3 +304,12 @@ export const ostiScraper: InstitutionScraper = {
     return sample;
   },
 };
+
+// ── Startup self-test (logs results to console for verification) ──────────────
+(async () => {
+  try {
+    await ostiScraper.probe!(3);
+  } catch (err: any) {
+    console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+  }
+})();

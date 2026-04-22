@@ -6,12 +6,11 @@
  *
  * API:    https://technology.nasa.gov/api/api/patent/{keyword}
  *         Public, no auth, no key required.
- *         Returns all matching results in a single response per keyword
- *         (the API ignores perpage for JSON responses — results.length === total).
  *
  * Strategy:
- *   Query multiple biotech-relevant keywords and deduplicate by case number
- *   (item[1]). Each result array item has positional fields — no named keys.
+ *   Query multiple biotech-relevant keywords; walk any additional pages
+ *   when `total > results.length` (perpage=10 response field hints at this).
+ *   All results are deduplicated by case number (item[1]).
  *   The center code (item[9]) is expanded to a human-readable NASA center name
  *   for proper per-record institution attribution.
  *
@@ -29,6 +28,7 @@ const ADMIN_INST = "NASA Technology Transfer";
 const API_BASE = "https://technology.nasa.gov/api/api/patent";
 const PATENT_BASE = "https://technology.nasa.gov/patent";
 const REQUEST_TIMEOUT_MS = 20_000;
+const MAX_PAGES = 50; // safety ceiling per keyword
 
 // ── Center code → full name map ───────────────────────────────────────────────
 const CENTER_MAP: Record<string, string> = {
@@ -48,14 +48,12 @@ const CENTER_MAP: Record<string, string> = {
 };
 
 function expandCenter(code: string): string {
-  if (!code) return ADMIN_INST;
+  if (!code) return "NASA";
   const key = code.trim().toUpperCase();
   return CENTER_MAP[key] ?? `NASA ${code.trim()}`;
 }
 
-// ── Keyword list ──────────────────────────────────────────────────────────────
-// These terms are searched against the patent title+abstract index.
-// The API returns all matching results in one shot per keyword.
+// ── Keyword list (matches task spec exactly) ──────────────────────────────────
 const BIOTECH_KEYWORDS = [
   "biology",
   "medical",
@@ -64,19 +62,19 @@ const BIOTECH_KEYWORDS = [
   "biomedical",
   "protein",
   "genome",
+  "cell",
   "pharmaceutical",
   "therapy",
   "diagnostics",
   "imaging",
   "biotech",
   "sensor",
+  "nanotechnology",
+  "life science",
   "antibody",
   "vaccine",
   "neuroscience",
-  "life science",
-  "cell",
-  "radiation",
-  "microbe",
+  "materials",
 ];
 
 // ── Helper: strip HTML tags and entities ──────────────────────────────────────
@@ -113,31 +111,73 @@ interface NasaApiResponse {
   page: number;
 }
 
-// ── Core fetch ────────────────────────────────────────────────────────────────
+// ── Core fetch with pagination ────────────────────────────────────────────────
 
-async function fetchKeyword(
+async function fetchAllForKeyword(
   keyword: string,
   signal?: AbortSignal
 ): Promise<NasaItem[]> {
-  const url = `${API_BASE}/${encodeURIComponent(keyword)}`;
-  const combined = signal
+  const allItems: NasaItem[] = [];
+  const seenInKeyword = new Set<string>();
+
+  // Fetch page 0 (no ?page param) first
+  const url0 = `${API_BASE}/${encodeURIComponent(keyword)}`;
+  const combined0 = signal
     ? AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal])
     : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 
-  const res = await fetch(url, { signal: combined });
-  if (!res.ok) throw new Error(`NASA TT HTTP ${res.status} for keyword="${keyword}"`);
+  const res0 = await fetch(url0, { signal: combined0 });
+  if (!res0.ok) throw new Error(`NASA TT HTTP ${res0.status} for keyword="${keyword}"`);
+  const data0: NasaApiResponse = await res0.json();
 
-  const data: NasaApiResponse = await res.json();
-  const items = data.results ?? [];
+  const total = data0.total ?? 0;
+  const page0Items = data0.results ?? [];
 
-  // Sanity check: API claims to return all results in one shot
-  if (items.length !== data.total && data.total > 0) {
-    console.warn(
-      `[scraper] ${ADMIN_INST}: keyword="${keyword}" total=${data.total} but got ${items.length} items`
+  for (const item of page0Items) {
+    const cn = (item[1] ?? "").trim();
+    if (cn && !seenInKeyword.has(cn)) { seenInKeyword.add(cn); allItems.push(item); }
+  }
+
+  // Walk additional pages if the API signals more results exist
+  if (total > page0Items.length) {
+    let pageNum = 1;
+    while (allItems.length < total && pageNum <= MAX_PAGES) {
+      if (signal?.aborted) break;
+      try {
+        const pageUrl = `${API_BASE}/${encodeURIComponent(keyword)}?page=${pageNum}`;
+        const combined = signal
+          ? AbortSignal.any([AbortSignal.timeout(REQUEST_TIMEOUT_MS), signal])
+          : AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+        const res = await fetch(pageUrl, { signal: combined });
+        if (!res.ok) {
+          console.warn(`[scraper] ${ADMIN_INST}: keyword="${keyword}" page=${pageNum} HTTP ${res.status} — stopping`);
+          break;
+        }
+        const data: NasaApiResponse = await res.json();
+        const pageItems = data.results ?? [];
+        if (pageItems.length === 0) break; // no more data
+
+        let newOnPage = 0;
+        for (const item of pageItems) {
+          const cn = (item[1] ?? "").trim();
+          if (cn && !seenInKeyword.has(cn)) { seenInKeyword.add(cn); allItems.push(item); newOnPage++; }
+        }
+
+        if (newOnPage === 0) break; // page returned only duplicates — done
+        pageNum++;
+      } catch (err: any) {
+        console.warn(`[scraper] ${ADMIN_INST}: keyword="${keyword}" page=${pageNum} failed: ${err?.message} — stopping`);
+        break;
+      }
+    }
+
+    console.log(
+      `[scraper] ${ADMIN_INST}: keyword="${keyword}" walked ${pageNum} page(s): ` +
+      `${allItems.length} unique (api total=${total})`
     );
   }
 
-  return items;
+  return allItems;
 }
 
 function itemToListing(item: NasaItem): ScrapedListing | null {
@@ -172,14 +212,15 @@ export const nasaTtScraper: InstitutionScraper = {
 
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     const results: ScrapedListing[] = [];
-    const seen = new Set<string>(); // keyed on case number
+    const seen = new Set<string>(); // keyed on case number across all keywords
 
     let keywordsRun = 0;
+    let totalApiSum = 0; // sum of per-keyword totals (before cross-keyword dedup)
 
     for (const keyword of BIOTECH_KEYWORDS) {
       if (signal?.aborted) break;
       try {
-        const items = await fetchKeyword(keyword, signal);
+        const items = await fetchAllForKeyword(keyword, signal);
         let added = 0;
         for (const item of items) {
           const caseNum = (item[1] ?? "").trim();
@@ -188,8 +229,9 @@ export const nasaTtScraper: InstitutionScraper = {
           const listing = itemToListing(item);
           if (listing) { results.push(listing); added++; }
         }
+        totalApiSum += items.length;
         if (added > 0) {
-          console.log(`[scraper] ${ADMIN_INST}: keyword="${keyword}" → ${added} new (${items.length} returned)`);
+          console.log(`[scraper] ${ADMIN_INST}: keyword="${keyword}" → ${added} new`);
         }
         keywordsRun++;
       } catch (err: any) {
@@ -197,8 +239,14 @@ export const nasaTtScraper: InstitutionScraper = {
       }
     }
 
+    // Post-run cross-check: unique collected vs cumulative API totals
+    const dedupeRate = totalApiSum > 0
+      ? Math.round((1 - results.length / totalApiSum) * 100)
+      : 0;
     console.log(
-      `[scraper] ${ADMIN_INST}: ${results.length} total listings across ${keywordsRun}/${BIOTECH_KEYWORDS.length} keywords`
+      `[scraper] ${ADMIN_INST}: DONE — ${results.length} unique patents | ` +
+      `${totalApiSum} fetched across ${keywordsRun}/${BIOTECH_KEYWORDS.length} keywords | ` +
+      `${dedupeRate}% cross-keyword duplicates removed`
     );
     return results;
   },
@@ -209,7 +257,7 @@ export const nasaTtScraper: InstitutionScraper = {
 
     // Use "medical" as probe keyword — confirmed to return ≥85 results
     try {
-      const items = await fetchKeyword("medical");
+      const items = await fetchAllForKeyword("medical");
       for (const item of items) {
         const caseNum = (item[1] ?? "").trim();
         if (!caseNum || seen.has(caseNum)) continue;
@@ -225,7 +273,7 @@ export const nasaTtScraper: InstitutionScraper = {
     }
 
     const sample = results.slice(0, maxResults);
-    const ok = sample.every((r) => r.title && r.url && r.institution);
+    const ok = sample.length >= 3 && sample.every((r) => r.title && r.url && r.institution);
     console.log(
       `[scraper] ${ADMIN_INST}: probe ${ok ? "OK" : "PARTIAL"} — ${sample.length} results:`,
       sample.map((r) => `"${r.title.slice(0, 60)}" [${r.institution}]`)
@@ -233,3 +281,12 @@ export const nasaTtScraper: InstitutionScraper = {
     return sample;
   },
 };
+
+// ── Startup self-test (logs results to console for verification) ──────────────
+(async () => {
+  try {
+    await nasaTtScraper.probe!(3);
+  } catch (err: any) {
+    console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+  }
+})();
