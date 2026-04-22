@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
+import type { Session } from "@supabase/supabase-js";
 import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
@@ -106,7 +107,7 @@ const FREE_TIERS = [
   },
 ];
 
-function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session: any }) {
+function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session: Session | null }) {
   const [loading, setLoading] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -142,7 +143,7 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
       if (data.url) {
         window.location.href = data.url;
       }
-    } catch (err: any) {
+    } catch {
       toast({
         title: "Network error",
         description: "Failed to connect to the server. Please try again.",

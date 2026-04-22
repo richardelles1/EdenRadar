@@ -24,7 +24,7 @@ function formatDate(iso: string | null) {
 }
 
 export default function BillingSuccess() {
-  const { session } = useAuth();
+  const { session, loading: authLoading } = useAuth();
   const [, navigate] = useLocation();
   const [state, setState] = useState<"loading" | "success" | "error">("loading");
   const [result, setResult] = useState<VerifyResult | null>(null);
@@ -40,16 +40,23 @@ export default function BillingSuccess() {
       return;
     }
 
+    // Auth is still loading — wait
+    if (authLoading) return;
+
+    // Auth done but no session — redirect to login preserving the return path
     if (!session?.access_token) {
+      navigate(`/login?redirect=/billing/success${encodeURIComponent("?session_id=" + sessionId)}`);
       return;
     }
+
+    const accessToken: string = session.access_token;
 
     const verify = async () => {
       try {
         const res = await fetch(`/api/stripe/verify-session?session_id=${encodeURIComponent(sessionId)}`, {
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
         });
-        const data = await res.json();
+        const data = (await res.json()) as { error?: string } & Partial<VerifyResult>;
 
         if (!res.ok) {
           setErrorMsg(data.error ?? "Payment could not be verified.");
@@ -59,14 +66,14 @@ export default function BillingSuccess() {
 
         setResult(data as VerifyResult);
         setState("success");
-      } catch (err: any) {
-        setErrorMsg(err?.message ?? "Network error. Please contact support.");
+      } catch {
+        setErrorMsg("Network error. Please contact support.");
         setState("error");
       }
     };
 
     verify();
-  }, [session?.access_token]);
+  }, [session?.access_token, authLoading]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">

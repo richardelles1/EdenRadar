@@ -5426,6 +5426,8 @@ If a field cannot be determined, use "N/A".`
   // Plan-check endpoint — returns the authenticated user's active EdenScout plan tier.
   // Returns { plan: string | null, orgName: string | null }
   // plan is null when the user has no org or their org has no recognised paid tier.
+  // planTier="none" is the canonical non-paid sentinel written by the Stripe webhook on
+  // subscription cancellation; it is not in PAID_PLANS so this endpoint returns plan=null for it.
   app.get("/api/me/plan", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;

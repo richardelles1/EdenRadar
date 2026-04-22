@@ -646,7 +646,7 @@ export type EdenSession = typeof edenSessions.$inferSelect;
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  planTier: text("plan_tier").notNull().default("individual"), // individual | team5 | team10 | enterprise
+  planTier: text("plan_tier").notNull().default("individual"), // individual | team5 | team10 | enterprise | "none"=subscription canceled/revoked
   seatLimit: integer("seat_limit").notNull().default(1),
   logoUrl: text("logo_url"),
   primaryColor: text("primary_color"), // hex e.g. "#16a34a"
