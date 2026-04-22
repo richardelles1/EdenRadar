@@ -413,6 +413,8 @@ import {
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
 import { ostiScraper } from "./osti";
 import { nasaTtScraper } from "./nasatt";
+// ── Task #445 — NASA TechPort R&D projects (public API, no proxy) ────────────
+import { nasaTechPortScraper } from "./nasatechport";
 
 // ── Task #277 — VIPS DOE National Labs ────────────────────────────────────────
 import {
@@ -634,8 +636,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   nciTtcScraper,
   // iEdisonScraper disabled — blocks cloud IPs, no API key available (see import above)
   // ── Task #444 — public government API scrapers (no proxy, no key) ──────────
-  ostiScraper,   // DOE patents via OSTI.gov (covers ORNL, ANL, PNNL, BNL, etc.)
-  nasaTtScraper, // NASA patent portfolio available for licensing
+  ostiScraper,          // DOE patents via OSTI.gov (covers ORNL, ANL, PNNL, BNL, etc.)
+  nasaTtScraper,        // NASA patent portfolio available for licensing
+  // ── Task #445 — NASA TechPort R&D projects (pre-patent, public API) ────────
+  nasaTechPortScraper,  // NASA active/completed R&D projects across all centers
   // ────────────────────────────────────────────────────────────────────────────
   maxPlanckScraper,
   mskScraper,
