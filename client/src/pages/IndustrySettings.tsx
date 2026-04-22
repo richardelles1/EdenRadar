@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Users,
   CreditCard,
+  Loader2,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -245,6 +246,7 @@ export default function IndustrySettings() {
   const [freqLoading, setFreqLoading] = useState(false);
   const [pwModalOpen, setPwModalOpen] = useState(false);
   const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
+  const [portalLoading, setPortalLoading] = useState(false);
 
   useEffect(() => {
     setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
@@ -314,6 +316,29 @@ export default function IndustrySettings() {
       toast({ title: "Network error", variant: "destructive" });
     } finally {
       setFreqLoading(false);
+    }
+  }
+
+  async function handleManageBilling() {
+    if (!session?.access_token) return;
+    setPortalLoading(true);
+    try {
+      const res = await fetch("/api/stripe/portal", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Could not open billing portal", description: data.error ?? "Please try again.", variant: "destructive" });
+        return;
+      }
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch {
+      toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
+    } finally {
+      setPortalLoading(false);
     }
   }
 
@@ -487,13 +512,32 @@ export default function IndustrySettings() {
               {billingMethodLabel(org?.billingMethod ?? "stripe")}
             </p>
           </div>
-          <button
-            className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors shrink-0"
-            onClick={() => window.open("mailto:support@edennx.com?subject=Billing inquiry", "_blank")}
-            data-testid="link-billing"
-          >
-            Billing <ChevronRight className="w-3 h-3" />
-          </button>
+          {org?.stripeCustomerId ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleManageBilling}
+              disabled={portalLoading}
+              data-testid="button-manage-billing"
+              className="gap-1.5 shrink-0"
+            >
+              {portalLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <ExternalLink className="w-3.5 h-3.5" />
+              )}
+              {portalLoading ? "Opening…" : "Manage Billing"}
+            </Button>
+          ) : (
+            <Link href="/pricing">
+              <button
+                className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5 transition-colors shrink-0"
+                data-testid="link-upgrade-plan"
+              >
+                Upgrade <ChevronRight className="w-3 h-3" />
+              </button>
+            </Link>
+          )}
         </div>
       </div>
 

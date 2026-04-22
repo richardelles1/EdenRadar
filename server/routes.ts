@@ -7382,5 +7382,36 @@ If multiple assets appear, return each as a separate array item.`;
     res.json({ received: true });
   });
 
+  // POST /api/stripe/portal — create a Stripe Customer Portal session for self-serve plan management
+  app.post("/api/stripe/portal", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe is not configured on this server yet" });
+
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+
+      if (!org) {
+        return res.status(404).json({ error: "No organization found for this account" });
+      }
+      if (!org.stripeCustomerId) {
+        return res.status(400).json({ error: "No Stripe billing found — subscribe to a plan first" });
+      }
+
+      const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
+      const baseUrl = origin || `https://${req.headers.host}`;
+
+      const portalSession = await (stripe as any).billingPortal.sessions.create({
+        customer: org.stripeCustomerId,
+        return_url: `${baseUrl}/industry/settings`,
+      });
+
+      res.json({ url: portalSession.url });
+    } catch (err: any) {
+      console.error("[stripe/portal]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to create portal session" });
+    }
+  });
+
   return httpServer;
 }
