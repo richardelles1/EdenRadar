@@ -310,10 +310,6 @@ export interface IStorage {
   getWindowAssetSummary(windowHours: number): Promise<{ totalCount: number; top5Ids: number[] }>;
   getAllInstitutionNames(): Promise<string[]>;
 
-  // FDA designation enrichment
-  getIngestedAssetsForFdaTagging(): Promise<IngestedAsset[]>;
-  updateFdaDesignation(id: number, designation: string, date?: string): Promise<void>;
-
   // Organizations
   getAllOrganizations(): Promise<Organization[]>;
   getOrganization(id: number): Promise<Organization | undefined>;
@@ -2720,28 +2716,6 @@ export class DatabaseStorage implements IStorage {
       .map((r) => r.institution)
       .filter((n): n is string => !!n && n.trim().length > 0)
       .sort((a, b) => a.localeCompare(b));
-  }
-
-  async getIngestedAssetsForFdaTagging(): Promise<IngestedAsset[]> {
-    return db
-      .select()
-      .from(ingestedAssets)
-      .where(
-        and(
-          eq(ingestedAssets.relevant, true),
-          isNotNull(ingestedAssets.assetName),
-        )
-      );
-  }
-
-  async updateFdaDesignation(id: number, designation: string, date?: string): Promise<void> {
-    await db
-      .update(ingestedAssets)
-      .set({
-        fdaDesignation: designation,
-        ...(date ? { fdaDesignationDate: date } : {}),
-      })
-      .where(eq(ingestedAssets.id, id));
   }
 
   private async _getNewRelevantAssets(windowHours: number): Promise<Omit<AssetSuggestion, "score" | "matchedFields">[]> {

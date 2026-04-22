@@ -230,7 +230,7 @@ interface SyncStatusResponse {
   syncRunningFor: string | null;
 }
 
-function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: string; pw: string; onCollapse: () => void }) {
+function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institution: string; pw: string; onCollapse: () => void; liveInDb?: number }) {
   const [polling, setPolling] = useState(true);
   const { toast } = useToast();
 
@@ -326,9 +326,9 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
   const syncIsActive = statusData?.syncRunning ?? false;
 
   const rawCount = session?.rawCount ?? 0;
-  const currentIndexed = session?.currentIndexed ?? 0;
+  const currentInDb = liveInDb ?? session?.currentIndexed ?? 0;
   const zeroGuard = isEnriched && rawCount === 0;
-  const softWarning = isEnriched && currentIndexed > 0 && rawCount > 0 && rawCount < currentIndexed * 0.5;
+  const softWarning = isEnriched && currentInDb > 0 && rawCount > 0 && rawCount < currentInDb * 0.5;
 
   const phaseLabel = syncForThisInst && session?.status !== "running" ? "Starting sync..."
     : session?.phase === "scraping" ? "Collecting..."
@@ -383,16 +383,16 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                         {s.status === "pushed" ? (
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" aria-label="Pushed to pipeline" />
                         ) : s.status === "failed" ? (
-                          <XCircle className="h-3.5 w-3.5 text-red-500" aria-label="Scrape failed" />
+                          <XCircle className="h-3.5 w-3.5 text-red-500" aria-label="Collection failed" />
                         ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
                           <span className="inline-flex items-center gap-1 text-blue-500"><Clock className="h-3.5 w-3.5 shrink-0" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                         ) : (
-                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Scraped 0 results: site may have been unreachable" />
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500" aria-label="Collected 0 results: site may have been unreachable" />
                         )}
                         <span className="text-muted-foreground">{s.completedAt ? formatDate(s.completedAt) : "In progress"}</span>
                       </div>
                       <div className="flex items-center gap-3 text-muted-foreground/70">
-                        <span>{s.rawCount} scraped</span>
+                        <span>{s.rawCount} collected</span>
                         <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                         {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
                       </div>
@@ -461,7 +461,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 />
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                {rawCount > 0 ? `${rawCount} raw listings scraped` : "Fetching listings from institution..."}
+                {rawCount > 0 ? `${rawCount} raw listings collected` : "Fetching listings from institution..."}
               </p>
               {!syncIsActive && (
                 <Button
@@ -487,12 +487,12 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
             <div className="px-5 py-4 space-y-4" data-testid="sync-result-details">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div className="rounded-lg border border-border bg-background p-3 text-center">
-                  <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentIndexed}</div>
-                  <div className="text-xs text-muted-foreground">Currently Indexed</div>
+                  <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-currently-indexed">{currentInDb}</div>
+                  <div className="text-xs text-muted-foreground">In DB Now</div>
                 </div>
                 <div className="rounded-lg border border-border bg-background p-3 text-center">
                   <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-raw-scraped">{session.rawCount}</div>
-                  <div className="text-xs text-muted-foreground">Raw Scraped</div>
+                  <div className="text-xs text-muted-foreground">Raw Collected</div>
                 </div>
                 <div className="rounded-lg border border-border bg-background p-3 text-center">
                   <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-new-found">{session.newCount}</div>
@@ -510,7 +510,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-fail-reason">
                   <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Scrape failed</p>
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Collection failed</p>
                     <p className="text-xs text-red-600 dark:text-red-500 mt-1 font-mono break-all">{session.errorMessage}</p>
                   </div>
                 </div>
@@ -527,8 +527,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                 const textCls = isSiteDown ? "text-red-700 dark:text-red-400" : isRateLimited ? "text-orange-700 dark:text-orange-400" : isBlocked ? "text-amber-700 dark:text-amber-400" : "text-violet-700 dark:text-violet-400";
                 const detailCls = isSiteDown ? "text-red-600 dark:text-red-500" : isRateLimited ? "text-orange-600 dark:text-orange-500" : isBlocked ? "text-amber-600 dark:text-amber-500" : "text-violet-600 dark:text-violet-500";
                 const iconCls = isSiteDown ? "text-red-500" : isRateLimited ? "text-orange-500" : isBlocked ? "text-amber-500" : "text-violet-500";
-                const title = isSiteDown ? "Site is down or in maintenance" : isRateLimited ? "Scraper was rate-limited" : isBlocked ? "Access blocked (WAF / bot protection)" : "Parser failure — scraper returned 0 results";
-                const detail = errMsg ?? "The scraper ran without an HTTP error but found no listings. A CSS selector change or site layout update likely broke the parser.";
+                const title = isSiteDown ? "Site is down or in maintenance" : isRateLimited ? "Collector was rate-limited" : isBlocked ? "Access blocked (WAF / bot protection)" : "Parser failure — collector returned 0 results";
+                const detail = errMsg ?? "The collector ran without an HTTP error but found no listings. A CSS selector change or site layout update likely broke the parser.";
                 return (
                   <div className={`flex items-start gap-3 p-4 rounded-lg border ${borderCls}`} data-testid="sync-zero-guard">
                     <AlertTriangle className={`h-5 w-5 ${iconCls} flex-shrink-0 mt-0.5`} />
@@ -546,7 +546,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                   <div>
                     <p className="text-sm font-medium text-amber-700 dark:text-amber-400">Results significantly below expected count</p>
                     <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
-                      Scraped {rawCount} results but {currentIndexed} are currently indexed. This is below 50% of the expected count; the scraper may only be returning partial results.
+                      Collected {rawCount} results but {currentInDb} are currently in DB. This is below 50% of the expected count; the collector may only be returning partial results.
                     </p>
                   </div>
                 </div>
@@ -568,7 +568,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                   <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-medium text-red-700 dark:text-red-400">Sync failed</p>
-                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The scraper encountered an error. Check server logs for details.</p>
+                    <p className="text-xs text-red-600 dark:text-red-500 mt-1">The collector encountered an error. Check server logs for details.</p>
                   </div>
                 </div>
               )}
@@ -675,18 +675,18 @@ function ExpandedSyncPanel({ institution, pw, onCollapse }: { institution: strin
                       {s.status === "pushed" ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" aria-label="Pushed to pipeline" />
                       ) : s.status === "failed" ? (
-                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="Scrape failed" />
+                        <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" aria-label="Collection failed" />
                       ) : s.status === "enriched" && (s.rawCount ?? 0) > 0 ? (
                         <span className="inline-flex items-center gap-1 text-blue-500 shrink-0"><Clock className="h-3.5 w-3.5" aria-label="Ready to push" /><span className="text-[10px] font-medium">ready</span></span>
                       ) : (
-                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Scraped 0 results: site may have been unreachable" />
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0" aria-label="Collected 0 results: site may have been unreachable" />
                       )}
                       <span className="text-muted-foreground truncate">
                         {s.completedAt ? formatDate(s.completedAt) : "In progress"}
                       </span>
                     </div>
                     <div className="flex items-center gap-3 text-muted-foreground/70 shrink-0 ml-3">
-                      <span>{s.rawCount} scraped</span>
+                      <span>{s.rawCount} collected</span>
                       <span className={s.relevantCount > 0 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}>{s.relevantCount} relevant</span>
                       {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
                     </div>
@@ -1600,6 +1600,7 @@ function DataHealth({ pw }: { pw: string }) {
                             institution={row.institution}
                             pw={pw}
                             onCollapse={() => setExpandedInstitution(null)}
+                            liveInDb={row.totalInDb}
                           />
                         )}
                       </React.Fragment>
@@ -1705,7 +1706,7 @@ function DataHealth({ pw }: { pw: string }) {
         )}
       </div>
 
-      {/* ── Scraper Health section ─────────────────────────── */}
+      {/* ── Collector Health section ─────────────────────────── */}
       <button
         className="w-full flex items-center justify-between px-4 py-3 border-b border-border bg-muted/10 hover:bg-muted/20 transition-colors text-left"
         onClick={() => setHealthPanelOpen((v) => !v)}
@@ -1713,7 +1714,7 @@ function DataHealth({ pw }: { pw: string }) {
       >
         <div className="flex items-center gap-2">
           <Server className="h-4 w-4 text-primary" />
-          <span className="font-semibold text-foreground text-sm">Scraper Health</span>
+          <span className="font-semibold text-foreground text-sm">Collector Health</span>
           {scraperHealthData?.inBackoff ? (
             <span className="text-xs text-red-500 bg-red-500/10 border border-red-500/20 rounded-full px-2 py-0.5">
               {scraperHealthData.inBackoff} in backoff
@@ -1733,7 +1734,7 @@ function DataHealth({ pw }: { pw: string }) {
             </div>
           ) : scraperHealthData.rows.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground text-sm">
-              No failure data recorded yet. Scrapers will appear here after their first run.
+              No failure data recorded yet. Collectors will appear here after their first run.
             </div>
           ) : (
             <div className="overflow-x-auto rounded-lg border border-border">
@@ -8540,7 +8541,7 @@ function DataPipeline({ pw }: { pw: string }) {
           data-testid="subnav-link-scraper-health"
         >
           <Server className="h-3 w-3" />
-          Scraper Health
+          Collector Health
         </button>
         <button
           onClick={() => scrollTo("data-quality")}
@@ -8895,7 +8896,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <>
               <div className="mb-6">
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Pipeline</h2>
-                <p className="text-sm text-muted-foreground mt-1">Scraper health, live connections, dataset quality, field coverage, enrichment controls, CSV import, and duplicate detection — all in one place.</p>
+                <p className="text-sm text-muted-foreground mt-1">Collector health, live connections, dataset quality, field coverage, enrichment controls, CSV import, and duplicate detection — all in one place.</p>
               </div>
               <DataPipeline pw={pw} />
             </>

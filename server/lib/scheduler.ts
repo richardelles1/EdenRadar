@@ -6,10 +6,8 @@ import {
   loadSchedulerState,
   loadAllScraperHealth,
   updateScraperHealth,
-  recordFdaDesignationHealth,
   type ScraperHealthRow,
 } from "./scraperState";
-import { runFdaDesignationMatch } from "./fda-designations";
 import { storage } from "../storage";
 
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
@@ -54,7 +52,6 @@ let priorityQueue: string[] = [];
 let syncDurations: number[] = [];
 let lastCycleCompletedAt: Date | null = null;
 let delayBetweenSyncsMs = 0;
-let fdaDesignationRunning = false;
 /** Tier-sorted queue for the current cycle. Re-built at every cycle start.
  * Tier 1 (API/RSS) → Tier 2 (platform factory) → Tier 3 (bespoke HTML) → Tier 4 (Playwright). */
 let tieredQueue: string[] = [];
@@ -606,31 +603,6 @@ function scheduleNext(): void {
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
 
-    // ── Post-cycle: FDA designation enrichment ────────────────────────────────
-    // Runs asynchronously after each full scraper cycle completes; results are
-    // stored in scraper_health under "__fda_designation__" for health tracking.
-    // Single-flight guard prevents concurrent runs across overlapping cycles.
-    if (!fdaDesignationRunning) {
-      fdaDesignationRunning = true;
-      (async () => {
-        try {
-          console.log("[scheduler] Post-cycle: running FDA designation match...");
-          const fdaResult = await runFdaDesignationMatch();
-          await recordFdaDesignationHealth(fdaResult.tagged, fdaResult.errors);
-          console.log(
-            `[scheduler] Post-cycle: FDA designation match complete — ` +
-            `tagged=${fdaResult.tagged} errors=${fdaResult.errors}`
-          );
-        } catch (err: any) {
-          console.warn(`[scheduler] Post-cycle: FDA designation match failed: ${err?.message}`);
-          await recordFdaDesignationHealth(0, 1).catch(() => {});
-        } finally {
-          fdaDesignationRunning = false;
-        }
-      })();
-    } else {
-      console.log("[scheduler] Post-cycle: FDA designation match already running — skipping this cycle");
-    }
   }
 }
 
