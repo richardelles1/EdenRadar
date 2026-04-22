@@ -468,8 +468,6 @@ export async function registerRoutes(
           licensing_status: r.licensingReadiness ?? "unknown",
           stage_changed_at: r.stageChangedAt ? r.stageChangedAt.toISOString() : null,
           previous_stage: r.previousStage ?? null,
-          fda_designation: r.fdaDesignation ?? null,
-          fda_designation_date: r.fdaDesignationDate ?? null,
         };
       });
 
@@ -490,7 +488,6 @@ export async function registerRoutes(
           mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
           completeness_score, licensing_readiness, ip_type, source_url, source_name,
           summary, categories, technology_id, stage_changed_at, previous_stage,
-          fda_designation, fda_designation_date,
           first_seen_at
         FROM ingested_assets
         WHERE relevant = true AND completeness_score >= 0.4
@@ -514,8 +511,6 @@ export async function registerRoutes(
         innovation_claim: typeof r.innovation_claim === "string" ? r.innovation_claim : null,
         stage_changed_at: r.stage_changed_at ? String(r.stage_changed_at) : null,
         previous_stage: typeof r.previous_stage === "string" ? r.previous_stage : null,
-        fda_designation: typeof r.fda_designation === "string" ? r.fda_designation : null,
-        fda_designation_date: typeof r.fda_designation_date === "string" ? r.fda_designation_date : null,
         first_seen_at: r.first_seen_at ? String(r.first_seen_at) : null,
         score: 0,
         score_breakdown: { freshness: 0, novelty: 0, readiness: 0, licensability: 0, fit: 0, competition: 0, total: 0 },
@@ -863,8 +858,6 @@ export async function registerRoutes(
               institution: enrichedRecord.institution,
               summary: enrichedRecord.summary,
               sourceUrl: enrichedRecord.sourceUrl,
-              fdaDesignation: enrichedRecord.fdaDesignation ?? null,
-              fdaDesignationDate: enrichedRecord.fdaDesignationDate ?? null,
             }
           : null,
         enriched: enrichedRecord

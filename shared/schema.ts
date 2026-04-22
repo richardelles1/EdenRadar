@@ -219,9 +219,6 @@ export const ingestedAssets = pgTable("ingested_assets", {
   //   - The retry increments 1 → 2, permanently excluding the asset (2 > 1).
   //   - Maximum 2 GPT-4o calls per asset; reset to 0 on content change.
   deepEnrichAttempts: integer("deep_enrich_attempts").default(0).notNull(),
-  // FDA designation tag applied by periodic enrichment job (orphan drug, fast track, breakthrough therapy)
-  fdaDesignation: text("fda_designation"),
-  fdaDesignationDate: text("fda_designation_date"),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

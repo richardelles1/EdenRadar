@@ -117,8 +117,7 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
   const stageLabel = normalizePillValue(asset.development_stage);
   const modalityLabel = normalizePillValue(asset.modality);
-  const fdaDesignation = asset.fda_designation ?? null;
-  const hasPills = stageLabel || modalityLabel || fdaDesignation;
+  const hasPills = stageLabel || modalityLabel;
 
   const handleViewDossier = () => {
     sessionStorage.setItem(`asset-${asset.id}`, JSON.stringify(asset));
@@ -319,34 +318,6 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
                 >
                   {modalityLabel}
                 </span>
-              )}
-              {fdaDesignation && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full select-none border ${
-                        fdaDesignation.toLowerCase().includes("orphan")
-                          ? "bg-purple-50 dark:bg-purple-950/40 border-purple-300/60 dark:border-purple-700/40 text-purple-700 dark:text-purple-300"
-                          : fdaDesignation.toLowerCase().includes("breakthrough")
-                          ? "bg-amber-50 dark:bg-amber-950/40 border-amber-300/60 dark:border-amber-700/40 text-amber-700 dark:text-amber-300"
-                          : "bg-sky-50 dark:bg-sky-950/40 border-sky-300/60 dark:border-sky-700/40 text-sky-700 dark:text-sky-300"
-                      }`}
-                      data-testid={`pill-fda-${asset.id}`}
-                    >
-                      FDA {fdaDesignation}
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom" className="text-xs max-w-52">
-                    {fdaDesignation.toLowerCase().includes("orphan")
-                      ? "FDA Orphan Drug Designation — granted for drugs targeting rare diseases affecting fewer than 200,000 people."
-                      : fdaDesignation.toLowerCase().includes("breakthrough")
-                      ? "FDA Breakthrough Therapy Designation — expedited development and review for serious conditions."
-                      : "FDA Fast Track Designation — expedited review to treat serious conditions with unmet medical needs."}
-                    {asset.fda_designation_date && (
-                      <span className="block mt-1 opacity-70">Designated {asset.fda_designation_date}</span>
-                    )}
-                  </TooltipContent>
-                </Tooltip>
               )}
             </div>
           )}
