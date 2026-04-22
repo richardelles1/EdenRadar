@@ -966,6 +966,46 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
+  const { data: enrichStatus, refetch: refetchEnrichStatus } = useQuery<{
+    running: boolean;
+    paused: boolean;
+    capPerCycle: number;
+    processed: number;
+    total: number;
+    succeeded: number;
+    failed: number;
+    lastCycleCount: number;
+    lastCycleDeferred: number;
+    job: { status: string; completedAt: string | null } | null;
+  }>({
+    queryKey: ["/api/admin/eden/enrich/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load enrichment status");
+      return res.json();
+    },
+    refetchInterval: 10_000,
+    retry: 2,
+  });
+
+  const enrichTogglePauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/toggle-pause", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
+      return res.json();
+    },
+    onSuccess: (d: { paused: boolean }) => {
+      toast({ title: d.paused ? "Enrichment paused" : "Enrichment resumed", description: d.paused ? "Deep enrichment will be skipped until resumed" : "Deep enrichment is now active" });
+      refetchEnrichStatus();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const [fdaPolling, setFdaPolling] = useState(false);
   const { data: fdaStatus, refetch: refetchFdaStatus } = useQuery<{
     running: boolean;
@@ -1443,6 +1483,67 @@ function DataHealth({ pw }: { pw: string }) {
             </div>
           </div>
         )}
+
+        {/* ── Deep Enrichment control strip ──────────────────── */}
+        <div className="px-4 py-3 border-b border-border bg-muted/10 flex items-center justify-between gap-4 flex-wrap" data-testid="enrichment-control-strip">
+          <div className="flex items-center gap-3 min-w-0 flex-wrap">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <BrainCircuit className="w-4 h-4 text-violet-500" />
+              <span className="font-semibold text-foreground text-sm">Deep Enrichment</span>
+            </div>
+            {enrichStatus ? (
+              enrichStatus.running ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-running">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                  Running ({enrichStatus.processed}/{enrichStatus.total})
+                </span>
+              ) : enrichStatus.paused ? (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-paused">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  Paused
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-1 flex-shrink-0" data-testid="badge-enrichment-active">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Active
+                </span>
+              )
+            ) : null}
+            <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+              <span data-testid="text-enrich-cap">
+                Cap: <span className="text-foreground font-medium">{enrichStatus?.capPerCycle?.toLocaleString() ?? 500}</span>/cycle
+              </span>
+              <span data-testid="text-enrich-cost">
+                Est. cost: <span className="text-foreground font-medium">${((enrichStatus?.capPerCycle ?? 500) * 0.01).toFixed(2)}</span>/cycle (GPT-4o)
+              </span>
+              {(enrichStatus?.lastCycleCount ?? 0) > 0 && (
+                <span data-testid="text-enrich-last-cycle">
+                  Last cycle: <span className="text-foreground font-medium">{enrichStatus!.lastCycleCount.toLocaleString()}</span> enriched
+                  {(enrichStatus?.lastCycleDeferred ?? 0) > 0 && (
+                    <span className="text-amber-600 dark:text-amber-400 ml-1">({enrichStatus!.lastCycleDeferred.toLocaleString()} deferred)</span>
+                  )}
+                </span>
+              )}
+            </div>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => enrichTogglePauseMutation.mutate()}
+            disabled={enrichTogglePauseMutation.isPending || enrichStatus?.running}
+            data-testid="button-toggle-enrichment-pause"
+            className={`h-8 text-xs font-medium shrink-0 ${enrichStatus?.paused
+              ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+              : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"}`}
+          >
+            {enrichTogglePauseMutation.isPending
+              ? <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+              : enrichStatus?.paused
+              ? <><Zap className="w-3 h-3 mr-1" />Resume Enrichment</>
+              : <><AlertCircle className="w-3 h-3 mr-1" />Pause Enrichment</>
+            }
+          </Button>
+        </div>
 
         {/* ── Live Connections section ───────────────────────── */}
         <button

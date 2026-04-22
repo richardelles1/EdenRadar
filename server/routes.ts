@@ -2695,6 +2695,10 @@ export async function registerRoutes(
   let edenImproved = 0;
   let edenFailed = 0;
   let edenShouldStop = false;
+  let edenPaused = false;
+  const ENRICH_MAX_PER_CYCLE = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
+  let edenLastCycleCount = 0;
+  let edenLastCycleDeferred = 0;
 
   app.get("/api/admin/eden/stats", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
@@ -2722,6 +2726,7 @@ export async function registerRoutes(
   app.post("/api/admin/eden/enrich", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (edenPaused) return res.status(409).json({ error: "Deep enrichment is paused — resume it first" });
     if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
       const [assets, breakdown] = await Promise.all([
@@ -2730,21 +2735,26 @@ export async function registerRoutes(
       ]);
       if (assets.length === 0) return res.json({ message: "All relevant assets already deeply enriched", total: 0, breakdown: { fresh: 0, legacy: 0, lowQualityRetry: 0, total: 0 } });
 
-      edenTotal = assets.length;
+      const capped = assets.slice(0, ENRICH_MAX_PER_CYCLE);
+      const deferred = assets.length - capped.length;
+      if (deferred > 0) {
+        console.log(`[EDEN] Per-cycle cap hit: processing ${capped.length} assets, deferring ${deferred} to next run (cap=${ENRICH_MAX_PER_CYCLE})`);
+      }
+
+      edenTotal = capped.length;
       edenProcessed = 0;
       edenRunning = true;
       edenShouldStop = false;
-
       edenImproved = 0;
       edenFailed = 0;
 
-      const job = await storage.createDeepEnrichmentJob(assets.length);
+      const job = await storage.createDeepEnrichmentJob(capped.length);
       edenJobId = job.id;
 
-      res.json({ message: "Deep enrichment started", jobId: job.id, total: assets.length, breakdown });
+      res.json({ message: "Deep enrichment started", jobId: job.id, total: capped.length, totalAvailable: assets.length, deferred, breakdown });
 
       deepEnrichBatch(
-        assets.map((a) => ({
+        capped.map((a) => ({
           id: a.id,
           assetName: a.assetName,
           summary: a.summary,
@@ -2774,6 +2784,8 @@ export async function registerRoutes(
         edenRunning = false;
         edenImproved = batchResult.succeeded;
         edenFailed = batchResult.failed;
+        edenLastCycleCount = batchResult.succeeded;
+        edenLastCycleDeferred = deferred;
         if (edenJobId !== null) {
           await storage.updateEnrichmentJob(edenJobId, {
             status: edenShouldStop ? "stopped" : "done",
@@ -2809,15 +2821,27 @@ export async function registerRoutes(
       const latest = await storage.getLatestDeepEnrichmentJob();
       res.json({
         running: edenRunning,
+        paused: edenPaused,
+        capPerCycle: ENRICH_MAX_PER_CYCLE,
         processed: edenProcessed,
         total: edenTotal,
         succeeded: edenImproved,
         failed: edenFailed,
+        lastCycleCount: edenLastCycleCount,
+        lastCycleDeferred: edenLastCycleDeferred,
         job: latest ?? null,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
+  });
+
+  app.post("/api/admin/eden/enrich/toggle-pause", async (req, res) => {
+    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
+    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    edenPaused = !edenPaused;
+    console.log(`[EDEN] Deep enrichment ${edenPaused ? "paused" : "resumed"} by admin`);
+    res.json({ paused: edenPaused });
   });
 
   app.post("/api/admin/eden/enrich/stop", async (req, res) => {
