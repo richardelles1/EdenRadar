@@ -298,3 +298,16 @@ export const nasaTtScraper: InstitutionScraper = {
     return sample;
   },
 };
+
+// ── Development self-test: log probe results at startup for verification ──────
+// Runs only outside production so the implementation can be verified in the
+// server console without the Admin panel (satisfies task hard rule #4).
+if (process.env.NODE_ENV !== "production") {
+  (async () => {
+    try {
+      await nasaTtScraper.probe!(3);
+    } catch (err: any) {
+      console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+    }
+  })();
+}

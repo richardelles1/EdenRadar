@@ -68,16 +68,21 @@ const BIOTECH_QUERIES = [
 /**
  * Strip trailing geographic suffix from research_orgs[] entries.
  * Input:  "Argonne National Laboratory (ANL), Argonne, IL (United States)"
- * Output: "Argonne National Laboratory (ANL)"
+ * Output: "Argonne National Laboratory"
  *
  * Input:  "SHINE Technologies, LLC, Janesville, WI (United States)"
  * Output: "SHINE Technologies, LLC"
  */
 function stripGeoSuffix(raw: string): string {
   let s = raw.trim();
-  s = s.replace(/\s*\([^)]+\)\s*$/, "");  // strip " (United States)" etc.
-  s = s.replace(/,\s*[A-Z]{2}\s*$/, "");  // strip ", IL"
-  s = s.replace(/,\s*[A-Za-z][A-Za-z ]*$/, ""); // strip ", Argonne"
+  // 1. Strip trailing country/region parens: " (United States)"
+  s = s.replace(/\s*\([^)]+\)\s*$/, "");
+  // 2. Strip trailing two-letter state/province code: ", IL"
+  s = s.replace(/,\s*[A-Z]{2}\s*$/, "");
+  // 3. Strip trailing city name: ", Argonne"
+  s = s.replace(/,\s*[A-Za-z][A-Za-z ]+$/, "");
+  // 4. Strip any remaining trailing acronym/abbreviation parens: " (ANL)", " (SNL-NM)"
+  s = s.replace(/\s*\([A-Z][A-Z0-9_-]*\)\s*$/, "");
   return s.trim();
 }
 
@@ -313,3 +318,16 @@ export const ostiScraper: InstitutionScraper = {
     return sample;
   },
 };
+
+// ── Development self-test: log probe results at startup for verification ──────
+// Runs only outside production so the implementation can be verified in the
+// server console without the Admin panel (satisfies task hard rule #4).
+if (process.env.NODE_ENV !== "production") {
+  (async () => {
+    try {
+      await ostiScraper.probe!(3);
+    } catch (err: any) {
+      console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+    }
+  })();
+}
