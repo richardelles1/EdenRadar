@@ -5885,20 +5885,6 @@ function EdenTab({ pw }: { pw: string }) {
               </div>
             )}
 
-            {/* Stale-job resume banner — shown when server restarted with an in-progress job */}
-            {!live && status?.staleJobDetected && (
-              <div className="rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
-                <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
-                  <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
-                    A deep enrichment job (#{status.staleJobId}) was in progress when the server last restarted and has not resumed.
-                    Click &ldquo;Start Deep Enrichment&rdquo; below to resume where it left off.
-                  </p>
-                </div>
-              </div>
-            )}
-
             {/* Live embedding status */}
             {embedLive && (
               <div className="rounded-lg border border-violet-500/30 bg-violet-500/5 p-4" data-testid="card-embed-live">
@@ -8527,6 +8513,176 @@ function PlatformInfo({ pw }: { pw: string }) {
   );
 }
 
+function DataPipeline({ pw }: { pw: string }) {
+  const { toast } = useToast();
+  const [staleDismissed, setStaleDismissed] = useState(false);
+
+  const { data: edenStatus, refetch: refetchEdenStatus } = useQuery<{
+    running: boolean;
+    paused: boolean;
+    capPerCycle: number;
+    processed: number;
+    total: number;
+    succeeded: number;
+    failed: number;
+    lastCycleCount: number;
+    lastCycleDeferred: number;
+    job: { status: string; completedAt: string | null } | null;
+    staleJobDetected: boolean;
+    staleJobId: number | null;
+  }>({
+    queryKey: ["/api/admin/eden/enrich/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load enrichment status");
+      return res.json();
+    },
+    refetchInterval: 10_000,
+    retry: 2,
+  });
+
+  const resumeEnrichMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ adminPassword: pw }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to resume"); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setStaleDismissed(true);
+      toast({ title: "Deep Enrichment resumed", description: `Processing ${data.total?.toLocaleString() ?? "?"} assets with GPT-4o` });
+      refetchEdenStatus();
+    },
+    onError: (e: Error) => toast({ title: "Failed to resume", description: e.message, variant: "destructive" }),
+  });
+
+  const enrichTogglePauseMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/eden/enrich/toggle-pause", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
+      return res.json();
+    },
+    onSuccess: () => refetchEdenStatus(),
+    onError: (err: Error) => toast({ title: "Toggle failed", description: err.message, variant: "destructive" }),
+  });
+
+  const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
+
+  return (
+    <>
+      <DataHealth pw={pw} />
+
+      <div className="mt-8 mb-4">
+        <h3 className="text-lg font-semibold text-foreground" data-testid="text-quality-section-title">Data Quality &amp; Enrichment</h3>
+        <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets.</p>
+      </div>
+
+      {/* Stale-job resume banner */}
+      {showStaleBanner && (
+        <div className="mb-5 rounded-lg border border-amber-500/40 bg-amber-500/8 p-4 flex items-start gap-3" data-testid="card-stale-job-banner">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Enrichment job interrupted</p>
+            <p className="text-xs text-amber-600/80 dark:text-amber-400/70 mt-0.5">
+              Deep enrichment job #{edenStatus?.staleJobId} was in progress when the server restarted and has not been resumed.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => resumeEnrichMutation.mutate()}
+              disabled={resumeEnrichMutation.isPending}
+              className="inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border border-amber-400/60 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 transition-colors disabled:opacity-50"
+              data-testid="button-stale-resume"
+            >
+              {resumeEnrichMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+              Resume
+            </button>
+            <button
+              onClick={() => setStaleDismissed(true)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="button-stale-dismiss"
+              aria-label="Dismiss"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDEN Deep Enrichment Controls */}
+      <div className="mb-6 border border-border rounded-xl bg-card overflow-hidden" data-testid="card-pipeline-enrich-controls">
+        <div className="px-5 py-3 bg-muted/20 border-b border-border flex items-center gap-3">
+          <BrainCircuit className="h-4 w-4 text-violet-500" />
+          <span className="text-sm font-semibold text-foreground">Deep Enrichment (EDEN)</span>
+          {edenStatus ? (
+            edenStatus.running ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 dark:text-blue-400 bg-blue-500/10 border border-blue-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-running">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse" />
+                Running ({edenStatus.processed.toLocaleString()}/{edenStatus.total.toLocaleString()})
+              </span>
+            ) : edenStatus.paused ? (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-paused">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                Paused
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-full px-2.5 py-0.5" data-testid="badge-pipeline-enrichment-active">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                Active
+              </span>
+            )
+          ) : null}
+        </div>
+        <div className="px-5 py-3 flex items-center gap-4 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+            <span data-testid="text-pipeline-enrich-cap">
+              Cap: <span className="text-foreground font-medium">{edenStatus?.capPerCycle?.toLocaleString() ?? 500}</span>/cycle
+            </span>
+            <span data-testid="text-pipeline-enrich-cost">
+              Est. cost: <span className="text-foreground font-medium">${((edenStatus?.capPerCycle ?? 500) * 0.01).toFixed(2)}</span>/cycle (GPT-4o)
+            </span>
+            {(edenStatus?.lastCycleCount ?? 0) > 0 && (
+              <span data-testid="text-pipeline-enrich-last-cycle">
+                Last cycle: <span className="text-foreground font-medium">{edenStatus!.lastCycleCount.toLocaleString()}</span> enriched
+                {(edenStatus?.lastCycleDeferred ?? 0) > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400 ml-1">({edenStatus!.lastCycleDeferred.toLocaleString()} deferred)</span>
+                )}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => enrichTogglePauseMutation.mutate()}
+            disabled={enrichTogglePauseMutation.isPending || edenStatus?.running}
+            data-testid="button-pipeline-toggle-enrichment-pause"
+            className={`ml-auto inline-flex items-center gap-1 text-xs font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-50 ${
+              edenStatus?.paused
+                ? "border-emerald-400/50 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50"
+                : "border-amber-400/50 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/50"
+            }`}
+          >
+            {enrichTogglePauseMutation.isPending
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : edenStatus?.paused
+              ? <><Zap className="w-3 h-3" /><span>Resume Enrichment</span></>
+              : <><AlertCircle className="w-3 h-3" /><span>Pause Enrichment</span></>
+            }
+          </button>
+        </div>
+      </div>
+
+      <Enrichment pw={pw} />
+      <BulkCsvImport pw={pw} />
+      <PotentialDuplicates pw={pw} />
+    </>
+  );
+}
+
 function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
   pw: string;
   setAuthed: (v: boolean) => void;
@@ -8763,14 +8919,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Data Pipeline</h2>
                 <p className="text-sm text-muted-foreground mt-1">Scraper health, live connections, dataset quality, field coverage, enrichment controls, CSV import, and duplicate detection — all in one place.</p>
               </div>
-              <DataHealth pw={pw} />
-              <div className="mt-8 mb-6">
-                <h3 className="text-lg font-semibold text-foreground" data-testid="text-quality-section-title">Data Quality &amp; Enrichment</h3>
-                <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets. Enrichment controls at the bottom.</p>
-              </div>
-              <Enrichment pw={pw} />
-              <BulkCsvImport pw={pw} />
-              <PotentialDuplicates pw={pw} />
+              <DataPipeline pw={pw} />
             </>
           )}
 
