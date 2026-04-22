@@ -925,6 +925,11 @@ function DataHealth({ pw }: { pw: string }) {
   });
 
   const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
+    // If we're paused mid-way through this exact tier scan, resume instead of restarting.
+    if (schedPaused && sched.tierOnly === tier) {
+      schedulerStartMutation.mutate();
+      return;
+    }
     if (pendingTier !== tier) {
       setPendingTier(tier);
       if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
@@ -1293,6 +1298,7 @@ function DataHealth({ pw }: { pw: string }) {
             {([1, 2, 3, 4] as const).map((tier) => {
               const isConfirming = pendingTier === tier;
               const isThisTierRunning = schedRunning && sched.currentTier === tier;
+              const isThisTierPaused = schedPaused && sched.tierOnly === tier;
               const anyRunning = schedRunning || schedulerTierMutation.isPending;
               return (
                 <Button
@@ -1302,6 +1308,8 @@ function DataHealth({ pw }: { pw: string }) {
                   className={`h-7 text-xs font-medium px-3 transition-colors ${
                     isThisTierRunning
                       ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                      : isThisTierPaused
+                      ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                       : isConfirming
                       ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
                       : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
@@ -1309,10 +1317,12 @@ function DataHealth({ pw }: { pw: string }) {
                   onClick={() => handleTierClick(tier)}
                   disabled={anyRunning}
                   data-testid={`button-sync-tier-${tier}`}
-                  title={isThisTierRunning ? `Tier ${tier} is currently syncing` : `Start a sequential sync of all Tier ${tier} institutions only`}
+                  title={isThisTierRunning ? `Tier ${tier} is currently syncing` : isThisTierPaused ? `Resume the paused Tier ${tier} scan` : `Start a sequential sync of all Tier ${tier} institutions only`}
                 >
                   {isThisTierRunning ? (
                     <><Loader2 className="w-3 h-3 mr-1 animate-spin" />T{tier} running</>
+                  ) : isThisTierPaused ? (
+                    `Resume T${tier}`
                   ) : isConfirming ? (
                     `Confirm T${tier}?`
                   ) : (

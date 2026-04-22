@@ -6,6 +6,7 @@ import {
   loadSchedulerState,
   loadAllScraperHealth,
   updateScraperHealth,
+  ensureSchedulerStateSchema,
   type ScraperHealthRow,
 } from "./scraperState";
 import { storage } from "../storage";
@@ -188,6 +189,7 @@ function buildStateSnapshot() {
     failedThisCycle,
     lastCycleCompletedAt,
     schedulerRunning: schedulerState === "running",
+    tierOnly: tierOnlyActive,
   };
 }
 
@@ -272,6 +274,9 @@ export function setDelay(ms: number): { ok: boolean; message: string } {
 
 export async function loadAndRestoreScheduler(): Promise<boolean> {
   try {
+    // Ensure the scheduler_state table has the tier_only column (idempotent).
+    await ensureSchedulerStateSchema();
+
     const cleaned = await storage.markRunningSessionsFailed();
     if (cleaned > 0) {
       console.log(`[scheduler] Cleaned up ${cleaned} interrupted session(s) from previous server instance`);
@@ -292,13 +297,23 @@ export async function loadAndRestoreScheduler(): Promise<boolean> {
     completedThisCycle = saved.completedThisCycle;
     failedThisCycle = saved.failedThisCycle;
     lastCycleCompletedAt = saved.lastCycleCompletedAt;
+    tierOnlyActive = saved.tierOnly ?? null;
 
     const wasRunning = saved.schedulerRunning;
     if (!wasRunning) {
       schedulerState = "paused";
     }
-    tieredQueue = buildTieredQueue();
-    console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running" : "paused"}`);
+    // If we were in a tier-only scan, rebuild that tier's queue; otherwise build the full queue.
+    if (tierOnlyActive !== null) {
+      const tier = tierOnlyActive as 1 | 2 | 3 | 4;
+      const buckets: Record<1 | 2 | 3 | 4, string[]> = { 1: [], 2: [], 3: [], 4: [] };
+      for (const s of ALL_SCRAPERS) { const t = getScraperTier(s.institution); buckets[t].push(s.institution); }
+      tieredQueue = buckets[tier];
+      console.log(`[scheduler] Restored Tier-${tier} scan state: position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running" : "paused"}`);
+    } else {
+      tieredQueue = buildTieredQueue();
+      console.log(`[scheduler] Restored state: cycle #${cycleCount}, position ${queueIndex}/${tieredQueue.length}, was ${wasRunning ? "running" : "paused"}`);
+    }
     return wasRunning;
   } catch (err: any) {
     console.warn(`[scheduler] Failed to restore state: ${err?.message}`);

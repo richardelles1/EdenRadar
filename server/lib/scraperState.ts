@@ -9,6 +9,8 @@ export interface SchedulerStateRow {
   failedThisCycle: number;
   lastCycleCompletedAt: Date | null;
   schedulerRunning: boolean;
+  /** Non-null when the paused/running scheduler is in tier-only mode. */
+  tierOnly: number | null;
 }
 
 export interface ScraperHealthRow {
@@ -28,11 +30,22 @@ export interface ScraperHealthRow {
 
 // Graduated backoff: 3→6h, 5→24h, 8→3 days, 12→7 days
 
+/** Run once at startup to ensure the scheduler_state table has the tier_only column.
+ * Safe to re-run — IF NOT EXISTS is idempotent. */
+export async function ensureSchedulerStateSchema(): Promise<void> {
+  try {
+    await db.execute(sql`ALTER TABLE scheduler_state ADD COLUMN IF NOT EXISTS tier_only INTEGER NULL`);
+  } catch (err: any) {
+    // Non-fatal — column may already exist or DB may lack ALTER privileges; proceed anyway.
+    console.warn(`[scraperState] ensureSchedulerStateSchema: ${err?.message}`);
+  }
+}
+
 export async function saveSchedulerState(state: SchedulerStateRow): Promise<void> {
   try {
     await db.execute(sql`
-      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, scheduler_running, updated_at)
-      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, ${state.schedulerRunning}, NOW())
+      INSERT INTO scheduler_state (id, queue_index, cycle_count, cycle_started_at, completed_this_cycle, failed_this_cycle, last_cycle_completed_at, scheduler_running, tier_only, updated_at)
+      VALUES (1, ${state.queueIndex}, ${state.cycleCount}, ${state.cycleStartedAt}, ${state.completedThisCycle}, ${state.failedThisCycle}, ${state.lastCycleCompletedAt}, ${state.schedulerRunning}, ${state.tierOnly ?? null}, NOW())
       ON CONFLICT (id) DO UPDATE SET
         queue_index = EXCLUDED.queue_index,
         cycle_count = EXCLUDED.cycle_count,
@@ -41,6 +54,7 @@ export async function saveSchedulerState(state: SchedulerStateRow): Promise<void
         failed_this_cycle = EXCLUDED.failed_this_cycle,
         last_cycle_completed_at = EXCLUDED.last_cycle_completed_at,
         scheduler_running = EXCLUDED.scheduler_running,
+        tier_only = EXCLUDED.tier_only,
         updated_at = NOW()
     `);
   } catch (err: any) {
@@ -62,6 +76,7 @@ export async function loadSchedulerState(): Promise<SchedulerStateRow | null> {
       failedThisCycle: Number(row.failed_this_cycle ?? 0),
       lastCycleCompletedAt: row.last_cycle_completed_at ? new Date(row.last_cycle_completed_at) : null,
       schedulerRunning: row.scheduler_running === true || row.scheduler_running === 't' || row.scheduler_running === 'true',
+      tierOnly: row.tier_only != null ? Number(row.tier_only) : null,
     };
   } catch (err: any) {
     console.warn(`[scraperState] loadSchedulerState failed: ${err?.message}`);
