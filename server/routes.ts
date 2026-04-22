@@ -7293,8 +7293,12 @@ If multiple assets appear, return each as a separate array item.`;
         expand: ["subscription", "customer"],
       });
 
-      if (session.payment_status !== "paid" && session.status !== "complete") {
-        return res.status(402).json({ error: "Payment not completed" });
+      // Only activate plan for definitively paid or fully-covered (coupon/trial) sessions.
+      // "status === complete" alone is insufficient — a session can be complete with payment_status
+      // "unpaid" (e.g. payment failed). Both conditions must agree before granting access.
+      const safePaymentStatuses = ["paid", "no_payment_required"] as const;
+      if (!(safePaymentStatuses as ReadonlyArray<string>).includes(session.payment_status)) {
+        return res.status(402).json({ error: "Payment not completed — session payment_status is not confirmed" });
       }
 
       const rawPlanId = String(session.metadata?.planId ?? "");
