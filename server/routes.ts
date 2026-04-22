@@ -7133,28 +7133,43 @@ If multiple assets appear, return each as a separate array item.`;
   //
   // All Stripe routes gracefully degrade when STRIPE_SECRET_KEY is absent.
   // Keys are wired in separately after smoke-testing the checkout flow.
+  //
+  // DB MIGRATION NOTE: The 4 Stripe columns on the organizations table
+  // (stripe_customer_id, stripe_subscription_id, stripe_status, stripe_price_id)
+  // were applied manually via SQL ALTER TABLE IF NOT EXISTS.
+  // This file serves as the in-repo record; re-run via:
+  //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT;
+  //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+  //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_status TEXT;
+  //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;
+
+  type StripePlanId = "individual" | "team5" | "team10";
 
   const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
   const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
 
   // Price ID map — set via env vars in Stripe Dashboard
-  const STRIPE_PRICE_MAP: Record<"individual" | "team5" | "team10", string | undefined> = {
+  const STRIPE_PRICE_MAP: Record<StripePlanId, string | undefined> = {
     individual: process.env.STRIPE_PRICE_INDIVIDUAL,
     team5: process.env.STRIPE_PRICE_TEAM5,
     team10: process.env.STRIPE_PRICE_TEAM10,
   };
 
   // Plan tier and seat limits for each plan ID
-  const PLAN_TIER_MAP: Record<"individual" | "team5" | "team10", string> = {
+  const PLAN_TIER_MAP: Record<StripePlanId, string> = {
     individual: "individual",
     team5: "team5",
     team10: "team10",
   };
-  const PLAN_SEAT_MAP: Record<"individual" | "team5" | "team10", number> = {
+  const PLAN_SEAT_MAP: Record<StripePlanId, number> = {
     individual: 1,
     team5: 5,
     team10: 10,
   };
+
+  function isStripePlanId(val: string): val is StripePlanId {
+    return val === "individual" || val === "team5" || val === "team10";
+  }
 
   if (!STRIPE_SECRET_KEY) {
     console.warn("[stripe] STRIPE_SECRET_KEY not set — Stripe routes will return 503 until configured");
@@ -7163,31 +7178,43 @@ If multiple assets appear, return each as a separate array item.`;
     console.warn("[stripe] STRIPE_WEBHOOK_SECRET not set — webhook route will reject all events until configured");
   }
 
-  // Helper: lazily initialise stripe SDK once key is available
+  // Helper: initialise stripe SDK (returns null if key absent)
   function getStripe() {
     if (!STRIPE_SECRET_KEY) return null;
     const Stripe = require("stripe");
     return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-01-27.acacia" });
   }
 
-  // Helper: resolve or auto-create an org for a user so self-serve checkout always works
-  async function resolveOrCreateOrg(
+  // Helper: extract the string ID from a Stripe expandable field (string | { id: string } | null)
+  function stripeId(field: string | { id: string } | null | undefined): string {
+    if (!field) return "";
+    if (typeof field === "string") return field;
+    return field.id;
+  }
+
+  // Helper: resolve or auto-create an org for a user so self-serve checkout always works.
+  // After creating, industry_profiles.org_id is set so repeated checkout attempts always
+  // find the same org via getOrgForUser — preventing duplicate org creation.
+  async function resolveOrCreateOrgForUser(
     userId: string,
-    planId: keyof typeof PLAN_TIER_MAP,
+    planId: StripePlanId,
   ) {
-    let org = await storage.getOrgForUser(userId);
-    if (!org) {
-      // Auto-create a personal org so new users can subscribe without going through settings
-      org = await storage.createOrganization({
-        name: "My Organisation",
-        planTier: "none" as any, // will be set to the real tier after payment
-        seatLimit: PLAN_SEAT_MAP[planId],
-        billingMethod: "stripe",
-      });
-      await storage.addOrgMember({ orgId: org.id, userId, role: "owner" });
-      console.log(`[stripe/checkout] Auto-created org ${org.id} for user ${userId}`);
-    }
-    return org;
+    // 1. Primary lookup via industry_profiles.org_id
+    const existing = await storage.getOrgForUser(userId);
+    if (existing) return existing;
+
+    // 2. Auto-create a personal org, add membership, and link via industry_profile.org_id
+    //    so the next call to getOrgForUser returns this org (preventing duplicate creation).
+    const newOrg = await storage.createOrganization({
+      name: "My Organisation",
+      planTier: "none",
+      seatLimit: PLAN_SEAT_MAP[planId],
+      billingMethod: "stripe",
+    });
+    await storage.addOrgMember({ orgId: newOrg.id, userId, role: "owner" });
+    await storage.setIndustryProfileOrg(userId, newOrg.id);
+    console.log(`[stripe] Auto-created org ${newOrg.id} for user ${userId}`);
+    return newOrg;
   }
 
   // POST /api/stripe/checkout — create a hosted checkout session
@@ -7197,19 +7224,20 @@ If multiple assets appear, return each as a separate array item.`;
 
     try {
       const userId = req.headers["x-user-id"] as string;
-      const planId = (req.body?.planId ?? "") as string;
+      const rawPlanId = String(req.body?.planId ?? "");
 
-      if (!["individual", "team5", "team10"].includes(planId)) {
+      if (!isStripePlanId(rawPlanId)) {
         return res.status(400).json({ error: "Invalid planId — must be individual | team5 | team10" });
       }
+      const planId: StripePlanId = rawPlanId;
 
-      const priceId = STRIPE_PRICE_MAP[planId as keyof typeof STRIPE_PRICE_MAP];
+      const priceId = STRIPE_PRICE_MAP[planId];
       if (!priceId) {
         return res.status(503).json({ error: `STRIPE_PRICE_${planId.toUpperCase()} env var not set` });
       }
 
       // Resolve or auto-create the user's org
-      const org = await resolveOrCreateOrg(userId, planId as keyof typeof PLAN_TIER_MAP);
+      const org = await resolveOrCreateOrgForUser(userId, planId);
 
       // Find or create Stripe customer
       let customerId: string;
@@ -7222,8 +7250,8 @@ If multiple assets appear, return each as a separate array item.`;
           metadata: { orgId: String(org.id), planId },
         });
         customerId = customer.id;
-        // Pre-store customerId so webhook can find the org if verify-session is skipped
-        await storage.updateOrganization(org.id, { stripeCustomerId: customerId } as any);
+        // Pre-store customerId so webhook can locate the org if the browser redirect is skipped
+        await storage.updateOrganization(org.id, { stripeCustomerId: customerId });
       }
 
       const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
@@ -7247,6 +7275,8 @@ If multiple assets appear, return each as a separate array item.`;
   });
 
   // GET /api/stripe/verify-session?session_id=... — verify checkout completion
+  // Security: org resolution tracks HOW the org was found; any org resolved by id (not by caller's
+  // own userId) triggers a hard membership check and returns 403 on mismatch to prevent IDOR.
   app.get("/api/stripe/verify-session", verifyAnyAuth, async (req, res) => {
     const stripe = getStripe();
     if (!stripe) return res.status(503).json({ error: "Stripe is not configured" });
@@ -7265,39 +7295,72 @@ If multiple assets appear, return each as a separate array item.`;
         return res.status(402).json({ error: "Payment not completed" });
       }
 
-      const planId = (session.metadata?.planId ?? "individual") as keyof typeof PLAN_TIER_MAP;
-      const planTier = PLAN_TIER_MAP[planId] ?? "individual";
+      const rawPlanId = String(session.metadata?.planId ?? "");
+      const planId: StripePlanId = isStripePlanId(rawPlanId) ? rawPlanId : "individual";
+      const planTier = PLAN_TIER_MAP[planId];
 
-      const customerId = typeof session.customer === "string"
-        ? session.customer
-        : (session.customer as any)?.id ?? "";
+      const customerId = stripeId(session.customer);
 
-      const sub = session.subscription as any;
-      const subscriptionId = typeof sub === "string" ? sub : (sub?.id ?? "");
-      const stripeStatus = sub?.status ?? "active";
-      const stripePriceId = sub?.items?.data?.[0]?.price?.id ?? "";
+      // ── Org resolution with ownership tracking ──────────────────────────────
+      // org is found in one of four ways — order matters for ownership semantics:
+      // 1) metadata orgId: requires membership check (could be any user's org if session_id leaked)
+      // 2) caller's own industry_profile.org_id: guaranteed ownership — no check needed
+      // 3) Stripe customer ID: requires membership check (customer was created for a specific org)
+      // 4) auto-create: guaranteed ownership — created for this caller
 
-      // Resolve target org — prefer metadata orgId, then look up by userId, then by customer ID
-      let orgId = parseInt(session.metadata?.orgId ?? "0", 10);
-      let org = orgId ? await storage.getOrganization(orgId) : null;
+      type OrgSource = "metadata" | "caller" | "customer" | "created";
+      let org: Awaited<ReturnType<typeof storage.getOrganization>> | null = null;
+      let orgSource: OrgSource = "created";
+
+      const metaOrgId = parseInt(session.metadata?.orgId ?? "0", 10);
+      if (metaOrgId) {
+        org = await storage.getOrganization(metaOrgId) ?? null;
+        if (org) orgSource = "metadata";
+      }
 
       if (!org) {
         org = await storage.getOrgForUser(userId) ?? null;
+        if (org) orgSource = "caller";
       }
+
       if (!org && customerId) {
         org = await storage.getOrgByStripeCustomer(customerId) ?? null;
+        if (org) orgSource = "customer";
       }
+
       if (!org) {
-        // Last resort: auto-create org for this user
+        // Auto-create — fully owned by this caller
         org = await storage.createOrganization({
           name: "My Organisation",
-          planTier: planTier as any,
-          seatLimit: PLAN_SEAT_MAP[planId] ?? 1,
+          planTier: "none",
+          seatLimit: PLAN_SEAT_MAP[planId],
           billingMethod: "stripe",
         });
         await storage.addOrgMember({ orgId: org.id, userId, role: "owner" });
+        await storage.setIndustryProfileOrg(userId, org.id);
+        orgSource = "created";
         console.log(`[stripe/verify-session] Auto-created org ${org.id} for user ${userId}`);
       }
+
+      // Ownership enforcement: if org came from metadata or customer-id lookup,
+      // verify the caller is a member — return 403 if not.
+      if (orgSource === "metadata" || orgSource === "customer") {
+        const members = await storage.getOrgMembers(org.id);
+        if (!members.some((m) => m.userId === userId)) {
+          console.warn(`[stripe/verify-session] User ${userId} not authorized for org ${org.id} (source=${orgSource})`);
+          return res.status(403).json({ error: "Not authorized for this checkout session" });
+        }
+      }
+
+      // Extract subscription details from the expanded Stripe response
+      type ExpandedSub = { id: string; status: string; current_period_end: number; items: { data: { price: { id: string } }[] } };
+      const sub: ExpandedSub | null =
+        session.subscription && typeof session.subscription === "object"
+          ? (session.subscription as ExpandedSub)
+          : null;
+      const subscriptionId = sub?.id ?? (typeof session.subscription === "string" ? session.subscription : "");
+      const stripeStatus = sub?.status ?? "active";
+      const stripePriceId = sub?.items?.data?.[0]?.price?.id ?? "";
 
       // Write Stripe fields + grant plan access
       const updatedOrg = await storage.applyStripeSubscription(org.id, {
@@ -7308,7 +7371,9 @@ If multiple assets appear, return each as a separate array item.`;
         planTier,
       });
 
-      // Determine next billing date
+      // Ensure industry_profile.orgId is linked so subsequent getOrgForUser calls succeed
+      await storage.setIndustryProfileOrg(userId, org.id);
+
       const nextBillingAt = sub?.current_period_end
         ? new Date(sub.current_period_end * 1000).toISOString()
         : null;
@@ -7345,82 +7410,83 @@ If multiple assets appear, return each as a separate array item.`;
       return res.status(400).json({ error: "Missing stripe-signature header" });
     }
 
-    let event: any;
+    let event: { type: string; data: { object: Record<string, unknown> } };
     try {
-      const rawBody = (req as any).rawBody;
+      const rawBody = req.rawBody as Buffer | string;
       event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
     } catch (err: any) {
       console.error("[stripe/webhook] Signature verification failed:", err?.message);
       return res.status(400).json({ error: `Webhook signature error: ${err?.message}` });
     }
 
-    const eventType: string = event?.type ?? "";
+    const eventType: string = event.type;
     console.log(`[stripe/webhook] Received event: ${eventType}`);
 
     try {
       switch (eventType) {
         case "checkout.session.completed": {
-          // Redundant safety sync — verify-session endpoint handles the primary write.
-          // Acts as fallback when the browser doesn't complete the redirect.
-          const sess = event.data.object;
-          const orgId = parseInt(sess.metadata?.orgId ?? "0", 10);
+          // Safety sync fallback — verify-session handles the primary write after the browser redirect.
+          const sess = event.data.object as Record<string, unknown>;
+          const orgId = parseInt(String(sess["metadata"] && (sess["metadata"] as Record<string, string>)["orgId"] || "0"), 10);
           if (!orgId) break;
-          const planId = (sess.metadata?.planId ?? "individual") as keyof typeof PLAN_TIER_MAP;
-          const planTier = PLAN_TIER_MAP[planId] ?? "individual";
-          const customerId = typeof sess.customer === "string" ? sess.customer : "";
-          const sub = typeof sess.subscription === "string" ? sess.subscription : (sess.subscription?.id ?? "");
-          if (customerId && orgId) {
+          const rawPlanIdC = String(sess["metadata"] && (sess["metadata"] as Record<string, string>)["planId"] || "");
+          const planIdC: StripePlanId = isStripePlanId(rawPlanIdC) ? rawPlanIdC : "individual";
+          const planTierC = PLAN_TIER_MAP[planIdC];
+          const customerC = stripeId(sess["customer"] as string | { id: string } | null);
+          const subC = stripeId(sess["subscription"] as string | { id: string } | null);
+          if (customerC && orgId) {
             await storage.applyStripeSubscription(orgId, {
-              stripeCustomerId: customerId,
-              stripeSubscriptionId: sub,
+              stripeCustomerId: customerC,
+              stripeSubscriptionId: subC,
               stripeStatus: "active",
               stripePriceId: "",
-              planTier,
-            }).catch((e: any) => console.error("[stripe/webhook] checkout.session.completed write failed:", e?.message));
-            console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTier}`);
+              planTier: planTierC,
+            }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
+            console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}`);
           }
           break;
         }
 
         case "customer.subscription.updated": {
-          const sub = event.data.object;
-          const stripeCustomerId = sub.customer;
+          const sub = event.data.object as Record<string, unknown>;
+          const stripeCustomerId = String(sub["customer"] ?? "");
           const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
           if (!org) {
             console.warn(`[stripe/webhook] subscription.updated: no org for customer ${stripeCustomerId}`);
             break;
           }
-          const priceId = sub.items?.data?.[0]?.price?.id ?? org.stripePriceId ?? "";
-          // Reverse-map price ID to planTier; fall back to current tier if price not recognised
-          const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0] as keyof typeof PLAN_TIER_MAP | undefined;
-          const planTier = matchedPlanId ? PLAN_TIER_MAP[matchedPlanId] : org.planTier;
+          const items = sub["items"] as { data: { price: { id: string } }[] } | undefined;
+          const priceId = items?.data?.[0]?.price?.id ?? org.stripePriceId ?? "";
+          const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0];
+          const planTierU = matchedPlanId && isStripePlanId(matchedPlanId) ? PLAN_TIER_MAP[matchedPlanId] : org.planTier;
           await storage.applyStripeSubscription(org.id, {
             stripeCustomerId,
-            stripeSubscriptionId: sub.id,
-            stripeStatus: sub.status,
+            stripeSubscriptionId: String(sub["id"] ?? ""),
+            stripeStatus: String(sub["status"] ?? "active"),
             stripePriceId: priceId,
-            planTier,
-          }).catch((e: any) => console.error("[stripe/webhook] subscription.updated write failed:", e?.message));
-          console.log(`[stripe/webhook] Updated org ${org.id} → planTier=${planTier}, status=${sub.status}`);
+            planTier: planTierU,
+          }).catch((e: unknown) => console.error("[stripe/webhook] subscription.updated write failed:", (e as Error)?.message));
+          console.log(`[stripe/webhook] Updated org ${org.id} → planTier=${planTierU}, status=${sub["status"]}`);
           break;
         }
 
         case "customer.subscription.deleted": {
-          const sub = event.data.object;
-          const stripeCustomerId = sub.customer;
+          const sub = event.data.object as Record<string, unknown>;
+          const stripeCustomerId = String(sub["customer"] ?? "");
           const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
           if (!org) {
             console.warn(`[stripe/webhook] subscription.deleted: no org for customer ${stripeCustomerId}`);
             break;
           }
+          const items = sub["items"] as { data: { price: { id: string } }[] } | undefined;
           // Revoke access: planTier "none" is not in PAID_PLANS → ScoutGate blocks
           await storage.applyStripeSubscription(org.id, {
             stripeCustomerId,
-            stripeSubscriptionId: sub.id,
+            stripeSubscriptionId: String(sub["id"] ?? ""),
             stripeStatus: "canceled",
-            stripePriceId: sub.items?.data?.[0]?.price?.id ?? "",
+            stripePriceId: items?.data?.[0]?.price?.id ?? "",
             planTier: "none",
-          }).catch((e: any) => console.error("[stripe/webhook] subscription.deleted write failed:", e?.message));
+          }).catch((e: unknown) => console.error("[stripe/webhook] subscription.deleted write failed:", (e as Error)?.message));
           console.log(`[stripe/webhook] Org ${org.id} subscription canceled — planTier set to "none", access revoked`);
           break;
         }
