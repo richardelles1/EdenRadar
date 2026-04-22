@@ -113,10 +113,15 @@ interface NasaApiResponse {
 
 // ── Core fetch with pagination ────────────────────────────────────────────────
 
+interface FetchResult {
+  items: NasaItem[];
+  apiTotal: number; // total as reported by the API (used for reconciliation)
+}
+
 async function fetchAllForKeyword(
   keyword: string,
   signal?: AbortSignal
-): Promise<NasaItem[]> {
+): Promise<FetchResult> {
   const allItems: NasaItem[] = [];
   const seenInKeyword = new Set<string>();
 
@@ -130,7 +135,8 @@ async function fetchAllForKeyword(
   if (!res0.ok) throw new Error(`NASA TT HTTP ${res0.status} for keyword="${keyword}"`);
   const data0: NasaApiResponse = await res0.json();
 
-  const total = data0.total ?? 0;
+  const apiTotal = data0.total ?? 0;
+  const total = apiTotal; // alias for pagination loop
   const page0Items = data0.results ?? [];
 
   for (const item of page0Items) {
@@ -188,7 +194,7 @@ async function fetchAllForKeyword(
     }
   }
 
-  return allItems;
+  return { items: allItems, apiTotal };
 }
 
 function itemToListing(item: NasaItem): ScrapedListing | null {
@@ -226,12 +232,13 @@ export const nasaTtScraper: InstitutionScraper = {
     const seen = new Set<string>(); // keyed on case number across all keywords
 
     let keywordsRun = 0;
-    let totalApiSum = 0; // sum of per-keyword totals (before cross-keyword dedup)
+    let totalApiReported = 0; // sum of API-reported totals per keyword
+    let totalFetched = 0;     // sum of items actually collected per keyword (before cross-dedup)
 
     for (const keyword of BIOTECH_KEYWORDS) {
       if (signal?.aborted) break;
       try {
-        const items = await fetchAllForKeyword(keyword, signal);
+        const { items, apiTotal } = await fetchAllForKeyword(keyword, signal);
         let added = 0;
         for (const item of items) {
           const caseNum = (item[1] ?? "").trim();
@@ -240,7 +247,8 @@ export const nasaTtScraper: InstitutionScraper = {
           const listing = itemToListing(item);
           if (listing) { results.push(listing); added++; }
         }
-        totalApiSum += items.length;
+        totalApiReported += apiTotal;
+        totalFetched += items.length;
         if (added > 0) {
           console.log(`[scraper] ${ADMIN_INST}: keyword="${keyword}" → ${added} new`);
         }
@@ -250,15 +258,19 @@ export const nasaTtScraper: InstitutionScraper = {
       }
     }
 
-    // Post-run cross-check: unique collected vs cumulative API totals
-    const dedupeRate = totalApiSum > 0
-      ? Math.round((1 - results.length / totalApiSum) * 100)
-      : 0;
-    const discrepancy = totalApiSum - results.length;
-    if (discrepancy > 0) {
+    // Post-run cross-check: compare API-reported totals vs actual collected
+    const apiShortfall = totalApiReported - totalFetched;
+    if (apiShortfall > 0) {
+      console.warn(
+        `[scraper] ${ADMIN_INST}: run-level discrepancy — ` +
+        `API reported ${totalApiReported} total across all keywords but fetched only ${totalFetched} items`
+      );
+    }
+    const crossDedupRemoved = totalFetched - results.length;
+    if (crossDedupRemoved > 0) {
       console.log(
-        `[scraper] ${ADMIN_INST}: cross-keyword dedup removed ${discrepancy} duplicates ` +
-        `(${dedupeRate}% of ${totalApiSum} fetched — ${results.length} unique retained)`
+        `[scraper] ${ADMIN_INST}: cross-keyword dedup removed ${crossDedupRemoved} duplicates ` +
+        `(${totalFetched} fetched → ${results.length} unique retained)`
       );
     }
     console.log(
@@ -274,7 +286,7 @@ export const nasaTtScraper: InstitutionScraper = {
 
     // Use "medical" as probe keyword — confirmed to return ≥85 results
     try {
-      const items = await fetchAllForKeyword("medical");
+      const { items } = await fetchAllForKeyword("medical");
       for (const item of items) {
         const caseNum = (item[1] ?? "").trim();
         if (!caseNum || seen.has(caseNum)) continue;
@@ -305,9 +317,13 @@ export const nasaTtScraper: InstitutionScraper = {
 if (process.env.NODE_ENV !== "production") {
   (async () => {
     try {
-      await nasaTtScraper.probe!(3);
+      const sample = await nasaTtScraper.probe!(3);
+      const passed = sample.length >= 3 && sample.every(r => r.title && r.url && r.institution);
+      if (!passed) {
+        console.error(`[scraper] ${ADMIN_INST}: PROBE FAILED — expected ≥3 valid results, got ${sample.length}`);
+      }
     } catch (err: any) {
-      console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+      console.error(`[scraper] ${ADMIN_INST}: PROBE FAILED — ${err?.message}`);
     }
   })();
 }

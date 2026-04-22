@@ -265,8 +265,15 @@ async function fetchQuery(
       }
     }
 
-    if (added > 0) {
-      console.log(`[scraper] ${ADMIN_INST}: q="${query}" pages 0-${page - 1} → ${added} new`);
+    // Always log pagination completion so two-keyword verification is visible in console
+    const reachedLast = page - 1 >= lastPage;
+    if (lastPage > 0) {
+      console.log(
+        `[scraper] ${ADMIN_INST}: q="${query}" paginated 0→${page - 1}/${lastPage} ` +
+        `(${reachedLast ? "reached rel=last ✓" : "stopped early"}) → ${added} new`
+      );
+    } else if (added > 0) {
+      console.log(`[scraper] ${ADMIN_INST}: q="${query}" single page → ${added} new`);
     }
   } catch (err: any) {
     console.warn(`[scraper] ${ADMIN_INST}: query="${query}" fetch failed: ${err?.message}`);
@@ -325,9 +332,13 @@ export const ostiScraper: InstitutionScraper = {
 if (process.env.NODE_ENV !== "production") {
   (async () => {
     try {
-      await ostiScraper.probe!(3);
+      const sample = await ostiScraper.probe!(3);
+      const passed = sample.length >= 3 && sample.every(r => r.title && r.url && r.institution);
+      if (!passed) {
+        console.error(`[scraper] ${ADMIN_INST}: PROBE FAILED — expected ≥3 valid results, got ${sample.length}`);
+      }
     } catch (err: any) {
-      console.warn(`[scraper] ${ADMIN_INST}: startup probe error: ${err?.message}`);
+      console.error(`[scraper] ${ADMIN_INST}: PROBE FAILED — ${err?.message}`);
     }
   })();
 }
