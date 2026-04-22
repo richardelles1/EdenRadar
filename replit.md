@@ -217,6 +217,38 @@ shared/schema.ts          # Drizzle: users, searchHistory, savedAssets, ingestio
 - Dark mode: `--background: 222 47% 6%`
 - CSS animations: `radar-sweep`, `helix-scroll`, `glow-pulse`
 
+## Stripe Subscription Rails (Task #429)
+
+Self-serve billing via Stripe Checkout for EdenScout (Individual / Team 5 / Team 10 plans).
+
+### Schema
+`organizations` table has 4 Stripe columns (added via SQL ALTER TABLE, not db:push):
+- `stripe_customer_id`, `stripe_subscription_id`, `stripe_status`, `stripe_price_id`
+- Existing `plan_tier` column is the gating field written by webhook/verify-session
+
+### Storage methods added (`server/storage.ts`)
+- `getOrgByStripeCustomer(stripeCustomerId)` — reverse lookup by Stripe customer ID
+- `applyStripeSubscription(orgId, data)` — atomic write of all Stripe + planTier fields
+
+### Backend routes (`server/routes.ts`)
+- `POST /api/stripe/checkout` (auth required) — creates Stripe Checkout session, returns `{ url }`
+- `GET /api/stripe/verify-session?session_id=` (auth required) — verifies payment, writes planTier to DB
+- `POST /api/stripe/webhook` — handles `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`; gracefully skips signature verification if `STRIPE_WEBHOOK_SECRET` is not yet set
+
+All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash on startup.
+
+### Frontend
+- `client/src/pages/Pricing.tsx` — Subscribe buttons per plan call `/api/stripe/checkout`, redirect unauthenticated users to `/login?mode=signup&redirect=/pricing`
+- `client/src/pages/BillingSuccess.tsx` — shown at `/billing/success?session_id=...`; calls verify-session and displays plan + billing date; handles loading/error states
+- Route registered in `client/src/App.tsx`
+
+### Env vars needed (not yet set — user will supply after smoke-test)
+- `STRIPE_SECRET_KEY` — Stripe secret key (sk_live_... or sk_test_...)
+- `STRIPE_WEBHOOK_SECRET` — Stripe webhook signing secret (whsec_...)
+- `STRIPE_PRICE_INDIVIDUAL` — Stripe price ID for Individual plan
+- `STRIPE_PRICE_TEAM5` — Stripe price ID for Team (5 seats)
+- `STRIPE_PRICE_TEAM10` — Stripe price ID for Team (10 seats)
+
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
 - `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)

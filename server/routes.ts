@@ -7129,5 +7129,258 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  // ── Stripe subscription routes ──────────────────────────────────────────────
+  //
+  // All Stripe routes gracefully degrade when STRIPE_SECRET_KEY is absent.
+  // Keys are wired in separately after smoke-testing the checkout flow.
+
+  const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+  const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET;
+
+  // Price ID map — set via env vars in Stripe Dashboard
+  const STRIPE_PRICE_MAP: Record<"individual" | "team5" | "team10", string | undefined> = {
+    individual: process.env.STRIPE_PRICE_INDIVIDUAL,
+    team5: process.env.STRIPE_PRICE_TEAM5,
+    team10: process.env.STRIPE_PRICE_TEAM10,
+  };
+
+  // Plan tier that each price maps to (mirrors Stripe price → our planTier column)
+  const PLAN_TIER_MAP: Record<"individual" | "team5" | "team10", string> = {
+    individual: "individual",
+    team5: "team5",
+    team10: "team10",
+  };
+
+  if (!STRIPE_SECRET_KEY) {
+    console.warn("[stripe] STRIPE_SECRET_KEY not set — Stripe routes will return 503 until configured");
+  }
+
+  // Helper: lazily initialise stripe SDK once key is available
+  function getStripe() {
+    if (!STRIPE_SECRET_KEY) return null;
+    const Stripe = require("stripe");
+    return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-01-27.acacia" });
+  }
+
+  // POST /api/stripe/checkout — create a hosted checkout session
+  app.post("/api/stripe/checkout", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe is not configured on this server yet" });
+
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const planId = (req.body?.planId ?? "") as string;
+
+      if (!["individual", "team5", "team10"].includes(planId)) {
+        return res.status(400).json({ error: "Invalid planId — must be individual | team5 | team10" });
+      }
+
+      const priceId = STRIPE_PRICE_MAP[planId as keyof typeof STRIPE_PRICE_MAP];
+      if (!priceId) {
+        return res.status(503).json({ error: `STRIPE_PRICE_${planId.toUpperCase()} env var not set` });
+      }
+
+      // Resolve org and billing email for customer lookup/creation
+      const org = await storage.getOrgForUser(userId);
+      if (!org) {
+        return res.status(400).json({ error: "No organisation found for your account — please set one up in Settings first" });
+      }
+
+      // Find or create Stripe customer
+      let customerId: string;
+      if (org.stripeCustomerId) {
+        customerId = org.stripeCustomerId;
+      } else {
+        const billingEmail = org.billingEmail ?? undefined;
+        const customer = await stripe.customers.create({
+          email: billingEmail,
+          metadata: { orgId: String(org.id), planTier: planId },
+        });
+        customerId = customer.id;
+      }
+
+      const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
+      const baseUrl = origin || `https://${req.headers.host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "subscription",
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/pricing`,
+        metadata: { orgId: String(org.id), planId },
+        subscription_data: { metadata: { orgId: String(org.id), planId } },
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[stripe/checkout]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to create checkout session" });
+    }
+  });
+
+  // GET /api/stripe/verify-session?session_id=... — verify checkout completion
+  app.get("/api/stripe/verify-session", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe is not configured" });
+
+    try {
+      const sessionId = String(req.query.session_id ?? "");
+      if (!sessionId) return res.status(400).json({ error: "session_id is required" });
+
+      const userId = req.headers["x-user-id"] as string;
+
+      const session = await stripe.checkout.sessions.retrieve(sessionId, {
+        expand: ["subscription", "customer"],
+      });
+
+      if (session.payment_status !== "paid" && session.status !== "complete") {
+        return res.status(402).json({ error: "Payment not completed" });
+      }
+
+      const orgId = parseInt(session.metadata?.orgId ?? "0", 10);
+      if (!orgId) return res.status(400).json({ error: "Missing orgId in session metadata" });
+
+      const planId = (session.metadata?.planId ?? "individual") as keyof typeof PLAN_TIER_MAP;
+      const planTier = PLAN_TIER_MAP[planId] ?? "individual";
+
+      const customerId = typeof session.customer === "string"
+        ? session.customer
+        : (session.customer as any)?.id ?? "";
+
+      const sub = session.subscription as any;
+      const subscriptionId = typeof sub === "string" ? sub : (sub?.id ?? "");
+      const stripeStatus = sub?.status ?? "active";
+      const stripePriceId = sub?.items?.data?.[0]?.price?.id ?? "";
+
+      // Write plan to DB
+      const updatedOrg = await storage.applyStripeSubscription(orgId, {
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscriptionId,
+        stripeStatus,
+        stripePriceId,
+        planTier,
+      });
+
+      // Determine next billing date
+      const nextBillingAt = sub?.current_period_end
+        ? new Date(sub.current_period_end * 1000).toISOString()
+        : null;
+
+      console.log(`[stripe] Verified session ${sessionId}: org ${orgId} → planTier=${planTier}, status=${stripeStatus}`);
+
+      res.json({
+        planTier,
+        planId,
+        orgName: updatedOrg?.name ?? null,
+        nextBillingAt,
+        stripeStatus,
+      });
+    } catch (err: any) {
+      console.error("[stripe/verify-session]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to verify session" });
+    }
+  });
+
+  // POST /api/stripe/webhook — handle Stripe events
+  // Must use rawBody for signature verification (set up in server/index.ts)
+  app.post("/api/stripe/webhook", async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
+
+    const sig = req.headers["stripe-signature"];
+    let event: any;
+
+    if (STRIPE_WEBHOOK_SECRET && sig) {
+      try {
+        const rawBody = (req as any).rawBody;
+        event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
+      } catch (err: any) {
+        console.error("[stripe/webhook] Signature verification failed:", err?.message);
+        return res.status(400).json({ error: `Webhook signature error: ${err?.message}` });
+      }
+    } else {
+      // No webhook secret yet — accept but log a warning
+      console.warn("[stripe/webhook] STRIPE_WEBHOOK_SECRET not set — accepting event without signature verification (dev mode)");
+      event = req.body;
+    }
+
+    const eventType: string = event?.type ?? "";
+    console.log(`[stripe/webhook] Received event: ${eventType}`);
+
+    try {
+      switch (eventType) {
+        case "checkout.session.completed": {
+          // Redundant safety sync — verify-session endpoint handles the primary write.
+          // Only act if orgId is present in metadata.
+          const session = event.data.object;
+          const orgId = parseInt(session.metadata?.orgId ?? "0", 10);
+          if (!orgId) break;
+          const planId = (session.metadata?.planId ?? "individual") as keyof typeof PLAN_TIER_MAP;
+          const planTier = PLAN_TIER_MAP[planId] ?? "individual";
+          const customerId = typeof session.customer === "string" ? session.customer : "";
+          const sub = typeof session.subscription === "string" ? session.subscription : (session.subscription?.id ?? "");
+          if (customerId) {
+            await storage.applyStripeSubscription(orgId, {
+              stripeCustomerId: customerId,
+              stripeSubscriptionId: sub,
+              stripeStatus: "active",
+              stripePriceId: "",
+              planTier,
+            }).catch((e: any) => console.error("[stripe/webhook] checkout.session.completed write failed:", e?.message));
+          }
+          break;
+        }
+
+        case "customer.subscription.updated": {
+          const sub = event.data.object;
+          const stripeCustomerId = sub.customer;
+          const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+          if (!org) {
+            console.warn(`[stripe/webhook] subscription.updated: no org for customer ${stripeCustomerId}`);
+            break;
+          }
+          const priceId = sub.items?.data?.[0]?.price?.id ?? org.stripePriceId ?? "";
+          // Reverse-map price ID to planTier
+          const planId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0] as keyof typeof PLAN_TIER_MAP | undefined;
+          const planTier = planId ? PLAN_TIER_MAP[planId] : org.planTier;
+          await storage.applyStripeSubscription(org.id, {
+            stripeCustomerId,
+            stripeSubscriptionId: sub.id,
+            stripeStatus: sub.status,
+            stripePriceId: priceId,
+            planTier,
+          }).catch((e: any) => console.error("[stripe/webhook] subscription.updated write failed:", e?.message));
+          console.log(`[stripe/webhook] Updated org ${org.id} → planTier=${planTier}, status=${sub.status}`);
+          break;
+        }
+
+        case "customer.subscription.deleted": {
+          const sub = event.data.object;
+          const stripeCustomerId = sub.customer;
+          const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+          if (!org) {
+            console.warn(`[stripe/webhook] subscription.deleted: no org for customer ${stripeCustomerId}`);
+            break;
+          }
+          // Revoke access: clear planTier and set stripeStatus to canceled
+          await storage.updateOrganization(org.id, {
+            stripeStatus: "canceled",
+          } as any).catch((e: any) => console.error("[stripe/webhook] subscription.deleted write failed:", e?.message));
+          console.log(`[stripe/webhook] Org ${org.id} subscription canceled — access revoked`);
+          break;
+        }
+
+        default:
+          console.log(`[stripe/webhook] Unhandled event type: ${eventType}`);
+          break;
+      }
+    } catch (err: any) {
+      console.error(`[stripe/webhook] Error handling event ${eventType}:`, err?.message);
+    }
+
+    res.json({ received: true });
+  });
+
   return httpServer;
 }

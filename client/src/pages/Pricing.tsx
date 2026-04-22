@@ -1,6 +1,9 @@
-import { Link } from "wouter";
-import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail } from "lucide-react";
+import { Link, useLocation } from "wouter";
+import { useState } from "react";
+import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 const CONTACT_SALES = "sales@edenradar.com";
 
@@ -12,8 +15,6 @@ const SCOUT_PLANS = [
     period: "/mo",
     seats: "1 seat",
     tagline: "For solo BD professionals and licensing executives.",
-    cta: "Request access",
-    ctaHref: "/login?mode=signup",
     features: [
       "Market intelligence feed from 300+ TTOs",
       "EDEN semantic search across full asset catalog",
@@ -31,8 +32,6 @@ const SCOUT_PLANS = [
     period: "/mo",
     seats: "5 seats",
     tagline: "For BD teams that share pipeline and move fast.",
-    cta: "Request access",
-    ctaHref: "/login?mode=signup",
     features: [
       "Everything in Individual",
       "5 shared team seats",
@@ -50,8 +49,6 @@ const SCOUT_PLANS = [
     period: "/mo",
     seats: "10 seats",
     tagline: "For larger BD divisions running multiple workstreams.",
-    cta: "Request access",
-    ctaHref: "/login?mode=signup",
     features: [
       "Everything in Team (5-seat)",
       "10 shared team seats",
@@ -109,7 +106,75 @@ const FREE_TIERS = [
   },
 ];
 
+function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session: any }) {
+  const [loading, setLoading] = useState(false);
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+
+  async function handleSubscribe() {
+    if (!session?.access_token) {
+      navigate(`/login?mode=signup&redirect=/pricing`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/stripe/checkout", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ planId: plan.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast({
+          title: "Could not start checkout",
+          description: data.error ?? "Something went wrong. Please try again.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.url) {
+        window.location.href = data.url;
+      }
+    } catch (err: any) {
+      toast({
+        title: "Network error",
+        description: "Failed to connect to the server. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Button
+      className="w-full font-semibold h-9 text-sm"
+      variant={plan.highlighted ? "default" : "outline"}
+      style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+      onClick={handleSubscribe}
+      disabled={loading}
+      data-testid={`button-pricing-${plan.id}`}
+    >
+      {loading ? (
+        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+      ) : (
+        <ArrowRight className="w-3.5 h-3.5 mr-1 order-last" />
+      )}
+      {loading ? "Redirecting to checkout…" : "Subscribe"}
+    </Button>
+  );
+}
+
 export default function Pricing() {
+  const { session } = useAuth();
+
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-6 py-12 space-y-16">
@@ -228,17 +293,7 @@ export default function Pricing() {
 
                 {/* CTA */}
                 <div className="px-5 py-4 bg-card border-t border-border">
-                  <Link href={plan.ctaHref}>
-                    <Button
-                      className="w-full font-semibold h-9 text-sm"
-                      variant={plan.highlighted ? "default" : "outline"}
-                      style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
-                      data-testid={`button-pricing-${plan.id}`}
-                    >
-                      {plan.cta}
-                      <ArrowRight className="w-3.5 h-3.5 ml-1" />
-                    </Button>
-                  </Link>
+                  <PlanCTA plan={plan} session={session} />
                 </div>
               </div>
             ))}

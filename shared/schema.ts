@@ -653,6 +653,12 @@ export const organizations = pgTable("organizations", {
   billingEmail: text("billing_email"),
   billingMethod: text("billing_method").notNull().default("stripe"), // stripe | ach | invoice
   billingNotes: text("billing_notes"),
+  // Stripe subscription columns — added via startup migration; declared here for type safety.
+  // Values are null until a Stripe checkout is completed.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeStatus: text("stripe_status"), // active | past_due | canceled | null
+  stripePriceId: text("stripe_price_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -320,6 +320,8 @@ export interface IStorage {
   createOrganization(data: InsertOrganization): Promise<Organization>;
   updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
   deleteOrganization(id: number): Promise<void>;
+  getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
+  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string }): Promise<Organization | undefined>;
 
   // Org Members
   getOrgMembers(orgId: number): Promise<OrgMember[]>;
@@ -2807,6 +2809,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteOrganization(id: number): Promise<void> {
     await db.delete(organizations).where(eq(organizations.id, id));
+  }
+
+  async getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined> {
+    const [row] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.stripeCustomerId, stripeCustomerId))
+      .limit(1);
+    return row;
+  }
+
+  async applyStripeSubscription(
+    orgId: number,
+    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string },
+  ): Promise<Organization | undefined> {
+    const [row] = await db
+      .update(organizations)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(organizations.id, orgId))
+      .returning();
+    return row;
   }
 
   // ── Org Members ──────────────────────────────────────────────────────────────
