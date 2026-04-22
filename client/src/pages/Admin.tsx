@@ -8522,11 +8522,41 @@ function DataPipeline({ pw }: { pw: string }) {
 
   const showStaleBanner = !staleDismissed && !edenStatus?.running && edenStatus?.staleJobDetected;
 
+  function scrollTo(id: string) {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <>
-      <DataHealth pw={pw} />
+      {/* ── In-page sticky sub-nav ─────────────────────────── */}
+      <div
+        className="sticky top-0 z-10 -mx-6 px-6 py-2 bg-background/95 backdrop-blur border-b border-border mb-6 flex gap-2 overflow-x-auto"
+        data-testid="subnav-data-pipeline"
+      >
+        <button
+          onClick={() => scrollTo("scraper-health")}
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted text-foreground whitespace-nowrap transition-colors"
+          data-testid="subnav-link-scraper-health"
+        >
+          <Server className="h-3 w-3" />
+          Scraper Health
+        </button>
+        <button
+          onClick={() => scrollTo("data-quality")}
+          className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full border border-border bg-muted/50 hover:bg-muted text-foreground whitespace-nowrap transition-colors"
+          data-testid="subnav-link-data-quality"
+        >
+          <Database className="h-3 w-3" />
+          Data Quality &amp; Enrichment
+        </button>
+      </div>
 
-      <div className="mt-8 mb-4">
+      <div id="scraper-health" className="scroll-mt-14">
+        <DataHealth pw={pw} />
+      </div>
+
+      <div id="data-quality" className="mt-8 mb-4 scroll-mt-14">
         <h3 className="text-lg font-semibold text-foreground" data-testid="text-quality-section-title">Data Quality &amp; Enrichment</h3>
         <p className="text-sm text-muted-foreground mt-1">Dataset completeness, field coverage, and duplicate detection for relevant biotech assets.</p>
       </div>
