@@ -2696,7 +2696,8 @@ export async function registerRoutes(
   let edenFailed = 0;
   let edenShouldStop = false;
   let edenPaused = false;
-  const ENRICH_MAX_PER_CYCLE = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
+  const _rawCap = parseInt(process.env.ENRICH_MAX_PER_CYCLE ?? "500", 10);
+  const ENRICH_MAX_PER_CYCLE = Number.isFinite(_rawCap) && _rawCap > 0 ? _rawCap : 500;
   let edenLastCycleCount = 0;
   let edenLastCycleDeferred = 0;
 
@@ -2839,6 +2840,7 @@ export async function registerRoutes(
   app.post("/api/admin/eden/enrich/toggle-pause", async (req, res) => {
     const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
     if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    if (edenRunning) return res.status(409).json({ error: "Cannot toggle pause while enrichment is running — stop it first" });
     edenPaused = !edenPaused;
     console.log(`[EDEN] Deep enrichment ${edenPaused ? "paused" : "resumed"} by admin`);
     res.json({ paused: edenPaused });
