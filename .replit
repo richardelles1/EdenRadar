@@ -64,6 +64,9 @@ integrations = ["javascript_openai_ai_integrations:2.0.0", "javascript_database:
 VITE_SUPABASE_URL = "https://tqaitpaajbogrcoyzsgx.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRxYWl0cGFhamJvZ3Jjb3l6c2d4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMyODM0MzAsImV4cCI6MjA4ODg1OTQzMH0.YhDp-Qdx7XAdqPzD1OXT-QqaSoMmoreHPEBCUnUzozk"
 RESEND_FROM_ADDRESS = "EdenRadar <noreply@edenradar.com>"
+STRIPE_PRICE_INDIVIDUAL = "price_1TP9ImGalzdvFwc8uYy5Mog3"
+STRIPE_PRICE_TEAM5 = "price_1TP9IpGalzdvFwc8XVICeyAa"
+STRIPE_PRICE_TEAM10 = "price_1TP9IsGalzdvFwc84fxy1S2C"
 
 [postMerge]
 path = "scripts/post-merge.sh"
