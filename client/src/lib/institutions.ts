@@ -152,6 +152,11 @@ export const INSTITUTIONS: Institution[] = [
   { slug: "asu", name: "Arizona State University", city: "Tempe, AZ", ttoName: "ASU Skysong Innovations", website: "https://skysonginnovations.com", specialties: ["Drug Discovery", "Diagnostics", "Biomaterials"] },
   { slug: "uillinois", name: "University of Illinois", city: "Urbana-Champaign, IL", ttoName: "UI Office of Technology Management", website: "https://otm.illinois.edu", specialties: ["Drug Delivery", "Bioelectronics", "Genomics"] },
 
+  // ── US Federal / Government API Sources ──────────────────────────────────
+  { slug: "nasa-tt",      name: "NASA Technology Transfer", city: "Washington, DC",   ttoName: "NASA Technology Transfer Program", website: "https://technology.nasa.gov",      specialties: ["Biomedical Devices", "Biosensors", "Diagnostics", "Life Sciences"] },
+  { slug: "nasa-techport",name: "NASA TechPort",            city: "Washington, DC",   ttoName: "NASA Technology Transfer Program", website: "https://techport.nasa.gov",        specialties: ["Life Sciences", "Biomedical Devices", "Radiation Biology", "Sensors"] },
+  { slug: "osti",         name: "OSTI.gov (DOE Patents)",   city: "Oak Ridge, TN",    ttoName: "DOE Office of Scientific & Technical Information", website: "https://www.osti.gov", specialties: ["Genomics", "Drug Delivery", "Biosensors", "Bioenergy"] },
+
   // ── Europe ────────────────────────────────────────────────────────────────
   // UK
   { slug: "oxford", name: "University of Oxford", city: "Oxford, UK", ttoName: "Oxford University Innovation", website: "https://innovation.ox.ac.uk", specialties: ["Drug Discovery", "Vaccines", "Oncology"], continent: "Europe" , noPublicPortal: true },
