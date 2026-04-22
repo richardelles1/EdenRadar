@@ -966,48 +966,6 @@ function DataHealth({ pw }: { pw: string }) {
     },
   });
 
-  const { data: enrichStatus, refetch: refetchEnrichStatus } = useQuery<{
-    running: boolean;
-    paused: boolean;
-    capPerCycle: number;
-    processed: number;
-    total: number;
-    succeeded: number;
-    failed: number;
-    lastCycleCount: number;
-    lastCycleDeferred: number;
-    job: { status: string; completedAt: string | null } | null;
-    staleJobDetected: boolean;
-    staleJobId: number | null;
-  }>({
-    queryKey: ["/api/admin/eden/enrich/status", pw],
-    queryFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
-      if (!res.ok) throw new Error("Failed to load enrichment status");
-      return res.json();
-    },
-    refetchInterval: 10_000,
-    retry: 2,
-  });
-
-  const enrichTogglePauseMutation = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/toggle-pause", {
-        method: "POST",
-        headers: { "x-admin-password": pw },
-      });
-      if (!res.ok) throw new Error("Failed to toggle enrichment pause");
-      return res.json();
-    },
-    onSuccess: (d: { paused: boolean }) => {
-      toast({ title: d.paused ? "Enrichment paused" : "Enrichment resumed", description: d.paused ? "Deep enrichment will be skipped until resumed" : "Deep enrichment is now active" });
-      refetchEnrichStatus();
-    },
-    onError: (err: Error) => {
-      toast({ title: "Toggle failed", description: err.message, variant: "destructive" });
-    },
-  });
-
   type ScraperHealthRow = {
     institution: string;
     consecutiveFailures: number;
