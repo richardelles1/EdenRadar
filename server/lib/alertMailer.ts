@@ -1,8 +1,21 @@
 import { db } from "../db";
 import { storage } from "../storage";
-import { userAlerts, ingestedAssets } from "../../shared/schema";
+import { userAlerts, ingestedAssets, industryProfiles } from "../../shared/schema";
 import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
+
+const DIGEST_SAMPLE_LIMIT = 3;
+
+function frequencyWindowHours(frequency: string): number {
+  if (frequency === "weekly") return 168;
+  return 24;
+}
+
+function shouldSendNow(lastSentAt: Date | null, windowHours: number): boolean {
+  if (!lastSentAt) return true;
+  const elapsedHours = (Date.now() - lastSentAt.getTime()) / (1000 * 60 * 60);
+  return elapsedHours >= windowHours;
+}
 
 /**
  * Guards against concurrent evaluations (e.g., manual admin trigger races with
@@ -108,6 +121,14 @@ async function evaluateAlerts(): Promise<void> {
   const evaluationStartedAt = new Date();
   const fortyEightHoursAgo = new Date(evaluationStartedAt.getTime() - 48 * 60 * 60 * 1000);
 
+  // Batch-fetch industry profiles for all unique user IDs so we can check
+  // opt-in status and frequency preference without N+1 queries.
+  const uniqueUserIds = [...new Set(alerts.map((a) => a.userId).filter(Boolean))] as string[];
+  const profileRows = uniqueUserIds.length
+    ? await db.select().from(industryProfiles).where(inArray(industryProfiles.userId, uniqueUserIds))
+    : [];
+  const profileMap = new Map(profileRows.map((p) => [p.userId, p]));
+
   // Resolve user emails via Supabase admin API — fully paginated so every user
   // is covered regardless of team size.
   const { createClient } = await import("@supabase/supabase-js");
@@ -138,6 +159,22 @@ async function evaluateAlerts(): Promise<void> {
   for (const alert of alerts) {
     if (!alert.userId) continue;
 
+    // Only send to users who have opted in to email digest
+    const profile = profileMap.get(alert.userId);
+    if (!profile?.subscribedToDigest) {
+      continue;
+    }
+
+    // Respect the user's chosen frequency (daily/weekly). "realtime" always sends.
+    const frequency = (profile.notificationPrefs as { frequency?: string } | null)?.frequency ?? "daily";
+    if (frequency !== "realtime") {
+      const windowHours = frequencyWindowHours(frequency);
+      if (!shouldSendNow(alert.lastAlertSentAt ?? null, windowHours)) {
+        console.log(`[alertMailer] Skipping alert ${alert.id} — frequency gate (${frequency})`);
+        continue;
+      }
+    }
+
     // Use lastAlertSentAt watermark; fall back to 48h ago for first-run alerts
     // to avoid flooding users with historical data.
     const since = alert.lastAlertSentAt ?? fortyEightHoursAgo;
@@ -159,15 +196,19 @@ async function evaluateAlerts(): Promise<void> {
     }
 
     const alertName = alert.name ?? "Unnamed Alert";
-    const subject = `EdenRadar Alert: ${matched.length} new match${matched.length !== 1 ? "es" : ""} — ${alertName}`;
-    const windowLabel = `Alert: ${alertName} · ${matched.length} new asset${matched.length !== 1 ? "s" : ""}`;
+    const totalCount = matched.length;
+    // Show up to 3 sample assets in the digest; remaining count shown in a footer CTA
+    const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);
+    const subject = `EdenRadar Alert: ${totalCount} new match${totalCount !== 1 ? "es" : ""} — ${alertName}`;
+    const windowLabel = `Alert: ${alertName} · ${totalCount} new asset${totalCount !== 1 ? "s" : ""}`;
 
     const html = renderDispatchEmail({
       subject,
-      assets: matched,
+      assets: sampleAssets,
       windowLabel,
       isTest: false,
       colorMode: "light",
+      totalCount,
     });
 
     try {

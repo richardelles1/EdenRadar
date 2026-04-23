@@ -152,8 +152,9 @@ export function renderDispatchEmail(opts: {
   windowLabel: string;
   isTest?: boolean;
   colorMode?: "light" | "dark";
+  totalCount?: number;
 }): string {
-  const { subject, assets, windowLabel, isTest = false, colorMode = "light" } = opts;
+  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount } = opts;
   const isLight = colorMode === "light";
 
   const byInstitution = new Map<string, DispatchAsset[]>();
@@ -358,6 +359,17 @@ export function renderDispatchEmail(opts: {
             <table cellpadding="0" cellspacing="0" width="100%">
               ${institutionBlocks}
             </table>
+            ${totalCount && totalCount > assets.length ? `
+            <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:20px;">
+              <tr>
+                <td style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:8px;padding:14px 20px;text-align:center;">
+                  <p style="margin:0;font-size:13px;color:#166534;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+                    <strong style="color:#0a1a0f;">+${totalCount - assets.length} more match${totalCount - assets.length !== 1 ? "es" : ""}</strong> found for this alert.
+                    &nbsp;<a href="https://edenradar.com/alerts" style="color:${G_MAIN};font-weight:700;text-decoration:none;">View all ${totalCount} in EdenRadar &rarr;</a>
+                  </p>
+                </td>
+              </tr>
+            </table>` : ""}
           </td>
         </tr>
 
