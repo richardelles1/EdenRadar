@@ -4,7 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -694,6 +694,7 @@ export async function registerRoutes(
         temperature: 0.4,
       });
       const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
+      logAppEvent("pipeline_brief_generated", { listId, assetCount: assets.length });
       return res.json({ brief, assetCount: assets.length, pipelineName });
     } catch (err: any) {
       console.error("[pipeline-lists/brief] Error:", err);
@@ -726,7 +727,7 @@ export async function registerRoutes(
       const clustered = clusterAssets(normalized);
       const scored = await scoreAssets(clustered, profile);
       const report = await generateReport(scored, query, profile);
-
+      logAppEvent("report_generated", { query: query.slice(0, 80), assetCount: scored.length });
       return res.json(report);
     } catch (err: any) {
       console.error("Report error:", err);
@@ -739,6 +740,7 @@ export async function registerRoutes(
       const { asset } = dossierBodySchema.parse(req.body);
       if (!asset) return res.status(400).json({ error: "Asset required" });
       const dossier = await generateDossier(asset as ScoredAsset);
+      logAppEvent("dossier_opened", { source: (asset as any)?.sourceName ?? null });
       return res.json(dossier);
     } catch (err: any) {
       console.error("Dossier error:", err);
@@ -889,6 +891,7 @@ export async function registerRoutes(
         })),
         literature,
       });
+      logAppEvent("intelligence_fetched", { institution: enrichedRecord?.institution ?? null });
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
@@ -1029,6 +1032,13 @@ export async function registerRoutes(
     } catch (e) {
       console.error("[team-activity] Failed to log:", e);
     }
+  }
+
+  // ── App event logger (fire-and-forget, no PII) ──────────────────────────
+  function logAppEvent(event: string, metadata?: Record<string, unknown>): void {
+    db.insert(appEvents).values({ event, metadata: metadata ?? null }).catch((e) => {
+      console.error("[app-events] Failed to log:", e);
+    });
   }
 
   // ── Saved asset access guard ─────────────────────────────────────────────
@@ -1208,6 +1218,7 @@ export async function registerRoutes(
         temperature: 0.4,
       });
       const brief = completion.choices[0]?.message?.content ?? "Unable to generate brief.";
+      logAppEvent("pipeline_brief_generated", { stage, assetCount: assets.length });
       return res.json({ brief, assetCount: assets.length });
     } catch (err: any) {
       console.error("[pipeline/brief] Error:", err);
@@ -4929,6 +4940,116 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // ── Admin Analytics ──────────────────────────────────────────────────────
+
+  app.get("/api/admin/analytics/overview", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+
+      // Daily search volume — last 30 days
+      const searchesPerDayResult = await db.execute(sql`
+        SELECT DATE(created_at) AS day, COUNT(*) AS count
+        FROM search_history
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY day
+        ORDER BY day ASC
+      `);
+      const searchesPerDay = searchesPerDayResult.rows as { day: string; count: string }[];
+
+      // Eden AI sessions per day — last 30 days
+      const sessionsPerDayResult = await db.execute(sql`
+        SELECT DATE(created_at) AS day, COUNT(*) AS count
+        FROM eden_sessions
+        WHERE created_at >= NOW() - INTERVAL '30 days'
+        GROUP BY day
+        ORDER BY day ASC
+      `);
+      const sessionsPerDay = sessionsPerDayResult.rows as { day: string; count: string }[];
+
+      // Saved assets per day (cumulative growth proxy) — last 30 days
+      const savedAssetsPerDayResult = await db.execute(sql`
+        SELECT DATE(saved_at) AS day, COUNT(*) AS count
+        FROM saved_assets
+        WHERE saved_at >= NOW() - INTERVAL '30 days'
+        GROUP BY day
+        ORDER BY day ASC
+      `);
+      const savedAssetsPerDay = savedAssetsPerDayResult.rows as { day: string; count: string }[];
+
+      // Dispatch logs per week — last 8 weeks
+      const dispatchesPerWeekResult = await db.execute(sql`
+        SELECT DATE_TRUNC('week', sent_at) AS week, COUNT(*) AS count
+        FROM dispatch_logs
+        WHERE sent_at >= NOW() - INTERVAL '8 weeks'
+        GROUP BY week
+        ORDER BY week ASC
+      `);
+      const dispatchesPerWeek = dispatchesPerWeekResult.rows as { week: string; count: string }[];
+
+      // App event feature usage counts (all time)
+      const featureUsageResult = await db.execute(sql`
+        SELECT event, COUNT(*) AS count
+        FROM app_events
+        GROUP BY event
+        ORDER BY count DESC
+      `);
+      const featureUsage = featureUsageResult.rows as { event: string; count: string }[];
+
+      // Recent app events list (last 50)
+      const recentEventsResult = await db.execute(sql`
+        SELECT id, event, metadata, created_at
+        FROM app_events
+        ORDER BY created_at DESC
+        LIMIT 50
+      `);
+      const recentEvents = recentEventsResult.rows as { id: number; event: string; metadata: Record<string, unknown> | null; created_at: string }[];
+
+      // Aggregate totals
+      const [totalSearches, totalSessions, totalSavedAssets, totalDispatches] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*) AS n FROM search_history`),
+        db.execute(sql`SELECT COUNT(*) AS n FROM eden_sessions`),
+        db.execute(sql`SELECT COUNT(*) AS n FROM saved_assets`),
+        db.execute(sql`SELECT COUNT(*) AS n FROM dispatch_logs`),
+      ]);
+
+      res.json({
+        searchesPerDay: searchesPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
+        sessionsPerDay: sessionsPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
+        savedAssetsPerDay: savedAssetsPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
+        dispatchesPerWeek: dispatchesPerWeek.map(r => ({ week: r.week, count: Number(r.count) })),
+        featureUsage: featureUsage.map(r => ({ event: r.event, count: Number(r.count) })),
+        recentEvents: recentEvents.map(r => ({ id: r.id, event: r.event, metadata: r.metadata, createdAt: r.created_at })),
+        totals: {
+          searches: Number((totalSearches.rows[0] as any)?.n ?? 0),
+          sessions: Number((totalSessions.rows[0] as any)?.n ?? 0),
+          savedAssets: Number((totalSavedAssets.rows[0] as any)?.n ?? 0),
+          dispatches: Number((totalDispatches.rows[0] as any)?.n ?? 0),
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/analytics/top-searches", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const result = await db.execute(sql`
+        SELECT query, COUNT(*) AS count
+        FROM search_history
+        GROUP BY query
+        ORDER BY count DESC
+        LIMIT 20
+      `);
+      const rows = result.rows as { query: string; count: string }[];
+      res.json({ searches: rows.map(r => ({ query: r.query, count: Number(r.count) })) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
 
@@ -5498,6 +5619,7 @@ If a field cannot be determined, use "N/A".`
         })
         .returning();
 
+      logAppEvent("concept_submitted", { therapeuticArea: parsed.therapeuticArea, modality: parsed.modality });
       res.json({ concept: stripPrivateFields(concept) });
     } catch (err: any) {
       res.status(400).json({ error: err.message });

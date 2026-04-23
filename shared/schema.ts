@@ -735,3 +735,25 @@ export const sharedLinks = pgTable("shared_links", {
 export const insertSharedLinkSchema = createInsertSchema(sharedLinks).omit({ id: true, token: true, createdAt: true });
 export type InsertSharedLink = z.infer<typeof insertSharedLinkSchema>;
 export type SharedLink = typeof sharedLinks.$inferSelect;
+
+// ── App Events (usage analytics) ──────────────────────────────────────────────
+
+export const APP_EVENT_TYPES = [
+  "dossier_opened",
+  "intelligence_fetched",
+  "report_generated",
+  "pipeline_brief_generated",
+  "concept_submitted",
+] as const;
+export type AppEventType = typeof APP_EVENT_TYPES[number];
+
+export const appEvents = pgTable("app_events", {
+  id: serial("id").primaryKey(),
+  event: text("event").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertAppEventSchema = createInsertSchema(appEvents).omit({ id: true, createdAt: true });
+export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;
+export type AppEvent = typeof appEvents.$inferSelect;
