@@ -44,7 +44,7 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import type { UserAlert } from "@shared/schema";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
@@ -953,7 +953,15 @@ export default function Alerts() {
 
   const { data: alertsDelta, isLoading: alertsDeltaLoading } = useQuery<AlertsDeltaResponse>({
     queryKey: ["/api/alerts/delta", sinceParam],
-    queryFn: () => fetch(alertsDeltaUrl, { credentials: "include" }).then((r) => r.json()),
+    queryFn: async () => {
+      const authHeaders = await getAuthHeaders();
+      const r = await fetch(alertsDeltaUrl, { credentials: "include", headers: authHeaders });
+      if (!r.ok) return { byAlert: [], total: 0 } as AlertsDeltaResponse;
+      const json = await r.json();
+      // Guard: ensure shape is correct even if server returns unexpected payload
+      if (!Array.isArray(json?.byAlert)) return { byAlert: [], total: 0 } as AlertsDeltaResponse;
+      return json as AlertsDeltaResponse;
+    },
     staleTime: 5 * 60 * 1000,
   });
 
