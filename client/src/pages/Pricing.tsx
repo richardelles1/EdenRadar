@@ -243,19 +243,17 @@ export default function Pricing() {
                     borderBottom: "1px solid hsl(var(--border))",
                   }}
                 >
-                  {plan.highlighted && (
-                    <div className="mb-3">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-3xl font-black text-foreground">{plan.price}</span>
+                    <span className="text-sm text-muted-foreground">{plan.period}</span>
+                    {plan.highlighted && (
                       <span
-                        className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+                        className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
                         style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
                       >
                         Most popular
                       </span>
-                    </div>
-                  )}
-                  <div className="flex items-baseline gap-1 mb-1">
-                    <span className="text-3xl font-black text-foreground">{plan.price}</span>
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
+                    )}
                   </div>
                   <div className="flex items-center gap-2 mb-3">
                     <span

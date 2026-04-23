@@ -1635,10 +1635,46 @@ function TractionSlide({ colors }: { colors: Colors }) {
         ))}
       </div>
 
-      {/* Pricing layout — mobile: stack, desktop: left col (2 free tiers) + right col (Scout) */}
+      {/* Pricing layout — mobile: stack (Scout first), desktop: Scout left dominant + free tiers right */}
       <div className="flex flex-col lg:flex-row gap-3 lg:gap-4">
 
-        {/* Left column — two free tiers stacked */}
+        {/* Left column — EdenScout dominant card (renders first on mobile too) */}
+        <div className="lg:flex-1 rounded-xl p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.green}88`, boxShadow: `0 0 32px ${colors.green}1a` }}>
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
+                <Search className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3</p>
+                  <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
+                </div>
+                <h3 className="text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
+                <p className="text-[10px]" style={{ color: colors.text }}>Full platform access for serious BD teams</p>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <div className="flex items-baseline gap-0.5">
+                <span className="text-3xl font-extrabold tabular-nums" style={{ color: colors.green }}>$1,999</span>
+                <span className="text-xs" style={{ color: colors.text }}>/mo</span>
+              </div>
+              <p className="text-[9px] mt-0.5" style={{ color: colors.textMuted }}>starting at</p>
+            </div>
+          </div>
+
+          {/* Feature grid — 2 columns */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 mt-3">
+            {scoutFeatures.map((f) => (
+              <div key={f} className="flex items-start gap-1.5 text-xs" style={{ color: colors.text }}>
+                <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: colors.green }} />
+                {f}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Right column — two free tiers stacked */}
         <div className="flex flex-col gap-3 lg:w-[38%]">
           {/* EdenDiscovery */}
           <div className="rounded-xl p-4 flex flex-col flex-1" style={{ background: colors.amberDim, border: `1px solid ${colors.amber}55` }}>
@@ -1688,39 +1724,6 @@ function TractionSlide({ colors }: { colors: Colors }) {
                 </li>
               ))}
             </ul>
-          </div>
-        </div>
-
-        {/* Right column — EdenScout dominant card */}
-        <div className="lg:flex-1 rounded-xl p-5 flex flex-col" style={{ background: `linear-gradient(135deg, ${colors.greenDim} 0%, ${colors.bgLight} 100%)`, border: `2px solid ${colors.green}88`, boxShadow: `0 0 32px ${colors.green}1a` }}>
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: colors.green }}>
-                <Search className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{ color: colors.green }}>Tier 3</p>
-                  <span className="px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-wider" style={{ background: colors.green, color: "#fff" }}>Most Popular</span>
-                </div>
-                <h3 className="text-lg font-bold leading-tight" style={{ color: colors.text }}>EdenScout</h3>
-                <p className="text-[10px]" style={{ color: colors.text }}>Full platform access for serious BD teams</p>
-              </div>
-            </div>
-            <div className="text-right shrink-0">
-              <span className="text-3xl font-extrabold tabular-nums" style={{ color: colors.green }}>$799</span>
-              <span className="text-xs" style={{ color: colors.text }}>/mo</span>
-            </div>
-          </div>
-
-          {/* Feature grid — 2 columns */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2.5 mt-3">
-            {scoutFeatures.map((f) => (
-              <div key={f} className="flex items-start gap-1.5 text-xs" style={{ color: colors.text }}>
-                <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: colors.green }} />
-                {f}
-              </div>
-            ))}
           </div>
         </div>
       </div>
