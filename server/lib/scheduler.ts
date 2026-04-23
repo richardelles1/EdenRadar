@@ -10,6 +10,7 @@ import {
   type ScraperHealthRow,
 } from "./scraperState";
 import { storage } from "../storage";
+import { checkAndSendAlerts } from "./alertMailer";
 
 /** Skip an institution only if it was synced within this window AND found 0 new assets. */
 const FRESH_THRESHOLD_MS = 4 * 60 * 60 * 1000;  // 4 hours
@@ -738,6 +739,12 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastSuccessNewCount: result.newCount,
       lastSuccessRawCount: result.rawCount,
     });
+    // Fire-and-forget: evaluate user alerts whenever new assets arrive
+    if (result.newCount > 0) {
+      checkAndSendAlerts(institution).catch((err: any) => {
+        console.error(`[scheduler] Alert email error after ${institution} sync:`, err?.message);
+      });
+    }
   } else if (finalErr !== null) {
     // ── Failure path (both attempts failed) ─────────────────────────────────
     const msg = finalErr?.message ?? "";

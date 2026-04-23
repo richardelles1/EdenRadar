@@ -597,6 +597,7 @@ export const userAlerts = pgTable("user_alerts", {
   stages: text("stages").array(),
   institutions: text("institutions").array(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastAlertSentAt: timestamp("last_alert_sent_at"),
 });
 export type UserAlert = typeof userAlerts.$inferSelect;
 export type InsertUserAlert = typeof userAlerts.$inferInsert;

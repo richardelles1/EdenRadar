@@ -6570,6 +6570,22 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  app.post("/api/admin/alerts/trigger-emails", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const { checkAndSendAlerts } = await import("./lib/alertMailer");
+      // Run async — don't await so the HTTP response returns immediately
+      checkAndSendAlerts().catch((err: any) => {
+        console.error("[admin/alerts/trigger-emails] Error:", err?.message);
+      });
+      return res.json({ ok: true, message: "Alert email evaluation started in background." });
+    } catch (err: any) {
+      console.error("[admin/alerts/trigger-emails] Error:", err);
+      return res.status(500).json({ error: err.message ?? "Failed to trigger alert emails" });
+    }
+  });
+
   app.get("/api/admin/dispatch/subscribers", async (req, res) => {
     try {
       const pw = req.query.pw ?? req.headers["x-admin-password"];
