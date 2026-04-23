@@ -395,7 +395,7 @@ export class DatabaseStorage implements IStorage {
   async getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]> {
     if (!userId) return [];
     const conditions: SQL[] = [
-      or(eq(savedAssets.userId, userId), isNull(savedAssets.userId))!,
+      eq(savedAssets.userId, userId),
     ];
     if (pipelineListId === null) conditions.push(isNull(savedAssets.pipelineListId));
     else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
@@ -501,11 +501,7 @@ export class DatabaseStorage implements IStorage {
 
   async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {
     const conditions: SQL[] = [];
-    if (userId) {
-      // Own pipelines OR unclaimed (null userId) — mirrors getSavedAssets behaviour
-      conditions.push(eq(pipelineLists.userId, userId));
-      conditions.push(isNull(pipelineLists.userId));
-    }
+    if (userId) conditions.push(eq(pipelineLists.userId, userId));
     if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
     if (conditions.length === 0) return [];
     return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);

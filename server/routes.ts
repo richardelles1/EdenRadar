@@ -7,7 +7,7 @@ import mammoth from "mammoth";
 import { storage } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount } from "drizzle-orm";
+import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { makeFingerprint } from "./lib/ingestion";
 import { classifyBatch } from "./lib/pipeline/classifyAsset";
@@ -640,13 +640,13 @@ export async function registerRoutes(
       const userOrg = await storage.getOrgForUser(userId);
       const orgId = userOrg?.id ?? null;
 
-      // Pipeline lists query: scope to the calling user, their org (if any), and unclaimed (null userId) rows
+      // Pipeline lists query: scope to the calling user and their org (if any)
       const listsQuery = orgId
         ? sql`
           SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
           FROM pipeline_lists pl
           LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
-          WHERE pl.user_id = ${userId} OR pl.user_id IS NULL OR pl.org_id = ${orgId}
+          WHERE pl.user_id = ${userId} OR pl.org_id = ${orgId}
           GROUP BY pl.id, pl.name
           ORDER BY pl.created_at DESC
         `
@@ -654,19 +654,19 @@ export async function registerRoutes(
           SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
           FROM pipeline_lists pl
           LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
-          WHERE pl.user_id = ${userId} OR pl.user_id IS NULL
+          WHERE pl.user_id = ${userId}
           GROUP BY pl.id, pl.name
           ORDER BY pl.created_at DESC
         `;
 
       const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
         db.execute(listsQuery),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId} OR user_id IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId}`),
         db.execute(sql`
           SELECT COUNT(DISTINCT COALESCE(ia.institution, sa.source_journal))::int AS n
           FROM saved_assets sa
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
-          WHERE (sa.user_id = ${userId} OR sa.user_id IS NULL)
+          WHERE sa.user_id = ${userId}
             AND COALESCE(ia.institution, sa.source_journal) IS NOT NULL
             AND COALESCE(ia.institution, sa.source_journal) != ''
             AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
@@ -3787,6 +3787,100 @@ export async function registerRoutes(
       res.json({ ok: true, message: "All ingested assets wiped" });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Inspect, reassign, or delete orphaned saved_assets / pipeline_lists rows with NULL user_id.
+  // These were created before auth was wired up.  Three operations are available:
+  //   GET    /api/admin/orphaned-records              — counts + 20-row preview
+  //   POST   /api/admin/orphaned-records/reassign     — reassign to a target userId
+  //   DELETE /api/admin/orphaned-records              — hard delete (requires confirm: true)
+  // Auth: x-admin-password header (consistent with all other admin endpoints).
+  // Destructive operations additionally require { confirm: true } in the request body.
+
+  app.get("/api/admin/orphaned-records", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    try {
+      const [saCountResult, plCountResult, saPreview, plPreview] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM pipeline_lists WHERE user_id IS NULL`),
+        db.execute(sql`SELECT id, asset_name, saved_at FROM saved_assets WHERE user_id IS NULL ORDER BY saved_at DESC LIMIT 20`),
+        db.execute(sql`SELECT id, name, created_at FROM pipeline_lists WHERE user_id IS NULL ORDER BY created_at DESC LIMIT 20`),
+      ]);
+      return res.json({
+        savedAssets: {
+          count: Number((saCountResult.rows[0] as Record<string, unknown>)?.n ?? 0),
+          preview: saPreview.rows,
+        },
+        pipelineLists: {
+          count: Number((plCountResult.rows[0] as Record<string, unknown>)?.n ?? 0),
+          preview: plPreview.rows,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Reassign null-userId rows to a specific user (and optionally an org).
+  // Call GET first to confirm what will be affected, then POST to commit.
+  app.post("/api/admin/orphaned-records/reassign", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { targetUserId, targetOrgId, confirm: confirmed } = req.body as {
+      targetUserId?: string;
+      targetOrgId?: number;
+      confirm?: boolean;
+    };
+    if (!targetUserId) return res.status(400).json({ error: "targetUserId is required" });
+    if (!confirmed) return res.status(400).json({ error: "Pass { confirm: true } to execute" });
+    try {
+      // Count first so the response is informative even if no rows matched
+      const [saCountResult, plCountResult] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM pipeline_lists WHERE user_id IS NULL`),
+      ]);
+      const savedAssetCount = Number((saCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const pipelineListCount = Number((plCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+
+      // Perform reassignment — savedAssets has no orgId column, so we only set orgId on pipelineLists
+      const saUpdateOpts = { userId: targetUserId };
+      const plUpdateOpts = targetOrgId
+        ? { userId: targetUserId, orgId: targetOrgId }
+        : { userId: targetUserId };
+      await Promise.all([
+        db.update(savedAssets).set(saUpdateOpts).where(isNull(savedAssets.userId)),
+        db.update(pipelineLists).set(plUpdateOpts).where(isNull(pipelineLists.userId)),
+      ]);
+      return res.json({ ok: true, reassignedSavedAssets: savedAssetCount, reassignedPipelineLists: pipelineListCount, targetUserId, targetOrgId: targetOrgId ?? null });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Hard-delete all remaining null-userId rows.  Run /reassign first for records worth keeping.
+  app.delete("/api/admin/orphaned-records", async (req, res) => {
+    const pw = req.headers["x-admin-password"] as string;
+    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+    const { confirm: confirmed } = req.body as { confirm?: boolean };
+    if (!confirmed) return res.status(400).json({ error: "Pass { confirm: true } to execute" });
+    try {
+      // Count before deleting so the response accurately reflects what was removed
+      const [saCountResult, plCountResult] = await Promise.all([
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id IS NULL`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM pipeline_lists WHERE user_id IS NULL`),
+      ]);
+      const savedAssetCount = Number((saCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+      const pipelineListCount = Number((plCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
+
+      await Promise.all([
+        db.delete(savedAssets).where(isNull(savedAssets.userId)),
+        db.delete(pipelineLists).where(isNull(pipelineLists.userId)),
+      ]);
+      return res.json({ ok: true, deletedSavedAssets: savedAssetCount, deletedPipelineLists: pipelineListCount });
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message });
     }
   });
 
