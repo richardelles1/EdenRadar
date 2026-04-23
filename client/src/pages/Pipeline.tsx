@@ -24,6 +24,9 @@ import {
   ChevronUp,
   Send,
   Share2,
+  Eye,
+  EyeOff,
+  Lock,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { SavedAsset } from "@shared/schema";
@@ -440,6 +443,9 @@ export default function Pipeline() {
   const [copied, setCopied] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [showShareForm, setShowShareForm] = useState(false);
+  const [shareBriefPassword, setShareBriefPassword] = useState("");
+  const [shareBriefPasswordVisible, setShareBriefPasswordVisible] = useState(false);
 
   const { data, isLoading } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
@@ -471,7 +477,9 @@ export default function Pipeline() {
         pipelineName: briefModal.label,
         assetCount: briefModal.assetCount,
       };
-      const res = await apiRequest("POST", "/api/share", { type: "pipeline_brief", payload });
+      const body: Record<string, unknown> = { type: "pipeline_brief", payload };
+      if (shareBriefPassword) body.password = shareBriefPassword;
+      const res = await apiRequest("POST", "/api/share", body);
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error ?? "Failed to create share link");
@@ -480,6 +488,7 @@ export default function Pipeline() {
     },
     onSuccess: (data) => {
       setShareUrl(data.url);
+      setShowShareForm(false);
     },
     onError: (err: any) => {
       toast({ title: "Failed to create share link", description: err.message, variant: "destructive" });
@@ -691,7 +700,7 @@ export default function Pipeline() {
         )}
       </main>
 
-      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); setShareUrl(null); setShareLinkCopied(false); } }}>
+      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); setShareUrl(null); setShareLinkCopied(false); setShowShareForm(false); setShareBriefPassword(""); setShareBriefPasswordVisible(false); } }}>
         <DialogContent className="max-w-xl max-h-[80vh] flex flex-col overflow-hidden" data-testid="dialog-pipeline-brief">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
@@ -724,18 +733,46 @@ export default function Pipeline() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => shareBriefMutation.mutate()}
+                  onClick={() => { setShowShareForm(true); setShareUrl(null); setShareBriefPassword(""); setShareBriefPasswordVisible(false); }}
                   disabled={shareBriefMutation.isPending}
                   className="h-7 text-xs gap-1.5 border-card-border"
                   data-testid="button-brief-share"
                 >
-                  {shareBriefMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />}
-                  {shareBriefMutation.isPending ? "..." : "Share"}
+                  <Share2 className="w-3 h-3" />
+                  Share
                 </Button>
               </div>
             </div>
+            {showShareForm && !shareUrl && (
+              <div className="flex flex-col gap-2 mt-2" data-testid="share-form-row">
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type={shareBriefPasswordVisible ? "text" : "password"}
+                    placeholder="Password (optional)"
+                    value={shareBriefPassword}
+                    onChange={(e) => setShareBriefPassword(e.target.value)}
+                    className="h-7 text-xs"
+                    data-testid="input-brief-share-password"
+                  />
+                  <Button size="sm" variant="ghost" className="h-7 px-2 shrink-0" onClick={() => setShareBriefPasswordVisible(v => !v)} data-testid="button-brief-toggle-password">
+                    {shareBriefPasswordVisible ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => shareBriefMutation.mutate()}
+                    disabled={shareBriefMutation.isPending}
+                    className="h-7 text-xs gap-1.5 shrink-0"
+                    data-testid="button-create-brief-share-link"
+                  >
+                    {shareBriefMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />}
+                    {shareBriefMutation.isPending ? "..." : "Create Link"}
+                  </Button>
+                </div>
+              </div>
+            )}
             {shareUrl && (
               <div className="flex gap-2 mt-2" data-testid="share-url-row">
+                {shareBriefPassword && <Lock className="w-3 h-3 text-amber-500 shrink-0 self-center" />}
                 <Input
                   readOnly
                   value={shareUrl}

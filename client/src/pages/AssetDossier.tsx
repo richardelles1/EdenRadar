@@ -13,6 +13,7 @@ import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
   Beaker, Tag, FlaskConical, Lightbulb, Mail, Share2, Copy, Check, X,
+  Eye, EyeOff, Loader2, Lock,
 } from "lucide-react";
 import {
   Dialog,
@@ -189,6 +190,8 @@ export default function AssetDossier() {
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [shareCopied, setShareCopied] = useState(false);
+  const [sharePassword, setSharePassword] = useState("");
+  const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
 
   const fingerprint = sessionStorage.getItem(`asset-fingerprint-${id}`) ?? id;
 
@@ -279,7 +282,9 @@ export default function AssetDossier() {
         licensingStatus: enriched?.licensingStatus ?? asset.licensing_status,
         generated_at: dossier.generated_at,
       };
-      const res = await apiRequest("POST", "/api/share", { type: "dossier", entityId: id, payload });
+      const body: Record<string, unknown> = { type: "dossier", entityId: id, payload };
+      if (sharePassword) body.password = sharePassword;
+      const res = await apiRequest("POST", "/api/share", body);
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error ?? "Failed to create share link");
@@ -420,7 +425,7 @@ export default function AssetDossier() {
                   variant="outline"
                   size="sm"
                   className="shrink-0 gap-1.5 text-xs no-print"
-                  onClick={() => shareMutation.mutate()}
+                  onClick={() => { setShareUrl(null); setSharePassword(""); setSharePasswordVisible(false); setShareDialogOpen(true); }}
                   disabled={shareMutation.isPending}
                   data-testid="button-share-dossier"
                 >
@@ -798,7 +803,7 @@ export default function AssetDossier() {
       </div>
     </div>
 
-    <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!open) { setShareDialogOpen(false); setShareCopied(false); } }}>
+    <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!open) { setShareDialogOpen(false); setShareCopied(false); setShareUrl(null); setSharePassword(""); setSharePasswordVisible(false); } }}>
       <DialogContent className="max-w-sm" data-testid="dialog-share-dossier">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-base">
@@ -806,36 +811,77 @@ export default function AssetDossier() {
             Share Dossier
           </DialogTitle>
         </DialogHeader>
-        <div className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Anyone with this link can view the dossier. The link expires in 7 days.
-          </p>
-          <div className="flex gap-2">
-            <Input
-              readOnly
-              value={shareUrl ?? ""}
-              className="text-xs font-mono"
-              onClick={(e) => (e.target as HTMLInputElement).select()}
-              data-testid="input-share-url"
-            />
+        {!shareUrl ? (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Create a public read-only link. Expires in 7&nbsp;days.
+            </p>
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">Password protection <span className="opacity-60">(optional)</span></p>
+              <div className="flex gap-2">
+                <Input
+                  type={sharePasswordVisible ? "text" : "password"}
+                  placeholder="Leave blank for public access"
+                  value={sharePassword}
+                  onChange={(e) => setSharePassword(e.target.value)}
+                  className="text-sm"
+                  data-testid="input-share-password"
+                />
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="shrink-0 px-2"
+                  onClick={() => setSharePasswordVisible(v => !v)}
+                  data-testid="button-toggle-password-visibility"
+                >
+                  {sharePasswordVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </Button>
+              </div>
+            </div>
             <Button
+              className="w-full gap-2"
               size="sm"
-              variant="outline"
-              className="shrink-0 gap-1.5"
-              onClick={() => {
-                if (!shareUrl) return;
-                navigator.clipboard.writeText(shareUrl).then(() => {
-                  setShareCopied(true);
-                  setTimeout(() => setShareCopied(false), 2000);
-                });
-              }}
-              data-testid="button-copy-share-url"
+              onClick={() => shareMutation.mutate()}
+              disabled={shareMutation.isPending}
+              data-testid="button-create-share-link"
             >
-              {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-              {shareCopied ? "Copied!" : "Copy"}
+              {shareMutation.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Share2 className="w-3.5 h-3.5" />}
+              {shareMutation.isPending ? "Creating..." : "Create Share Link"}
             </Button>
           </div>
-        </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Link created — expires in 7&nbsp;days.{sharePassword && (
+                <span className="inline-flex items-center gap-1 ml-1.5 text-amber-500"><Lock className="w-3 h-3" />Password protected.</span>
+              )}
+            </p>
+            <div className="flex gap-2">
+              <Input
+                readOnly
+                value={shareUrl}
+                className="text-xs font-mono"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+                data-testid="input-share-url"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5"
+                onClick={() => {
+                  navigator.clipboard.writeText(shareUrl).then(() => {
+                    setShareCopied(true);
+                    setTimeout(() => setShareCopied(false), 2000);
+                  });
+                }}
+                data-testid="button-copy-share-url"
+              >
+                {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                {shareCopied ? "Copied!" : "Copy"}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
     </>

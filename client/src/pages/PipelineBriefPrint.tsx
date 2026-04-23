@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowLeft, Moon, Printer, Sun } from "lucide-react";
+import { ArrowLeft, Moon, Printer, Sun, Share2, Eye, EyeOff, Copy, Check, Lock, Loader2 } from "lucide-react";
 import { PRINT_STYLES, PrintFooter, formatDate, GREEN, BG_DARK } from "@/lib/print-shared";
 
 type BriefData = {
@@ -55,6 +55,14 @@ export default function PipelineBriefPrint() {
   const [dark, setDark] = useState(false);
   const today = formatDate(new Date().toISOString());
 
+  const [showShareForm, setShowShareForm] = useState(false);
+  const [sharePassword, setSharePassword] = useState("");
+  const [sharePasswordVisible, setSharePasswordVisible] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCreating, setShareCreating] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
+
   useEffect(() => {
     try {
       const raw = sessionStorage.getItem("pipeline-brief-print");
@@ -62,6 +70,34 @@ export default function PipelineBriefPrint() {
     } catch {
     }
   }, []);
+
+  async function handleCreateShareLink() {
+    if (!data) return;
+    setShareCreating(true);
+    setShareError(null);
+    try {
+      const payload = { brief: data.brief, pipelineName: data.pipelineName, assetCount: data.assetCount };
+      const body: Record<string, unknown> = { type: "pipeline_brief", payload };
+      if (sharePassword) body.password = sharePassword;
+      const res = await fetch("/api/share", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? "Failed to create share link");
+      }
+      const result = await res.json() as { url: string };
+      setShareUrl(result.url);
+      setShowShareForm(false);
+    } catch (err: unknown) {
+      setShareError(err instanceof Error ? err.message : "Failed to create share link");
+    } finally {
+      setShareCreating(false);
+    }
+  }
 
   if (!data) {
     return (
@@ -109,8 +145,86 @@ export default function PipelineBriefPrint() {
 
       <div className="no-print" style={{
         position: "fixed", top: "1rem", right: "1.25rem", zIndex: 100,
-        display: "flex", gap: "0.5rem", alignItems: "center",
+        display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end",
       }}>
+        {shareUrl ? (
+          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+            {sharePassword && <Lock size={11} color="#d97706" />}
+            <input
+              readOnly
+              value={shareUrl}
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              style={{
+                border: `1px solid ${cardBorder}`, borderRadius: "6px", padding: "0.3rem 0.5rem",
+                fontSize: "0.72rem", fontFamily: "monospace", background: cardBg, color: fg, width: "240px",
+              }}
+              data-testid="input-print-share-url"
+            />
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 2000);
+                });
+              }}
+              style={btnBase}
+              data-testid="button-copy-print-share-url"
+            >
+              {shareCopied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
+              {shareCopied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        ) : showShareForm ? (
+          <div style={{ display: "flex", gap: "0.4rem", alignItems: "center" }}>
+            <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+              <input
+                type={sharePasswordVisible ? "text" : "password"}
+                placeholder="Password (optional)"
+                value={sharePassword}
+                onChange={(e) => setSharePassword(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleCreateShareLink(); }}
+                style={{
+                  border: `1px solid ${cardBorder}`, borderRadius: "6px", padding: "0.3rem 1.8rem 0.3rem 0.5rem",
+                  fontSize: "0.75rem", background: cardBg, color: fg, width: "160px",
+                }}
+                data-testid="input-print-share-password"
+              />
+              <button
+                onClick={() => setSharePasswordVisible(v => !v)}
+                style={{ position: "absolute", right: "0.3rem", background: "none", border: "none", cursor: "pointer", color: mutedColor, padding: 0 }}
+                data-testid="button-print-toggle-password"
+              >
+                {sharePasswordVisible ? <EyeOff size={12} /> : <Eye size={12} />}
+              </button>
+            </div>
+            {shareError && <span style={{ fontSize: "0.7rem", color: "#ef4444" }}>{shareError}</span>}
+            <button
+              onClick={handleCreateShareLink}
+              disabled={shareCreating}
+              style={{ ...btnBase, background: GREEN, border: "none", color: "#fff", fontWeight: 600 }}
+              data-testid="button-create-print-share-link"
+            >
+              {shareCreating ? <Loader2 size={12} /> : <Share2 size={12} />}
+              {shareCreating ? "..." : "Create Link"}
+            </button>
+            <button
+              onClick={() => { setShowShareForm(false); setShareError(null); }}
+              style={btnBase}
+              data-testid="button-cancel-print-share"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setShowShareForm(true); setShareUrl(null); setSharePassword(""); setSharePasswordVisible(false); setShareError(null); }}
+            style={btnBase}
+            data-testid="button-print-share"
+          >
+            <Share2 size={13} />
+            Share
+          </button>
+        )}
         <button
           onClick={() => setDark(d => !d)}
           style={btnBase}

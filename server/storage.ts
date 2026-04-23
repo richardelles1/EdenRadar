@@ -331,7 +331,7 @@ export interface IStorage {
   getOrgForUser(userId: string): Promise<Organization | undefined>;
   getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null>;
 
-  createSharedLink(data: { type: string; entityId?: string; payload: unknown; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink>;
+  createSharedLink(data: { type: string; entityId?: string; payload: Record<string, unknown>; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink>;
   getSharedLinkByToken(token: string): Promise<SharedLink | undefined>;
 }
 
@@ -2890,11 +2890,11 @@ export class DatabaseStorage implements IStorage {
     return row ?? null;
   }
 
-  async createSharedLink(data: { type: string; entityId?: string; payload: unknown; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink> {
+  async createSharedLink(data: { type: string; entityId?: string; payload: Record<string, unknown>; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink> {
     const [row] = await db.insert(sharedLinks).values({
       type: data.type,
       entityId: data.entityId ?? null,
-      payload: data.payload as any,
+      payload: data.payload,
       createdBy: data.createdBy ?? null,
       expiresAt: data.expiresAt,
       passwordHash: data.passwordHash ?? null,
