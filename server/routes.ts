@@ -629,22 +629,42 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/pipeline-lists/summary", async (_req, res) => {
+  app.get("/api/pipeline-lists/summary", async (req, res) => {
     try {
-      const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
-        db.execute(sql`
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+
+      const userOrg = await storage.getOrgForUser(userId);
+      const orgId = userOrg?.id ?? null;
+
+      // Pipeline lists query: scope to the calling user and their org (if any)
+      const listsQuery = orgId
+        ? sql`
           SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
           FROM pipeline_lists pl
           LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
+          WHERE pl.user_id = ${userId} OR pl.org_id = ${orgId}
           GROUP BY pl.id, pl.name
           ORDER BY pl.created_at DESC
-        `),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets`),
+        `
+        : sql`
+          SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
+          FROM pipeline_lists pl
+          LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
+          WHERE pl.user_id = ${userId}
+          GROUP BY pl.id, pl.name
+          ORDER BY pl.created_at DESC
+        `;
+
+      const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
+        db.execute(listsQuery),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId}`),
         db.execute(sql`
           SELECT COUNT(DISTINCT COALESCE(ia.institution, sa.source_journal))::int AS n
           FROM saved_assets sa
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
-          WHERE COALESCE(ia.institution, sa.source_journal) IS NOT NULL
+          WHERE sa.user_id = ${userId}
+            AND COALESCE(ia.institution, sa.source_journal) IS NOT NULL
             AND COALESCE(ia.institution, sa.source_journal) != ''
             AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
         `),

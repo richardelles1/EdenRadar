@@ -393,8 +393,7 @@ export class DatabaseStorage implements IStorage {
 
   async getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]> {
     const conditions: SQL[] = [];
-    // Include user's assets + legacy rows (null userId) to preserve backward compatibility
-    if (userId) conditions.push(or(eq(savedAssets.userId, userId), isNull(savedAssets.userId)) as SQL);
+    if (userId) conditions.push(eq(savedAssets.userId, userId));
     if (pipelineListId === null) conditions.push(isNull(savedAssets.pipelineListId));
     else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
