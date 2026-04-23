@@ -282,7 +282,7 @@ export default function AssetDossier() {
         licensingStatus: enriched?.licensingStatus ?? asset.licensing_status,
         generated_at: dossier.generated_at,
       };
-      const body: Record<string, unknown> = { type: "dossier", entityId: id, payload };
+      const body: Record<string, unknown> = { type: "dossier", entityId: fingerprint, payload };
       if (sharePassword) body.password = sharePassword;
       const res = await apiRequest("POST", "/api/share", body);
       if (!res.ok) {
