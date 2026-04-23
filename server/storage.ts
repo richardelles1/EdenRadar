@@ -252,6 +252,7 @@ export interface IStorage {
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
 
   createUserAlert(data: InsertUserAlert, userId?: string): Promise<UserAlert>;
+  updateUserAlert(id: number, data: Partial<InsertUserAlert>): Promise<UserAlert>;
   listUserAlerts(userId?: string): Promise<UserAlert[]>;
   deleteUserAlert(id: number): Promise<void>;
 
@@ -2373,6 +2374,11 @@ export class DatabaseStorage implements IStorage {
     const values: any = { ...data };
     if (userId) values.userId = userId;
     const [row] = await db.insert(userAlerts).values(values).returning();
+    return row;
+  }
+
+  async updateUserAlert(id: number, data: Partial<InsertUserAlert>): Promise<UserAlert> {
+    const [row] = await db.update(userAlerts).set(data).where(eq(userAlerts.id, id)).returning();
     return row;
   }
 

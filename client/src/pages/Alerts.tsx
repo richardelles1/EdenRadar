@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -39,6 +39,8 @@ import {
   Trash2,
   Check,
   ChevronsUpDown,
+  Pencil,
+  Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -71,6 +73,24 @@ interface IndustryDeltaResponse {
   };
   windowHours: number;
   since?: string;
+}
+
+interface AlertDeltaBucket {
+  alertId: number;
+  alertName: string;
+  matchCount: number;
+  samples: Array<{ id: number; assetName: string; institution: string; modality: string; developmentStage: string }>;
+}
+
+interface AlertsDeltaResponse {
+  byAlert: AlertDeltaBucket[];
+  total: number;
+  since: string;
+}
+
+interface PreviewResponse {
+  count: number | string;
+  samples: Array<{ id: number; assetName: string; institution: string; modality: string; developmentStage: string }>;
 }
 
 function formatRelative(dateStr: string | null | undefined): string {
@@ -181,7 +201,7 @@ function SectionHeader({
   );
 }
 
-function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert; onDelete: (id: number) => void; isPending: boolean }) {
+function AlertDefinitionCard({ alert, onDelete, onEdit, isPending }: { alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean }) {
   const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
 
   const parts = [alert.query, ...(alert.modalities ?? []), ...(alert.stages ?? [])].filter(Boolean);
@@ -223,14 +243,24 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
           </span>
         </div>
 
-        <button
-          onClick={() => onDelete(alert.id)}
-          className="absolute top-2 right-2 z-[5] text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
-          data-testid={`button-delete-alert-${alert.id}`}
-          disabled={isPending}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </button>
+        <div className="absolute top-2 right-2 z-[5] flex items-center gap-1">
+          <button
+            onClick={() => onEdit(alert)}
+            className="text-muted-foreground hover:text-primary transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-primary/10 active:scale-90"
+            data-testid={`button-edit-alert-${alert.id}`}
+            disabled={isPending}
+          >
+            <Pencil className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => onDelete(alert.id)}
+            className="text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
+            data-testid={`button-delete-alert-${alert.id}`}
+            disabled={isPending}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
 
         <div className="relative z-[4] pt-7 pb-3 pl-4 pr-3">
           <div className="space-y-1.5">
@@ -272,6 +302,7 @@ function AlertDefinitionCard({ alert, onDelete, isPending }: { alert: UserAlert;
 
 function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   const [expanded, setExpanded] = useState(false);
+  const [editingAlert, setEditingAlert] = useState<UserAlert | null>(null);
   const { data: alerts = [], isLoading } = useQuery<UserAlert[]>({
     queryKey: ["/api/alerts"],
   });
@@ -282,51 +313,57 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   });
 
   return (
-    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-      <div className="p-4">
-        <SectionHeader
-          icon={Bell}
-          label="My Alerts"
-          count={alerts.length}
-          countLabel={`${alerts.length} saved`}
-          color="bg-emerald-500/10 text-emerald-500"
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          hasNew={false}
-        />
-      </div>
-      {expanded && (
-        <div className="border-t border-card-border/60 px-4 pb-4">
-          {isLoading ? (
-            <div className="pt-3 space-y-2">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
-            </div>
-          ) : alerts.length === 0 ? (
-            <div className="pt-3 space-y-2">
-              <p className="text-xs text-muted-foreground">No saved alerts yet. Use + Create Alert to set one up.</p>
-              <button
-                onClick={onCreateAlert}
-                className="text-xs text-primary hover:underline"
-                data-testid="button-create-first-alert"
-              >
-                + Create your first alert
-              </button>
-            </div>
-          ) : (
-            <div className="pt-3 space-y-2">
-              {alerts.map((alert) => (
-                <AlertDefinitionCard
-                  key={alert.id}
-                  alert={alert}
-                  onDelete={(id) => deleteMutation.mutate(id)}
-                  isPending={deleteMutation.isPending}
-                />
-              ))}
-            </div>
-          )}
+    <>
+      <div className="rounded-lg border border-card-border bg-card overflow-hidden">
+        <div className="p-4">
+          <SectionHeader
+            icon={Bell}
+            label="My Alerts"
+            count={alerts.length}
+            countLabel={`${alerts.length} saved`}
+            color="bg-emerald-500/10 text-emerald-500"
+            expanded={expanded}
+            onToggle={() => setExpanded((v) => !v)}
+            hasNew={false}
+          />
         </div>
+        {expanded && (
+          <div className="border-t border-card-border/60 px-4 pb-4">
+            {isLoading ? (
+              <div className="pt-3 space-y-2">
+                {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
+              </div>
+            ) : alerts.length === 0 ? (
+              <div className="pt-3 space-y-2">
+                <p className="text-xs text-muted-foreground">No saved alerts yet. Use + Create Alert to set one up.</p>
+                <button
+                  onClick={onCreateAlert}
+                  className="text-xs text-primary hover:underline"
+                  data-testid="button-create-first-alert"
+                >
+                  + Create your first alert
+                </button>
+              </div>
+            ) : (
+              <div className="pt-3 space-y-2">
+                {alerts.map((alert) => (
+                  <AlertDefinitionCard
+                    key={alert.id}
+                    alert={alert}
+                    onDelete={(id) => deleteMutation.mutate(id)}
+                    onEdit={(a) => setEditingAlert(a)}
+                    isPending={deleteMutation.isPending}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {editingAlert && (
+        <EditAlertSheet alert={editingAlert} onClose={() => setEditingAlert(null)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -878,6 +915,271 @@ function InstitutionCombobox({
   );
 }
 
+function AlertsDeltaSection({
+  data,
+  isLoading,
+  onCreateAlert,
+}: {
+  data: AlertsDeltaResponse | undefined;
+  isLoading: boolean;
+  onCreateAlert: () => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [openBuckets, setOpenBuckets] = useState<Set<number>>(new Set());
+  const displayCount = data?.total ?? 0;
+
+  function toggleBucket(alertId: number) {
+    setOpenBuckets((prev) => {
+      const next = new Set(prev);
+      next.has(alertId) ? next.delete(alertId) : next.add(alertId);
+      return next;
+    });
+  }
+
+  return (
+    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
+      <div className="p-4">
+        <SectionHeader
+          icon={Package}
+          label="TTO Assets"
+          count={displayCount}
+          color="bg-primary/10 text-primary"
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+          hasNew={displayCount > 0}
+        />
+      </div>
+      {expanded && (
+        <div className="border-t border-card-border/60 px-4 pb-4">
+          {isLoading ? (
+            <div className="pt-3 space-y-2">
+              {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
+            </div>
+          ) : !data || data.byAlert.length === 0 ? (
+            <div className="pt-3 space-y-2">
+              <p className="text-xs text-muted-foreground">
+                {data
+                  ? "No new TTO assets match your saved alert criteria. Try broadening your filters or checking back after the next sync."
+                  : "Create a saved alert to filter TTO asset notifications to your thesis."}
+              </p>
+              {!data && (
+                <button onClick={onCreateAlert} className="text-xs text-primary hover:underline" data-testid="button-create-alert-from-tto">
+                  + Create your first alert
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="pt-3 space-y-2">
+              <p className="text-[10px] text-muted-foreground/70 pb-1">Grouped by alert</p>
+              {data.byAlert.map((bucket) => (
+                <div key={bucket.alertId} data-testid={`alert-bucket-${bucket.alertId}`}>
+                  <div className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10">
+                    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: "#22c55e" }} />
+                    <div
+                      className="flex items-center gap-2.5 pl-4 pr-3 py-3 cursor-pointer"
+                      onClick={() => toggleBucket(bucket.alertId)}
+                    >
+                      <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      <span className="flex-1 text-xs font-semibold text-foreground truncate">{bucket.alertName}</span>
+                      <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                        +{bucket.matchCount}
+                      </Badge>
+                      {openBuckets.has(bucket.alertId) ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+                    </div>
+                    {openBuckets.has(bucket.alertId) && bucket.samples.length > 0 && (
+                      <div className="px-3 pb-3 border-t border-white/20 dark:border-white/10">
+                        <div className="space-y-1.5 pt-2">
+                          {bucket.samples.map((asset, j) => (
+                            <MiniAssetBloomCard key={asset.id} asset={{ id: asset.id, name: asset.assetName }} index={j} />
+                          ))}
+                        </div>
+                        {bucket.matchCount > bucket.samples.length && (
+                          <p className="text-[10px] text-muted-foreground mt-1.5">
+                            +{bucket.matchCount - bucket.samples.length} more
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertPreviewSection({ query, modalities, stages, institutions }: {
+  query: string;
+  modalities: string[];
+  stages: string[];
+  institutions: string[];
+}) {
+  const [preview, setPreview] = useState<PreviewResponse | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0;
+
+  useEffect(() => {
+    if (!hasAnyFilter) { setPreview(null); return; }
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      try {
+        const res = await apiRequest("POST", "/api/alerts/preview", {
+          query: query.trim() || null,
+          modalities: modalities.map((m) => m.toLowerCase().replace(/\s+/g, "-")),
+          stages: stages.map((s) => s.toLowerCase().replace(/\s+/g, "-")),
+          institutions,
+        });
+        const data = await res.json();
+        setPreview(data);
+      } catch { setPreview(null); }
+      finally { setIsLoading(false); }
+    }, 500);
+    return () => clearTimeout(timer);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, modalities.join(","), stages.join(","), institutions.join(","), hasAnyFilter]);
+
+  if (!hasAnyFilter) return null;
+
+  return (
+    <div className="rounded-md border border-card-border bg-muted/30 p-3 space-y-1.5" data-testid="alert-preview">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold text-foreground">Preview matches</span>
+        {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+        {!isLoading && preview && (
+          <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium" data-testid="preview-count">
+            ~{preview.count} existing asset{preview.count === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+      {!isLoading && preview && preview.samples.length > 0 && (
+        <div className="space-y-1">
+          {preview.samples.map((s) => (
+            <div key={s.id} className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              <span className="text-[11px] text-muted-foreground truncate">{s.assetName}</span>
+              <span className="text-[10px] text-muted-foreground/60 shrink-0">— {s.institution}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {!isLoading && preview && preview.count === 0 && (
+        <p className="text-[11px] text-muted-foreground">No existing assets match these criteria yet.</p>
+      )}
+    </div>
+  );
+}
+
+function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => void }) {
+  const { toast } = useToast();
+
+  function toDisplayModality(s: string) { return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
+  function toDisplayStage(s: string) { return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
+
+  const [query, setQuery] = useState(alert.query ?? "");
+  const [modalities, setModalities] = useState<string[]>((alert.modalities ?? []).map(toDisplayModality));
+  const [stages, setStages] = useState<string[]>((alert.stages ?? []).map(toDisplayStage));
+  const [institutions, setInstitutions] = useState<string[]>(alert.institutions ?? []);
+
+  function toggleItem(arr: string[], setArr: (v: string[]) => void, val: string) {
+    setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
+  }
+
+  const editMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("PUT", `/api/alerts/${alert.id}`, {
+        query: query.trim() || null,
+        modalities: modalities.map((m) => m.toLowerCase().replace(/\s+/g, "-")),
+        stages: stages.map((s) => s.toLowerCase().replace(/\s+/g, "-")),
+        institutions,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
+      toast({ title: "Alert updated" });
+      onClose();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error updating alert", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function handleSave() {
+    if (!query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+      toast({ title: "Set at least one filter", variant: "destructive" });
+      return;
+    }
+    editMutation.mutate();
+  }
+
+  return (
+    <Sheet open onOpenChange={onClose}>
+      <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
+        <SheetHeader>
+          <SheetTitle>Edit Alert</SheetTitle>
+          <SheetDescription>Update your saved alert criteria.</SheetDescription>
+        </SheetHeader>
+        <div className="mt-6 space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="edit-alert-query">Query</Label>
+            <Input id="edit-alert-query" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. CAR-T solid tumor preclinical" data-testid="input-edit-alert-query" />
+          </div>
+          <div className="space-y-2">
+            <Label>Modality</Label>
+            <MultiSelectCombobox options={MODALITY_OPTIONS} selected={modalities} onToggle={(v) => toggleItem(modalities, setModalities, v)} placeholder="Any modality" searchPlaceholder="Search modalities..." testId="select-edit-alert-modality" />
+            {modalities.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {modalities.map((m) => (
+                  <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                    {m}<button onClick={() => toggleItem(modalities, setModalities, m)} className="hover:text-destructive">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Stage</Label>
+            <MultiSelectCombobox options={STAGE_OPTIONS} selected={stages} onToggle={(v) => toggleItem(stages, setStages, v)} placeholder="Any stage" searchPlaceholder="Search stages..." testId="select-edit-alert-stage" />
+            {stages.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {stages.map((s) => (
+                  <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 flex items-center gap-1">
+                    {s}<button onClick={() => toggleItem(stages, setStages, s)} className="hover:text-destructive">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <Label>Institutions</Label>
+            <InstitutionCombobox selected={institutions} onToggle={(v) => toggleItem(institutions, setInstitutions, v)} />
+            {institutions.length > 0 && (
+              <div className="flex flex-wrap gap-1 pt-1">
+                {institutions.map((inst) => (
+                  <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1 max-w-[150px]">
+                    <span className="truncate">{inst}</span>
+                    <button onClick={() => toggleItem(institutions, setInstitutions, inst)} className="hover:text-destructive shrink-0">×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+          <div className="pt-2 flex gap-3">
+            <Button className="flex-1" onClick={handleSave} disabled={editMutation.isPending} data-testid="button-update-alert">
+              {editMutation.isPending ? "Saving..." : "Save Changes"}
+            </Button>
+            <Button variant="outline" onClick={onClose} data-testid="button-cancel-edit-alert">Cancel</Button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
   const [query, setQuery] = useState("");
@@ -899,6 +1201,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
       toast({ title: "Alert saved", description: "You'll see it in My Alerts." });
       setQuery("");
       setModalities([]);
@@ -1003,7 +1306,9 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
             )}
           </div>
 
-          <div className="pt-4 flex gap-3">
+          <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+
+          <div className="pt-2 flex gap-3">
             <Button
               className="flex-1"
               onClick={handleSave}
@@ -1036,16 +1341,21 @@ export default function Alerts() {
     ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
     : "/api/industry/alerts/delta";
 
+  const alertsDeltaUrl = sinceParam
+    ? `/api/alerts/delta?since=${encodeURIComponent(sinceParam)}`
+    : "/api/alerts/delta";
+
   const { data, isLoading } = useQuery<IndustryDeltaResponse>({
     queryKey: [deltaUrl],
     staleTime: 5 * 60 * 1000,
   });
 
-  const matchedTtoCount = data?.newAssets.hasAlerts
-    ? (data.newAssets.byInstitution
-        .filter((inst) => inst.matchedBy !== null)
-        .reduce((s, inst) => s + inst.matchedCount, 0))
-    : (data?.newAssets.total ?? 0);
+  const { data: alertsDelta, isLoading: alertsDeltaLoading } = useQuery<AlertsDeltaResponse>({
+    queryKey: [alertsDeltaUrl],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const matchedTtoCount = alertsDelta?.total ?? 0;
 
   const totalNew =
     matchedTtoCount +
@@ -1085,7 +1395,7 @@ export default function Alerts() {
       </div>
 
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
-        {isLoading ? (
+        {isLoading && alertsDeltaLoading ? (
           <div className="space-y-3 max-w-2xl">
             {[1, 2, 3, 4].map((i) => (
               <Skeleton key={i} className="h-16 w-full rounded-lg" />
@@ -1100,7 +1410,11 @@ export default function Alerts() {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-4">
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} />
-              <TtoAssetsSection data={data.newAssets} onCreateAlert={() => setSheetOpen(true)} />
+              <AlertsDeltaSection
+                data={alertsDelta}
+                isLoading={alertsDeltaLoading}
+                onCreateAlert={() => setSheetOpen(true)}
+              />
               <ConceptsSection data={data.newConcepts} />
               <ProjectsSection data={data.newProjects} />
             </div>
