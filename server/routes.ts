@@ -7640,6 +7640,13 @@ If multiple assets appear, return each as a separate array item.`;
       if (!["dossier", "pipeline_brief"].includes(type)) {
         return res.status(400).json({ error: "type must be dossier or pipeline_brief" });
       }
+      const payloadSize = JSON.stringify(payload).length;
+      if (payloadSize > 64_000) {
+        return res.status(400).json({ error: "Payload too large (max 64 KB)" });
+      }
+      if (password && String(password).length > 256) {
+        return res.status(400).json({ error: "Password too long (max 256 characters)" });
+      }
 
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + Math.min(Math.max(1, expiresInDays), 30));
@@ -7659,8 +7666,9 @@ If multiple assets appear, return each as a separate array item.`;
       });
 
       const configuredBase = process.env.APP_BASE_URL?.replace(/\/$/, "");
-      const requestBase = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
-      const baseUrl = configuredBase || requestBase || `https://${req.headers.host}`;
+      const originHeader = (req.headers.origin ?? "").replace(/\/$/, "");
+      const hostFallback = `https://${req.headers.host}`;
+      const baseUrl = configuredBase || originHeader || hostFallback;
       const url = `${baseUrl}/share/${link.token}`;
 
       res.json({ token: link.token, expiresAt: link.expiresAt, url });
