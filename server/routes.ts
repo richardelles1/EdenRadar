@@ -1085,6 +1085,8 @@ export async function registerRoutes(
   // ── Pipeline ownership guard ──────────────────────────────────────────────
   async function canMutatePipeline(pipeline: { userId: string | null; orgId: number | null }, requestUserId: string | null): Promise<boolean> {
     if (!requestUserId) return false;
+    // Unclaimed pipelines (null userId) are accessible to any authenticated user — backward compat
+    if (pipeline.userId === null) return true;
     if (pipeline.userId === requestUserId) return true;
     if (pipeline.orgId) {
       const requesterOrg = await storage.getOrgForUser(requestUserId);

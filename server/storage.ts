@@ -501,7 +501,11 @@ export class DatabaseStorage implements IStorage {
 
   async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {
     const conditions: SQL[] = [];
-    if (userId) conditions.push(eq(pipelineLists.userId, userId));
+    if (userId) {
+      // Own pipelines OR unclaimed (null userId) — mirrors getSavedAssets behaviour
+      conditions.push(eq(pipelineLists.userId, userId));
+      conditions.push(isNull(pipelineLists.userId));
+    }
     if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
     if (conditions.length === 0) return [];
     return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);
