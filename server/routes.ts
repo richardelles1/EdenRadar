@@ -5944,6 +5944,8 @@ If a field cannot be determined, use "N/A".`
   // Runs SQL count(*) with the same predicates as alertMailer for an accurate total.
   app.post("/api/alerts/preview", async (req, res) => {
     try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
       const { query, modalities, stages, institutions } = req.body ?? {};
       const trimmedQuery = (query as string | undefined)?.trim();
       const hasAnyFilter =

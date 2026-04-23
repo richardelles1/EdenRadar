@@ -309,7 +309,10 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/alerts/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/alerts"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
+    },
   });
 
   return (
