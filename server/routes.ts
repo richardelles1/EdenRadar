@@ -1781,7 +1781,7 @@ export async function registerRoutes(
           rawCount: session?.rawCount ?? 0,
           newCount: session?.newCount ?? 0,
           relevantCount: session?.relevantCount ?? 0,
-          phase: session?.phase ?? null,
+          phase: (liveActiveSyncs.has(name) && session?.status !== "running") ? null : (session?.phase ?? null),
           sessionId: session?.sessionId ?? null,
           consecutiveFailures,
           health,

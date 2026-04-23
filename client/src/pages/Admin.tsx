@@ -324,6 +324,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
   const isEnriched = session?.status === "enriched" && !syncForThisInst;
   const isPushed = session?.status === "pushed" && !syncForThisInst;
   const isFailed = session?.status === "failed" && !syncForThisInst;
+  const isInterrupted = isFailed && session?.errorMessage === "Server restarted during sync";
   const isAnomalous = session?.status === "anomalous" && !syncForThisInst;
   const syncIsActive = statusData?.syncRunning ?? false;
 
@@ -424,8 +425,8 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
             </div>
             <div className="flex items-center gap-2">
               <Badge
-                variant={isPushed ? "default" : isFailed ? "destructive" : isAnomalous ? "destructive" : isEnriched ? "secondary" : "outline"}
-                className={isRunning ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800" : isAnomalous ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-800" : ""}
+                variant={isPushed ? "default" : (isFailed && !isInterrupted) ? "destructive" : isAnomalous ? "destructive" : isEnriched ? "secondary" : "outline"}
+                className={isRunning ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-800" : isInterrupted ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 border-amber-200 dark:border-amber-800" : isAnomalous ? "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-800" : ""}
                 data-testid="sync-status-badge"
               >
                 {syncForThisInst && session?.status !== "running" ? "starting…" : session.status}
@@ -509,11 +510,15 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
               </div>
 
               {isFailed && session?.errorMessage && (
-                <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-fail-reason">
-                  <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+                <div className={`flex items-start gap-3 p-4 rounded-lg border ${isInterrupted ? "border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" : "border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30"}`} data-testid="sync-fail-reason">
+                  {isInterrupted
+                    ? <AlertTriangle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                    : <XCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />}
                   <div>
-                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Collection failed</p>
-                    <p className="text-xs text-red-600 dark:text-red-500 mt-1 font-mono break-all">{session.errorMessage}</p>
+                    <p className={`text-sm font-medium ${isInterrupted ? "text-amber-700 dark:text-amber-400" : "text-red-700 dark:text-red-400"}`}>
+                      {isInterrupted ? "Interrupted by server restart" : "Collection failed"}
+                    </p>
+                    <p className={`text-xs mt-1 font-mono break-all ${isInterrupted ? "text-amber-600 dark:text-amber-500" : "text-red-600 dark:text-red-500"}`}>{session.errorMessage}</p>
                   </div>
                 </div>
               )}
@@ -565,7 +570,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
                 </div>
               )}
 
-              {isFailed && (
+              {isFailed && !session?.errorMessage && (
                 <div className="flex items-start gap-3 p-4 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="sync-failed">
                   <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
                   <div>
