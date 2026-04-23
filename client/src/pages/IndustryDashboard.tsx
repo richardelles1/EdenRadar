@@ -435,9 +435,7 @@ export default function IndustryDashboard() {
 
   const firstName = profile.userName?.trim().split(/\s+/)[0] ?? "";
 
-  const deltaTotal = deltaData?.newAssets.hasAlerts
-    ? (deltaData?.newAssets.matchedTotal ?? 0)
-    : (deltaData?.newAssets.total ?? 0);
+  const deltaTotal = deltaData?.newAssets.matchedTotal ?? 0;
 
   const rawSubtitle = deltaTotal > 0
     ? `${deltaTotal.toLocaleString()} new asset${deltaTotal !== 1 ? "s" : ""} since your last visit`

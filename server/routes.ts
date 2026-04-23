@@ -6402,6 +6402,7 @@ If a field cannot be determined, use "N/A".`
         : new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
 
       const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
 
       const [newAssetRows, newConceptRows, newProjectRows, savedAlerts] = await Promise.all([
         db
@@ -6465,9 +6466,7 @@ If a field cannot be determined, use "N/A".`
           .orderBy(desc(researchProjects.lastEditedAt))
           .limit(20),
 
-        userId
-          ? db.select().from(userAlerts).where(eq(userAlerts.userId, userId)).orderBy(desc(userAlerts.createdAt))
-          : Promise.resolve([] as typeof userAlerts.$inferSelect[]),
+        db.select().from(userAlerts).where(eq(userAlerts.userId, userId)).orderBy(desc(userAlerts.createdAt)),
       ]);
 
       // Per-asset alert matching delegated to the module-level alertMatchesAsset
