@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { getAuthHeaders } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -109,10 +110,11 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const saveMutation = useMutation({
     mutationFn: async ({ pipelineListId, pipelineId }: { pipelineListId: number | null; pipelineId?: number }) => {
       if (!effectivePayload) throw new Error("No asset payload");
+      const authHeaders = await getAuthHeaders();
       const url = pipelineId != null ? `/api/pipelines/${pipelineId}/assets` : "/api/saved-assets";
       const res = await fetch(url, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           asset_name: effectivePayload.asset_name,
           target: effectivePayload.target ?? "unknown",
@@ -151,16 +153,17 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const createAndSaveMutation = useMutation({
     mutationFn: async ({ name, shared }: { name: string; shared?: boolean }) => {
       if (!effectivePayload) throw new Error("No asset payload");
+      const authHeaders = await getAuthHeaders();
       const plRes = await fetch("/api/pipelines", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ name, shared: shared ?? false }),
       });
       if (!plRes.ok) throw new Error("Failed to create pipeline");
       const { pipeline } = await plRes.json();
       const res = await fetch(`/api/pipelines/${pipeline.id}/assets`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({
           asset_name: effectivePayload.asset_name,
           target: effectivePayload.target ?? "unknown",

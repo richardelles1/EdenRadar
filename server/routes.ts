@@ -640,13 +640,13 @@ export async function registerRoutes(
       const userOrg = await storage.getOrgForUser(userId);
       const orgId = userOrg?.id ?? null;
 
-      // Pipeline lists query: scope to the calling user and their org (if any)
+      // Pipeline lists query: scope to the calling user, their org (if any), and unclaimed (null userId) rows
       const listsQuery = orgId
         ? sql`
           SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
           FROM pipeline_lists pl
           LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
-          WHERE pl.user_id = ${userId} OR pl.org_id = ${orgId}
+          WHERE pl.user_id = ${userId} OR pl.user_id IS NULL OR pl.org_id = ${orgId}
           GROUP BY pl.id, pl.name
           ORDER BY pl.created_at DESC
         `
@@ -654,19 +654,19 @@ export async function registerRoutes(
           SELECT pl.id, pl.name, COUNT(sa.id)::int AS asset_count
           FROM pipeline_lists pl
           LEFT JOIN saved_assets sa ON sa.pipeline_list_id = pl.id
-          WHERE pl.user_id = ${userId}
+          WHERE pl.user_id = ${userId} OR pl.user_id IS NULL
           GROUP BY pl.id, pl.name
           ORDER BY pl.created_at DESC
         `;
 
       const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
         db.execute(listsQuery),
-        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId}`),
+        db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId} OR user_id IS NULL`),
         db.execute(sql`
           SELECT COUNT(DISTINCT COALESCE(ia.institution, sa.source_journal))::int AS n
           FROM saved_assets sa
           LEFT JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
-          WHERE sa.user_id = ${userId}
+          WHERE (sa.user_id = ${userId} OR sa.user_id IS NULL)
             AND COALESCE(ia.institution, sa.source_journal) IS NOT NULL
             AND COALESCE(ia.institution, sa.source_journal) != ''
             AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
@@ -6401,6 +6401,8 @@ If a field cannot be determined, use "N/A".`
         ? new Date(sinceParam)
         : new Date(Date.now() - WINDOW_HOURS * 60 * 60 * 1000);
 
+      const userId = await tryGetUserId(req);
+
       const [newAssetRows, newConceptRows, newProjectRows, savedAlerts] = await Promise.all([
         db
           .select({
@@ -6463,7 +6465,9 @@ If a field cannot be determined, use "N/A".`
           .orderBy(desc(researchProjects.lastEditedAt))
           .limit(20),
 
-        db.select().from(userAlerts).orderBy(desc(userAlerts.createdAt)),
+        userId
+          ? db.select().from(userAlerts).where(eq(userAlerts.userId, userId)).orderBy(desc(userAlerts.createdAt))
+          : Promise.resolve([] as typeof userAlerts.$inferSelect[]),
       ]);
 
       // Per-asset alert matching delegated to the module-level alertMatchesAsset
@@ -6519,10 +6523,13 @@ If a field cannot be determined, use "N/A".`
         }))
         .sort((a, b) => b.count - a.count);
 
+      const matchedTotal = byInstitution.reduce((sum, entry) => sum + entry.matchedCount, 0);
+
       const windowHours = Math.round((Date.now() - since.getTime()) / 3600000);
       res.json({
         newAssets: {
           total: newAssetRows.length,
+          matchedTotal,
           hasAlerts,
           byInstitution,
         },
