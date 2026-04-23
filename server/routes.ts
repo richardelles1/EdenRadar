@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import rateLimit from "express-rate-limit";
 import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
 import { createServer, type Server } from "http";
@@ -258,6 +259,18 @@ const DEFAULT_BUYER_PROFILE: BuyerProfile = {
   notes: "",
 };
 
+// ── Rate limiters ─────────────────────────────────────────────────────────────
+// Applied only to the four AI-backed endpoints that hit OpenAI and are
+// expensive to abuse. Limits are intentionally generous — a real user
+// clicking through the app will never approach them.
+const aiRateLimit = rateLimit({
+  windowMs: 60 * 1000,       // 1-minute rolling window
+  max: 10,                   // 10 requests per IP per minute
+  standardHeaders: "draft-7",
+  legacyHeaders: false,
+  message: { error: "Too many requests — please wait a moment before trying again." },
+});
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -271,7 +284,7 @@ export async function registerRoutes(
     res.json({ sources });
   });
 
-  app.post("/api/search", async (req, res) => {
+  app.post("/api/search", aiRateLimit, async (req, res) => {
     try {
       const { query, sources, maxPerSource, buyerProfile, field, sourceType, dateRange, technologyType, trialPhase } = searchBodySchema.parse(req.body);
       const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
@@ -702,7 +715,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/report", async (req, res) => {
+  app.post("/api/report", aiRateLimit, async (req, res) => {
     try {
       const { query, sources, maxPerSource, buyerProfile } = reportBodySchema.parse(req.body);
       const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
@@ -735,7 +748,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/dossier", async (req, res) => {
+  app.post("/api/dossier", aiRateLimit, async (req, res) => {
     try {
       const { asset } = dossierBodySchema.parse(req.body);
       if (!asset) return res.status(400).json({ error: "Asset required" });
@@ -748,7 +761,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/assets/:fingerprint/intelligence", async (req, res) => {
+  app.get("/api/assets/:fingerprint/intelligence", aiRateLimit, async (req, res) => {
     try {
       const { fingerprint } = req.params;
       if (!fingerprint) return res.status(400).json({ error: "Fingerprint required" });

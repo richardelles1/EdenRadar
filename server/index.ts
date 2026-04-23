@@ -1,4 +1,5 @@
 import express, { type Request, Response, NextFunction } from "express";
+import cors from "cors";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
@@ -65,6 +66,31 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Allow: any *.replit.app subdomain, localhost/127.0.0.1 for dev, and an
+// optional ALLOWED_ORIGIN env var for a custom production domain.
+// Explicitly rejects all other origins rather than reflecting them.
+app.use(
+  cors({
+    origin(origin, callback) {
+      // Non-browser requests (curl, server-to-server) have no Origin header —
+      // allow them so admin scripts and health checks keep working.
+      if (!origin) return callback(null, true);
+
+      const allowed =
+        /^https:\/\/[a-zA-Z0-9-]+\.replit\.app$/.test(origin) ||
+        /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin) ||
+        (process.env.ALLOWED_ORIGIN ? origin === process.env.ALLOWED_ORIGIN : false);
+
+      if (allowed) return callback(null, true);
+      // Return false — cors will send no Allow header and the browser blocks it.
+      // Do NOT call callback(new Error(...)) as that logs a noisy 500.
+      callback(null, false);
+    },
+    credentials: true,
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
