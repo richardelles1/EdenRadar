@@ -393,17 +393,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]> {
-    const conditions: SQL[] = [];
-    if (userId) {
-      // Authenticated: show the caller's own assets AND any legacy null-owner assets.
-      // This prevents cross-user data leakage for callers that properly pass userId.
-      conditions.push(or(eq(savedAssets.userId, userId), isNull(savedAssets.userId))!);
-    }
-    // No userId (unauthenticated or legacy callers): no user filter — backward compat.
+    if (!userId) return [];
+    const conditions: SQL[] = [
+      or(eq(savedAssets.userId, userId), isNull(savedAssets.userId))!,
+    ];
     if (pipelineListId === null) conditions.push(isNull(savedAssets.pipelineListId));
     else if (pipelineListId !== undefined) conditions.push(eq(savedAssets.pipelineListId, pipelineListId));
-    const where = conditions.length > 0 ? and(...conditions) : undefined;
-    return db.select().from(savedAssets).where(where).orderBy(desc(savedAssets.savedAt));
+    return db.select().from(savedAssets).where(and(...conditions)).orderBy(desc(savedAssets.savedAt));
   }
 
   async getSavedAssetsForTeam(orgId: number, filterUserId?: string): Promise<{

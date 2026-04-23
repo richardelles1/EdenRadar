@@ -1,12 +1,11 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
@@ -707,8 +706,7 @@ export default function Assets() {
   const { data, isLoading: assetsLoading } = useQuery<SavedAssetsResponse>({
     queryKey: assetsQueryKey,
     queryFn: async () => {
-      const token = (await supabase.auth.getSession()).data.session?.access_token;
-      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      const headers = await getAuthHeaders();
       if (teamScope) {
         const url = selectedMemberId
           ? `/api/saved-assets?scope=team&memberId=${encodeURIComponent(selectedMemberId)}`
