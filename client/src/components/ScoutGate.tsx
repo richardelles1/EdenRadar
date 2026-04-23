@@ -143,17 +143,19 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
                     <span className="text-[10px] text-muted-foreground border border-border rounded px-1.5 py-0.5">
                       {plan.seats}
                     </span>
-                    {plan.popular && (
-                      <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-600/10 border border-emerald-600/20 rounded px-1.5 py-0.5">
-                        Most popular
-                      </span>
-                    )}
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{plan.desc}</p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-lg font-bold text-foreground tabular-nums">{plan.price}</p>
-                  <p className="text-[10px] text-muted-foreground">/mo</p>
+                  <div className="flex items-center justify-end gap-1.5">
+                    {plan.popular && (
+                      <span className="text-[9px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-600/10 border border-emerald-600/20 rounded px-1.5 py-0.5">
+                        Most popular
+                      </span>
+                    )}
+                    <p className="text-lg font-bold text-foreground tabular-nums">{plan.price}</p>
+                    <p className="text-[10px] text-muted-foreground">/mo</p>
+                  </div>
                 </div>
               </div>
             ))}
