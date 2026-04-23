@@ -41,6 +41,7 @@ export const industryProfiles = pgTable("industry_profiles", {
   subscribedToDigest: boolean("subscribed_to_digest").notNull().default(false),
   lastAlertSentAt: timestamp("last_alert_sent_at"),
   alertLastAssetId: integer("alert_last_asset_id"),
+  lastViewedAlertsAt: timestamp("last_viewed_alerts_at"),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
 });

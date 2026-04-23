@@ -1340,6 +1340,12 @@ export default function Alerts() {
     typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
   );
 
+  useEffect(() => {
+    apiRequest("POST", "/api/alerts/mark-read").then(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
+    }).catch(() => {});
+  }, []);
+
   const deltaUrl = sinceParam
     ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
     : "/api/industry/alerts/delta";

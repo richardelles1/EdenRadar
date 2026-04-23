@@ -4,7 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -6041,6 +6041,68 @@ If a field cannot be determined, use "N/A".`
         count: Number(totalCount),
         samples,
       });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── GET /api/alerts/unread-count — backend-driven badge count ────────────
+  // Returns the number of distinct ingested assets matching any of the user's
+  // saved alerts that have arrived since last_viewed_alerts_at. Uses the same
+  // buildAlertWhere SQL predicate as alertMailer for accuracy.
+  app.get("/api/alerts/unread-count", async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.json({ count: 0 });
+
+      const [profileRow] = await db
+        .select({ lastViewedAlertsAt: industryProfiles.lastViewedAlertsAt })
+        .from(industryProfiles)
+        .where(eq(industryProfiles.userId, userId))
+        .limit(1);
+
+      const since = profileRow?.lastViewedAlertsAt
+        ? profileRow.lastViewedAlertsAt
+        : new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+      const userAlertsList = await db
+        .select()
+        .from(userAlerts)
+        .where(eq(userAlerts.userId, userId))
+        .orderBy(desc(userAlerts.createdAt));
+
+      if (userAlertsList.length === 0) return res.json({ count: 0 });
+
+      const sinceCondition = gt(ingestedAssets.firstSeenAt, since);
+      const seenIds = new Set<number>();
+      for (const alert of userAlertsList) {
+        const rows = await db
+          .select({ id: ingestedAssets.id })
+          .from(ingestedAssets)
+          .where(buildAlertWhere(alert, [sinceCondition]));
+        for (const row of rows) seenIds.add(row.id);
+      }
+
+      res.json({ count: seenIds.size });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── POST /api/alerts/mark-read — clear the unread badge ──────────────────
+  // Updates last_viewed_alerts_at on industry_profiles so subsequent calls to
+  // /api/alerts/unread-count return 0 until new assets arrive.
+  app.post("/api/alerts/mark-read", async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.json({ ok: true });
+
+      await db
+        .update(industryProfiles)
+        .set({ lastViewedAlertsAt: new Date() })
+        .where(eq(industryProfiles.userId, userId));
+
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

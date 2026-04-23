@@ -299,7 +299,7 @@ export interface IStorage {
   }>): Promise<{ updated: number; skipped: number; notFoundIds: number[] }>;
 
   getIndustryProfileByUserId(userId: string): Promise<IndustryProfileRow | undefined>;
-  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId">): Promise<IndustryProfileRow>;
+  upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt">): Promise<IndustryProfileRow>;
   getAllIndustryProfiles(): Promise<IndustryProfileRow[]>;
   setIndustryProfileOrg(userId: string, orgId: number | null): Promise<void>;
 
@@ -2628,7 +2628,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId">): Promise<IndustryProfileRow> {
+  async upsertIndustryProfile(userId: string, data: Omit<IndustryProfileRow, "userId" | "updatedAt" | "orgId" | "subscribedToDigest" | "lastAlertSentAt" | "alertLastAssetId" | "lastViewedAlertsAt">): Promise<IndustryProfileRow> {
     const [row] = await db
       .insert(industryProfiles)
       .values({ userId, ...data, updatedAt: new Date() })

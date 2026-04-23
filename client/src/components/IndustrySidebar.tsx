@@ -9,7 +9,7 @@ import {
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { getIndustryProfile } from "@/hooks/use-industry";
 import { useOrg, planTierLabel } from "@/hooks/use-org";
 import {
@@ -18,14 +18,6 @@ import {
   useSidebar,
 } from "@/components/ui/aceternity-sidebar";
 import { cn } from "@/lib/utils";
-
-const STORAGE_KEY = "edenLastSeenAlerts";
-
-type AlertsBadgeData = {
-  newAssets: { total: number };
-  newConcepts: { total: number };
-  newProjects: { total: number };
-};
 
 type NavItem = {
   href: string;
@@ -158,7 +150,7 @@ function NavButton({
             style={{ color: orgAccent }}
             data-testid="alerts-count"
           >
-            {totalAlerts}
+            {totalAlerts > 9 ? "9+" : totalAlerts}
           </span>
         )}
       </motion.span>
@@ -248,29 +240,13 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
 
-  const [sinceParam, setSinceParam] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
-  );
-
-  useEffect(() => {
-    const handler = () => setSinceParam(localStorage.getItem(STORAGE_KEY) ?? "");
-    window.addEventListener("eden-alerts-seen", handler);
-    return () => window.removeEventListener("eden-alerts-seen", handler);
-  }, []);
-
-  const deltaSidebarUrl = sinceParam
-    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
-    : "/api/industry/alerts/delta";
-
-  const { data: alertsData } = useQuery<AlertsBadgeData>({
-    queryKey: [deltaSidebarUrl],
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/alerts/unread-count"],
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 
-  const totalAlerts =
-    (alertsData?.newAssets.total ?? 0) +
-    (alertsData?.newConcepts.total ?? 0) +
-    (alertsData?.newProjects.total ?? 0);
+  const totalAlerts = unreadData?.count ?? 0;
 
   function navigate(href: string) {
     setLocation(href);
