@@ -7658,8 +7658,9 @@ If multiple assets appear, return each as a separate array item.`;
         passwordHash,
       });
 
-      const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
-      const baseUrl = origin || `https://${req.headers.host}`;
+      const configuredBase = process.env.APP_BASE_URL?.replace(/\/$/, "");
+      const requestBase = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
+      const baseUrl = configuredBase || requestBase || `https://${req.headers.host}`;
       const url = `${baseUrl}/share/${link.token}`;
 
       res.json({ token: link.token, expiresAt: link.expiresAt, url });
