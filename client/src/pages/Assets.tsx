@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -706,11 +707,13 @@ export default function Assets() {
   const { data, isLoading: assetsLoading } = useQuery<SavedAssetsResponse>({
     queryKey: assetsQueryKey,
     queryFn: async () => {
+      const token = (await supabase.auth.getSession()).data.session?.access_token;
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
       if (teamScope) {
         const url = selectedMemberId
           ? `/api/saved-assets?scope=team&memberId=${encodeURIComponent(selectedMemberId)}`
           : "/api/saved-assets?scope=team";
-        const res = await fetch(url);
+        const res = await fetch(url, { headers });
         if (!res.ok) throw new Error("Failed to load team assets");
         return res.json();
       }
@@ -719,7 +722,7 @@ export default function Assets() {
         : selectedPipeline === null
           ? "/api/saved-assets?pipelineListId=null"
           : `/api/saved-assets?pipelineListId=${selectedPipeline}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers });
       if (!res.ok) throw new Error("Failed to load assets");
       return res.json();
     },
