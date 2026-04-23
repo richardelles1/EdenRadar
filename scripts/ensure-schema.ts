@@ -199,6 +199,12 @@ async function run() {
       console.warn("ensure-schema: embedding column skipped (pgvector unavailable?):", msg);
     }
 
+    // Task #498 -- user_id on search_history for per-user scoping
+    await client.query(`
+      ALTER TABLE search_history
+      ADD COLUMN IF NOT EXISTS user_id text
+    `);
+
     console.log("ensure-schema: all column checks passed");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
