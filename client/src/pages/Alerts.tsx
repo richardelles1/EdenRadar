@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -41,12 +41,26 @@ import {
   ChevronsUpDown,
   Pencil,
   Loader2,
+  ExternalLink,
+  ArrowRight,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { UserAlert } from "@shared/schema";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
+
+function defaultSince(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 7);
+  return d.toISOString();
+}
+
+function formatSinceLabel(dateStr: string | null | undefined): string {
+  if (!dateStr) return "the last 7 days";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+}
 
 interface DeltaInstitution {
   institution: string;
@@ -93,219 +107,106 @@ interface PreviewResponse {
   samples: Array<{ id: number; assetName: string; institution: string; modality: string; developmentStage: string }>;
 }
 
-function formatRelative(dateStr: string | null | undefined): string {
-  if (!dateStr) return "last 48h";
-  const ms = Date.now() - new Date(dateStr).getTime();
-  const days = Math.floor(ms / 86400000);
-  const hours = Math.floor(ms / 3600000);
-  if (hours < 1) return "the last hour";
-  if (hours < 24) return `the last ${hours}h`;
-  if (days === 1) return "yesterday";
-  if (days < 7) return `the last ${days} days`;
-  if (days < 30) return `the last ${Math.round(days / 7)} weeks`;
-  return `the last ${Math.round(days / 30)} months`;
+function normalizeModality(m: string): string {
+  return m.toLowerCase();
 }
 
-function useBloomCard(rotateMax = 8) {
-  const cardRef = useRef<HTMLDivElement>(null);
-  const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
-  const [pressed, setPressed] = useState(false);
-  const [hovered, setHovered] = useState(false);
-
-  const handleMouseMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!cardRef.current) return;
-    const rect = cardRef.current.getBoundingClientRect();
-    const relX = (e.clientX - rect.left) / rect.width;
-    const relY = (e.clientY - rect.top) / rect.height;
-    setTilt({ x: (relY - 0.5) * -rotateMax, y: (relX - 0.5) * rotateMax, active: true });
-  }, [rotateMax]);
-
-  const handleMouseLeave = useCallback(() => {
-    setHovered(false);
-    setTilt({ x: 0, y: 0, active: false });
-    setPressed(false);
-  }, []);
-
-  const cardStyle: React.CSSProperties = {
-    willChange: "transform",
-    transformStyle: "preserve-3d",
-    transform: pressed
-      ? "perspective(1000px) scale(0.97)"
-      : tilt.active
-      ? `perspective(1000px) rotateX(${tilt.x}deg) rotateY(${tilt.y}deg)`
-      : "perspective(1000px)",
-    transition: pressed
-      ? "transform 0.07s ease-in"
-      : tilt.active
-      ? "transform 0.08s ease-out"
-      : "transform 0.5s cubic-bezier(0.23,1,0.32,1)",
-    boxShadow: hovered
-      ? "0 16px 48px rgba(0,0,0,0.18), 0 4px 12px rgba(0,0,0,0.10)"
-      : "0 4px 20px rgba(0,0,0,0.09), 0 1px 4px rgba(0,0,0,0.05)",
-  };
-
-  const bloomHandlers = {
-    onMouseMove: handleMouseMove,
-    onMouseEnter: () => setHovered(true),
-    onMouseLeave: handleMouseLeave,
-    onMouseDown: () => setPressed(true),
-    onMouseUp: () => setPressed(false),
-  };
-
-  return { cardRef, hovered, cardStyle, bloomHandlers };
+function normalizeStage(s: string): string {
+  return s.toLowerCase().replace(/\s+/g, " ");
 }
 
-function SectionHeader({
-  icon: Icon,
-  label,
-  count,
-  countLabel,
-  color,
-  expanded,
-  onToggle,
-  hasNew,
-}: {
-  icon: React.ElementType;
-  label: string;
-  count: number;
-  countLabel?: string;
-  color: string;
-  expanded: boolean;
-  onToggle: () => void;
-  hasNew?: boolean;
+function toDisplayModality(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function toDisplayStage(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function AssetRow({ id, name, institution, modality, stage, index }: {
+  id: number; name: string; institution?: string; modality?: string; stage?: string; index: number;
 }) {
   return (
-    <button
-      className="w-full flex items-center gap-3 text-left select-none"
-      onClick={onToggle}
-      data-testid={`alerts-section-${label.toLowerCase().replace(/\s+/g, "-")}`}
-    >
-      <div className={`relative w-8 h-8 rounded-md flex items-center justify-center shrink-0 ${color}`}>
-        <Icon className="w-4 h-4" />
-        {hasNew && !expanded && (
-          <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-primary border border-card" />
-        )}
+    <Link href={`/asset/${id}`}>
+      <div
+        className="flex items-center gap-3 px-3 py-2 rounded-md hover:bg-muted/60 transition-colors cursor-pointer group border border-transparent hover:border-border"
+        data-testid={`asset-row-${index}`}
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-medium text-foreground truncate">{name}</p>
+          {(institution || modality || stage) && (
+            <p className="text-[10px] text-muted-foreground truncate">
+              {[institution, modality, stage].filter(Boolean).join(" · ")}
+            </p>
+          )}
+        </div>
+        <ArrowRight className="w-3 h-3 text-muted-foreground/40 group-hover:text-muted-foreground shrink-0 transition-colors" />
       </div>
-      <div className="flex-1 min-w-0">
-        <span className="text-sm font-semibold text-foreground">{label}</span>
-      </div>
-      <Badge variant="secondary" className="shrink-0 text-[11px] tabular-nums">
-        {countLabel ?? `${count} new`}
-      </Badge>
-      {expanded ? (
-        <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-      ) : (
-        <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-      )}
-    </button>
+    </Link>
   );
 }
 
-function AlertDefinitionCard({ alert, onDelete, onEdit, isPending }: { alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean }) {
-  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
-
-  const parts = [alert.query, ...(alert.modalities ?? []), ...(alert.stages ?? [])].filter(Boolean);
+function AlertCard({ alert, onDelete, onEdit, isPending }: {
+  alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean;
+}) {
+  const parts = [alert.query, ...(alert.modalities ?? []).map(toDisplayModality), ...(alert.stages ?? []).map(toDisplayStage)].filter(Boolean);
   const draft = parts.join(" ");
 
   return (
-    <div style={{ perspective: "1000px" }} data-testid={`alert-card-${alert.id}`}>
-      <div
-        ref={cardRef}
-        className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
-        style={cardStyle}
-        {...bloomHandlers}
-      >
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            width: "56px",
-            height: "56px",
-            borderRadius: "50%",
-            background: "rgba(217, 119, 6, 0.55)",
-            top: "-28px",
-            left: "-28px",
-            transform: hovered ? "scale(26)" : "scale(1)",
-            opacity: hovered ? 0.13 : 0,
-            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-            zIndex: 1,
-          }}
-        />
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
-
-        <div
-          className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
-          style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
-          data-testid={`alert-badge-${alert.id}`}
+    <div
+      className="flex items-start gap-3 rounded-md border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-colors"
+      data-testid={`alert-card-${alert.id}`}
+    >
+      <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+      <div className="flex-1 min-w-0 space-y-1">
+        <p className="text-xs font-semibold text-foreground truncate" data-testid={`alert-title-${alert.id}`}>
+          {alert.query || "All new assets"}
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {(alert.modalities ?? []).map((m) => (
+            <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{toDisplayModality(m)}</span>
+          ))}
+          {(alert.stages ?? []).map((s) => (
+            <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{toDisplayStage(s)}</span>
+          ))}
+          {(alert.institutions ?? []).map((inst) => (
+            <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
+          ))}
+        </div>
+        {draft && (
+          <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+            <span className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
+              Explore matches →
+            </span>
+          </Link>
+        )}
+      </div>
+      <div className="flex items-center gap-1 shrink-0">
+        <button
+          onClick={() => onEdit(alert)}
+          className="text-muted-foreground hover:text-primary transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-primary/10"
+          data-testid={`button-edit-alert-${alert.id}`}
+          disabled={isPending}
         >
-          <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Filters</span>
-          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-amber-600 dark:text-amber-400">
-            {(alert.modalities?.length ?? 0) + (alert.stages?.length ?? 0) + (alert.institutions?.length ?? 0) + (alert.query ? 1 : 0)}
-          </span>
-        </div>
-
-        <div className="absolute top-2 right-2 z-[5] flex items-center gap-1">
-          <button
-            onClick={() => onEdit(alert)}
-            className="text-muted-foreground hover:text-primary transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-primary/10 active:scale-90"
-            data-testid={`button-edit-alert-${alert.id}`}
-            disabled={isPending}
-          >
-            <Pencil className="w-3 h-3" />
-          </button>
-          <button
-            onClick={() => onDelete(alert.id)}
-            className="text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10 active:scale-90"
-            data-testid={`button-delete-alert-${alert.id}`}
-            disabled={isPending}
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div className="relative z-[4] pt-7 pb-3 pl-4 pr-3">
-          <div className="space-y-1.5">
-            {draft ? (
-              <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
-                <p className="text-xs font-semibold text-foreground hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer" data-testid={`alert-title-${alert.id}`}>
-                  {alert.query || "Any query"}
-                </p>
-              </Link>
-            ) : (
-              <p className="text-xs font-semibold text-foreground" data-testid={`alert-title-${alert.id}`}>
-                {alert.query || "Any query"}
-              </p>
-            )}
-            <div className="flex flex-wrap gap-1">
-              {(alert.modalities ?? []).map((m: string) => (
-                <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{m}</span>
-              ))}
-              {(alert.stages ?? []).map((s: string) => (
-                <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{s}</span>
-              ))}
-              {(alert.institutions ?? []).map((inst: string) => (
-                <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
-              ))}
-            </div>
-            {draft && (
-              <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
-                <span className="text-[10px] text-amber-600 dark:text-amber-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
-                  Explore matches →
-                </span>
-              </Link>
-            )}
-          </div>
-        </div>
+          <Pencil className="w-3 h-3" />
+        </button>
+        <button
+          onClick={() => onDelete(alert.id)}
+          className="text-muted-foreground hover:text-destructive transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-destructive/10"
+          data-testid={`button-delete-alert-${alert.id}`}
+          disabled={isPending}
+        >
+          <Trash2 className="w-3 h-3" />
+        </button>
       </div>
     </div>
   );
 }
 
 function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
-  const [expanded, setExpanded] = useState(false);
   const [editingAlert, setEditingAlert] = useState<UserAlert | null>(null);
-  const { data: alerts = [], isLoading } = useQuery<UserAlert[]>({
-    queryKey: ["/api/alerts"],
-  });
+  const { data: alerts = [], isLoading } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) => apiRequest("DELETE", `/api/alerts/${id}`),
@@ -317,52 +218,54 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
 
   return (
     <>
-      <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-        <div className="p-4">
-          <SectionHeader
-            icon={Bell}
-            label="My Alerts"
-            count={alerts.length}
-            countLabel={`${alerts.length} saved`}
-            color="bg-emerald-500/10 text-emerald-500"
-            expanded={expanded}
-            onToggle={() => setExpanded((v) => !v)}
-            hasNew={false}
-          />
-        </div>
-        {expanded && (
-          <div className="border-t border-card-border/60 px-4 pb-4">
-            {isLoading ? (
-              <div className="pt-3 space-y-2">
-                {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
-              </div>
-            ) : alerts.length === 0 ? (
-              <div className="pt-3 space-y-2">
-                <p className="text-xs text-muted-foreground">No saved alerts yet. Use + Create Alert to set one up.</p>
-                <button
-                  onClick={onCreateAlert}
-                  className="text-xs text-primary hover:underline"
-                  data-testid="button-create-first-alert"
-                >
-                  + Create your first alert
-                </button>
-              </div>
-            ) : (
-              <div className="pt-3 space-y-2">
-                {alerts.map((alert) => (
-                  <AlertDefinitionCard
-                    key={alert.id}
-                    alert={alert}
-                    onDelete={(id) => deleteMutation.mutate(id)}
-                    onEdit={(a) => setEditingAlert(a)}
-                    isPending={deleteMutation.isPending}
-                  />
-                ))}
-              </div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <Bell className="w-4 h-4 text-emerald-500" />
+            My Saved Alerts
+            {alerts.length > 0 && (
+              <Badge variant="secondary" className="text-[11px] tabular-nums">{alerts.length}</Badge>
             )}
+          </h2>
+          <button
+            onClick={onCreateAlert}
+            className="text-xs text-primary hover:underline flex items-center gap-1"
+            data-testid="button-create-alert-inline"
+          >
+            <Plus className="w-3 h-3" /> Add alert
+          </button>
+        </div>
+
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2].map((i) => <Skeleton key={i} className="h-14 w-full rounded-md" />)}
+          </div>
+        ) : alerts.length === 0 ? (
+          <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-5 text-center space-y-2" data-testid="alerts-empty-state">
+            <p className="text-xs text-muted-foreground">No saved alerts yet. Create one to personalise your TTO asset feed.</p>
+            <button
+              onClick={onCreateAlert}
+              className="text-xs text-primary hover:underline"
+              data-testid="button-create-first-alert"
+            >
+              + Create your first alert
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map((alert) => (
+              <AlertCard
+                key={alert.id}
+                alert={alert}
+                onDelete={(id) => deleteMutation.mutate(id)}
+                onEdit={(a) => setEditingAlert(a)}
+                isPending={deleteMutation.isPending}
+              />
+            ))}
           </div>
         )}
       </div>
+
       {editingAlert && (
         <EditAlertSheet alert={editingAlert} onClose={() => setEditingAlert(null)} />
       )}
@@ -370,402 +273,303 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   );
 }
 
-function TtoAssetsSection({
-  data,
+function InstitutionGroup({ inst, matchLabel }: { inst: DeltaInstitution; matchLabel?: string }) {
+  const [open, setOpen] = useState(false);
+  const assets = matchLabel ? inst.matchedSampleAssets : inst.sampleAssets;
+  const count = matchLabel ? inst.matchedCount : inst.count;
+
+  return (
+    <div className="rounded-md border border-border overflow-hidden" data-testid={`inst-group-${inst.institution}`}>
+      <button
+        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Building2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        <span className="flex-1 text-xs font-semibold text-foreground truncate">{inst.institution}</span>
+        {matchLabel && (
+          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium truncate max-w-[80px] hidden sm:inline-block" title={matchLabel}>
+            {matchLabel}
+          </span>
+        )}
+        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          +{count}
+        </Badge>
+        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />}
+      </button>
+      {open && assets.length > 0 && (
+        <div className="border-t border-border px-2 py-2 space-y-0.5 bg-muted/20">
+          {assets.map((asset, i) => (
+            <AssetRow key={asset.id} id={asset.id} name={asset.name} index={i} />
+          ))}
+          {count > assets.length && (
+            <p className="text-[10px] text-muted-foreground px-3 pt-1">+{count - assets.length} more</p>
+          )}
+          <Link
+            href={`/scout?q=${encodeURIComponent(inst.institution)}`}
+            className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline px-3 pt-1 pb-0.5 transition-colors"
+            data-testid={`alert-scout-link-${inst.institution}`}
+          >
+            Search Scout for {inst.institution} assets →
+          </Link>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AlertBucket({ bucket }: { bucket: AlertDeltaBucket }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="rounded-md border border-border overflow-hidden" data-testid={`alert-bucket-${bucket.alertId}`}>
+      <button
+        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        <span className="flex-1 text-xs font-semibold text-foreground truncate">{bucket.alertName}</span>
+        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+          +{bucket.matchCount}
+        </Badge>
+        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />}
+      </button>
+      {open && bucket.samples.length > 0 && (
+        <div className="border-t border-border px-2 py-2 space-y-0.5 bg-muted/20">
+          {bucket.samples.map((asset, j) => (
+            <AssetRow key={asset.id} id={asset.id} name={asset.assetName} institution={asset.institution} modality={asset.modality} stage={asset.developmentStage} index={j} />
+          ))}
+          {bucket.matchCount > bucket.samples.length && (
+            <p className="text-[10px] text-muted-foreground px-3 pt-1">+{bucket.matchCount - bucket.samples.length} more</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NewTtoAssetsSection({
+  industryData,
+  alertsDelta,
+  alertsDeltaLoading,
+  hasAlerts,
   onCreateAlert,
 }: {
-  data: IndustryDeltaResponse["newAssets"];
+  industryData: IndustryDeltaResponse["newAssets"] | undefined;
+  alertsDelta: AlertsDeltaResponse | undefined;
+  alertsDeltaLoading: boolean;
+  hasAlerts: boolean;
   onCreateAlert: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const matched = data.byInstitution.filter((inst) => inst.matchedBy !== null);
-  const matchedTotal = matched.reduce((s, inst) => s + inst.matchedCount, 0);
-  const displayCount = data.hasAlerts ? matchedTotal : data.total;
+  const hasMatchedAlerts = !!(alertsDelta && alertsDelta.byAlert.length > 0);
+  const unfilteredInstitutions = industryData?.byInstitution ?? [];
+  const totalUnfiltered = industryData?.total ?? 0;
 
   return (
-    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-      <div className="p-4">
-        <SectionHeader
-          icon={Package}
-          label="TTO Assets"
-          count={displayCount}
-          color="bg-primary/10 text-primary"
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          hasNew={displayCount > 0}
-        />
-      </div>
-      {expanded && (
-        <div className="border-t border-card-border/60 px-4 pb-4">
-          {!data.hasAlerts ? (
-            <div className="pt-3 space-y-2">
-              <p className="text-xs text-muted-foreground">
-                Create a saved alert to personalise this feed. We'll highlight new TTO assets matching your criteria.
-              </p>
-              <button
-                onClick={onCreateAlert}
-                className="text-xs text-primary hover:underline"
-                data-testid="button-create-alert-from-tto"
-              >
-                + Create your first alert
-              </button>
-            </div>
-          ) : matched.length === 0 ? (
-            <p className="text-xs text-muted-foreground pt-3">
-              {data.total > 0
-                ? "No new assets match your saved alert criteria. Try broadening your alert filters."
-                : "No new TTO assets since your last visit. Check back soon."}
-            </p>
-          ) : (
-            <div className="pt-3 space-y-2">
-              <p className="text-[10px] text-muted-foreground/70 pb-1">Matching your alerts</p>
-              {matched.map((inst, i) => (
-                <InstitutionRow key={inst.institution} inst={inst} index={i} matchLabel={inst.matchedBy!} />
-              ))}
-            </div>
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <Package className="w-4 h-4 text-emerald-500" />
+          New TTO Assets
+          {hasMatchedAlerts && (
+            <Badge variant="secondary" className="text-[11px] tabular-nums bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              +{alertsDelta!.total}
+            </Badge>
           )}
+          {!hasMatchedAlerts && totalUnfiltered > 0 && (
+            <Badge variant="secondary" className="text-[11px] tabular-nums">+{totalUnfiltered}</Badge>
+          )}
+        </h2>
+      </div>
+
+      {!hasAlerts && (
+        <div className="rounded-md border border-dashed border-primary/30 bg-primary/5 px-4 py-3 flex items-start gap-3" data-testid="alerts-setup-prompt">
+          <Bell className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-medium text-foreground">Set up an alert to personalise this feed</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Below are all new assets — create a saved alert to filter by modality, stage, or institution.</p>
+            <button
+              onClick={onCreateAlert}
+              className="text-xs text-primary hover:underline mt-1"
+              data-testid="button-create-alert-from-tto"
+            >
+              + Create an alert →
+            </button>
+          </div>
         </div>
+      )}
+
+      {alertsDeltaLoading ? (
+        <div className="space-y-2">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-11 w-full rounded-md" />)}
+        </div>
+      ) : hasMatchedAlerts ? (
+        <div className="space-y-2">
+          <p className="text-[10px] text-muted-foreground/70 px-0.5">Matched by your alerts</p>
+          {alertsDelta!.byAlert.map((bucket) => (
+            <AlertBucket key={bucket.alertId} bucket={bucket} />
+          ))}
+        </div>
+      ) : hasAlerts ? (
+        <p className="text-xs text-muted-foreground py-3 px-1" data-testid="no-alert-matches">
+          No new assets match your saved alert criteria. Try broadening your filters, or see all new assets below.
+        </p>
+      ) : null}
+
+      {!hasMatchedAlerts && unfilteredInstitutions.length > 0 && (
+        <div className="space-y-2">
+          {hasAlerts && <p className="text-[10px] text-muted-foreground/70 px-0.5">All new assets by institution</p>}
+          {unfilteredInstitutions.map((inst, i) => (
+            <InstitutionGroup key={inst.institution} inst={inst} />
+          ))}
+        </div>
+      )}
+
+      {!hasMatchedAlerts && !alertsDeltaLoading && unfilteredInstitutions.length === 0 && totalUnfiltered === 0 && (
+        <p className="text-xs text-muted-foreground py-3 px-1" data-testid="no-new-assets">
+          No new TTO assets since your last visit. Check back soon.
+        </p>
       )}
     </div>
   );
 }
 
-function MiniAssetBloomCard({ asset, index }: { asset: { id: number; name: string }; index: number }) {
-  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(5);
-  return (
-    <div style={{ perspective: "1000px" }}>
-      <Link href={`/asset/${asset.id}`}>
-        <div
-          ref={cardRef}
-          className="relative rounded-[11px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
-          style={cardStyle}
-          {...bloomHandlers}
-          data-testid={`alert-asset-mini-${index}`}
-        >
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              width: "40px",
-              height: "40px",
-              borderRadius: "50%",
-              background: "rgba(38, 122, 70, 0.55)",
-              top: "-20px",
-              left: "-20px",
-              transform: hovered ? "scale(22)" : "scale(1)",
-              opacity: hovered ? 0.13 : 0,
-              transition: "transform 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-              zIndex: 1,
-            }}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
-          <div
-            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-1.5 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "17px 0 10px 0", minWidth: "30px" }}
-          >
-            <span className="text-[7px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">New</span>
-            <span className="font-mono text-[9px] font-bold leading-tight mt-0.5 text-emerald-600 dark:text-emerald-400">TTO</span>
-          </div>
-          <div className="relative z-[4] pl-4 pr-3 pt-5 pb-2 flex items-center justify-between gap-2">
-            <span className="text-[11px] font-medium text-foreground truncate">{asset.name}</span>
-            <span className="text-[10px] text-primary shrink-0 font-medium">View →</span>
-          </div>
-        </div>
-      </Link>
-    </div>
-  );
-}
-
-function InstitutionRow({ inst, index, matchLabel }: { inst: DeltaInstitution; index: number; matchLabel?: string }) {
-  const [open, setOpen] = useState(false);
-  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(6);
+function OtherActivitySection({
+  concepts,
+  projects,
+}: {
+  concepts: IndustryDeltaResponse["newConcepts"];
+  projects: IndustryDeltaResponse["newProjects"];
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const totalActivity = concepts.total + projects.total;
 
   return (
-    <div style={{ perspective: "1000px" }} data-testid={`delta-card-${index}`}>
-      <div
-        ref={cardRef}
-        className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10"
-        style={cardStyle}
-        {...bloomHandlers}
+    <div className="rounded-lg border border-border bg-card overflow-hidden">
+      <button
+        className="w-full flex items-center gap-3 text-left px-4 py-3 hover:bg-muted/30 transition-colors"
+        onClick={() => setExpanded((v) => !v)}
+        data-testid="other-activity-toggle"
       >
-        <div
-          className="absolute pointer-events-none"
-          style={{
-            width: "56px",
-            height: "56px",
-            borderRadius: "50%",
-            background: "rgba(38, 122, 70, 0.55)",
-            top: "-28px",
-            left: "-28px",
-            transform: hovered ? "scale(26)" : "scale(1)",
-            opacity: hovered ? 0.13 : 0,
-            transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-            zIndex: 1,
-          }}
-        />
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+        <div className="w-7 h-7 rounded-md bg-muted flex items-center justify-center shrink-0">
+          <Lightbulb className="w-3.5 h-3.5 text-muted-foreground" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <span className="text-sm font-semibold text-foreground">Other Activity</span>
+          <p className="text-[10px] text-muted-foreground/70">Platform-wide concepts &amp; research projects</p>
+        </div>
+        <Badge variant="secondary" className="shrink-0 text-[11px] tabular-nums">
+          {totalActivity} new
+        </Badge>
+        {expanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+      </button>
 
-        <div className="relative z-[4]">
-          <div
-            className="flex items-center gap-2.5 pl-4 pr-3 py-3 cursor-pointer"
-            onClick={() => setOpen((v) => !v)}
-          >
-            <Building2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            <span className="flex-1 text-xs font-semibold text-foreground truncate">{inst.institution}</span>
-            {matchLabel && (
-              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium truncate max-w-[80px] hidden sm:inline-block" title={matchLabel}>
-                {matchLabel}
-              </span>
-            )}
-            <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              +{matchLabel ? inst.matchedCount : inst.count}
-            </Badge>
-            {open ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-          </div>
-          {open && (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length > 0 && (
-            <div className="px-3 pb-3 border-t border-white/20 dark:border-white/10">
-              <div className="space-y-1.5 pt-2">
-                {(matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).map((asset, i) => (
-                  <MiniAssetBloomCard key={asset.id} asset={asset} index={i} />
+      {expanded && (
+        <div className="border-t border-border px-4 py-4 space-y-5">
+          {concepts.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                <span className="text-xs font-semibold text-foreground">New Concepts</span>
+                <Badge variant="secondary" className="text-[11px] tabular-nums">{concepts.total}</Badge>
+              </div>
+              <div className="space-y-0.5">
+                {concepts.items.map((concept) => (
+                  <Link href={`/discovery/concept/${concept.id}`} key={concept.id}>
+                    <div
+                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
+                      data-testid={`alert-concept-${concept.id}`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shrink-0 mt-1" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{concept.title}</p>
+                        {concept.oneLiner && (
+                          <p className="text-[10px] text-muted-foreground truncate">{concept.oneLiner}</p>
+                        )}
+                        {(concept.therapeuticArea || concept.submitterAffiliation) && (
+                          <p className="text-[10px] text-muted-foreground/70 truncate">
+                            {[concept.therapeuticArea, concept.submitterAffiliation].filter(Boolean).join(" · ")}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
                 ))}
               </div>
-              {(matchLabel ? inst.matchedCount : inst.count) > (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length && (
-                <p className="text-[10px] text-muted-foreground mt-1.5">
-                  +{(matchLabel ? inst.matchedCount : inst.count) - (matchLabel ? inst.matchedSampleAssets : inst.sampleAssets).length} more
-                </p>
-              )}
-              <Link
-                href={`/scout?q=${encodeURIComponent(inst.institution)}`}
-                className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline mt-2 transition-colors"
-                data-testid={`alert-scout-link-${inst.institution}`}
-              >
-                Search Scout for {inst.institution} assets
-              </Link>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-type ConceptItem = IndustryDeltaResponse["newConcepts"]["items"][number];
-type ProjectItem = IndustryDeltaResponse["newProjects"]["items"][number];
-
-function ConceptAlertCard({ concept }: { concept: ConceptItem }) {
-  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
-  return (
-    <div style={{ perspective: "1000px" }} data-testid={`alert-concept-${concept.id}`}>
-      <Link href={`/discovery/concept/${concept.id}`}>
-        <div
-          ref={cardRef}
-          className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
-          style={cardStyle}
-          {...bloomHandlers}
-        >
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              width: "56px",
-              height: "56px",
-              borderRadius: "50%",
-              background: "rgba(217, 119, 6, 0.55)",
-              top: "-28px",
-              left: "-28px",
-              transform: hovered ? "scale(26)" : "scale(1)",
-              opacity: hovered ? 0.13 : 0,
-              transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-              zIndex: 1,
-            }}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#d97706" }} />
-
-          <div
-            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-amber-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
-          >
-            <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Idea</span>
-            <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-amber-600 dark:text-amber-400">
-              {concept.therapeuticArea ? concept.therapeuticArea.slice(0, 2).toUpperCase() : "—"}
-            </span>
-          </div>
-
-          <div className="relative z-[4] pl-4 pr-3 pt-7 pb-3">
-            <p className="text-xs font-semibold text-foreground truncate">{concept.title}</p>
-            {concept.oneLiner && (
-              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">{concept.oneLiner}</p>
-            )}
-            <div className="flex items-center gap-2 mt-1.5">
-              {concept.therapeuticArea && (
-                <span className="text-[10px] text-amber-600 dark:text-amber-400">{concept.therapeuticArea}</span>
-              )}
-              {concept.submitterAffiliation && (
-                <span className="text-[10px] text-muted-foreground truncate">{concept.submitterAffiliation}</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </Link>
-    </div>
-  );
-}
-
-function ProjectAlertCard({ proj }: { proj: ProjectItem }) {
-  const { cardRef, hovered, cardStyle, bloomHandlers } = useBloomCard(7);
-  return (
-    <div style={{ perspective: "1000px" }} data-testid={`alert-project-${proj.id}`}>
-      <Link href="/industry/projects">
-        <div
-          ref={cardRef}
-          className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10 cursor-pointer"
-          style={cardStyle}
-          {...bloomHandlers}
-        >
-          <div
-            className="absolute pointer-events-none"
-            style={{
-              width: "56px",
-              height: "56px",
-              borderRadius: "50%",
-              background: "rgba(124, 58, 237, 0.55)",
-              top: "-28px",
-              left: "-28px",
-              transform: hovered ? "scale(26)" : "scale(1)",
-              opacity: hovered ? 0.13 : 0,
-              transition: "transform 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease",
-              zIndex: 1,
-            }}
-          />
-          <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#7c3aed" }} />
-
-          <div
-            className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-violet-500/40 bg-white dark:bg-zinc-900"
-            style={{ borderRadius: "17px 0 10px 0", minWidth: "34px" }}
-          >
-            <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Lab</span>
-            <span className="font-mono text-xs font-bold leading-tight mt-0.5 text-violet-600 dark:text-violet-400">
-              {proj.researchArea ? proj.researchArea.slice(0, 2).toUpperCase() : "—"}
-            </span>
-          </div>
-
-          <div className="relative z-[4] pl-4 pr-3 pt-7 pb-3">
-            <p className="text-xs font-semibold text-foreground truncate">
-              {proj.discoveryTitle || proj.title}
-            </p>
-            {(proj.discoverySummary || proj.description) && (
-              <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
-                {proj.discoverySummary || proj.description}
-              </p>
-            )}
-            <div className="flex items-center justify-between mt-1.5 gap-2">
-              <div className="flex items-center gap-2 flex-wrap min-w-0">
-                {proj.researchArea && (
-                  <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
-                )}
-                {(proj.projectContributors ?? [])[0]?.institution && (
-                  <span className="text-[10px] text-muted-foreground truncate">
-                    {(proj.projectContributors ?? [])[0].institution}
-                  </span>
-                )}
-                <span className="text-[10px] text-muted-foreground/60 capitalize">{proj.status}</span>
-              </div>
-              {proj.projectUrl && (
-                <a
-                  href={proj.projectUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => e.stopPropagation()}
-                  className="text-[10px] text-violet-500 hover:underline shrink-0"
-                  data-testid={`alert-project-source-${proj.id}`}
-                >
-                  Source
-                </a>
-              )}
-            </div>
-          </div>
-        </div>
-      </Link>
-    </div>
-  );
-}
-
-function ConceptsSection({ data }: { data: IndustryDeltaResponse["newConcepts"] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-      <div className="p-4">
-        <SectionHeader
-          icon={Lightbulb}
-          label="New Concepts"
-          count={data.total}
-          color="bg-amber-500/10 text-amber-500"
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          hasNew={data.total > 0}
-        />
-      </div>
-      {expanded && (
-        <div className="border-t border-card-border/60 px-4 pb-4">
-          {data.total === 0 ? (
-            <p className="text-xs text-muted-foreground pt-3">
-              No new concepts since your last visit. Check back soon.
-            </p>
-          ) : (
-            <div className="pt-3 space-y-2">
-              {data.items.map((concept) => (
-                <ConceptAlertCard key={concept.id} concept={concept} />
-              ))}
-              {data.total > data.items.length && (
+              {concepts.total > concepts.items.length && (
                 <Link href="/industry/concepts">
-                  <p className="text-xs text-primary hover:underline cursor-pointer">
-                    +{data.total - data.items.length} more, view all concepts
+                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
+                    +{concepts.total - concepts.items.length} more — view all concepts
                   </p>
                 </Link>
               )}
             </div>
           )}
-        </div>
-      )}
-    </div>
-  );
-}
 
-function ProjectsSection({ data }: { data: IndustryDeltaResponse["newProjects"] }) {
-  const [expanded, setExpanded] = useState(false);
+          {concepts.total === 0 && (
+            <p className="text-xs text-muted-foreground">No new concepts since your last visit.</p>
+          )}
 
-  return (
-    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-      <div className="p-4">
-        <SectionHeader
-          icon={FlaskConical}
-          label="Research Projects"
-          count={data.total}
-          color="bg-violet-500/10 text-violet-500"
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          hasNew={data.total > 0}
-        />
-      </div>
-      {expanded && (
-        <div className="border-t border-card-border/60 px-4 pb-4">
-          {data.total === 0 ? (
-            <p className="text-xs text-muted-foreground pt-3">
-              No new research projects since your last visit. Check back soon.
-            </p>
-          ) : (
-            <div className="pt-3 space-y-2">
-              {data.items.map((proj) => (
-                <ProjectAlertCard key={proj.id} proj={proj} />
-              ))}
-              {data.total > data.items.length && (
+          {projects.total > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <FlaskConical className="w-3.5 h-3.5 text-violet-500" />
+                <span className="text-xs font-semibold text-foreground">Research Projects</span>
+                <Badge variant="secondary" className="text-[11px] tabular-nums">{projects.total}</Badge>
+              </div>
+              <div className="space-y-0.5">
+                {projects.items.map((proj) => (
+                  <Link href="/industry/projects" key={proj.id}>
+                    <div
+                      className="flex items-start gap-2 px-2 py-2 rounded-md hover:bg-muted/50 transition-colors cursor-pointer"
+                      data-testid={`alert-project-${proj.id}`}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-violet-400 shrink-0 mt-1" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-foreground truncate">{proj.discoveryTitle || proj.title}</p>
+                        {(proj.discoverySummary || proj.description) && (
+                          <p className="text-[10px] text-muted-foreground line-clamp-1">
+                            {proj.discoverySummary || proj.description}
+                          </p>
+                        )}
+                        <div className="flex items-center gap-2 mt-0.5">
+                          {proj.researchArea && (
+                            <span className="text-[10px] text-violet-500">{proj.researchArea}</span>
+                          )}
+                          {(proj.projectContributors ?? [])[0]?.institution && (
+                            <span className="text-[10px] text-muted-foreground truncate">
+                              {(proj.projectContributors ?? [])[0].institution}
+                            </span>
+                          )}
+                          {proj.projectUrl && (
+                            <a
+                              href={proj.projectUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[10px] text-violet-500 hover:underline flex items-center gap-0.5"
+                              data-testid={`alert-project-source-${proj.id}`}
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" /> Source
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              {projects.total > projects.items.length && (
                 <Link href="/industry/projects">
-                  <p className="text-xs text-primary hover:underline cursor-pointer">
-                    +{data.total - data.items.length} more, view all projects
+                  <p className="text-xs text-primary hover:underline cursor-pointer px-2">
+                    +{projects.total - projects.items.length} more — view all projects
                   </p>
                 </Link>
               )}
             </div>
+          )}
+
+          {projects.total === 0 && (
+            <p className="text-xs text-muted-foreground">No new research projects since your last visit.</p>
           )}
         </div>
       )}
@@ -796,16 +600,8 @@ function MultiSelectCombobox({
 }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-
-  const filtered = options.filter((o) =>
-    o.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const label = selected.length === 0
-    ? placeholder
-    : selected.length === 1
-      ? selected[0]
-      : `${selected.length} selected`;
+  const filtered = options.filter((o) => o.toLowerCase().includes(search.toLowerCase()));
+  const label = selected.length === 0 ? placeholder : selected.length === 1 ? selected[0] : `${selected.length} selected`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -814,28 +610,18 @@ function MultiSelectCombobox({
           className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm text-left hover:bg-accent/20 transition-colors"
           data-testid={testId}
         >
-          <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground truncate"}>
-            {label}
-          </span>
+          <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground truncate"}>{label}</span>
           <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
         <Command>
-          <CommandInput
-            placeholder={searchPlaceholder}
-            value={search}
-            onValueChange={setSearch}
-          />
+          <CommandInput placeholder={searchPlaceholder} value={search} onValueChange={setSearch} />
           <CommandList>
             <CommandEmpty>No options found.</CommandEmpty>
             <CommandGroup>
               {filtered.map((opt) => (
-                <CommandItem
-                  key={opt}
-                  onSelect={() => onToggle(opt)}
-                  className="flex items-center gap-2"
-                >
+                <CommandItem key={opt} onSelect={() => onToggle(opt)} className="flex items-center gap-2">
                   <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected.includes(opt) ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
                     {selected.includes(opt) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                   </div>
@@ -850,30 +636,15 @@ function MultiSelectCombobox({
   );
 }
 
-function InstitutionCombobox({
-  selected,
-  onToggle,
-}: {
-  selected: string[];
-  onToggle: (val: string) => void;
-}) {
+function InstitutionCombobox({ selected, onToggle }: { selected: string[]; onToggle: (val: string) => void }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-
   const { data: allInstitutions = [] } = useQuery<string[]>({
     queryKey: ["/api/ingest/institutions/names"],
     staleTime: 10 * 60 * 1000,
   });
-
-  const filtered = allInstitutions.filter((inst) =>
-    inst.toLowerCase().includes(search.toLowerCase())
-  ).slice(0, 100);
-
-  const label = selected.length === 0
-    ? "All institutions"
-    : selected.length === 1
-      ? selected[0]
-      : `${selected.length} selected`;
+  const filtered = allInstitutions.filter((inst) => inst.toLowerCase().includes(search.toLowerCase())).slice(0, 100);
+  const label = selected.length === 0 ? "All institutions" : selected.length === 1 ? selected[0] : `${selected.length} selected`;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -882,28 +653,18 @@ function InstitutionCombobox({
           className="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm text-left hover:bg-accent/20 transition-colors"
           data-testid="select-alert-institutions"
         >
-          <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground truncate"}>
-            {label}
-          </span>
+          <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground truncate"}>{label}</span>
           <ChevronsUpDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-2" />
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-72 p-0" align="start">
         <Command shouldFilter={false}>
-          <CommandInput
-            placeholder="Type to search institutions..."
-            value={search}
-            onValueChange={setSearch}
-          />
+          <CommandInput placeholder="Type to search institutions..." value={search} onValueChange={setSearch} />
           <CommandList className="max-h-60">
             <CommandEmpty>No institutions found.</CommandEmpty>
             <CommandGroup>
               {filtered.map((inst) => (
-                <CommandItem
-                  key={inst}
-                  onSelect={() => onToggle(inst)}
-                  className="flex items-center gap-2"
-                >
+                <CommandItem key={inst} onSelect={() => onToggle(inst)} className="flex items-center gap-2">
                   <div className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 ${selected.includes(inst) ? "bg-primary border-primary" : "border-muted-foreground/30"}`}>
                     {selected.includes(inst) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
                   </div>
@@ -918,111 +679,11 @@ function InstitutionCombobox({
   );
 }
 
-function AlertsDeltaSection({
-  data,
-  isLoading,
-  onCreateAlert,
-}: {
-  data: AlertsDeltaResponse | undefined;
-  isLoading: boolean;
-  onCreateAlert: () => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const [openBuckets, setOpenBuckets] = useState<Set<number>>(new Set());
-  const displayCount = data?.total ?? 0;
-
-  function toggleBucket(alertId: number) {
-    setOpenBuckets((prev) => {
-      const next = new Set(prev);
-      next.has(alertId) ? next.delete(alertId) : next.add(alertId);
-      return next;
-    });
-  }
-
-  return (
-    <div className="rounded-lg border border-card-border bg-card overflow-hidden">
-      <div className="p-4">
-        <SectionHeader
-          icon={Package}
-          label="TTO Assets"
-          count={displayCount}
-          color="bg-primary/10 text-primary"
-          expanded={expanded}
-          onToggle={() => setExpanded((v) => !v)}
-          hasNew={displayCount > 0}
-        />
-      </div>
-      {expanded && (
-        <div className="border-t border-card-border/60 px-4 pb-4">
-          {isLoading ? (
-            <div className="pt-3 space-y-2">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-12 w-full rounded-md" />)}
-            </div>
-          ) : !data || data.byAlert.length === 0 ? (
-            <div className="pt-3 space-y-2">
-              <p className="text-xs text-muted-foreground">
-                {data
-                  ? "No new TTO assets match your saved alert criteria. Try broadening your filters or checking back after the next sync."
-                  : "Create a saved alert to filter TTO asset notifications to your thesis."}
-              </p>
-              {!data && (
-                <button onClick={onCreateAlert} className="text-xs text-primary hover:underline" data-testid="button-create-alert-from-tto">
-                  + Create your first alert
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="pt-3 space-y-2">
-              <p className="text-[10px] text-muted-foreground/70 pb-1">Grouped by alert</p>
-              {data.byAlert.map((bucket) => (
-                <div key={bucket.alertId} data-testid={`alert-bucket-${bucket.alertId}`}>
-                  <div className="relative rounded-[13px] overflow-hidden bg-white dark:bg-zinc-900 border border-white/90 dark:border-white/10">
-                    <div className="absolute left-0 top-0 bottom-0 w-[3px]" style={{ background: "#22c55e" }} />
-                    <div
-                      className="flex items-center gap-2.5 pl-4 pr-3 py-3 cursor-pointer"
-                      onClick={() => toggleBucket(bucket.alertId)}
-                    >
-                      <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                      <span className="flex-1 text-xs font-semibold text-foreground truncate">{bucket.alertName}</span>
-                      <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                        +{bucket.matchCount}
-                      </Badge>
-                      {openBuckets.has(bucket.alertId) ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-                    </div>
-                    {openBuckets.has(bucket.alertId) && bucket.samples.length > 0 && (
-                      <div className="px-3 pb-3 border-t border-white/20 dark:border-white/10">
-                        <div className="space-y-1.5 pt-2">
-                          {bucket.samples.map((asset, j) => (
-                            <MiniAssetBloomCard key={asset.id} asset={{ id: asset.id, name: asset.assetName }} index={j} />
-                          ))}
-                        </div>
-                        {bucket.matchCount > bucket.samples.length && (
-                          <p className="text-[10px] text-muted-foreground mt-1.5">
-                            +{bucket.matchCount - bucket.samples.length} more
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function AlertPreviewSection({ query, modalities, stages, institutions }: {
-  query: string;
-  modalities: string[];
-  stages: string[];
-  institutions: string[];
+  query: string; modalities: string[]; stages: string[]; institutions: string[];
 }) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-
   const hasAnyFilter = !!(query.trim()) || modalities.length > 0 || stages.length > 0 || institutions.length > 0;
 
   useEffect(() => {
@@ -1032,8 +693,8 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
       try {
         const res = await apiRequest("POST", "/api/alerts/preview", {
           query: query.trim() || null,
-          modalities: modalities.map((m) => m.toLowerCase().replace(/\s+/g, "-")),
-          stages: stages.map((s) => s.toLowerCase().replace(/\s+/g, "-")),
+          modalities: modalities.map(normalizeModality),
+          stages: stages.map(normalizeStage),
           institutions,
         });
         const data = await res.json();
@@ -1076,18 +737,82 @@ function AlertPreviewSection({ query, modalities, stages, institutions }: {
   );
 }
 
+function AlertFormFields({
+  query, setQuery,
+  modalities, stages, institutions,
+  toggleModality, toggleStage, toggleInstitution,
+  idPrefix,
+}: {
+  query: string; setQuery: (v: string) => void;
+  modalities: string[]; stages: string[]; institutions: string[];
+  toggleModality: (v: string) => void; toggleStage: (v: string) => void; toggleInstitution: (v: string) => void;
+  idPrefix: string;
+}) {
+  return (
+    <>
+      <div className="space-y-2">
+        <Label htmlFor={`${idPrefix}-query`}>Query</Label>
+        <Input
+          id={`${idPrefix}-query`}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="e.g. CAR-T solid tumor preclinical"
+          data-testid={`input-${idPrefix}-query`}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label>Modality</Label>
+        <MultiSelectCombobox options={MODALITY_OPTIONS} selected={modalities} onToggle={toggleModality} placeholder="Any modality" searchPlaceholder="Search modalities..." testId={`select-${idPrefix}-modality`} />
+        {modalities.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {modalities.map((m) => (
+              <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
+                {m}<button onClick={() => toggleModality(m)} className="hover:text-destructive">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>Stage</Label>
+        <MultiSelectCombobox options={STAGE_OPTIONS} selected={stages} onToggle={toggleStage} placeholder="Any stage" searchPlaceholder="Search stages..." testId={`select-${idPrefix}-stage`} />
+        {stages.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {stages.map((s) => (
+              <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 flex items-center gap-1">
+                {s}<button onClick={() => toggleStage(s)} className="hover:text-destructive">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label>Institutions</Label>
+        <InstitutionCombobox selected={institutions} onToggle={toggleInstitution} />
+        {institutions.length > 0 && (
+          <div className="flex flex-wrap gap-1 pt-1">
+            {institutions.map((inst) => (
+              <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1 max-w-[150px]">
+                <span className="truncate">{inst}</span>
+                <button onClick={() => toggleInstitution(inst)} className="hover:text-destructive shrink-0">×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+      <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+    </>
+  );
+}
+
 function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => void }) {
   const { toast } = useToast();
-
-  function toDisplayModality(s: string) { return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
-  function toDisplayStage(s: string) { return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()); }
-
   const [query, setQuery] = useState(alert.query ?? "");
   const [modalities, setModalities] = useState<string[]>((alert.modalities ?? []).map(toDisplayModality));
   const [stages, setStages] = useState<string[]>((alert.stages ?? []).map(toDisplayStage));
   const [institutions, setInstitutions] = useState<string[]>(alert.institutions ?? []);
 
-  function toggleItem(arr: string[], setArr: (v: string[]) => void, val: string) {
+  function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
     setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   }
 
@@ -1095,8 +820,8 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
     mutationFn: () =>
       apiRequest("PUT", `/api/alerts/${alert.id}`, {
         query: query.trim() || null,
-        modalities: modalities.map((m) => m.toLowerCase().replace(/\s+/g, "-")),
-        stages: stages.map((s) => s.toLowerCase().replace(/\s+/g, "-")),
+        modalities: modalities.map(normalizeModality),
+        stages: stages.map(normalizeStage),
         institutions,
       }),
     onSuccess: () => {
@@ -1126,51 +851,14 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
           <SheetDescription>Update your saved alert criteria.</SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="edit-alert-query">Query</Label>
-            <Input id="edit-alert-query" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="e.g. CAR-T solid tumor preclinical" data-testid="input-edit-alert-query" />
-          </div>
-          <div className="space-y-2">
-            <Label>Modality</Label>
-            <MultiSelectCombobox options={MODALITY_OPTIONS} selected={modalities} onToggle={(v) => toggleItem(modalities, setModalities, v)} placeholder="Any modality" searchPlaceholder="Search modalities..." testId="select-edit-alert-modality" />
-            {modalities.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {modalities.map((m) => (
-                  <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                    {m}<button onClick={() => toggleItem(modalities, setModalities, m)} className="hover:text-destructive">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Stage</Label>
-            <MultiSelectCombobox options={STAGE_OPTIONS} selected={stages} onToggle={(v) => toggleItem(stages, setStages, v)} placeholder="Any stage" searchPlaceholder="Search stages..." testId="select-edit-alert-stage" />
-            {stages.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {stages.map((s) => (
-                  <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 flex items-center gap-1">
-                    {s}<button onClick={() => toggleItem(stages, setStages, s)} className="hover:text-destructive">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="space-y-2">
-            <Label>Institutions</Label>
-            <InstitutionCombobox selected={institutions} onToggle={(v) => toggleItem(institutions, setInstitutions, v)} />
-            {institutions.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {institutions.map((inst) => (
-                  <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1 max-w-[150px]">
-                    <span className="truncate">{inst}</span>
-                    <button onClick={() => toggleItem(institutions, setInstitutions, inst)} className="hover:text-destructive shrink-0">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
+          <AlertFormFields
+            query={query} setQuery={setQuery}
+            modalities={modalities} stages={stages} institutions={institutions}
+            toggleModality={(v) => toggle(modalities, setModalities, v)}
+            toggleStage={(v) => toggle(stages, setStages, v)}
+            toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+            idPrefix="edit-alert"
+          />
           <div className="pt-2 flex gap-3">
             <Button className="flex-1" onClick={handleSave} disabled={editMutation.isPending} data-testid="button-update-alert">
               {editMutation.isPending ? "Saving..." : "Save Changes"}
@@ -1190,7 +878,7 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
   const [stages, setStages] = useState<string[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
 
-  function toggleItem(arr: string[], setArr: (v: string[]) => void, val: string) {
+  function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
     setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   }
 
@@ -1198,18 +886,15 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
     mutationFn: () =>
       apiRequest("POST", "/api/alerts", {
         query: query.trim() || null,
-        modalities: modalities.map((m) => m.toLowerCase().replace(/\s+/g, "-")),
-        stages: stages.map((s) => s.toLowerCase().replace(/\s+/g, "-")),
+        modalities: modalities.map(normalizeModality),
+        stages: stages.map(normalizeStage),
         institutions,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
-      toast({ title: "Alert saved", description: "You'll see it in My Alerts." });
-      setQuery("");
-      setModalities([]);
-      setStages([]);
-      setInstitutions([]);
+      toast({ title: "Alert saved", description: "You'll see it in My Saved Alerts." });
+      setQuery(""); setModalities([]); setStages([]); setInstitutions([]);
       onClose();
     },
     onError: (err: any) => {
@@ -1230,103 +915,22 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
       <SheetContent side="right" className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Create Alert</SheetTitle>
-          <SheetDescription>
-            Set up a saved search that notifies you when new matching assets are found.
-          </SheetDescription>
+          <SheetDescription>Set up a saved search that notifies you when new matching assets are found.</SheetDescription>
         </SheetHeader>
-
         <div className="mt-6 space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="alert-query">Query</Label>
-            <Input
-              id="alert-query"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="e.g. CAR-T solid tumor preclinical"
-              data-testid="input-alert-query"
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Modality</Label>
-            <MultiSelectCombobox
-              options={MODALITY_OPTIONS}
-              selected={modalities}
-              onToggle={(v) => toggleItem(modalities, setModalities, v)}
-              placeholder="Any modality"
-              searchPlaceholder="Search modalities..."
-              testId="select-alert-modality"
-            />
-            {modalities.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {modalities.map((m) => (
-                  <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1">
-                    {m}
-                    <button onClick={() => toggleItem(modalities, setModalities, m)} className="hover:text-destructive">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Stage</Label>
-            <MultiSelectCombobox
-              options={STAGE_OPTIONS}
-              selected={stages}
-              onToggle={(v) => toggleItem(stages, setStages, v)}
-              placeholder="Any stage"
-              searchPlaceholder="Search stages..."
-              testId="select-alert-stage"
-            />
-            {stages.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {stages.map((s) => (
-                  <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 flex items-center gap-1">
-                    {s}
-                    <button onClick={() => toggleItem(stages, setStages, s)} className="hover:text-destructive">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label>Institutions</Label>
-            <InstitutionCombobox
-              selected={institutions}
-              onToggle={(v) => toggleItem(institutions, setInstitutions, v)}
-            />
-            {institutions.length > 0 && (
-              <div className="flex flex-wrap gap-1 pt-1">
-                {institutions.map((inst) => (
-                  <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20 flex items-center gap-1 max-w-[150px]">
-                    <span className="truncate">{inst}</span>
-                    <button onClick={() => toggleItem(institutions, setInstitutions, inst)} className="hover:text-destructive shrink-0">×</button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <AlertPreviewSection query={query} modalities={modalities} stages={stages} institutions={institutions} />
-
+          <AlertFormFields
+            query={query} setQuery={setQuery}
+            modalities={modalities} stages={stages} institutions={institutions}
+            toggleModality={(v) => toggle(modalities, setModalities, v)}
+            toggleStage={(v) => toggle(stages, setStages, v)}
+            toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+            idPrefix="alert"
+          />
           <div className="pt-2 flex gap-3">
-            <Button
-              className="flex-1"
-              onClick={handleSave}
-              disabled={saveMutation.isPending}
-              data-testid="button-save-alert"
-            >
+            <Button className="flex-1" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-alert">
               {saveMutation.isPending ? "Saving..." : "Save Alert"}
             </Button>
-            <Button
-              variant="outline"
-              onClick={onClose}
-              data-testid="button-cancel-alert"
-            >
-              Cancel
-            </Button>
+            <Button variant="outline" onClick={onClose} data-testid="button-cancel-alert">Cancel</Button>
           </div>
         </div>
       </SheetContent>
@@ -1336,9 +940,14 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
 export default function Alerts() {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [sinceParam, setSinceParam] = useState<string>(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
-  );
+  const [sinceParam, setSinceParam] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem(STORAGE_KEY) ?? defaultSince();
+    }
+    return defaultSince();
+  });
+
+  const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
   useEffect(() => {
     apiRequest("POST", "/api/alerts/mark-read").then(() => {
@@ -1346,13 +955,8 @@ export default function Alerts() {
     }).catch(() => {});
   }, []);
 
-  const deltaUrl = sinceParam
-    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
-    : "/api/industry/alerts/delta";
-
-  const alertsDeltaUrl = sinceParam
-    ? `/api/alerts/delta?since=${encodeURIComponent(sinceParam)}`
-    : "/api/alerts/delta";
+  const deltaUrl = `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`;
+  const alertsDeltaUrl = `/api/alerts/delta?since=${encodeURIComponent(sinceParam)}`;
 
   const { data, isLoading } = useQuery<IndustryDeltaResponse>({
     queryKey: [deltaUrl],
@@ -1365,14 +969,11 @@ export default function Alerts() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const hasAlerts = alerts.length > 0;
   const matchedTtoCount = alertsDelta?.total ?? 0;
+  const totalNew = matchedTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
 
-  const totalNew =
-    matchedTtoCount +
-    (data?.newConcepts.total ?? 0) +
-    (data?.newProjects.total ?? 0);
-
-  const sinceLabel = formatRelative(data?.since ?? (sinceParam || undefined));
+  const sinceLabel = formatSinceLabel(sinceParam);
 
   function handleMarkAllSeen() {
     const now = new Date().toISOString();
@@ -1389,14 +990,10 @@ export default function Alerts() {
             <div>
               <h1 className="text-xl font-bold text-foreground">Alerts</h1>
               <p className="text-sm text-muted-foreground mt-0.5">
-                New discoveries across TTO assets, concepts, and research projects since your last visit.
+                New TTO assets, concepts, and research activity since {sinceLabel}.
               </p>
             </div>
-            <Button
-              className="gap-2 shrink-0"
-              onClick={() => setSheetOpen(true)}
-              data-testid="button-create-alert"
-            >
+            <Button className="gap-2 shrink-0" onClick={() => setSheetOpen(true)} data-testid="button-create-alert">
               <Plus className="w-4 h-4" />
               Create Alert
             </Button>
@@ -1407,9 +1004,7 @@ export default function Alerts() {
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
         {isLoading && alertsDeltaLoading ? (
           <div className="space-y-3 max-w-2xl">
-            {[1, 2, 3, 4].map((i) => (
-              <Skeleton key={i} className="h-16 w-full rounded-lg" />
-            ))}
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-16 w-full rounded-lg" />)}
           </div>
         ) : !data ? (
           <div className="flex flex-col items-center gap-3 py-16 text-center">
@@ -1418,53 +1013,51 @@ export default function Alerts() {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            <div className="lg:col-span-2 space-y-4">
+            <div className="lg:col-span-2 space-y-6">
               <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} />
-              <AlertsDeltaSection
-                data={alertsDelta}
-                isLoading={alertsDeltaLoading}
+
+              <div className="border-t border-border/40" />
+
+              <NewTtoAssetsSection
+                industryData={data.newAssets}
+                alertsDelta={alertsDelta}
+                alertsDeltaLoading={alertsDeltaLoading}
+                hasAlerts={hasAlerts}
                 onCreateAlert={() => setSheetOpen(true)}
               />
-              <ConceptsSection data={data.newConcepts} />
-              <ProjectsSection data={data.newProjects} />
+
+              <OtherActivitySection
+                concepts={data.newConcepts}
+                projects={data.newProjects}
+              />
             </div>
 
             <div className="lg:col-span-1">
-              <div className="rounded-lg border border-card-border bg-card p-5 space-y-3 sticky top-6">
+              <div className="rounded-lg border border-border bg-card p-5 space-y-3 sticky top-6">
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Clock className="w-4 h-4" />
                   <span className="text-xs font-medium">Since last visit</span>
                 </div>
-                <p className="text-[10px] text-muted-foreground/70 -mt-1">
-                  Showing activity from {sinceLabel}
+                <p className="text-[10px] text-muted-foreground/70 -mt-1" data-testid="text-since-label">
+                  Showing activity since {sinceLabel}
                 </p>
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">TTO Assets</span>
-                    <span className="font-semibold text-foreground tabular-nums">
-                      +{matchedTtoCount}
-                    </span>
+                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-tto-count">+{matchedTtoCount}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Concepts</span>
-                    <span className="font-semibold text-foreground tabular-nums">
-                      +{data.newConcepts.total}
-                    </span>
+                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-concepts-count">+{data.newConcepts.total}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Research Projects</span>
-                    <span className="font-semibold text-foreground tabular-nums">
-                      +{data.newProjects.total}
-                    </span>
+                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-projects-count">+{data.newProjects.total}</span>
                   </div>
                 </div>
                 <div className="border-t border-border/60 pt-3 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                    Total
-                  </span>
-                  <span className="text-xl font-bold text-primary tabular-nums">
-                    +{totalNew}
-                  </span>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
+                  <span className="text-xl font-bold text-primary tabular-nums" data-testid="sidebar-total-count">+{totalNew}</span>
                 </div>
                 {totalNew > 0 && (
                   <button
@@ -1482,10 +1075,7 @@ export default function Alerts() {
         )}
       </div>
 
-      <CreateAlertSheet
-        open={sheetOpen}
-        onClose={() => setSheetOpen(false)}
-      />
+      <CreateAlertSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
     </div>
   );
 }
