@@ -5497,6 +5497,23 @@ If a field cannot be determined, use "N/A".`
         console.warn("[delete-account] Could not look up user email before deletion:", lookupErr);
       }
 
+      // Cancel any active Stripe subscription before deleting the account
+      try {
+        const userOrg = await storage.getOrgForUser(userId);
+        if (userOrg?.stripeSubscriptionId) {
+          const stripe = getStripe();
+          if (stripe) {
+            await stripe.subscriptions.cancel(userOrg.stripeSubscriptionId);
+            await storage.updateOrganization(userOrg.id, { stripeStatus: "canceled" });
+            console.log(`[delete-account] Canceled Stripe subscription ${userOrg.stripeSubscriptionId} for org ${userOrg.id}`);
+          } else {
+            console.warn(`[delete-account] BILLING LEAK RISK: org ${userOrg.id} has subscription ${userOrg.stripeSubscriptionId} but Stripe client is unavailable (STRIPE_SECRET_KEY missing) — subscription was NOT canceled`);
+          }
+        }
+      } catch (stripeErr: any) {
+        console.error("[delete-account] Stripe cancellation failed, continuing with account deletion:", stripeErr?.message ?? stripeErr);
+      }
+
       // Delete Supabase Auth user first — if this fails, nothing else is touched
       const { error: supabaseError } = await adminSupabase.auth.admin.deleteUser(userId);
       if (supabaseError) {
