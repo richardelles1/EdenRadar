@@ -365,7 +365,7 @@ export default function Scout() {
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 50, buyerProfile }),
+          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 15, buyerProfile }),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
