@@ -6,6 +6,12 @@ import { Button } from "@/components/ui/button";
 
 const GREEN = "#22c55e";
 
+type ShareApiError = Error & { status?: number; passwordRequired?: boolean };
+
+function isShareApiError(err: unknown): err is ShareApiError {
+  return err instanceof Error;
+}
+
 type ShareResponse = {
   type: "dossier" | "pipeline_brief";
   entityId: string | null;
@@ -281,14 +287,19 @@ export default function ShareView() {
   const { data, isLoading, error, isError } = useQuery<ShareResponse>({
     queryKey,
     queryFn: async () => {
-      const url = password ? `/api/share/${token}?password=${encodeURIComponent(password)}` : `/api/share/${token}`;
-      const res = await fetch(url);
+      const res = await fetch(`/api/share/${token}/resolve`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(password !== undefined ? { password } : {}),
+      });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        const err: any = new Error(body.error ?? "Failed to load shared content");
-        err.status = res.status;
-        err.passwordRequired = body.passwordRequired;
-        throw err;
+        const apiErr = new Error(
+          (body as { error?: string }).error ?? "Failed to load shared content"
+        ) as ShareApiError;
+        apiErr.status = res.status;
+        apiErr.passwordRequired = (body as { passwordRequired?: boolean }).passwordRequired === true;
+        throw apiErr;
       }
       return res.json();
     },
@@ -296,10 +307,11 @@ export default function ShareView() {
     enabled: pendingPassword === password,
   });
 
-  const needsPassword = isError && (error as any)?.passwordRequired;
+  const apiError = isError && isShareApiError(error) ? error : null;
+  const needsPassword = apiError?.passwordRequired === true;
   const wrongPassword = needsPassword && password !== undefined;
-  const isExpired = isError && (error as any)?.status === 410;
-  const isNotFound = isError && (error as any)?.status === 404;
+  const isExpired = apiError?.status === 410;
+  const isNotFound = apiError?.status === 404;
 
   if (isLoading) {
     return (

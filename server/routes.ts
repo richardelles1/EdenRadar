@@ -7669,39 +7669,48 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  type ResolvedShareLink = { type: string; entityId: string | null; payload: unknown; expiresAt: Date; createdAt: Date };
+  type ShareLinkError = { httpStatus: number; body: Record<string, unknown> };
+
+  async function fetchSharedLinkData(token: string, password: string | undefined): Promise<{ ok: true; data: ResolvedShareLink } | { ok: false; error: ShareLinkError }> {
+    const link = await storage.getSharedLinkByToken(token);
+    if (!link) {
+      return { ok: false, error: { httpStatus: 404, body: { error: "Link not found" } } };
+    }
+    if (link.expiresAt < new Date()) {
+      return { ok: false, error: { httpStatus: 410, body: { error: "Link has expired" } } };
+    }
+    if (link.passwordHash) {
+      if (!password) {
+        return { ok: false, error: { httpStatus: 401, body: { error: "Password required", passwordRequired: true } } };
+      }
+      const hash = crypto.createHash("sha256").update(password).digest("hex");
+      if (hash !== link.passwordHash) {
+        return { ok: false, error: { httpStatus: 401, body: { error: "Incorrect password", passwordRequired: true } } };
+      }
+    }
+    return { ok: true, data: { type: link.type, entityId: link.entityId, payload: link.payload, expiresAt: link.expiresAt, createdAt: link.createdAt } };
+  }
+
   app.get("/api/share/:token", async (req, res) => {
     try {
-      const { token } = req.params;
-      const { password } = req.query as { password?: string };
-
-      const link = await storage.getSharedLinkByToken(token);
-      if (!link) {
-        return res.status(404).json({ error: "Link not found" });
-      }
-
-      if (link.expiresAt < new Date()) {
-        return res.status(410).json({ error: "Link has expired" });
-      }
-
-      if (link.passwordHash) {
-        if (!password) {
-          return res.status(401).json({ error: "Password required", passwordRequired: true });
-        }
-        const hash = crypto.createHash("sha256").update(password).digest("hex");
-        if (hash !== link.passwordHash) {
-          return res.status(401).json({ error: "Incorrect password", passwordRequired: true });
-        }
-      }
-
-      res.json({
-        type: link.type,
-        entityId: link.entityId,
-        payload: link.payload,
-        expiresAt: link.expiresAt,
-        createdAt: link.createdAt,
-      });
+      const result = await fetchSharedLinkData(req.params.token, undefined);
+      if (!result.ok) return res.status(result.error.httpStatus).json(result.error.body);
+      res.json(result.data);
     } catch (err: any) {
       console.error("[share/get]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
+    }
+  });
+
+  app.post("/api/share/:token/resolve", async (req, res) => {
+    try {
+      const { password } = req.body as { password?: string };
+      const result = await fetchSharedLinkData(req.params.token, password);
+      if (!result.ok) return res.status(result.error.httpStatus).json(result.error.body);
+      res.json(result.data);
+    } catch (err: any) {
+      console.error("[share/resolve]", err?.message);
       res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
     }
   });
