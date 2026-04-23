@@ -515,7 +515,16 @@ export default function IndustrySettings() {
               <p className="text-xs text-amber-600 dark:text-amber-400 mt-0.5" data-testid="text-cancel-at">
                 Cancels on {new Date(org.stripeCancelAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </p>
-            ) : org?.stripeCurrentPeriodEnd && (org.stripeStatus === "active" || org.stripeStatus === "trialing" || org.stripeStatus === "past_due") ? (
+            ) : org?.stripeCurrentPeriodEnd && org.stripeStatus === "trialing" ? (
+              <>
+                <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-trial-ends-on">
+                  Trial ends {new Date(org.stripeCurrentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </p>
+                <p className="text-xs text-muted-foreground" data-testid="text-trial-charge-note">
+                  You'll be charged on {new Date(org.stripeCurrentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} unless you cancel
+                </p>
+              </>
+            ) : org?.stripeCurrentPeriodEnd && (org.stripeStatus === "active" || org.stripeStatus === "past_due") ? (
               <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-renews-on">
                 Renews on {new Date(org.stripeCurrentPeriodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               </p>

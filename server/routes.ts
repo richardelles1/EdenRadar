@@ -7810,11 +7810,14 @@ If multiple assets appear, return each as a separate array item.`;
           const planTierC = PLAN_TIER_MAP[planIdC];
           const customerC = stripeId(sess["customer"] as string | { id: string } | null);
           const subC = stripeId(sess["subscription"] as string | { id: string } | null);
+          // Derive status: if payment_status is "no_payment_required" the subscription is in trial
+          const paymentStatusC = String(sess["payment_status"] ?? "paid");
+          const initialStripeStatus = paymentStatusC === "no_payment_required" ? "trialing" : "active";
           if (customerC && orgId) {
             await storage.applyStripeSubscription(orgId, {
               stripeCustomerId: customerC,
               stripeSubscriptionId: subC,
-              stripeStatus: "active",
+              stripeStatus: initialStripeStatus,
               stripePriceId: "",
               planTier: planTierC,
             }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
