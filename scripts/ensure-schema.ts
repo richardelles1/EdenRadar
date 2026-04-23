@@ -167,6 +167,9 @@ async function run() {
       ALTER TABLE saved_assets
         ADD COLUMN IF NOT EXISTS status TEXT
     `);
+    // Values match SAVED_ASSET_STATUSES in shared/schema.ts (5-value vocabulary).
+    // The server/index.ts startup function also enforces this constraint (DROP + re-ADD),
+    // so this is a no-op if it already exists with the correct values.
     await client.query(`
       DO $$ BEGIN
         IF NOT EXISTS (
@@ -175,13 +178,12 @@ async function run() {
         ) THEN
           ALTER TABLE saved_assets
             ADD CONSTRAINT saved_assets_status_check
-            CHECK (status IS NULL OR status IN ('viewing', 'evaluating', 'contacted'));
+            CHECK (status IS NULL OR status IN ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed'));
         END IF;
       END $$
     `);
 
     await client.query("COMMIT");
-    console.log("ensure-schema: all column checks passed");
 
     // Add the vector embedding column outside the transaction — it depends on
     // the pgvector extension (already ensured above) but cannot be in a txn
@@ -191,11 +193,13 @@ async function run() {
         ALTER TABLE ingested_assets
           ADD COLUMN IF NOT EXISTS embedding vector(1536)
       `);
-      console.log("ensure-schema: embedding column ready");
     } catch (embErr: unknown) {
       const msg = embErr instanceof Error ? embErr.message : String(embErr);
+      // Non-fatal: embedding is used for similarity search, not for checkout/industry portal.
       console.warn("ensure-schema: embedding column skipped (pgvector unavailable?):", msg);
     }
+
+    console.log("ensure-schema: all column checks passed");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("ensure-schema: error --", err);
