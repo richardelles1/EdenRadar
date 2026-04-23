@@ -5,6 +5,12 @@ import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
 
 /**
+ * Guards against concurrent evaluations (e.g., manual admin trigger races with
+ * cycle completion). Node.js is single-threaded so a simple boolean is sufficient.
+ */
+let isEvaluating = false;
+
+/**
  * Find new relevant assets that match a saved alert's criteria.
  * Uses idiomatic Drizzle: undefined conditions are silently ignored by `and()`.
  */
@@ -58,11 +64,24 @@ async function matchAssetsForAlert(
 
 /**
  * Evaluate all saved user alerts and send one email per alert that has new matches.
- *
- * @param triggeringInstitution — when provided, only evaluates alerts whose
- *   institution list includes this institution (or have no institution restriction).
+ * Called once per scheduler cycle (after all institutions complete) to avoid race
+ * conditions on the lastAlertSentAt watermark that would arise from per-institution
+ * concurrent evaluations.
  */
-export async function checkAndSendAlerts(triggeringInstitution?: string): Promise<void> {
+export async function checkAndSendAlerts(): Promise<void> {
+  if (isEvaluating) {
+    console.log("[alertMailer] Evaluation already in progress — skipping concurrent call");
+    return;
+  }
+  isEvaluating = true;
+  try {
+    await evaluateAlerts();
+  } finally {
+    isEvaluating = false;
+  }
+}
+
+async function evaluateAlerts(): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
   const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
   const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -86,11 +105,13 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
   const now = new Date();
   const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-  // Resolve user emails up-front via Supabase admin API
+  // Resolve user emails via Supabase admin API.
+  // Note: listUsers is paginated — perPage max is 1000 for admin API.
+  // TODO: paginate further if user count exceeds 1000.
   const { createClient } = await import("@supabase/supabase-js");
   const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
   const { data: usersData, error: usersError } =
-    await adminSupabase.auth.admin.listUsers({ perPage: 500 });
+    await adminSupabase.auth.admin.listUsers({ perPage: 1000 });
 
   if (usersError) {
     console.error("[alertMailer] Failed to fetch user emails:", usersError.message);
@@ -110,19 +131,8 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
   for (const alert of alerts) {
     if (!alert.userId) continue;
 
-    // Institution scope check: if this was triggered by a specific institution,
-    // skip alerts that don't cover it (alerts with no institution list match anything).
-    if (
-      triggeringInstitution &&
-      alert.institutions &&
-      alert.institutions.length > 0 &&
-      !alert.institutions
-        .map((i) => i.toLowerCase())
-        .includes(triggeringInstitution.toLowerCase())
-    ) {
-      continue;
-    }
-
+    // Use lastAlertSentAt watermark; fall back to 48h ago for first-run alerts
+    // to avoid flooding users with historical data.
     const since = alert.lastAlertSentAt ?? fortyEightHoursAgo;
     let matched: DispatchAsset[];
 
@@ -162,7 +172,10 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
       });
 
       if (sendError) {
-        console.error(`[alertMailer] Send error for alert ${alert.id} → ${email}:`, sendError.message);
+        console.error(
+          `[alertMailer] Send error for alert ${alert.id} → ${email}:`,
+          sendError.message,
+        );
         continue;
       }
 
@@ -182,7 +195,7 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
         isTest: false,
       });
 
-      // Update lastAlertSentAt only for this specific alert
+      // Advance the watermark for this specific alert only
       await db
         .update(userAlerts)
         .set({ lastAlertSentAt: now })

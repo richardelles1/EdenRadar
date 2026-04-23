@@ -639,6 +639,11 @@ function scheduleNext(): void {
     persistState(true).catch(() => {});
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
+    // Evaluate all user alert subscriptions once per cycle — avoids per-institution
+    // race conditions on the lastAlertSentAt watermark.
+    checkAndSendAlerts().catch((err: any) => {
+      console.error(`[scheduler] Alert email error after cycle #${cycleCount}:`, err?.message);
+    });
 
   }
 }
@@ -739,12 +744,6 @@ async function runOne(institution: string, gen: number): Promise<void> {
       lastSuccessNewCount: result.newCount,
       lastSuccessRawCount: result.rawCount,
     });
-    // Fire-and-forget: evaluate user alerts whenever new assets arrive
-    if (result.newCount > 0) {
-      checkAndSendAlerts(institution).catch((err: any) => {
-        console.error(`[scheduler] Alert email error after ${institution} sync:`, err?.message);
-      });
-    }
   } else if (finalErr !== null) {
     // ── Failure path (both attempts failed) ─────────────────────────────────
     const msg = finalErr?.message ?? "";
