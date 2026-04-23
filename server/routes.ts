@@ -5028,8 +5028,16 @@ If a field cannot be determined, use "N/A".`
           const adminClient = createClient(analyticsSupabaseUrl, analyticsSupabaseKey);
           const cutoff = new Date();
           cutoff.setDate(cutoff.getDate() - 56); // 8 weeks
-          const { data: usersData } = await adminClient.auth.admin.listUsers({ perPage: 500 });
-          const allUsers = usersData?.users ?? [];
+          // Paginate through all users to avoid the 500-user cap
+          const allUsers: { created_at: string }[] = [];
+          let page = 1;
+          while (true) {
+            const { data: pageData } = await adminClient.auth.admin.listUsers({ perPage: 1000, page });
+            const batch = pageData?.users ?? [];
+            allUsers.push(...batch);
+            if (batch.length < 1000) break;
+            page++;
+          }
           // Bucket by ISO week (Monday-based)
           const weekMap = new Map<string, number>();
           for (const u of allUsers) {
