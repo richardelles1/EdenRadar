@@ -5885,7 +5885,8 @@ If a field cannot be determined, use "N/A".`
   app.get("/api/alerts/delta", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
-      const alerts = await storage.listUserAlerts(userId ?? undefined);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const alerts = await storage.listUserAlerts(userId);
       const sinceParam = req.query.since as string | undefined;
       const since = sinceParam && !isNaN(Date.parse(sinceParam))
         ? new Date(sinceParam)
