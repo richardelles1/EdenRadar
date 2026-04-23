@@ -1354,7 +1354,8 @@ export default function Alerts() {
   });
 
   const { data: alertsDelta, isLoading: alertsDeltaLoading } = useQuery<AlertsDeltaResponse>({
-    queryKey: [alertsDeltaUrl],
+    queryKey: ["/api/alerts/delta", sinceParam],
+    queryFn: () => fetch(alertsDeltaUrl, { credentials: "include" }).then((r) => r.json()),
     staleTime: 5 * 60 * 1000,
   });
 
