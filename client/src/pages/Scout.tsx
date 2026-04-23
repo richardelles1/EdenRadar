@@ -5,7 +5,6 @@ import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
-import { AssetCard } from "@/components/AssetCard";
 import { ResearchCard } from "@/components/ResearchCard";
 import { BuyerProfileForm } from "@/components/BuyerProfileForm";
 import { apiRequest } from "@/lib/queryClient";
