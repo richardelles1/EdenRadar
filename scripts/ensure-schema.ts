@@ -91,6 +91,20 @@ async function run() {
         ON app_events (event, created_at DESC)
     `);
 
+    // Task #475 -- Stripe billing columns on organizations
+    // These were defined in shared/schema.ts but never applied to the live DB.
+    // All nullable — safe for existing rows.
+    await client.query(`
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS stripe_customer_id       TEXT,
+        ADD COLUMN IF NOT EXISTS stripe_subscription_id   TEXT,
+        ADD COLUMN IF NOT EXISTS stripe_status            TEXT,
+        ADD COLUMN IF NOT EXISTS stripe_price_id          TEXT,
+        ADD COLUMN IF NOT EXISTS stripe_current_period_end TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS stripe_cancel_at         TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS welcome_email_sent_sub_id TEXT
+    `);
+
     await client.query("COMMIT");
     console.log("ensure-schema: all column checks passed");
   } catch (err) {

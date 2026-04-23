@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -4194,6 +4195,7 @@ function AccountCenter({ pw }: { pw: string }) {
   const [invitePassword, setInvitePassword] = useState("");
   const [inviteRole, setInviteRole] = useState<PortalRole>("concept");
   const [copiedRole, setCopiedRole] = useState<string | null>(null);
+  const [deleteUserId, setDeleteUserId] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
@@ -4308,6 +4310,28 @@ function AccountCenter({ pw }: { pw: string }) {
     onError: (err: Error, _vars, context) => {
       if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
       toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await fetch(`/api/admin/members/${userId}`, {
+        method: "DELETE",
+        headers: { "x-admin-password": pw },
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to delete user");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setDeleteUserId(null);
+      toast({ title: "Account deleted", description: "The user has been permanently removed." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -4482,6 +4506,7 @@ function AccountCenter({ pw }: { pw: string }) {
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Digest</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Last Seen</th>
+                <th className="w-10 py-3 px-4"></th>
               </tr>
             </thead>
             <tbody>
@@ -4602,12 +4627,22 @@ function AccountCenter({ pw }: { pw: string }) {
                     <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
                       {timeAgoShort(user.lastSignInAt)}
                     </td>
+                    <td className="py-2.5 px-2 text-center">
+                      <button
+                        onClick={() => setDeleteUserId(user.id)}
+                        className="text-destructive/40 hover:text-destructive hover:bg-destructive/10 rounded p-1 transition-colors"
+                        title="Delete account permanently"
+                        data-testid={`button-delete-user-${user.id}`}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}
               {users.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-8 text-muted-foreground">No users found</td>
+                  <td colSpan={7} className="text-center py-8 text-muted-foreground">No users found</td>
                 </tr>
               )}
             </tbody>
@@ -4657,6 +4692,28 @@ function AccountCenter({ pw }: { pw: string }) {
           })}
         </div>
       </div>
+
+      <AlertDialog open={deleteUserId !== null} onOpenChange={(o) => { if (!o) setDeleteUserId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete account permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the user&apos;s login account and remove them from all organizations. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={deleteUserMutation.isPending}
+              onClick={() => deleteUserId && deleteUserMutation.mutate(deleteUserId)}
+              data-testid="button-confirm-delete-user"
+            >
+              {deleteUserMutation.isPending ? "Deleting..." : "Delete Account"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
