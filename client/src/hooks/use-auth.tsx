@@ -96,6 +96,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   async function signOut() {
     sessionStorage.removeItem("edenradar_welcomed");
+    const userSpecificKeys = [
+      "eden-industry-profile",
+      "eden-researcher-profile",
+      "edenradar:buyer-profile",
+      "edenLastSeenAlerts",
+      "eden-alerts-dismissed",
+      "eden-alerts-checked-at",
+      "eden-orientation-dismissed",
+    ];
+    userSpecificKeys.forEach((k) => localStorage.removeItem(k));
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
