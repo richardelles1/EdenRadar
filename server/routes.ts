@@ -727,7 +727,7 @@ export async function registerRoutes(
       const clustered = clusterAssets(normalized);
       const scored = await scoreAssets(clustered, profile);
       const report = await generateReport(scored, query, profile);
-      logAppEvent("report_generated", { query: query.slice(0, 80), assetCount: scored.length });
+      logAppEvent("report_generated", { assetCount: scored.length });
       return res.json(report);
     } catch (err: any) {
       console.error("Report error:", err);
@@ -740,7 +740,7 @@ export async function registerRoutes(
       const { asset } = dossierBodySchema.parse(req.body);
       if (!asset) return res.status(400).json({ error: "Asset required" });
       const dossier = await generateDossier(asset as ScoredAsset);
-      logAppEvent("dossier_opened", { source: (asset as any)?.sourceName ?? null });
+      logAppEvent("dossier_opened", { institution: (asset as ScoredAsset).institution ?? null });
       return res.json(dossier);
     } catch (err: any) {
       console.error("Dossier error:", err);
@@ -4947,6 +4947,9 @@ If a field cannot be determined, use "N/A".`
       const pw = req.headers["x-admin-password"];
       if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
+      const analyticsSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      const analyticsSupabaseUrl = process.env.VITE_SUPABASE_URL || "";
+
       // Daily search volume — last 30 days
       const searchesPerDayResult = await db.execute(sql`
         SELECT DATE(created_at) AS day, COUNT(*) AS count
@@ -5013,18 +5016,54 @@ If a field cannot be determined, use "N/A".`
         db.execute(sql`SELECT COUNT(*) AS n FROM dispatch_logs`),
       ]);
 
+      type CountRow = { n: string };
+      const toCount = (rows: unknown[]): number => Number((rows[0] as CountRow)?.n ?? 0);
+
+      // New user signups by week (last 8 weeks) via Supabase admin API
+      type SignupWeek = { week: string; count: number };
+      let signupsPerWeek: SignupWeek[] = [];
+      if (analyticsSupabaseKey && analyticsSupabaseUrl) {
+        try {
+          const { createClient } = await import("@supabase/supabase-js");
+          const adminClient = createClient(analyticsSupabaseUrl, analyticsSupabaseKey);
+          const cutoff = new Date();
+          cutoff.setDate(cutoff.getDate() - 56); // 8 weeks
+          const { data: usersData } = await adminClient.auth.admin.listUsers({ perPage: 500 });
+          const allUsers = usersData?.users ?? [];
+          // Bucket by ISO week (Monday-based)
+          const weekMap = new Map<string, number>();
+          for (const u of allUsers) {
+            const created = new Date(u.created_at);
+            if (created < cutoff) continue;
+            // Get Monday of that week
+            const day = created.getDay(); // 0=Sun
+            const diff = (day === 0 ? -6 : 1) - day;
+            const monday = new Date(created);
+            monday.setDate(created.getDate() + diff);
+            const key = monday.toISOString().slice(0, 10);
+            weekMap.set(key, (weekMap.get(key) ?? 0) + 1);
+          }
+          signupsPerWeek = Array.from(weekMap.entries())
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([week, count]) => ({ week, count }));
+        } catch {
+          // Non-fatal: if Supabase admin fails, omit signup chart
+        }
+      }
+
       res.json({
         searchesPerDay: searchesPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
         sessionsPerDay: sessionsPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
         savedAssetsPerDay: savedAssetsPerDay.map(r => ({ day: r.day, count: Number(r.count) })),
         dispatchesPerWeek: dispatchesPerWeek.map(r => ({ week: r.week, count: Number(r.count) })),
+        signupsPerWeek,
         featureUsage: featureUsage.map(r => ({ event: r.event, count: Number(r.count) })),
         recentEvents: recentEvents.map(r => ({ id: r.id, event: r.event, metadata: r.metadata, createdAt: r.created_at })),
         totals: {
-          searches: Number((totalSearches.rows[0] as any)?.n ?? 0),
-          sessions: Number((totalSessions.rows[0] as any)?.n ?? 0),
-          savedAssets: Number((totalSavedAssets.rows[0] as any)?.n ?? 0),
-          dispatches: Number((totalDispatches.rows[0] as any)?.n ?? 0),
+          searches: toCount(totalSearches.rows),
+          sessions: toCount(totalSessions.rows),
+          savedAssets: toCount(totalSavedAssets.rows),
+          dispatches: toCount(totalDispatches.rows),
         },
       });
     } catch (err: any) {

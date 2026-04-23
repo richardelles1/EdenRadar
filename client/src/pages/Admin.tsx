@@ -8704,6 +8704,7 @@ interface AnalyticsOverview {
   sessionsPerDay: { day: string; count: number }[];
   savedAssetsPerDay: { day: string; count: number }[];
   dispatchesPerWeek: { week: string; count: number }[];
+  signupsPerWeek: { week: string; count: number }[];
   featureUsage: { event: string; count: number }[];
   recentEvents: { id: number; event: string; metadata: Record<string, unknown> | null; createdAt: string }[];
   totals: { searches: number; sessions: number; savedAssets: number; dispatches: number };
@@ -8752,7 +8753,7 @@ function MiniBarChart({ data, label, color = "bg-primary" }: { data: { day: stri
   );
 }
 
-function WeekBarChart({ data, label }: { data: { week: string; count: number }[]; label: string }) {
+function WeekBarChart({ data, label, color = "bg-amber-500" }: { data: { week: string; count: number }[]; label: string; color?: string }) {
   if (data.length === 0) {
     return <div className="flex items-center justify-center h-24 text-muted-foreground text-xs">No data yet</div>;
   }
@@ -8763,7 +8764,7 @@ function WeekBarChart({ data, label }: { data: { week: string; count: number }[]
         {data.map((d, i) => (
           <div
             key={i}
-            className="flex-1 rounded-sm bg-amber-500 opacity-80 transition-all"
+            className={`flex-1 rounded-sm ${color} opacity-80 transition-all`}
             style={{ height: `${Math.max(4, (d.count / max) * 100)}%` }}
             title={`Week of ${d.week.slice(0, 10)}: ${d.count}`}
           />
@@ -8875,6 +8876,14 @@ function AnalyticsTab({ pw }: { pw: string }) {
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <h3 className="text-sm font-semibold text-foreground">Email Dispatches (last 8 weeks)</h3>
           <WeekBarChart data={overview.dispatchesPerWeek} label="dispatches/week" />
+        </div>
+        <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+          <h3 className="text-sm font-semibold text-foreground">New User Signups (last 8 weeks)</h3>
+          {overview.signupsPerWeek.length === 0 ? (
+            <div className="flex items-center justify-center h-16 text-muted-foreground text-xs">No signup data available</div>
+          ) : (
+            <WeekBarChart data={overview.signupsPerWeek} label="signups/week" color="bg-sky-500" />
+          )}
         </div>
       </div>
 
