@@ -115,11 +115,11 @@ function normalizeStage(s: string): string {
 }
 
 function toDisplayModality(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+  return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function toDisplayStage(s: string): string {
-  return s.replace(/\b\w/g, (c) => c.toUpperCase());
+  return s.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function AssetRow({ id, name, institution, modality, stage, index }: {
@@ -947,7 +947,8 @@ export default function Alerts() {
 
   const hasAlerts = alerts.length > 0;
   const matchedTtoCount = alertsDelta?.total ?? 0;
-  const totalNew = matchedTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
+  const sidebarTtoCount = hasAlerts ? matchedTtoCount : (data?.newAssets.total ?? 0);
+  const totalNew = sidebarTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
 
   const sinceLabel = formatSinceLabel(sinceParam);
 
@@ -1020,7 +1021,7 @@ export default function Alerts() {
                 <div className="space-y-2 pt-1">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">TTO Assets</span>
-                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-tto-count">+{matchedTtoCount}</span>
+                    <span className="font-semibold text-foreground tabular-nums" data-testid="sidebar-tto-count">+{sidebarTtoCount}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Concepts</span>
