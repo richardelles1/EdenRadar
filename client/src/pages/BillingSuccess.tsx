@@ -120,7 +120,7 @@ export default function BillingSuccess() {
                   <CheckCircle2 className="w-12 h-12" style={{ color: "hsl(142 52% 36%)" }} />
                 </div>
                 <h1 className="text-2xl font-bold text-foreground" data-testid="text-billing-success-title">
-                  {isTrial ? "Your free trial has started!" : "You're subscribed!"}
+                  {isTrial ? "Your 3-day free trial has started!" : "You're subscribed!"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   {isTrial
