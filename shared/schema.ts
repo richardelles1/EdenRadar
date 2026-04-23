@@ -53,6 +53,7 @@ export const searchHistory = pgTable("search_history", {
   query: text("query").notNull(),
   source: text("source").notNull().default("pubmed"),
   resultCount: integer("result_count").notNull().default(0),
+  userId: text("user_id"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 

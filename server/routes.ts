@@ -289,6 +289,7 @@ export async function registerRoutes(
       const { query, sources, maxPerSource, buyerProfile, field, sourceType, dateRange, technologyType, trialPhase } = searchBodySchema.parse(req.body);
       const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
       const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
+      const searchUserId = await tryGetUserId(req);
 
       const enrichedQuery = [query, field, technologyType].filter(Boolean).join(" ");
 
@@ -305,7 +306,7 @@ export async function registerRoutes(
       signals = signals.slice(0, 150);
 
       if (signals.length === 0) {
-        await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0 });
+        await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0, userId: searchUserId ?? null });
         const emptySearchResponse = { assets: [], query, sources: effectiveSources, signalsFound: 0 };
         cacheSet(searchCacheKey, emptySearchResponse, 5 * 60 * 1000);
         return res.json(emptySearchResponse);
@@ -374,7 +375,7 @@ export async function registerRoutes(
         }));
       }
 
-      await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: scored.length });
+      await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: scored.length, userId: searchUserId ?? null });
 
       const searchResponse = {
         assets: scored,
@@ -393,6 +394,7 @@ export async function registerRoutes(
 
   app.post("/api/scout/search", async (req, res) => {
     try {
+      const scoutUserId = await tryGetUserId(req);
       const schema = z.object({
         query: z.string().min(1).max(500),
         minSimilarity: z.number().min(0.40).max(1).default(0.40),
@@ -484,7 +486,7 @@ export async function registerRoutes(
         };
       });
 
-      await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length }).catch(() => {});
+      await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 
       return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], fallback: false });
     } catch (err: any) {
@@ -572,11 +574,12 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/dashboard/stats", async (_req, res) => {
+  app.get("/api/dashboard/stats", async (req, res) => {
     try {
+      const dashUserId = await tryGetUserId(req);
       const [stats, recentSearches, recentAssets, institutionCountResult, reviewCount, weeklyNewResult] = await Promise.all([
         fetchPortfolioStats(),
-        storage.getSearchHistory(8),
+        storage.getSearchHistory(8, dashUserId ?? undefined),
         db.select({
           id: ingestedAssets.id,
           assetName: ingestedAssets.assetName,
@@ -931,9 +934,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/search-history", async (_req, res) => {
+  app.get("/api/search-history", async (req, res) => {
     try {
-      const history = await storage.getSearchHistory(30);
+      const userId = await tryGetUserId(req);
+      const history = await storage.getSearchHistory(30, userId ?? undefined);
       res.json({ history });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to fetch history" });
@@ -1019,6 +1023,10 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { pipeline_list_id } = z.object({ pipeline_list_id: z.number().int().nullable() }).parse(req.body);
+      const userId = await tryGetUserId(req);
+      const existing = await storage.getSavedAsset(id);
+      if (!existing) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(existing, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       const asset = await storage.updateSavedAssetPipeline(id, pipeline_list_id);
       if (!asset) return res.status(404).json({ error: "Asset not found" });
       res.json({ asset });
@@ -1072,6 +1080,17 @@ export async function registerRoutes(
     db.insert(appEvents).values({ event, metadata: metadata ?? null }).catch((e) => {
       console.error("[app-events] Failed to log:", e);
     });
+  }
+
+  // ── Pipeline ownership guard ──────────────────────────────────────────────
+  async function canMutatePipeline(pipeline: { userId: string | null; orgId: number | null }, requestUserId: string | null): Promise<boolean> {
+    if (!requestUserId) return false;
+    if (pipeline.userId === requestUserId) return true;
+    if (pipeline.orgId) {
+      const requesterOrg = await storage.getOrgForUser(requestUserId);
+      if (requesterOrg && requesterOrg.id === pipeline.orgId) return true;
+    }
+    return false;
   }
 
   // ── Saved asset access guard ─────────────────────────────────────────────
@@ -1199,10 +1218,10 @@ export async function registerRoutes(
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const userId = await tryGetUserId(req);
       const assetBefore = await storage.getSavedAsset(id);
+      if (!assetBefore) return res.status(404).json({ error: "Asset not found" });
+      if (!await canAccessSavedAsset(assetBefore, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       await storage.deleteSavedAsset(id);
-      if (assetBefore) {
-        logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
-      }
+      logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
@@ -1301,6 +1320,10 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
       const { name } = z.object({ name: z.string().min(1).max(100) }).parse(req.body);
+      const userId = await tryGetUserId(req);
+      const existing = await storage.getPipelineList(id);
+      if (!existing) return res.status(404).json({ error: "Pipeline not found" });
+      if (!await canMutatePipeline(existing, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       const list = await storage.updatePipelineList(id, name);
       if (!list) return res.status(404).json({ error: "Pipeline not found" });
       res.json({ pipeline: list });
@@ -1314,6 +1337,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = await tryGetUserId(req);
+      const existing = await storage.getPipelineList(id);
+      if (!existing) return res.status(404).json({ error: "Pipeline not found" });
+      if (!await canMutatePipeline(existing, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       await storage.deletePipelineList(id);
       res.status(204).send();
     } catch (err: any) {

@@ -146,8 +146,8 @@ function AssetRow({ id, name, institution, modality, stage, index }: {
   );
 }
 
-function AlertCard({ alert, onDelete, onEdit, isPending }: {
-  alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean;
+function AlertCard({ alert, onDelete, onEdit, isPending, matchCount = 0 }: {
+  alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean; matchCount?: number;
 }) {
   const parts = [alert.query, ...(alert.modalities ?? []).map(toDisplayModality), ...(alert.stages ?? []).map(toDisplayStage)].filter(Boolean);
   const draft = parts.join(" ");
@@ -159,9 +159,20 @@ function AlertCard({ alert, onDelete, onEdit, isPending }: {
     >
       <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0 space-y-1">
-        <p className="text-xs font-semibold text-foreground truncate" data-testid={`alert-title-${alert.id}`}>
-          {alert.query || "All new assets"}
-        </p>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <p className="text-xs font-semibold text-foreground truncate" data-testid={`alert-title-${alert.id}`}>
+            {alert.query || "All new assets"}
+          </p>
+          {matchCount > 0 && (
+            <Badge
+              variant="secondary"
+              className="shrink-0 text-[10px] tabular-nums px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+              data-testid={`alert-match-count-${alert.id}`}
+            >
+              +{matchCount} new
+            </Badge>
+          )}
+        </div>
         <div className="flex flex-wrap gap-1">
           {(alert.modalities ?? []).map((m) => (
             <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{toDisplayModality(m)}</span>
@@ -203,7 +214,7 @@ function AlertCard({ alert, onDelete, onEdit, isPending }: {
   );
 }
 
-function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
+function MyAlertsSection({ onCreateAlert, matchCounts = {} }: { onCreateAlert: () => void; matchCounts?: Record<number, number> }) {
   const [editingAlert, setEditingAlert] = useState<UserAlert | null>(null);
   const { data: alerts = [], isLoading } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
@@ -259,6 +270,7 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
                 onDelete={(id) => deleteMutation.mutate(id)}
                 onEdit={(a) => setEditingAlert(a)}
                 isPending={deleteMutation.isPending}
+                matchCount={matchCounts[alert.id] ?? 0}
               />
             ))}
           </div>
@@ -947,6 +959,9 @@ export default function Alerts() {
 
   const hasAlerts = alerts.length > 0;
   const matchedTtoCount = alertsDelta?.total ?? 0;
+  const alertMatchCounts: Record<number, number> = Object.fromEntries(
+    (alertsDelta?.byAlert ?? []).map((b) => [b.alertId, b.matchCount])
+  );
   const sidebarTtoCount = hasAlerts ? matchedTtoCount : (data?.newAssets.total ?? 0);
   const totalNew = sidebarTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
 
@@ -991,7 +1006,7 @@ export default function Alerts() {
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             <div className="lg:col-span-2 space-y-6">
-              <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} />
+              <MyAlertsSection onCreateAlert={() => setSheetOpen(true)} matchCounts={alertMatchCounts} />
 
               <div className="border-t border-border/40" />
 

@@ -62,7 +62,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
 
-  getSearchHistory(limit?: number): Promise<SearchHistory[]>;
+  getSearchHistory(limit?: number, userId?: string): Promise<SearchHistory[]>;
   createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory>;
 
   getSavedAssets(pipelineListId?: number | null, userId?: string): Promise<SavedAsset[]>;
@@ -382,8 +382,9 @@ export class DatabaseStorage implements IStorage {
     return user;
   }
 
-  async getSearchHistory(limit = 20): Promise<SearchHistory[]> {
-    return db.select().from(searchHistory).orderBy(desc(searchHistory.createdAt)).limit(limit);
+  async getSearchHistory(limit = 20, userId?: string): Promise<SearchHistory[]> {
+    const where = userId ? eq(searchHistory.userId, userId) : undefined;
+    return db.select().from(searchHistory).where(where).orderBy(desc(searchHistory.createdAt)).limit(limit);
   }
 
   async createSearchHistory(entry: InsertSearchHistory): Promise<SearchHistory> {
@@ -498,15 +499,11 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]> {
-    if (userId || orgId) {
-      const conditions: SQL[] = [];
-      if (userId) conditions.push(eq(pipelineLists.userId, userId));
-      if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
-      // Legacy rows (null userId + null orgId) remain visible during migration
-      conditions.push(and(isNull(pipelineLists.userId), isNull(pipelineLists.orgId)) as SQL);
-      return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);
-    }
-    return db.select().from(pipelineLists).orderBy(pipelineLists.createdAt);
+    const conditions: SQL[] = [];
+    if (userId) conditions.push(eq(pipelineLists.userId, userId));
+    if (orgId) conditions.push(eq(pipelineLists.orgId, orgId));
+    if (conditions.length === 0) return [];
+    return db.select().from(pipelineLists).where(or(...conditions)).orderBy(pipelineLists.createdAt);
   }
 
   async getPipelineList(id: number): Promise<PipelineList | undefined> {
