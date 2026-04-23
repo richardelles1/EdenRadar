@@ -31,7 +31,6 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
-  Building2,
   Lightbulb,
   FlaskConical,
   Package,
@@ -273,79 +272,37 @@ function MyAlertsSection({ onCreateAlert }: { onCreateAlert: () => void }) {
   );
 }
 
-function InstitutionGroup({ inst, matchLabel }: { inst: DeltaInstitution; matchLabel?: string }) {
-  const [open, setOpen] = useState(false);
-  const assets = matchLabel ? inst.matchedSampleAssets : inst.sampleAssets;
-  const count = matchLabel ? inst.matchedCount : inst.count;
-
+function AlertBucketRows({ bucket }: { bucket: AlertDeltaBucket }) {
   return (
-    <div className="rounded-md border border-border overflow-hidden" data-testid={`inst-group-${inst.institution}`}>
-      <button
-        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Building2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="flex-1 text-xs font-semibold text-foreground truncate">{inst.institution}</span>
-        {matchLabel && (
-          <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 font-medium truncate max-w-[80px] hidden sm:inline-block" title={matchLabel}>
-            {matchLabel}
-          </span>
-        )}
-        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-          +{count}
-        </Badge>
-        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />}
-      </button>
-      {open && assets.length > 0 && (
-        <div className="border-t border-border px-2 py-2 space-y-0.5 bg-muted/20">
-          {assets.map((asset, i) => (
-            <AssetRow key={asset.id} id={asset.id} name={asset.name} index={i} />
-          ))}
-          {count > assets.length && (
-            <p className="text-[10px] text-muted-foreground px-3 pt-1">+{count - assets.length} more</p>
-          )}
-          <Link
-            href={`/scout?q=${encodeURIComponent(inst.institution)}`}
-            className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline px-3 pt-1 pb-0.5 transition-colors"
-            data-testid={`alert-scout-link-${inst.institution}`}
-          >
-            Search Scout for {inst.institution} assets →
-          </Link>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AlertBucket({ bucket }: { bucket: AlertDeltaBucket }) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="rounded-md border border-border overflow-hidden" data-testid={`alert-bucket-${bucket.alertId}`}>
-      <button
-        className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-muted/40 transition-colors text-left"
-        onClick={() => setOpen((v) => !v)}
-      >
-        <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-        <span className="flex-1 text-xs font-semibold text-foreground truncate">{bucket.alertName}</span>
-        <Badge variant="secondary" className="text-[11px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+    <div className="space-y-0.5" data-testid={`alert-bucket-${bucket.alertId}`}>
+      <div className="flex items-center gap-2 px-1 pb-1">
+        <Bell className="w-3 h-3 text-emerald-500 shrink-0" />
+        <span className="text-[11px] font-semibold text-foreground truncate">{bucket.alertName}</span>
+        <Badge variant="secondary" className="text-[10px] tabular-nums shrink-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
           +{bucket.matchCount}
         </Badge>
-        {open ? <ChevronUp className="w-3 h-3 text-muted-foreground shrink-0" /> : <ChevronDown className="w-3 h-3 text-muted-foreground shrink-0" />}
-      </button>
-      {open && bucket.samples.length > 0 && (
-        <div className="border-t border-border px-2 py-2 space-y-0.5 bg-muted/20">
-          {bucket.samples.map((asset, j) => (
-            <AssetRow key={asset.id} id={asset.id} name={asset.assetName} institution={asset.institution} modality={asset.modality} stage={asset.developmentStage} index={j} />
-          ))}
-          {bucket.matchCount > bucket.samples.length && (
-            <p className="text-[10px] text-muted-foreground px-3 pt-1">+{bucket.matchCount - bucket.samples.length} more</p>
-          )}
-        </div>
+      </div>
+      {bucket.samples.map((asset, j) => (
+        <AssetRow
+          key={asset.id}
+          id={asset.id}
+          name={asset.assetName}
+          institution={asset.institution}
+          modality={asset.modality}
+          stage={asset.developmentStage}
+          index={j}
+        />
+      ))}
+      {bucket.matchCount > bucket.samples.length && (
+        <p className="text-[10px] text-muted-foreground px-3 pt-0.5">
+          +{bucket.matchCount - bucket.samples.length} more in this alert
+        </p>
       )}
     </div>
   );
 }
+
+const FLAT_LIST_MAX = 30;
 
 function NewTtoAssetsSection({
   industryData,
@@ -361,8 +318,14 @@ function NewTtoAssetsSection({
   onCreateAlert: () => void;
 }) {
   const hasMatchedAlerts = !!(alertsDelta && alertsDelta.byAlert.length > 0);
-  const unfilteredInstitutions = industryData?.byInstitution ?? [];
   const totalUnfiltered = industryData?.total ?? 0;
+
+  const flatAssets: Array<{ id: number; name: string; institution: string }> =
+    (industryData?.byInstitution ?? []).flatMap((inst) =>
+      inst.sampleAssets.map((a) => ({ id: a.id, name: a.name, institution: inst.institution }))
+    );
+  const flatVisible = flatAssets.slice(0, FLAT_LIST_MAX);
+  const flatHidden = flatAssets.length - flatVisible.length;
 
   return (
     <div className="space-y-2">
@@ -386,12 +349,8 @@ function NewTtoAssetsSection({
           <Bell className="w-4 h-4 text-primary shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-xs font-medium text-foreground">Set up an alert to personalise this feed</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Below are all new assets — create a saved alert to filter by modality, stage, or institution.</p>
-            <button
-              onClick={onCreateAlert}
-              className="text-xs text-primary hover:underline mt-1"
-              data-testid="button-create-alert-from-tto"
-            >
+            <p className="text-[11px] text-muted-foreground mt-0.5">All new assets are shown below — create a saved alert to filter by modality, stage, or institution.</p>
+            <button onClick={onCreateAlert} className="text-xs text-primary hover:underline mt-1" data-testid="button-create-alert-from-tto">
               + Create an alert →
             </button>
           </div>
@@ -399,35 +358,52 @@ function NewTtoAssetsSection({
       )}
 
       {alertsDeltaLoading ? (
-        <div className="space-y-2">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-11 w-full rounded-md" />)}
+        <div className="space-y-1">
+          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-10 w-full rounded-md" />)}
         </div>
       ) : hasMatchedAlerts ? (
-        <div className="space-y-2">
-          <p className="text-[10px] text-muted-foreground/70 px-0.5">Matched by your alerts</p>
+        <div className="space-y-4" data-testid="alert-matched-buckets">
           {alertsDelta!.byAlert.map((bucket) => (
-            <AlertBucket key={bucket.alertId} bucket={bucket} />
+            <AlertBucketRows key={bucket.alertId} bucket={bucket} />
           ))}
+          {!hasAlerts && flatVisible.length > 0 && (
+            <div className="space-y-0.5 pt-2 border-t border-border/40">
+              <p className="text-[10px] text-muted-foreground/70 px-1 pb-1">All new assets</p>
+              {flatVisible.map((asset, i) => (
+                <AssetRow key={asset.id} id={asset.id} name={asset.name} institution={asset.institution} index={i} />
+              ))}
+            </div>
+          )}
         </div>
-      ) : hasAlerts ? (
-        <p className="text-xs text-muted-foreground py-3 px-1" data-testid="no-alert-matches">
-          No new assets match your saved alert criteria. Try broadening your filters, or see all new assets below.
-        </p>
-      ) : null}
-
-      {!hasMatchedAlerts && unfilteredInstitutions.length > 0 && (
-        <div className="space-y-2">
-          {hasAlerts && <p className="text-[10px] text-muted-foreground/70 px-0.5">All new assets by institution</p>}
-          {unfilteredInstitutions.map((inst, i) => (
-            <InstitutionGroup key={inst.institution} inst={inst} />
-          ))}
-        </div>
-      )}
-
-      {!hasMatchedAlerts && !alertsDeltaLoading && unfilteredInstitutions.length === 0 && totalUnfiltered === 0 && (
-        <p className="text-xs text-muted-foreground py-3 px-1" data-testid="no-new-assets">
-          No new TTO assets since your last visit. Check back soon.
-        </p>
+      ) : (
+        <>
+          {hasAlerts && (
+            <p className="text-xs text-muted-foreground py-1 px-1" data-testid="no-alert-matches">
+              No new assets match your saved alert criteria. All new assets are shown below.
+            </p>
+          )}
+          {flatVisible.length > 0 ? (
+            <div className="space-y-0.5" data-testid="flat-asset-list">
+              {flatVisible.map((asset, i) => (
+                <AssetRow key={asset.id} id={asset.id} name={asset.name} institution={asset.institution} index={i} />
+              ))}
+              {flatHidden > 0 && (
+                <p className="text-[10px] text-muted-foreground px-3 pt-1">
+                  +{flatHidden} more · <Link href="/scout" className="text-primary hover:underline">search in Scout</Link>
+                </p>
+              )}
+              {totalUnfiltered > flatAssets.length && (
+                <p className="text-[10px] text-muted-foreground px-3">
+                  {totalUnfiltered - flatAssets.length} additional assets not sampled · <Link href="/scout" className="text-primary hover:underline">search in Scout</Link>
+                </p>
+              )}
+            </div>
+          ) : !alertsDeltaLoading && (
+            <p className="text-xs text-muted-foreground py-3 px-1" data-testid="no-new-assets">
+              No new TTO assets since your last visit. Check back soon.
+            </p>
+          )}
+        </>
       )}
     </div>
   );
