@@ -971,6 +971,7 @@ export async function registerRoutes(
         sourceUrl: body.source_url,
         pmid: body.pmid,
       }, userId);
+      logTeamActivity(userId ?? null, "saved_asset", asset.id, asset.assetName).catch(() => {});
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to save asset" });
@@ -998,6 +999,33 @@ export async function registerRoutes(
       if (profile?.userName?.trim()) return profile.userName.trim();
     } catch { /* fall through */ }
     return "Team Member";
+  }
+
+  // ── Log a team activity (fire-and-forget; no-op for non-org users) ─────────
+  async function logTeamActivity(
+    userId: string | null,
+    action: string,
+    assetId: number | null,
+    assetName: string,
+    metadata?: Record<string, unknown>,
+  ): Promise<void> {
+    if (!userId) return;
+    try {
+      const org = await storage.getOrgForUser(userId);
+      if (!org) return;
+      const actorName = await resolveAuthorName(userId);
+      await storage.createTeamActivity({
+        orgId: org.id,
+        userId,
+        actorName,
+        action,
+        assetId: assetId ?? null,
+        assetName,
+        metadata: metadata ?? null,
+      });
+    } catch (e) {
+      console.error("[team-activity] Failed to log:", e);
+    }
   }
 
   // ── Saved asset access guard ─────────────────────────────────────────────
@@ -1058,6 +1086,10 @@ export async function registerRoutes(
           content,
           isSystemEvent: true,
         }).catch((e) => console.error(`[system-event-note] Failed for asset ${id}:`, e));
+        logTeamActivity(userId ?? null, "moved_asset", id, before.assetName, {
+          fromStage: prevLabel,
+          toStage: nextLabel,
+        }).catch(() => {});
       }
 
       res.json({ asset });
@@ -1108,6 +1140,7 @@ export async function registerRoutes(
         content,
         isSystemEvent: false,
       });
+      logTeamActivity(userId ?? null, "added_note", id, asset.assetName).catch(() => {});
       res.status(201).json({ note });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to create note" });
@@ -1118,10 +1151,29 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = await tryGetUserId(req);
+      const assetBefore = await storage.getSavedAsset(id);
       await storage.deleteSavedAsset(id);
+      if (assetBefore) {
+        logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
+      }
       res.status(204).send();
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to delete asset" });
+    }
+  });
+
+  // ── Team Activity Feed ─────────────────────────────────────────────────────
+  app.get("/api/team/activity", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const org = await storage.getOrgForUser(userId);
+      if (!org) return res.status(403).json({ error: "Team plan required" });
+      const activities = await storage.getTeamActivities(org.id, 20);
+      res.json({ activities });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch team activity" });
     }
   });
 

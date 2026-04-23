@@ -25,6 +25,7 @@ import {
   organizations, type Organization, type InsertOrganization,
   orgMembers, type OrgMember, type InsertOrgMember,
   sharedLinks, type SharedLink,
+  teamActivities, type TeamActivity, type InsertTeamActivity,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -333,6 +334,10 @@ export interface IStorage {
 
   createSharedLink(data: { type: string; entityId?: string; payload: Record<string, unknown>; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink>;
   getSharedLinkByToken(token: string): Promise<SharedLink | undefined>;
+
+  // Team Activities
+  createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
+  getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2905,6 +2910,20 @@ export class DatabaseStorage implements IStorage {
   async getSharedLinkByToken(token: string): Promise<SharedLink | undefined> {
     const [row] = await db.select().from(sharedLinks).where(eq(sharedLinks.token, token)).limit(1);
     return row;
+  }
+
+  async createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity> {
+    const [row] = await db.insert(teamActivities).values(data).returning();
+    return row;
+  }
+
+  async getTeamActivities(orgId: number, limit = 20): Promise<TeamActivity[]> {
+    return db
+      .select()
+      .from(teamActivities)
+      .where(eq(teamActivities.orgId, orgId))
+      .orderBy(desc(teamActivities.createdAt))
+      .limit(limit);
   }
 }
 

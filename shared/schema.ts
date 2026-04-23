@@ -699,6 +699,27 @@ export const insertDispatchLogSchema = createInsertSchema(dispatchLogs).omit({ i
 export type InsertDispatchLog = z.infer<typeof insertDispatchLogSchema>;
 export type DispatchLog = typeof dispatchLogs.$inferSelect;
 
+// ── Team Activity Feed ─────────────────────────────────────────────────────────
+
+export const TEAM_ACTIVITY_ACTIONS = ["saved_asset", "moved_asset", "added_note", "removed_asset"] as const;
+export type TeamActivityAction = typeof TEAM_ACTIVITY_ACTIONS[number];
+
+export const teamActivities = pgTable("team_activities", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  userId: text("user_id").notNull(),
+  actorName: text("actor_name").notNull(),
+  action: text("action").notNull(),
+  assetId: integer("asset_id"),
+  assetName: text("asset_name").notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertTeamActivitySchema = createInsertSchema(teamActivities).omit({ id: true, createdAt: true });
+export type InsertTeamActivity = z.infer<typeof insertTeamActivitySchema>;
+export type TeamActivity = typeof teamActivities.$inferSelect;
+
 export const sharedLinks = pgTable("shared_links", {
   id: serial("id").primaryKey(),
   token: uuid("token").notNull().unique().default(sql`gen_random_uuid()`),

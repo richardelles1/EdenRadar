@@ -10,6 +10,7 @@ export type IndustryProfile = {
   dealStages: string[];
   modalities: string[];
   onboardingDone: boolean;
+  orgId?: number | null;
 };
 
 const DEFAULT_PROFILE: IndustryProfile = {
@@ -20,6 +21,7 @@ const DEFAULT_PROFILE: IndustryProfile = {
   dealStages: [],
   modalities: [],
   onboardingDone: false,
+  orgId: null,
 };
 
 let _currentAccessToken: string | null = null;
@@ -131,8 +133,13 @@ export function useIndustrySyncOnMount(): { hydrated: boolean } {
             dealStages: serverProfile.dealStages ?? [],
             modalities: serverProfile.modalities ?? [],
             onboardingDone: serverProfile.onboardingDone ?? false,
+            orgId: serverProfile.orgId ?? null,
           }));
           qc.invalidateQueries({ queryKey: ["/api/industry/profile"] });
+        } else {
+          // Always sync orgId (can change without other profile fields changing)
+          const merged = { ...getIndustryProfile(), orgId: serverProfile.orgId ?? null };
+          localStorage.setItem("eden-industry-profile", JSON.stringify(merged));
         }
       } catch (err) {
         console.warn("[use-industry] Hydration failed:", err);

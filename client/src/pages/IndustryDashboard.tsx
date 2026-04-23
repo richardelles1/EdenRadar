@@ -16,6 +16,11 @@ import {
   Compass,
   Radar,
   TrendingUp,
+  Users,
+  BookmarkPlus,
+  StickyNote,
+  MoveRight,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -92,6 +97,22 @@ type AlertDeltaResponse = {
   newAssets: { total: number; byInstitution: Array<{ institution: string; count: number }> };
   windowHours: number;
   since?: string;
+};
+
+type TeamActivityItem = {
+  id: number;
+  orgId: number;
+  userId: string;
+  actorName: string;
+  action: string;
+  assetId: number | null;
+  assetName: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+};
+
+type TeamActivityResponse = {
+  activities: TeamActivityItem[];
 };
 
 const STATUS_CYCLE: Array<string | null> = [null, "viewing", "evaluating", "contacted"];
@@ -292,6 +313,16 @@ export default function IndustryDashboard() {
   const { data: exploreData, isLoading: exploreLoading } = useQuery<{ assets: BrowseAsset[]; hasMore: boolean }>({
     queryKey: ["/api/browse/assets?limit=24&sortBy=completeness"],
     staleTime: 10 * 60 * 1000,
+  });
+
+  const isOrgMember = Boolean(profile.orgId);
+
+  const { data: teamActivityData, isLoading: teamActivityLoading } = useQuery<TeamActivityResponse>({
+    queryKey: ["/api/team/activity"],
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+    retry: false,
+    enabled: isOrgMember,
   });
 
   const statusMutation = useMutation({
@@ -830,6 +861,90 @@ export default function IndustryDashboard() {
             </div>
           )}
         </div>
+
+        {/* ── SECTION 4: TEAM ACTIVITY FEED (org members only) ── */}
+        {isOrgMember && (
+          <div
+            className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
+            style={{
+              background: "color-mix(in srgb, hsl(var(--primary)) 3%, hsl(var(--background)))",
+              animation: "dash-fade-up 400ms ease 200ms both",
+            }}
+            data-testid="dashboard-team-activity"
+          >
+            <SectionHeader title="Team Activity" icon={Users} />
+
+            {teamActivityLoading ? (
+              <div className="space-y-2">
+                {[1, 2, 3, 4, 5].map((i) => <Skeleton key={i} className="h-12 rounded-lg" />)}
+              </div>
+            ) : !teamActivityData?.activities.length ? (
+              <div className="py-6 text-center">
+                <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground">No team activity yet.</p>
+                <p className="text-[11px] text-muted-foreground/60 mt-1">Actions by org members will appear here.</p>
+              </div>
+            ) : (
+              <div className="space-y-1.5" data-testid="team-activity-list">
+                {teamActivityData.activities.map((item) => {
+                  const actionMeta = {
+                    saved_asset: { icon: BookmarkPlus, label: "saved", color: "text-emerald-500", bg: "bg-emerald-500/10" },
+                    moved_asset: { icon: MoveRight, label: "moved", color: "text-blue-500", bg: "bg-blue-500/10" },
+                    added_note: { icon: StickyNote, label: "noted on", color: "text-amber-500", bg: "bg-amber-500/10" },
+                    removed_asset: { icon: Trash2, label: "removed", color: "text-rose-500", bg: "bg-rose-500/10" },
+                  }[item.action] ?? { icon: Users, label: item.action, color: "text-muted-foreground", bg: "bg-muted" };
+
+                  const ActionIcon = actionMeta.icon;
+                  const initials = item.actorName.split(/\s+/).map((p: string) => p[0]).join("").slice(0, 2).toUpperCase();
+
+                  const stageLabel = (item.metadata?.toStage as string | null) ?? null;
+                  const fromLabel = (item.metadata?.fromStage as string | null) ?? null;
+                  const actionDescription =
+                    item.action === "moved_asset" && stageLabel
+                      ? `moved to ${stageLabel}`
+                      : item.action === "moved_asset" && !stageLabel && fromLabel
+                      ? "cleared status on"
+                      : actionMeta.label;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border border-border/60 bg-background/50"
+                      data-testid={`team-activity-${item.id}`}
+                    >
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center shrink-0 text-[10px] font-bold text-primary border border-primary/20">
+                        {initials || "?"}
+                      </div>
+                      <div className={`w-6 h-6 rounded-md flex items-center justify-center shrink-0 ${actionMeta.bg}`}>
+                        <ActionIcon className={`w-3 h-3 ${actionMeta.color}`} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs text-foreground leading-snug truncate">
+                          <span className="font-medium">{item.actorName}</span>
+                          {" "}
+                          <span className="text-muted-foreground">{actionDescription}</span>
+                          {" "}
+                          {item.assetId ? (
+                            <Link href={`/asset/${item.assetId}`}>
+                              <span className="font-medium text-primary hover:underline cursor-pointer" data-testid={`team-activity-asset-link-${item.id}`}>
+                                {item.assetName}
+                              </span>
+                            </Link>
+                          ) : (
+                            <span className="font-medium">{item.assetName}</span>
+                          )}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground/60 shrink-0 tabular-nums">
+                        {timeAgo(item.createdAt)}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
     </div>
