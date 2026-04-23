@@ -721,6 +721,14 @@ async function runStartupMigrations() {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");
   }
 
+  // ── user_alerts: last_alert_sent_at column ────────────────────────────────
+  try {
+    await client.query(`ALTER TABLE user_alerts ADD COLUMN IF NOT EXISTS last_alert_sent_at TIMESTAMP`);
+    log("[startup] user_alerts last_alert_sent_at column ready", "startup");
+  } catch (err: any) {
+    log(`[startup] user_alerts migration failed: ${err?.message}`, "startup");
+  }
+
   } finally {
     // Always close the dedicated migration client, even if a migration throws
     await client.end().catch(() => {});

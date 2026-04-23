@@ -1,52 +1,45 @@
 import { db } from "../db";
+import { storage } from "../storage";
 import { userAlerts, ingestedAssets } from "../../shared/schema";
 import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
 
-interface AlertMatchGroup {
-  alertId: number;
-  alertName: string;
-  assets: DispatchAsset[];
-}
-
 /**
- * Query ingested_assets for new matches since the given date,
- * applying the alert's criteria filters.
+ * Find new relevant assets that match a saved alert's criteria.
+ * Uses idiomatic Drizzle: undefined conditions are silently ignored by `and()`.
  */
 async function matchAssetsForAlert(
   alert: typeof userAlerts.$inferSelect,
   since: Date,
 ): Promise<DispatchAsset[]> {
-  const conditions: ReturnType<typeof eq>[] = [
-    gt(ingestedAssets.firstSeenAt, since) as any,
-    eq(ingestedAssets.relevant, true) as any,
-  ];
-
-  if (alert.institutions && alert.institutions.length > 0) {
-    conditions.push(inArray(ingestedAssets.institution, alert.institutions) as any);
-  }
-  if (alert.modalities && alert.modalities.length > 0) {
-    conditions.push(inArray(ingestedAssets.modality, alert.modalities) as any);
-  }
-  if (alert.stages && alert.stages.length > 0) {
-    conditions.push(inArray(ingestedAssets.developmentStage, alert.stages) as any);
-  }
-  if (alert.query && alert.query.trim()) {
-    const q = `%${alert.query.trim()}%`;
-    conditions.push(
-      or(
-        ilike(ingestedAssets.assetName, q),
-        ilike(ingestedAssets.summary, q),
-        ilike(ingestedAssets.indication, q),
-        ilike(ingestedAssets.target, q),
-      ) as any,
-    );
-  }
+  const trimmedQuery = alert.query?.trim();
 
   const rows = await db
     .select()
     .from(ingestedAssets)
-    .where(and(...(conditions as any[])))
+    .where(
+      and(
+        gt(ingestedAssets.firstSeenAt, since),
+        eq(ingestedAssets.relevant, true),
+        alert.institutions?.length
+          ? inArray(ingestedAssets.institution, alert.institutions)
+          : undefined,
+        alert.modalities?.length
+          ? inArray(ingestedAssets.modality, alert.modalities)
+          : undefined,
+        alert.stages?.length
+          ? inArray(ingestedAssets.developmentStage, alert.stages)
+          : undefined,
+        trimmedQuery
+          ? or(
+              ilike(ingestedAssets.assetName, `%${trimmedQuery}%`),
+              ilike(ingestedAssets.summary, `%${trimmedQuery}%`),
+              ilike(ingestedAssets.indication, `%${trimmedQuery}%`),
+              ilike(ingestedAssets.target, `%${trimmedQuery}%`),
+            )
+          : undefined,
+      ),
+    )
     .orderBy(desc(ingestedAssets.firstSeenAt))
     .limit(15);
 
@@ -64,11 +57,10 @@ async function matchAssetsForAlert(
 }
 
 /**
- * Called after each institution sync that produced new assets, or at cycle end.
- * Evaluates all user_alerts, groups matches by user, and sends one email per user.
+ * Evaluate all saved user alerts and send one email per alert that has new matches.
  *
- * @param triggeringInstitution — when provided, only evaluates alerts that
- *   include this institution (or have no institution restriction).
+ * @param triggeringInstitution — when provided, only evaluates alerts whose
+ *   institution list includes this institution (or have no institution restriction).
  */
 export async function checkAndSendAlerts(triggeringInstitution?: string): Promise<void> {
   const apiKey = process.env.RESEND_API_KEY;
@@ -84,7 +76,6 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
     return;
   }
 
-  // Load all user_alerts that have a user_id
   const alerts = await db
     .select()
     .from(userAlerts)
@@ -95,51 +86,7 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
   const now = new Date();
   const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
 
-  // Evaluate each alert; collect matches keyed by user
-  const matchesByUser = new Map<string, AlertMatchGroup[]>();
-
-  for (const alert of alerts) {
-    if (!alert.userId) continue;
-
-    // If triggered by a specific institution, skip alerts that don't cover it
-    if (
-      triggeringInstitution &&
-      alert.institutions &&
-      alert.institutions.length > 0 &&
-      !alert.institutions
-        .map((i) => i.toLowerCase())
-        .includes(triggeringInstitution.toLowerCase())
-    ) {
-      continue;
-    }
-
-    const since = alert.lastAlertSentAt ?? fortyEightHoursAgo;
-    let matched: DispatchAsset[];
-
-    try {
-      matched = await matchAssetsForAlert(alert, since);
-    } catch (err: any) {
-      console.error(`[alertMailer] Error matching alert ${alert.id}:`, err?.message);
-      continue;
-    }
-
-    if (matched.length === 0) continue;
-
-    const existing = matchesByUser.get(alert.userId) ?? [];
-    existing.push({
-      alertId: alert.id,
-      alertName: alert.name ?? "Unnamed Alert",
-      assets: matched,
-    });
-    matchesByUser.set(alert.userId, existing);
-  }
-
-  if (matchesByUser.size === 0) {
-    console.log("[alertMailer] No alert matches — no emails to send");
-    return;
-  }
-
-  // Fetch user emails from Supabase admin API
+  // Resolve user emails up-front via Supabase admin API
   const { createClient } = await import("@supabase/supabase-js");
   const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
   const { data: usersData, error: usersError } =
@@ -157,37 +104,50 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
     if (email) userEmailMap.set(u.id, email);
   }
 
-  // Send one email per user containing all their matched assets
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
 
-  for (const [userId, groups] of matchesByUser.entries()) {
-    const email = userEmailMap.get(userId);
-    if (!email) {
-      console.log(`[alertMailer] No email for user ${userId} — skipping`);
+  for (const alert of alerts) {
+    if (!alert.userId) continue;
+
+    // Institution scope check: if this was triggered by a specific institution,
+    // skip alerts that don't cover it (alerts with no institution list match anything).
+    if (
+      triggeringInstitution &&
+      alert.institutions &&
+      alert.institutions.length > 0 &&
+      !alert.institutions
+        .map((i) => i.toLowerCase())
+        .includes(triggeringInstitution.toLowerCase())
+    ) {
       continue;
     }
 
-    // Deduplicate assets across alerts for this user
-    const seenIds = new Set<number>();
-    const allAssets: DispatchAsset[] = [];
-    for (const g of groups) {
-      for (const a of g.assets) {
-        if (!seenIds.has(a.id)) {
-          seenIds.add(a.id);
-          allAssets.push(a);
-        }
-      }
-    }
-    if (allAssets.length === 0) continue;
+    const since = alert.lastAlertSentAt ?? fortyEightHoursAgo;
+    let matched: DispatchAsset[];
 
-    const alertNames = [...new Set(groups.map((g) => g.alertName))].join(", ");
-    const subject = `EdenRadar Alert: ${allAssets.length} new match${allAssets.length !== 1 ? "es" : ""} — ${alertNames}`;
-    const windowLabel = `Alert match · ${allAssets.length} new asset${allAssets.length !== 1 ? "s" : ""}`;
+    try {
+      matched = await matchAssetsForAlert(alert, since);
+    } catch (err: any) {
+      console.error(`[alertMailer] Match error for alert ${alert.id}:`, err?.message);
+      continue;
+    }
+
+    if (matched.length === 0) continue;
+
+    const email = userEmailMap.get(alert.userId);
+    if (!email) {
+      console.log(`[alertMailer] No email for user ${alert.userId} — skipping alert ${alert.id}`);
+      continue;
+    }
+
+    const alertName = alert.name ?? "Unnamed Alert";
+    const subject = `EdenRadar Alert: ${matched.length} new match${matched.length !== 1 ? "es" : ""} — ${alertName}`;
+    const windowLabel = `Alert: ${alertName} · ${matched.length} new asset${matched.length !== 1 ? "s" : ""}`;
 
     const html = renderDispatchEmail({
       subject,
-      assets: allAssets,
+      assets: matched,
       windowLabel,
       isTest: false,
       colorMode: "light",
@@ -202,22 +162,33 @@ export async function checkAndSendAlerts(triggeringInstitution?: string): Promis
       });
 
       if (sendError) {
-        console.error(`[alertMailer] Send error for ${email}:`, sendError.message);
+        console.error(`[alertMailer] Send error for alert ${alert.id} → ${email}:`, sendError.message);
         continue;
       }
 
       console.log(
-        `[alertMailer] Sent alert email → ${email} | ${allAssets.length} asset(s) | alerts: ${alertNames}`,
+        `[alertMailer] Sent alert "${alertName}" → ${email} | ${matched.length} asset(s)`,
       );
 
-      // Update lastAlertSentAt only for the alerts that contributed matches
-      const matchedAlertIds = groups.map((g) => g.alertId);
+      // Record in dispatch_logs so admin can audit all outbound alert emails
+      await storage.createDispatchLog({
+        subject,
+        recipients: [email],
+        assetIds: matched.map((a) => a.id),
+        assetNames: matched.map((a) => a.assetName),
+        assetSourceUrls: matched.map((a) => a.sourceUrl ?? ""),
+        assetCount: matched.length,
+        windowHours: 0,
+        isTest: false,
+      });
+
+      // Update lastAlertSentAt only for this specific alert
       await db
         .update(userAlerts)
         .set({ lastAlertSentAt: now })
-        .where(inArray(userAlerts.id, matchedAlertIds));
+        .where(eq(userAlerts.id, alert.id));
     } catch (err: any) {
-      console.error(`[alertMailer] Unexpected error for ${email}:`, err?.message);
+      console.error(`[alertMailer] Unexpected error for alert ${alert.id}:`, err?.message);
     }
   }
 }
