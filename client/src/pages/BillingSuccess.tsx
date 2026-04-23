@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { CheckCircle2, ArrowRight, Loader2, AlertTriangle, Sprout } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, AlertTriangle, Sprout, UserPlus, Send, X, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 
 interface VerifyResult {
   planTier: string;
@@ -19,9 +22,154 @@ const PLAN_LABELS: Record<string, string> = {
   team10: "Team (10 seats)",
 };
 
+const PLAN_MAX_INVITES: Record<string, number> = {
+  team5: 4,
+  team10: 9,
+};
+
 function formatDate(iso: string | null) {
   if (!iso) return null;
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+}
+
+interface SentInvite {
+  email: string;
+  name: string;
+}
+
+function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId: string }) {
+  const { toast } = useToast();
+  const maxInvites = PLAN_MAX_INVITES[planId] ?? 0;
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState<SentInvite[]>([]);
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || !fullName.trim()) return;
+    if (sent.length >= maxInvites) {
+      toast({ title: "Seat limit reached", description: `You've filled all available seats for this plan.`, variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch("/api/org/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+        body: JSON.stringify({ email: email.trim(), fullName: fullName.trim(), role: "member" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Invite failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+        return;
+      }
+      setSent((prev) => [...prev, { email: email.trim(), name: fullName.trim() }]);
+      setEmail("");
+      setFullName("");
+      toast({ title: "Invite sent", description: `${fullName.trim()} will receive an email to set their password.` });
+    } catch {
+      toast({ title: "Network error", description: "Failed to send invite. Please try again.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const remaining = maxInvites - sent.length;
+
+  return (
+    <div
+      className="rounded-xl border bg-card overflow-hidden mt-4"
+      style={{ borderColor: "hsl(142 52% 36% / 0.25)" }}
+      data-testid="section-team-invite"
+    >
+      <div
+        className="px-6 py-4 flex items-center gap-3"
+        style={{ background: "hsl(142 52% 36% / 0.05)", borderBottom: "1px solid hsl(142 52% 36% / 0.15)" }}
+      >
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+          style={{ background: "hsl(142 52% 36% / 0.12)" }}
+        >
+          <UserPlus className="w-4 h-4" style={{ color: "hsl(142 52% 36%)" }} />
+        </div>
+        <div>
+          <p className="text-sm font-semibold text-foreground">Invite your team</p>
+          <p className="text-xs text-muted-foreground">
+            {remaining > 0
+              ? `${remaining} seat${remaining !== 1 ? "s" : ""} remaining — invite colleagues now or later from Settings`
+              : "All seats filled. Manage members in Settings."}
+          </p>
+        </div>
+      </div>
+
+      {remaining > 0 && (
+        <form onSubmit={handleInvite} className="px-6 py-4 space-y-3">
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1">
+              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name</Label>
+              <Input
+                id="invite-name"
+                placeholder="Jane Smith"
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+                disabled={loading}
+                data-testid="input-invite-name"
+                className="h-8 text-sm"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="invite-email" className="text-xs text-muted-foreground">Work email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="jane@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                data-testid="input-invite-email"
+                className="h-8 text-sm"
+              />
+            </div>
+          </div>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={loading || !email.trim() || !fullName.trim()}
+            data-testid="button-send-invite"
+            className="gap-1.5 w-full"
+            style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
+          >
+            {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {loading ? "Sending…" : "Send invite"}
+          </Button>
+        </form>
+      )}
+
+      {sent.length > 0 && (
+        <div className="px-6 pb-4 space-y-1.5" data-testid="list-sent-invites">
+          {sent.map((inv) => (
+            <div
+              key={inv.email}
+              className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
+              style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.15)" }}
+            >
+              <Mail className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(142 52% 36%)" }} />
+              <span className="font-medium text-foreground truncate">{inv.name}</span>
+              <span className="text-muted-foreground truncate">{inv.email}</span>
+              <span className="ml-auto text-[10px] font-medium" style={{ color: "hsl(142 52% 36%)" }}>Invited</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="px-6 pb-4">
+        <p className="text-[10px] text-muted-foreground">
+          Invitees receive an email with a link to set their password and join your workspace. You can manage seats anytime from Settings.
+        </p>
+      </div>
+    </div>
+  );
 }
 
 export default function BillingSuccess() {
@@ -76,6 +224,8 @@ export default function BillingSuccess() {
     verify();
   }, [session?.access_token, authLoading]);
 
+  const isTeamPlan = result?.planId === "team5" || result?.planId === "team10";
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center px-4">
       <div className="w-full max-w-md space-y-6">
@@ -107,85 +257,92 @@ export default function BillingSuccess() {
           const trialEndDate = formatDate(result.stripeTrialEnd);
           const billingDate = formatDate(result.nextBillingAt);
           return (
-            <div
-              className="rounded-xl border bg-card overflow-hidden"
-              style={{ borderColor: "hsl(142 52% 36% / 0.4)", boxShadow: "0 0 0 4px hsl(142 52% 36% / 0.06)" }}
-              data-testid="billing-success-card"
-            >
+            <>
               <div
-                className="px-7 py-6 text-center space-y-2"
-                style={{ background: "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))" }}
+                className="rounded-xl border bg-card overflow-hidden"
+                style={{ borderColor: "hsl(142 52% 36% / 0.4)", boxShadow: "0 0 0 4px hsl(142 52% 36% / 0.06)" }}
+                data-testid="billing-success-card"
               >
-                <div className="flex justify-center">
-                  <CheckCircle2 className="w-12 h-12" style={{ color: "hsl(142 52% 36%)" }} />
-                </div>
-                <h1 className="text-2xl font-bold text-foreground" data-testid="text-billing-success-title">
-                  {isTrial ? "Your 3-day free trial has started!" : "You're subscribed!"}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  {isTrial
-                    ? `Full access for 3 days, free of charge${result.orgName ? ` — ${result.orgName}` : ""}.`
-                    : `Welcome to EdenScout${result.orgName ? ` — ${result.orgName}` : ""}.`}
-                </p>
-              </div>
-
-              <div className="px-7 py-5 space-y-3 border-t border-border">
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Plan</span>
-                  <span className="font-semibold text-foreground" data-testid="text-billing-plan">
-                    {PLAN_LABELS[result.planId] ?? result.planTier}
-                  </span>
-                </div>
-                <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Status</span>
-                  <span
-                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                    style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
-                    data-testid="text-billing-status"
-                  >
-                    {isTrial ? "Free trial" : result.stripeStatus === "active" ? "Active" : result.stripeStatus}
-                  </span>
-                </div>
-                {isTrial && trialEndDate ? (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">Trial ends</span>
-                    <span className="font-medium text-foreground" data-testid="text-billing-trial-end">
-                      {trialEndDate}
-                    </span>
+                <div
+                  className="px-7 py-6 text-center space-y-2"
+                  style={{ background: "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))" }}
+                >
+                  <div className="flex justify-center">
+                    <CheckCircle2 className="w-12 h-12" style={{ color: "hsl(142 52% 36%)" }} />
                   </div>
-                ) : billingDate ? (
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-muted-foreground">Next billing</span>
-                    <span className="font-medium text-foreground" data-testid="text-billing-next-date">
-                      {billingDate}
-                    </span>
-                  </div>
-                ) : null}
-                {isTrial && (
-                  <p className="text-[11px] text-muted-foreground pt-1 leading-relaxed border-t border-border/60">
-                    You won't be charged until {trialEndDate ?? "your trial ends"}. Cancel anytime from your billing settings.
+                  <h1 className="text-2xl font-bold text-foreground" data-testid="text-billing-success-title">
+                    {isTrial ? "Your 3-day free trial has started!" : "You're subscribed!"}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {isTrial
+                      ? `Full access for 3 days, free of charge${result.orgName ? ` — ${result.orgName}` : ""}.`
+                      : `Welcome to EdenScout${result.orgName ? ` — ${result.orgName}` : ""}.`}
                   </p>
-                )}
+                </div>
+
+                <div className="px-7 py-5 space-y-3 border-t border-border">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Plan</span>
+                    <span className="font-semibold text-foreground" data-testid="text-billing-plan">
+                      {PLAN_LABELS[result.planId] ?? result.planTier}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Status</span>
+                    <span
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                      style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                      data-testid="text-billing-status"
+                    >
+                      {isTrial ? "Free trial" : result.stripeStatus === "active" ? "Active" : result.stripeStatus}
+                    </span>
+                  </div>
+                  {isTrial && trialEndDate ? (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Trial ends</span>
+                      <span className="font-medium text-foreground" data-testid="text-billing-trial-end">
+                        {trialEndDate}
+                      </span>
+                    </div>
+                  ) : billingDate ? (
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-muted-foreground">Next billing</span>
+                      <span className="font-medium text-foreground" data-testid="text-billing-next-date">
+                        {billingDate}
+                      </span>
+                    </div>
+                  ) : null}
+                  {isTrial && (
+                    <p className="text-[11px] text-muted-foreground pt-1 leading-relaxed border-t border-border/60">
+                      You won't be charged until {trialEndDate ?? "your trial ends"}. Cancel anytime from your billing settings.
+                    </p>
+                  )}
+                </div>
+
+                <div className="px-7 pb-7 pt-2 space-y-2">
+                  <Link href="/industry/dashboard">
+                    <Button
+                      className="w-full font-semibold"
+                      style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
+                      data-testid="button-billing-go-to-app"
+                    >
+                      {isTrial ? "Explore the platform" : "Go to dashboard"}
+                      <ArrowRight className="w-4 h-4 ml-1.5" />
+                    </Button>
+                  </Link>
+                  <Link href="/pricing">
+                    <Button variant="ghost" className="w-full text-sm text-muted-foreground">
+                      View plans
+                    </Button>
+                  </Link>
+                </div>
               </div>
 
-              <div className="px-7 pb-7 pt-2 space-y-2">
-                <Link href="/industry/dashboard">
-                  <Button
-                    className="w-full font-semibold"
-                    style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
-                    data-testid="button-billing-go-to-app"
-                  >
-                    {isTrial ? "Explore the platform" : "Go to dashboard"}
-                    <ArrowRight className="w-4 h-4 ml-1.5" />
-                  </Button>
-                </Link>
-                <Link href="/pricing">
-                  <Button variant="ghost" className="w-full text-sm text-muted-foreground">
-                    View plans
-                  </Button>
-                </Link>
-              </div>
-            </div>
+              {/* Team invite panel — only for team plans */}
+              {isTeamPlan && session?.access_token && (
+                <TeamInvitePanel accessToken={session.access_token} planId={result.planId} />
+              )}
+            </>
           );
         })()}
 

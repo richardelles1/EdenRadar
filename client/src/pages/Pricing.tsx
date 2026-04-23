@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2 } from "lucide-react";
+import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
@@ -15,7 +15,9 @@ const SCOUT_PLANS = [
     price: "$1,999",
     period: "/mo",
     seats: "1 seat",
+    isTeam: false,
     tagline: "For solo BD professionals and licensing executives.",
+    teamCallout: null as string | null,
     features: [
       "Market intelligence feed from 300+ TTOs",
       "EDEN semantic search across full asset catalog",
@@ -32,7 +34,9 @@ const SCOUT_PLANS = [
     price: "$8,999",
     period: "/mo",
     seats: "5 seats",
+    isTeam: true,
     tagline: "For BD teams that share pipeline and move fast.",
+    teamCallout: "Share access across your BD team — invite up to 4 colleagues after checkout.",
     features: [
       "Everything in Individual",
       "5 shared team seats",
@@ -49,7 +53,9 @@ const SCOUT_PLANS = [
     price: "$16,999",
     period: "/mo",
     seats: "10 seats",
+    isTeam: true,
     tagline: "For larger BD divisions running multiple workstreams.",
+    teamCallout: "Share access across your division — invite up to 9 colleagues after checkout.",
     features: [
       "Everything in Team (5-seat)",
       "10 shared team seats",
@@ -154,6 +160,8 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
     }
   }
 
+  const buttonLabel = plan.isTeam ? "Start team trial" : "Start 3-day free trial";
+
   return (
     <div className="space-y-1.5">
       <Button
@@ -169,7 +177,7 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
         ) : (
           <ArrowRight className="w-3.5 h-3.5 mr-1 order-last" />
         )}
-        {loading ? "Redirecting to checkout…" : "Start 3-day free trial"}
+        {loading ? "Redirecting to checkout…" : buttonLabel}
       </Button>
       <p className="text-center text-[10px] text-muted-foreground">No charge for 3 days · Cancel anytime</p>
     </div>
@@ -208,6 +216,23 @@ export default function Pricing() {
               EdenScout gives industry buyers continuous access to licensable biotech assets from 300+ tech transfer offices, enriched and scored by EDEN. Free tiers for researchers and concept creators are always included.
             </p>
           </div>
+        </div>
+
+        {/* ACH payment notice */}
+        <div
+          className="rounded-lg px-4 py-3 flex items-start gap-3"
+          style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }}
+        >
+          <div
+            className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+            style={{ background: "hsl(142 52% 36% / 0.15)" }}
+          >
+            <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="font-semibold text-foreground">ACH bank transfer accepted.</span>{" "}
+            Pay by bank account (ACH) or credit card at checkout — bank transfer is the default. No card required.
+          </p>
         </div>
 
         {/* EdenScout Paid Plans */}
@@ -257,14 +282,23 @@ export default function Pricing() {
                   </div>
                   <div className="flex items-center gap-2 mb-3">
                     <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
                       style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
                     >
+                      {plan.isTeam && <Users className="w-3 h-3" />}
                       {plan.seats}
                     </span>
                     <span className="text-xs font-semibold text-foreground">{plan.name}</span>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
+                  {plan.teamCallout && (
+                    <p
+                      className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
+                      style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
+                    >
+                      {plan.teamCallout}
+                    </p>
+                  )}
                 </div>
 
                 {/* Features */}

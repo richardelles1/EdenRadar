@@ -5725,6 +5725,123 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // ── Self-service team invite routes (owner-only, no admin password required) ──
+
+  async function requireOrgOwner(req: any, res: any): Promise<{ org: any; userId: string } | null> {
+    const userId = req.headers["x-user-id"] as string;
+    if (!userId) { res.status(401).json({ error: "Not authenticated" }); return null; }
+    const org = await storage.getOrgForUser(userId);
+    if (!org) { res.status(404).json({ error: "No organization found for this user" }); return null; }
+    const member = await storage.getOrgMemberByUserId(org.id, userId);
+    if (!member || member.role !== "owner") {
+      res.status(403).json({ error: "Only the org owner can manage team members" });
+      return null;
+    }
+    return { org, userId };
+  }
+
+  // POST /api/org/members — invite a new team member (owner only)
+  app.post("/api/org/members", verifyAnyAuth, async (req, res) => {
+    try {
+      const ctx = await requireOrgOwner(req, res);
+      if (!ctx) return;
+      const { org } = ctx;
+
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+
+      const memberSchema = z.object({
+        email: z.string().email(),
+        fullName: z.string().min(1),
+        role: z.enum(["admin", "member"]).default("member"),
+      });
+      const { email, fullName, role } = memberSchema.parse(req.body);
+
+      const currentCount = await storage.getOrgMemberCount(org.id);
+      if (currentCount >= org.seatLimit) {
+        return res.status(400).json({ error: `Seat limit reached (${currentCount}/${org.seatLimit}). Upgrade the plan to add more members.` });
+      }
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data: userData, error: supabaseError } = await adminSupabase.auth.admin.createUser({
+        email,
+        email_confirm: true,
+        user_metadata: { role: "industry", fullName },
+      });
+      if (supabaseError) return res.status(500).json({ error: supabaseError.message });
+      const newUserId = userData.user.id;
+
+      let setPasswordLink: string | undefined;
+      try {
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email });
+        if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
+      } catch {}
+
+      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role });
+      await storage.setIndustryProfileOrg(newUserId, org.id);
+      await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
+        console.error("[email] Self-service invite email failed:", err)
+      );
+
+      res.json({ member: newMember, user: { id: newUserId, email: userData.user.email, fullName } });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/org/members/:userId — remove a member (owner only, cannot remove self)
+  app.delete("/api/org/members/:memberId", verifyAnyAuth, async (req, res) => {
+    try {
+      const ctx = await requireOrgOwner(req, res);
+      if (!ctx) return;
+      const { org, userId: callerId } = ctx;
+      const { memberId } = req.params;
+      if (memberId === callerId) {
+        return res.status(400).json({ error: "You cannot remove yourself from the organization" });
+      }
+      await storage.removeOrgMember(org.id, memberId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/org/members/:userId/resend — resend invite email (owner only)
+  app.post("/api/org/members/:memberId/resend", verifyAnyAuth, async (req, res) => {
+    try {
+      const ctx = await requireOrgOwner(req, res);
+      if (!ctx) return;
+      const { org } = ctx;
+      const { memberId } = req.params;
+
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+
+      const members = await storage.getOrgMembers(org.id);
+      const member = members.find((m) => m.userId === memberId);
+      if (!member) return res.status(404).json({ error: "Member not found" });
+      if (!member.email) return res.status(400).json({ error: "Member has no email on record" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email });
+      if (linkError) return res.status(500).json({ error: linkError.message });
+      const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+
+      await sendTeamInviteEmail(member.email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
+        console.error("[email] Resend self-service invite failed:", err)
+      );
+
+      res.json({ ok: true, email: member.email });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   function stripPrivateFields(c: Record<string, any>) {
     const { submitterEmail, ...rest } = c;
     return rest;
@@ -7753,6 +7870,13 @@ If multiple assets appear, return each as a separate array item.`;
       const session = await stripe.checkout.sessions.create({
         customer: customerId,
         mode: "subscription",
+        payment_method_types: ["us_bank_account", "card"],
+        payment_method_options: {
+          us_bank_account: {
+            verification_method: "automatic",
+            financial_connections: { permissions: ["payment_method"] },
+          },
+        },
         line_items: [{ price: priceId, quantity: 1 }],
         success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/pricing`,

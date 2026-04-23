@@ -27,7 +27,12 @@ import {
   Users,
   CreditCard,
   Loader2,
+  UserPlus,
+  Send,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
@@ -237,6 +242,7 @@ export default function IndustrySettings() {
   const { user, session, signOut, role } = useAuth();
   const { toast } = useToast();
   const { data: org } = useOrg();
+  const queryClient = useQueryClient();
 
   const isIndustry = role === "industry";
 
@@ -247,6 +253,90 @@ export default function IndustrySettings() {
   const [pwModalOpen, setPwModalOpen] = useState(false);
   const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+
+  // Team invite modal state
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteFullName, setInviteFullName] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [resendingId, setResendingId] = useState<string | null>(null);
+  const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const isOwner = org?.members?.some((m: any) => m.userId === user?.id && m.role === "owner") ?? false;
+  const isTeamPlan = org?.planTier === "team5" || org?.planTier === "team10";
+  const seatsUsed = org?.seatCount ?? 0;
+  const seatLimit = org?.seatLimit ?? 1;
+  const canInvite = isOwner && isTeamPlan && seatsUsed < seatLimit;
+
+  async function handleInvite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!session?.access_token || !inviteEmail.trim() || !inviteFullName.trim()) return;
+    setInviteLoading(true);
+    try {
+      const res = await fetch("/api/org/members", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+        body: JSON.stringify({ email: inviteEmail.trim(), fullName: inviteFullName.trim(), role: "member" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Invite failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Invite sent", description: `${inviteFullName.trim()} will receive an email to set their password.` });
+      setInviteEmail("");
+      setInviteFullName("");
+      setInviteOpen(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setInviteLoading(false);
+    }
+  }
+
+  async function handleResend(memberId: string) {
+    if (!session?.access_token) return;
+    setResendingId(memberId);
+    try {
+      const res = await fetch(`/api/org/members/${memberId}/resend`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Resend failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Invite resent", description: `Resent invite to ${data.email}.` });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setResendingId(null);
+    }
+  }
+
+  async function handleRemove(memberId: string, memberName: string) {
+    if (!session?.access_token) return;
+    setRemovingId(memberId);
+    try {
+      const res = await fetch(`/api/org/members/${memberId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast({ title: "Remove failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
+      } else {
+        toast({ title: "Member removed", description: `${memberName} has been removed from the team.` });
+        queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
+      }
+    } catch {
+      toast({ title: "Network error", variant: "destructive" });
+    } finally {
+      setRemovingId(null);
+    }
+  }
 
   useEffect(() => {
     setEmailDigest(user?.user_metadata?.subscribedToDigest === true);
@@ -560,13 +650,42 @@ export default function IndustrySettings() {
       </div>
 
       {/* Team */}
-      {org && org.planTier !== "individual" && org.members.length > 0 && (
+      {org && isTeamPlan && (
         <div className="rounded-xl border border-card-border bg-card p-5" data-testid="section-team">
-          <SectionHeader icon={Users} title="Your Team" description="Members with access to this EdenScout workspace" />
+          <div className="flex items-start justify-between gap-3 mb-5">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+                <Users className="w-4 h-4 text-emerald-500" />
+              </div>
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">Your Team</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {seatsUsed} of {seatLimit} seat{seatLimit !== 1 ? "s" : ""} used
+                </p>
+              </div>
+            </div>
+            {isOwner && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 shrink-0"
+                onClick={() => setInviteOpen(true)}
+                disabled={!canInvite}
+                data-testid="button-invite-member"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                {canInvite ? "Invite member" : "Seats full"}
+              </Button>
+            )}
+          </div>
+
           <div className="space-y-2">
-            {org.members.map((member) => {
+            {org.members.map((member: any) => {
               const initials = (member.memberName ?? member.email ?? "?").trim().slice(0, 2).toUpperCase();
               const displayName = member.memberName ?? member.email ?? "Unknown";
+              const isSelf = member.userId === user?.id;
+              const isBeingRemoved = removingId === member.userId;
+              const isBeingResent = resendingId === member.userId;
               return (
                 <div
                   key={member.userId}
@@ -591,17 +710,86 @@ export default function IndustrySettings() {
                   >
                     {member.role}
                   </Badge>
+                  {isOwner && !isSelf && (
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        onClick={() => handleResend(member.userId)}
+                        disabled={isBeingResent || isBeingRemoved}
+                        title="Resend invite"
+                        data-testid={`button-resend-${member.userId}`}
+                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                      >
+                        {isBeingResent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                      </button>
+                      <button
+                        onClick={() => handleRemove(member.userId, displayName)}
+                        disabled={isBeingRemoved || isBeingResent}
+                        title="Remove member"
+                        data-testid={`button-remove-${member.userId}`}
+                        className="p-1 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      >
+                        {isBeingRemoved ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
-          {org.members.some((m) => m.userId === user?.id && m.role === "owner") && (
-            <p className="text-[10px] text-muted-foreground mt-4 pt-3 border-t border-border">
-              Manage seats and members in the Admin panel.
-            </p>
-          )}
         </div>
       )}
+
+      {/* Invite member modal */}
+      <Dialog open={inviteOpen} onOpenChange={(v) => { if (!v) { setInviteEmail(""); setInviteFullName(""); } setInviteOpen(v); }}>
+        <DialogContent className="sm:max-w-md" data-testid="modal-invite-member">
+          <DialogHeader>
+            <DialogTitle>Invite a team member</DialogTitle>
+            <DialogDescription>
+              They'll receive an email with a link to set their password and join your workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleInvite} className="space-y-4 pt-1">
+            <div className="space-y-1">
+              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name</Label>
+              <Input
+                id="invite-name"
+                placeholder="Jane Smith"
+                value={inviteFullName}
+                onChange={(e) => setInviteFullName(e.target.value)}
+                disabled={inviteLoading}
+                data-testid="input-invite-name"
+                autoFocus
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="invite-email" className="text-xs text-muted-foreground">Work email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="jane@company.com"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                disabled={inviteLoading}
+                data-testid="input-invite-email"
+              />
+            </div>
+            <DialogFooter className="gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setInviteOpen(false)} disabled={inviteLoading}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={inviteLoading || !inviteEmail.trim() || !inviteFullName.trim()}
+                data-testid="button-send-invite-modal"
+                className="gap-1.5"
+              >
+                {inviteLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                {inviteLoading ? "Sending…" : "Send invite"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <ChangePasswordModal open={pwModalOpen} onClose={() => setPwModalOpen(false)} />
     </div>
