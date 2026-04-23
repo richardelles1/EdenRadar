@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 
 export type ResearcherProfile = {
@@ -12,6 +13,8 @@ export type ResearcherProfile = {
   photoUrl: string;
   orcidId: string;
   onboardingDone?: boolean;
+  /** Stored locally only — identifies which account this profile belongs to. Stripped before server sync. */
+  _userId?: string | null;
 };
 
 const DEFAULT_PROFILE: ResearcherProfile = {
@@ -27,6 +30,12 @@ const DEFAULT_PROFILE: ResearcherProfile = {
   orcidId: "",
   onboardingDone: false,
 };
+
+let _currentResearcherUserId: string | null = null;
+
+export function setCurrentResearcherUserId(id: string | null) {
+  _currentResearcherUserId = id;
+}
 
 export function getProfileCompleteness(profile: ResearcherProfile): { percent: number; filled: number; total: number; missing: string[] } {
   const fields: { key: string; label: string; check: () => boolean }[] = [
@@ -72,6 +81,45 @@ export function getResearcherProfile(): ResearcherProfile {
 
 export function saveResearcherProfile(profile: Partial<ResearcherProfile>) {
   const existing = getResearcherProfile();
-  const merged = { ...existing, ...profile };
+  const merged = { ...existing, ...profile, _userId: _currentResearcherUserId ?? existing._userId ?? null };
   localStorage.setItem("eden-researcher-profile", JSON.stringify(merged));
+}
+
+/**
+ * Returns a copy of the profile with the local-only `_userId` field removed,
+ * safe to send as a server payload. Use this whenever syncing the researcher
+ * profile to any API endpoint.
+ */
+export function toServerResearcherProfile(profile: ResearcherProfile): Omit<ResearcherProfile, "_userId"> {
+  const { _userId: _discarded, ...serverPayload } = profile;
+  return serverPayload;
+}
+
+/**
+ * Keeps the module-level user ID in sync with the authenticated session.
+ * Call this hook once near the top of the researcher layout.
+ * If future server-sync logic is added to this hook, the same-user guard
+ * (compare local._userId vs currentUserId before pushing) should be applied
+ * here, mirroring the pattern in use-industry.ts.
+ */
+export function useResearcherInit() {
+  const { session } = useAuth();
+
+  useEffect(() => {
+    const userId = session?.user?.id ?? null;
+    setCurrentResearcherUserId(userId);
+
+    // Same-user guard: if the stored profile was stamped with a different
+    // account's ID, clear it so stale data cannot leak into this session.
+    if (userId) {
+      const local = getResearcherProfile();
+      if (local._userId && local._userId !== userId) {
+        console.warn("[use-researcher] Local profile belongs to a different account — discarding.");
+        localStorage.removeItem("eden-researcher-profile");
+      } else if (!local._userId) {
+        // Stamp the current user onto an un-stamped profile.
+        saveResearcherProfile({});
+      }
+    }
+  }, [session?.user?.id]);
 }

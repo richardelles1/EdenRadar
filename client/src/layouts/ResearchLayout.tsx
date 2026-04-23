@@ -4,7 +4,7 @@ import { ResearchSidebar } from "@/components/ResearchSidebar";
 import { ResearcherOnboarding } from "@/components/ResearcherOnboarding";
 import { useAuth } from "@/hooks/use-auth";
 import { PortalBackground } from "@/components/PortalBackground";
-import { getResearcherProfile } from "@/hooks/use-researcher";
+import { getResearcherProfile, useResearcherInit } from "@/hooks/use-researcher";
 
 type ResearchLayoutProps = {
   children: React.ReactNode;
@@ -13,6 +13,7 @@ type ResearchLayoutProps = {
 export function ResearchLayout({ children }: ResearchLayoutProps) {
   const [, navigate] = useLocation();
   const { session, role, loading } = useAuth();
+  useResearcherInit();
   const [onboardingOpen, setOnboardingOpen] = useState(false);
 
   useEffect(() => {
