@@ -21,7 +21,17 @@ const pool = new Pool({ connectionString: url, ssl: { rejectUnauthorized: false 
 async function run() {
   const client = await pool.connect();
   try {
+    // pgvector extension must be created outside a transaction block.
+    // Supabase typically pre-installs it; this is a no-op if already present.
+    try {
+      await client.query("CREATE EXTENSION IF NOT EXISTS vector");
+    } catch (extErr: unknown) {
+      const msg = extErr instanceof Error ? extErr.message : String(extErr);
+      console.warn("ensure-schema: pgvector extension not available (embedding column will be skipped):", msg);
+    }
+
     await client.query("BEGIN");
+
 
     // Task #406 -- deep_enrich_attempts column on ingested_assets
     // Added because db:push was blocked by an interactive prompt on the
@@ -105,10 +115,89 @@ async function run() {
         ADD COLUMN IF NOT EXISTS welcome_email_sent_sub_id TEXT
     `);
 
+    // Task #482 -- industry_profiles columns missing from live DB.
+    // Startup migrations in server/index.ts are dead code (return early).
+    // subscribed_to_digest is NOT NULL so it needs a DEFAULT for existing rows.
+    await client.query(`
+      ALTER TABLE industry_profiles
+        ADD COLUMN IF NOT EXISTS subscribed_to_digest  BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS last_alert_sent_at    TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS alert_last_asset_id   INTEGER,
+        ADD COLUMN IF NOT EXISTS notification_prefs    JSONB DEFAULT '{"frequency":"daily"}',
+        ADD COLUMN IF NOT EXISTS last_viewed_alerts_at TIMESTAMP
+    `);
+
+    // Task #482 -- ingested_assets enrichment columns from dead startup migration.
+    // All nullable (or have safe defaults) so existing rows are unaffected.
+    await client.query(`
+      ALTER TABLE ingested_assets
+        ADD COLUMN IF NOT EXISTS source_name           TEXT NOT NULL DEFAULT 'tech_transfer',
+        ADD COLUMN IF NOT EXISTS categories            JSONB,
+        ADD COLUMN IF NOT EXISTS category_confidence   REAL,
+        ADD COLUMN IF NOT EXISTS available             BOOLEAN,
+        ADD COLUMN IF NOT EXISTS content_hash          TEXT,
+        ADD COLUMN IF NOT EXISTS completeness_score    REAL,
+        ADD COLUMN IF NOT EXISTS last_content_change_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS innovation_claim      TEXT,
+        ADD COLUMN IF NOT EXISTS mechanism_of_action   TEXT,
+        ADD COLUMN IF NOT EXISTS ip_type               TEXT,
+        ADD COLUMN IF NOT EXISTS unmet_need            TEXT,
+        ADD COLUMN IF NOT EXISTS comparable_drugs      TEXT,
+        ADD COLUMN IF NOT EXISTS licensing_readiness   TEXT,
+        ADD COLUMN IF NOT EXISTS patent_status         TEXT,
+        ADD COLUMN IF NOT EXISTS licensing_status      TEXT,
+        ADD COLUMN IF NOT EXISTS inventors             JSONB,
+        ADD COLUMN IF NOT EXISTS contact_email         TEXT,
+        ADD COLUMN IF NOT EXISTS technology_id         TEXT,
+        ADD COLUMN IF NOT EXISTS abstract              TEXT,
+        ADD COLUMN IF NOT EXISTS duplicate_flag        BOOLEAN NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS duplicate_of_id       INTEGER,
+        ADD COLUMN IF NOT EXISTS dedupe_embedding      JSONB,
+        ADD COLUMN IF NOT EXISTS dedupe_similarity     REAL
+    `);
+
+    // Task #482 -- ingestion_runs column from dead startup migration.
+    await client.query(`
+      ALTER TABLE ingestion_runs
+        ADD COLUMN IF NOT EXISTS relevant_new_count INTEGER NOT NULL DEFAULT 0
+    `);
+
+    // Task #482 -- saved_assets.status column and check constraint.
+    await client.query(`
+      ALTER TABLE saved_assets
+        ADD COLUMN IF NOT EXISTS status TEXT
+    `);
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'saved_assets_status_check' AND conrelid = 'saved_assets'::regclass
+        ) THEN
+          ALTER TABLE saved_assets
+            ADD CONSTRAINT saved_assets_status_check
+            CHECK (status IS NULL OR status IN ('viewing', 'evaluating', 'contacted'));
+        END IF;
+      END $$
+    `);
+
     await client.query("COMMIT");
     console.log("ensure-schema: all column checks passed");
+
+    // Add the vector embedding column outside the transaction — it depends on
+    // the pgvector extension (already ensured above) but cannot be in a txn
+    // alongside the extension creation on all PG versions.
+    try {
+      await client.query(`
+        ALTER TABLE ingested_assets
+          ADD COLUMN IF NOT EXISTS embedding vector(1536)
+      `);
+      console.log("ensure-schema: embedding column ready");
+    } catch (embErr: unknown) {
+      const msg = embErr instanceof Error ? embErr.message : String(embErr);
+      console.warn("ensure-schema: embedding column skipped (pgvector unavailable?):", msg);
+    }
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query("ROLLBACK").catch(() => {});
     console.error("ensure-schema: error --", err);
     process.exit(1);
   } finally {
