@@ -32,6 +32,7 @@ import DiscoveryJoin from "@/pages/DiscoveryJoin";
 import MyConcepts from "@/pages/MyConcepts";
 import DiscoveryProfile from "@/pages/DiscoveryProfile";
 import DossierPrint from "@/pages/DossierPrint";
+import ShareView from "@/pages/ShareView";
 import ReportPrint from "@/pages/ReportPrint";
 import PipelineBriefPrint from "@/pages/PipelineBriefPrint";
 import PitchDeck from "@/pages/PitchDeck";
@@ -288,6 +289,7 @@ function Router() {
         </ResearchLayout>
       </Route>
 
+      <Route path="/share/:token" component={ShareView} />
       <Route path="/asset/:id/print" component={DossierPrint} />
       <Route path="/report/print" component={ReportPrint} />
       <Route path="/pipeline/brief/print" component={PipelineBriefPrint} />

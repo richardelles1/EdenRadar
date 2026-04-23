@@ -7,7 +7,7 @@ const SITE_KEY = "eden-access";
 
 export function SiteGate({ children }: { children: React.ReactNode }) {
   const PUBLIC_PATHS = ["/pitch", "/tos", "/privacy", "/pricing"];
-  const isPublic = PUBLIC_PATHS.includes(window.location.pathname);
+  const isPublic = PUBLIC_PATHS.includes(window.location.pathname) || window.location.pathname.startsWith("/share/");
   const [unlocked, setUnlocked] = useState(() => isPublic || localStorage.getItem(SITE_KEY) === "true");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);

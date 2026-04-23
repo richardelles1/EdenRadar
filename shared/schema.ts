@@ -698,3 +698,18 @@ export const dispatchLogs = pgTable("dispatch_logs", {
 export const insertDispatchLogSchema = createInsertSchema(dispatchLogs).omit({ id: true, sentAt: true });
 export type InsertDispatchLog = z.infer<typeof insertDispatchLogSchema>;
 export type DispatchLog = typeof dispatchLogs.$inferSelect;
+
+export const sharedLinks = pgTable("shared_links", {
+  id: serial("id").primaryKey(),
+  token: uuid("token").notNull().unique().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // "dossier" | "pipeline_brief"
+  entityId: text("entity_id"),
+  payload: jsonb("payload").notNull(),
+  createdBy: text("created_by"),
+  expiresAt: timestamp("expires_at").notNull(),
+  passwordHash: text("password_hash"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export const insertSharedLinkSchema = createInsertSchema(sharedLinks).omit({ id: true, token: true, createdAt: true });
+export type InsertSharedLink = z.infer<typeof insertSharedLinkSchema>;
+export type SharedLink = typeof sharedLinks.$inferSelect;

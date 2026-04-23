@@ -23,7 +23,9 @@ import {
   ChevronDown,
   ChevronUp,
   Send,
+  Share2,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import type { SavedAsset } from "@shared/schema";
 import { SAVED_ASSET_STATUSES } from "@shared/schema";
 
@@ -436,6 +438,8 @@ export default function Pipeline() {
   const [briefLoading, setBriefLoading] = useState<string | null>(null);
   const [briefModal, setBriefModal] = useState<BriefModal | null>(null);
   const [copied, setCopied] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
 
   const { data, isLoading } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
@@ -456,6 +460,29 @@ export default function Pipeline() {
     onError: (err: any) => {
       toast({ title: "Brief generation failed", description: err.message, variant: "destructive" });
       setBriefLoading(null);
+    },
+  });
+
+  const shareBriefMutation = useMutation({
+    mutationFn: async () => {
+      if (!briefModal) throw new Error("No brief to share");
+      const payload = {
+        brief: briefModal.brief,
+        pipelineName: briefModal.label,
+        assetCount: briefModal.assetCount,
+      };
+      const res = await apiRequest("POST", "/api/share", { type: "pipeline_brief", payload });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to create share link");
+      }
+      return res.json() as Promise<{ token: string; expiresAt: string; url: string }>;
+    },
+    onSuccess: (data) => {
+      setShareUrl(data.url);
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to create share link", description: err.message, variant: "destructive" });
     },
   });
 
@@ -664,7 +691,7 @@ export default function Pipeline() {
         )}
       </main>
 
-      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); } }}>
+      <Dialog open={!!briefModal} onOpenChange={(open) => { if (!open) { setBriefModal(null); setCopied(false); setShareUrl(null); setShareLinkCopied(false); } }}>
         <DialogContent className="max-w-xl max-h-[80vh] flex flex-col overflow-hidden" data-testid="dialog-pipeline-brief">
           <DialogHeader>
             <div className="flex items-center justify-between gap-3">
@@ -694,8 +721,45 @@ export default function Pipeline() {
                   <Printer className="w-3 h-3" />
                   Print
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => shareBriefMutation.mutate()}
+                  disabled={shareBriefMutation.isPending}
+                  className="h-7 text-xs gap-1.5 border-card-border"
+                  data-testid="button-brief-share"
+                >
+                  {shareBriefMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Share2 className="w-3 h-3" />}
+                  {shareBriefMutation.isPending ? "..." : "Share"}
+                </Button>
               </div>
             </div>
+            {shareUrl && (
+              <div className="flex gap-2 mt-2" data-testid="share-url-row">
+                <Input
+                  readOnly
+                  value={shareUrl}
+                  className="h-7 text-xs font-mono"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                  data-testid="input-brief-share-url"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 shrink-0 gap-1.5 text-xs border-card-border"
+                  onClick={() => {
+                    navigator.clipboard.writeText(shareUrl).then(() => {
+                      setShareLinkCopied(true);
+                      setTimeout(() => setShareLinkCopied(false), 2000);
+                    });
+                  }}
+                  data-testid="button-copy-brief-share-url"
+                >
+                  {shareLinkCopied ? <Check className="w-3 h-3 text-emerald-500" /> : <Copy className="w-3 h-3" />}
+                  {shareLinkCopied ? "Copied!" : "Copy"}
+                </Button>
+              </div>
+            )}
           </DialogHeader>
           <ScrollArea className="flex-1 min-h-0 mt-2">
             <pre className="text-sm text-foreground whitespace-pre-wrap font-sans leading-relaxed px-1 pb-4" data-testid="text-brief-content">

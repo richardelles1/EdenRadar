@@ -12,8 +12,15 @@ import { apiRequest } from "@/lib/queryClient";
 import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
-  Beaker, Tag, FlaskConical, Lightbulb, Mail,
+  Beaker, Tag, FlaskConical, Lightbulb, Mail, Share2, Copy, Check, X,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import {
   Tooltip,
   TooltipContent,
@@ -179,6 +186,9 @@ export default function AssetDossier() {
   const { toast } = useToast();
   const [asset, setAsset] = useState<ScoredAsset | null>(null);
   const [dossier, setDossier] = useState<DossierPayload | null>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   const fingerprint = sessionStorage.getItem(`asset-fingerprint-${id}`) ?? id;
 
@@ -253,6 +263,38 @@ export default function AssetDossier() {
 
   const loadingMessage = useLoadingMessage(dossierMutation.isPending);
 
+  const shareMutation = useMutation({
+    mutationFn: async () => {
+      if (!asset || !dossier) throw new Error("No dossier to share");
+      const enriched = intelligence?.enriched;
+      const payload = {
+        assetName: asset.asset_name,
+        target: asset.target,
+        modality: asset.modality,
+        developmentStage: asset.development_stage,
+        institution: asset.institution,
+        indication: asset.indication,
+        narrative: dossier.narrative,
+        score: asset.score,
+        licensingStatus: enriched?.licensingStatus ?? asset.licensing_status,
+        generated_at: dossier.generated_at,
+      };
+      const res = await apiRequest("POST", "/api/share", { type: "dossier", entityId: id, payload });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error ?? "Failed to create share link");
+      }
+      return res.json() as Promise<{ token: string; expiresAt: string; url: string }>;
+    },
+    onSuccess: (data) => {
+      setShareUrl(data.url);
+      setShareDialogOpen(true);
+    },
+    onError: (err: any) => {
+      toast({ title: "Failed to create share link", description: err.message, variant: "destructive" });
+    },
+  });
+
   if (!asset && intelLoading) {
     return (
       <div className="min-h-full relative overflow-hidden" style={{ background: "linear-gradient(180deg, hsl(210 30% 96%) 0%, hsl(var(--background)) 40%)" }}>
@@ -298,6 +340,7 @@ export default function AssetDossier() {
   ].filter((v, i, a) => a.indexOf(v) === i);
 
   return (
+    <>
     <div className="min-h-full relative overflow-hidden" data-testid="print-target" style={{ background: "linear-gradient(180deg, hsl(210 30% 96%) 0%, hsl(var(--background)) 40%)" }}>
       <style>{`
         @keyframes dash-fade-up {
@@ -371,22 +414,37 @@ export default function AssetDossier() {
               )}
             </div>
 
-            <Button
-              variant="outline"
-              size="sm"
-              className="shrink-0 gap-1.5 text-xs no-print"
-              onClick={() => {
-                try {
-                  sessionStorage.setItem(`asset-${id}`, JSON.stringify(asset));
-                  if (dossier) sessionStorage.setItem(`dossier-${id}`, JSON.stringify(dossier));
-                } catch {}
-                setLocation(`/asset/${id}/print`);
-              }}
-              data-testid="button-export-dossier"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              Export Dossier
-            </Button>
+            <div className="flex items-center gap-2">
+              {dossier && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0 gap-1.5 text-xs no-print"
+                  onClick={() => shareMutation.mutate()}
+                  disabled={shareMutation.isPending}
+                  data-testid="button-share-dossier"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  {shareMutation.isPending ? "Creating..." : "Share"}
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0 gap-1.5 text-xs no-print"
+                onClick={() => {
+                  try {
+                    sessionStorage.setItem(`asset-${id}`, JSON.stringify(asset));
+                    if (dossier) sessionStorage.setItem(`dossier-${id}`, JSON.stringify(dossier));
+                  } catch {}
+                  setLocation(`/asset/${id}/print`);
+                }}
+                data-testid="button-export-dossier"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                Export Dossier
+              </Button>
+            </div>
           </div>
 
           {/* Metadata grid */}
@@ -739,5 +797,47 @@ export default function AssetDossier() {
 
       </div>
     </div>
+
+    <Dialog open={shareDialogOpen} onOpenChange={(open) => { if (!open) { setShareDialogOpen(false); setShareCopied(false); } }}>
+      <DialogContent className="max-w-sm" data-testid="dialog-share-dossier">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <Share2 className="w-4 h-4 text-primary" />
+            Share Dossier
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Anyone with this link can view the dossier. The link expires in 7 days.
+          </p>
+          <div className="flex gap-2">
+            <Input
+              readOnly
+              value={shareUrl ?? ""}
+              className="text-xs font-mono"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              data-testid="input-share-url"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              className="shrink-0 gap-1.5"
+              onClick={() => {
+                if (!shareUrl) return;
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                  setShareCopied(true);
+                  setTimeout(() => setShareCopied(false), 2000);
+                });
+              }}
+              data-testid="button-copy-share-url"
+            >
+              {shareCopied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+              {shareCopied ? "Copied!" : "Copy"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

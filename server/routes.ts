@@ -4,7 +4,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -7624,6 +7624,85 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[stripe/portal]", err?.message);
       res.status(500).json({ error: err.message ?? "Failed to create portal session" });
+    }
+  });
+
+  // ── Shareable links ──────────────────────────────────────────────────────────
+
+  app.post("/api/share", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const { type, entityId, payload, password, expiresInDays = 7 } = req.body;
+
+      if (!type || !payload) {
+        return res.status(400).json({ error: "type and payload are required" });
+      }
+      if (!["dossier", "pipeline_brief"].includes(type)) {
+        return res.status(400).json({ error: "type must be dossier or pipeline_brief" });
+      }
+
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + Math.min(Math.max(1, expiresInDays), 30));
+
+      let passwordHash: string | undefined;
+      if (password) {
+        passwordHash = crypto.createHash("sha256").update(password).digest("hex");
+      }
+
+      const link = await storage.createSharedLink({
+        type,
+        entityId: entityId ?? undefined,
+        payload,
+        createdBy: userId ?? undefined,
+        expiresAt,
+        passwordHash,
+      });
+
+      const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
+      const baseUrl = origin || `https://${req.headers.host}`;
+      const url = `${baseUrl}/share/${link.token}`;
+
+      res.json({ token: link.token, expiresAt: link.expiresAt, url });
+    } catch (err: any) {
+      console.error("[share/create]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to create shared link" });
+    }
+  });
+
+  app.get("/api/share/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.query as { password?: string };
+
+      const link = await storage.getSharedLinkByToken(token);
+      if (!link) {
+        return res.status(404).json({ error: "Link not found" });
+      }
+
+      if (link.expiresAt < new Date()) {
+        return res.status(410).json({ error: "Link has expired" });
+      }
+
+      if (link.passwordHash) {
+        if (!password) {
+          return res.status(401).json({ error: "Password required", passwordRequired: true });
+        }
+        const hash = crypto.createHash("sha256").update(password).digest("hex");
+        if (hash !== link.passwordHash) {
+          return res.status(401).json({ error: "Incorrect password", passwordRequired: true });
+        }
+      }
+
+      res.json({
+        type: link.type,
+        entityId: link.entityId,
+        payload: link.payload,
+        expiresAt: link.expiresAt,
+        createdAt: link.createdAt,
+      });
+    } catch (err: any) {
+      console.error("[share/get]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
     }
   });
 

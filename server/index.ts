@@ -821,6 +821,28 @@ async function createSavedAssetNotesTable() {
   }
 }
 
+// ── Ensure shared_links table exists ──────────────────────────────────────────
+async function createSharedLinksTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS shared_links (
+        id           SERIAL PRIMARY KEY,
+        token        UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+        type         TEXT NOT NULL,
+        entity_id    TEXT,
+        payload      JSONB NOT NULL,
+        created_by   TEXT,
+        expires_at   TIMESTAMP NOT NULL,
+        password_hash TEXT,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    log("[startup] shared_links table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] shared_links table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── One-time migration: relabel old saved_asset status values ─────────────────
 // Old constraint: ('viewing', 'evaluating', 'contacted')
 // New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
@@ -919,6 +941,8 @@ async function migrateAssetStatusValues() {
       runStartupMigrations().catch(() => {});
       // ── Ensure saved_asset_notes table exists (idempotent) ────────────
       createSavedAssetNotesTable().catch(() => {});
+      // ── Ensure shared_links table exists (idempotent) ──────────────────
+      createSharedLinksTable().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────

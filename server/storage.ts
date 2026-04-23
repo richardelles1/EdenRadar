@@ -24,6 +24,7 @@ import {
   industryProfiles, type IndustryProfileRow,
   organizations, type Organization, type InsertOrganization,
   orgMembers, type OrgMember, type InsertOrgMember,
+  sharedLinks, type SharedLink,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -329,6 +330,9 @@ export interface IStorage {
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
   getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null>;
+
+  createSharedLink(data: { type: string; entityId?: string; payload: unknown; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink>;
+  getSharedLinkByToken(token: string): Promise<SharedLink | undefined>;
 }
 
 export type SubscriberMatchEntry = {
@@ -2884,6 +2888,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(orgMembers.userId, userId))
       .limit(1);
     return row ?? null;
+  }
+
+  async createSharedLink(data: { type: string; entityId?: string; payload: unknown; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink> {
+    const [row] = await db.insert(sharedLinks).values({
+      type: data.type,
+      entityId: data.entityId ?? null,
+      payload: data.payload as any,
+      createdBy: data.createdBy ?? null,
+      expiresAt: data.expiresAt,
+      passwordHash: data.passwordHash ?? null,
+    }).returning();
+    return row;
+  }
+
+  async getSharedLinkByToken(token: string): Promise<SharedLink | undefined> {
+    const [row] = await db.select().from(sharedLinks).where(eq(sharedLinks.token, token)).limit(1);
+    return row;
   }
 }
 
