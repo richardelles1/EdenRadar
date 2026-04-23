@@ -102,27 +102,30 @@ async function evaluateAlerts(): Promise<void> {
 
   if (alerts.length === 0) return;
 
-  const now = new Date();
-  const fortyEightHoursAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+  const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-  // Resolve user emails via Supabase admin API.
-  // Note: listUsers is paginated — perPage max is 1000 for admin API.
-  // TODO: paginate further if user count exceeds 1000.
+  // Resolve user emails via Supabase admin API — fully paginated so every user
+  // is covered regardless of team size.
   const { createClient } = await import("@supabase/supabase-js");
   const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-  const { data: usersData, error: usersError } =
-    await adminSupabase.auth.admin.listUsers({ perPage: 1000 });
-
-  if (usersError) {
-    console.error("[alertMailer] Failed to fetch user emails:", usersError.message);
-    return;
-  }
 
   const userEmailMap = new Map<string, string>();
-  for (const u of usersData?.users ?? []) {
-    const email: string | undefined =
-      (u.user_metadata?.contactEmail as string | undefined) || u.email;
-    if (email) userEmailMap.set(u.id, email);
+  let page = 1;
+  while (true) {
+    const { data: pageData, error: pageError } =
+      await adminSupabase.auth.admin.listUsers({ perPage: 1000, page });
+    if (pageError) {
+      console.error("[alertMailer] Failed to fetch user emails:", pageError.message);
+      return;
+    }
+    const users = pageData?.users ?? [];
+    for (const u of users) {
+      const email: string | undefined =
+        (u.user_metadata?.contactEmail as string | undefined) || u.email;
+      if (email) userEmailMap.set(u.id, email);
+    }
+    if (users.length < 1000) break;
+    page++;
   }
 
   const { Resend } = await import("resend");
@@ -195,10 +198,11 @@ async function evaluateAlerts(): Promise<void> {
         isTest: false,
       });
 
-      // Advance the watermark for this specific alert only
+      // Advance the watermark to the exact moment of send for this alert,
+      // preventing any assets ingested during the send loop from being re-sent.
       await db
         .update(userAlerts)
-        .set({ lastAlertSentAt: now })
+        .set({ lastAlertSentAt: new Date() })
         .where(eq(userAlerts.id, alert.id));
     } catch (err: any) {
       console.error(`[alertMailer] Unexpected error for alert ${alert.id}:`, err?.message);
