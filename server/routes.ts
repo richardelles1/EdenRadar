@@ -6,7 +6,7 @@ import mammoth from "mammoth";
 import { storage } from "./storage";
 import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, sql, desc, or, ilike, inArray, gte } from "drizzle-orm";
+import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { makeFingerprint } from "./lib/ingestion";
 import { classifyBatch } from "./lib/pipeline/classifyAsset";
@@ -5822,7 +5822,9 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
-      await storage.deleteUserAlert(id);
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      await storage.deleteUserAlert(id, userId);
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -5833,102 +5835,65 @@ If a field cannot be determined, use "N/A".`
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
       const { query, modalities, stages, institutions, name } = req.body ?? {};
       if (!query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
-      const updated = await storage.updateUserAlert(id, {
+      const updated = await storage.updateUserAlert(id, userId, {
         name: name ?? null,
         query: query ?? null,
         modalities: modalities ?? null,
         stages: stages ?? null,
         institutions: institutions ?? null,
       });
+      if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
   });
 
-  // ── Alert keyword matching helpers ────────────────────────────────────────
-  // Shared by /api/alerts/delta, /api/alerts/preview, and
-  // /api/industry/alerts/delta. Applies full AND semantics across all 4
-  // criteria. A wildcard alert (all arrays empty, no query) matches anything.
-  type AlertMatchAsset = {
-    assetName: string;
-    institution: string | null;
-    modality: string | null;
-    developmentStage: string | null;
-    summary?: string | null;
-    indication?: string | null;
-    target?: string | null;
-  };
-  function alertMatchesAsset(alert: UserAlert, asset: AlertMatchAsset): boolean {
-    const hasInst     = (alert.institutions?.length ?? 0) > 0;
-    const hasModality = (alert.modalities?.length ?? 0) > 0;
-    const hasStage    = (alert.stages?.length ?? 0) > 0;
-    const hasQuery    = !!(alert.query?.trim());
-    if (!hasInst && !hasModality && !hasStage && !hasQuery) return true;
-    if (hasInst) {
-      if (!asset.institution) return false;
-      const instLower = asset.institution.toLowerCase();
-      if (!alert.institutions!.some((ai) => instLower.includes(ai.toLowerCase()))) return false;
-    }
-    if (hasModality) {
-      if (!asset.modality) return false;
-      const modLower = asset.modality.toLowerCase();
-      if (!alert.modalities!.some((m) => modLower.includes(m.toLowerCase()))) return false;
-    }
-    if (hasStage) {
-      if (!asset.developmentStage) return false;
-      const stageLower = asset.developmentStage.toLowerCase();
-      if (!alert.stages!.some((s) => stageLower.includes(s.toLowerCase()))) return false;
-    }
-    if (hasQuery) {
-      const haystack = [
-        asset.assetName,
-        asset.institution,
-        asset.summary,
-        asset.indication,
-        asset.target,
-      ].filter(Boolean).join(" ").toLowerCase();
-      const queryLower = alert.query!.toLowerCase();
-      const tokens = queryLower.split(/\s+/).filter((t) => t.length >= 3);
-      const ok = tokens.length > 0
-        ? tokens.some((t) => haystack.includes(t))
-        : haystack.includes(queryLower.trim());
-      if (!ok) return false;
-    }
-    return true;
+  // ── Shared SQL alert predicate builder ───────────────────────────────────
+  // Mirrors the logic in server/lib/alertMailer.ts matchAssetsForAlert so that
+  // in-app display and email delivery use identical matching semantics.
+  function buildAlertWhere(
+    alert: { query?: string | null; modalities?: string[] | null; stages?: string[] | null; institutions?: string[] | null },
+    extraConditions?: ReturnType<typeof and>[],
+  ) {
+    const trimmedQuery = alert.query?.trim();
+    return and(
+      eq(ingestedAssets.relevant, true),
+      ...(extraConditions ?? []),
+      alert.institutions?.length ? inArray(ingestedAssets.institution, alert.institutions) : undefined,
+      alert.modalities?.length ? inArray(ingestedAssets.modality, alert.modalities) : undefined,
+      alert.stages?.length ? inArray(ingestedAssets.developmentStage, alert.stages) : undefined,
+      trimmedQuery
+        ? or(
+            ilike(ingestedAssets.assetName, `%${trimmedQuery}%`),
+            ilike(ingestedAssets.summary, `%${trimmedQuery}%`),
+            ilike(ingestedAssets.indication, `%${trimmedQuery}%`),
+            ilike(ingestedAssets.target, `%${trimmedQuery}%`),
+          )
+        : undefined,
+    );
   }
 
   // ── GET /api/alerts/delta — user-scoped, grouped by alert ────────────────
+  // Uses identical SQL predicates to alertMailer.ts so in-app and email counts agree.
   app.get("/api/alerts/delta", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
       const alerts = await storage.listUserAlerts(userId ?? undefined);
-      if (alerts.length === 0) {
-        return res.json({ byAlert: [], total: 0, since: new Date(Date.now() - 48 * 3600000).toISOString() });
-      }
       const sinceParam = req.query.since as string | undefined;
       const since = sinceParam && !isNaN(Date.parse(sinceParam))
         ? new Date(sinceParam)
         : new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-      const newAssetRows = await db
-        .select({
-          id: ingestedAssets.id,
-          assetName: ingestedAssets.assetName,
-          institution: ingestedAssets.institution,
-          modality: ingestedAssets.modality,
-          developmentStage: ingestedAssets.developmentStage,
-          summary: ingestedAssets.summary,
-          indication: ingestedAssets.indication,
-          target: ingestedAssets.target,
-        })
-        .from(ingestedAssets)
-        .where(and(eq(ingestedAssets.relevant, true), gte(ingestedAssets.firstSeenAt, since)))
-        .orderBy(desc(ingestedAssets.firstSeenAt));
+      if (alerts.length === 0) {
+        return res.json({ byAlert: [], total: 0, since: since.toISOString() });
+      }
 
       type AlertBucket = {
         alertId: number;
@@ -5939,18 +5904,30 @@ If a field cannot be determined, use "N/A".`
       const byAlert: AlertBucket[] = [];
 
       for (const alert of alerts) {
-        const matches = newAssetRows.filter((row) => alertMatchesAsset(alert, row));
-        if (matches.length === 0) continue;
+        const sinceCondition = gt(ingestedAssets.firstSeenAt, since);
+        const rows = await db
+          .select({
+            id: ingestedAssets.id,
+            assetName: ingestedAssets.assetName,
+            institution: ingestedAssets.institution,
+            modality: ingestedAssets.modality,
+            developmentStage: ingestedAssets.developmentStage,
+          })
+          .from(ingestedAssets)
+          .where(buildAlertWhere(alert, [sinceCondition]))
+          .orderBy(desc(ingestedAssets.firstSeenAt));
+
+        if (rows.length === 0) continue;
         byAlert.push({
           alertId: alert.id,
           alertName: alert.name ?? alert.query ?? "Untitled alert",
-          matchCount: matches.length,
-          samples: matches.slice(0, 5).map((r) => ({
+          matchCount: rows.length,
+          samples: rows.slice(0, 5).map((r) => ({
             id: r.id,
             assetName: r.assetName,
-            institution: r.institution,
-            modality: r.modality,
-            developmentStage: r.developmentStage,
+            institution: r.institution ?? "",
+            modality: r.modality ?? "",
+            developmentStage: r.developmentStage ?? "",
           })),
         });
       }
@@ -5963,83 +5940,48 @@ If a field cannot be determined, use "N/A".`
   });
 
   // ── POST /api/alerts/preview — live match count for unsaved criteria ──────
-  // Queries ALL relevant ingested_assets (no time filter) so users get an
-  // accurate count of existing assets that would match their new alert.
+  // Runs SQL count(*) with the same predicates as alertMailer for an accurate total.
   app.post("/api/alerts/preview", async (req, res) => {
     try {
       const { query, modalities, stages, institutions } = req.body ?? {};
-      const draftAlert = {
-        id: -1, userId: null, name: null,
-        query: query ?? null,
-        modalities: modalities ?? null,
-        stages: stages ?? null,
-        institutions: institutions ?? null,
-        createdAt: new Date(),
-        lastAlertSentAt: null,
-      } satisfies UserAlert;
-
+      const trimmedQuery = (query as string | undefined)?.trim();
       const hasAnyFilter =
-        !!draftAlert.query?.trim() ||
-        (draftAlert.modalities?.length ?? 0) > 0 ||
-        (draftAlert.stages?.length ?? 0) > 0 ||
-        (draftAlert.institutions?.length ?? 0) > 0;
+        !!trimmedQuery ||
+        (modalities?.length ?? 0) > 0 ||
+        (stages?.length ?? 0) > 0 ||
+        (institutions?.length ?? 0) > 0;
 
       if (!hasAnyFilter) return res.json({ count: 0, samples: [] });
 
-      // SQL pre-filter reduces the candidate set; JS refinement via alertMatchesAsset
-      // applies full AND semantics for exact match consistency.
-      const mods = (modalities?.length ?? 0) > 0
-        ? modalities.map((m: string) => m.toLowerCase().replace(/[\s-]+/g, "-"))
-        : undefined;
-      const stgs = (stages?.length ?? 0) > 0
-        ? stages.map((s: string) => s.toLowerCase().replace(/\s+/g, "-"))
-        : undefined;
-      const q = query?.trim() ? `%${query.trim()}%` : undefined;
+      const draft = {
+        query: trimmedQuery || null,
+        modalities: (modalities?.length ?? 0) > 0 ? (modalities as string[]) : null,
+        stages: (stages?.length ?? 0) > 0 ? (stages as string[]) : null,
+        institutions: (institutions?.length ?? 0) > 0 ? (institutions as string[]) : null,
+      };
+      const whereClause = buildAlertWhere(draft);
 
-      const rows = await db
+      const [{ totalCount }] = await db
+        .select({ totalCount: drizzleCount() })
+        .from(ingestedAssets)
+        .where(whereClause);
+
+      const samples = await db
         .select({
           id: ingestedAssets.id,
           assetName: ingestedAssets.assetName,
           institution: ingestedAssets.institution,
           modality: ingestedAssets.modality,
           developmentStage: ingestedAssets.developmentStage,
-          summary: ingestedAssets.summary,
-          indication: ingestedAssets.indication,
-          target: ingestedAssets.target,
         })
         .from(ingestedAssets)
-        .where(
-          and(
-            eq(ingestedAssets.relevant, true),
-            (institutions?.length ?? 0) > 0
-              ? inArray(ingestedAssets.institution, institutions)
-              : undefined,
-            mods ? inArray(ingestedAssets.modality, mods) : undefined,
-            stgs ? inArray(ingestedAssets.developmentStage, stgs) : undefined,
-            q
-              ? or(
-                  ilike(ingestedAssets.assetName, q),
-                  ilike(ingestedAssets.summary, q),
-                  ilike(ingestedAssets.indication, q),
-                  ilike(ingestedAssets.target, q),
-                )
-              : undefined,
-          )
-        )
+        .where(whereClause)
         .orderBy(desc(ingestedAssets.firstSeenAt))
-        .limit(200);
+        .limit(5);
 
-      // JS refinement using the same logic as alertMatchesAsset for consistency
-      const matched = rows.filter((r) => alertMatchesAsset(draftAlert, r));
       return res.json({
-        count: matched.length < 200 ? matched.length : matched.length + "+",
-        samples: matched.slice(0, 5).map((r) => ({
-          id: r.id,
-          assetName: r.assetName,
-          institution: r.institution,
-          modality: r.modality,
-          developmentStage: r.developmentStage,
-        })),
+        count: Number(totalCount),
+        samples,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -6059,6 +6001,29 @@ If a field cannot be determined, use "N/A".`
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Mirrors buildAlertWhere semantics for in-memory filtering used by the
+  // industry-grouped delta endpoint (exact inArray-equivalent matches for
+  // institution/modality/stage; substring ILIKE-equivalent for query).
+  function assetMatchesAlertJS(
+    alert: UserAlert,
+    asset: { assetName: string; institution: string | null; modality: string | null; developmentStage: string | null; summary?: string | null; indication?: string | null; target?: string | null }
+  ): boolean {
+    const hasInst = (alert.institutions?.length ?? 0) > 0;
+    const hasMod  = (alert.modalities?.length ?? 0) > 0;
+    const hasSt   = (alert.stages?.length ?? 0) > 0;
+    const hasQ    = !!(alert.query?.trim());
+    if (!hasInst && !hasMod && !hasSt && !hasQ) return true;
+    if (hasInst && !alert.institutions!.some((ai) => ai.toLowerCase() === (asset.institution ?? "").toLowerCase())) return false;
+    if (hasMod  && !alert.modalities!.some((m)  => m.toLowerCase()  === (asset.modality ?? "").toLowerCase()))          return false;
+    if (hasSt   && !alert.stages!.some((s)       => s.toLowerCase()  === (asset.developmentStage ?? "").toLowerCase())) return false;
+    if (hasQ) {
+      const q = alert.query!.toLowerCase().trim();
+      const fields = [asset.assetName, asset.summary, asset.indication, asset.target].filter(Boolean).join(" ").toLowerCase();
+      if (!fields.includes(q)) return false;
+    }
+    return true;
+  }
 
   app.get("/api/industry/alerts/delta", async (req, res) => {
     try {
@@ -6159,7 +6124,7 @@ If a field cannot be determined, use "N/A".`
 
         if (hasAlerts) {
           for (const alert of savedAlerts) {
-            if (alertMatchesAsset(alert, row)) {
+            if (assetMatchesAlertJS(alert, row)) {
               existing.matchedCount++;
               if (!existing.matchedBy) existing.matchedBy = alert.name ?? alert.query ?? "Your alert";
               // Only collect sample assets that actually matched

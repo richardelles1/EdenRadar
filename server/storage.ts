@@ -252,9 +252,9 @@ export interface IStorage {
   getEdenFeedbackForSession(sessionId: string): Promise<Array<{ messageIndex: number; sentiment: string }>>;
 
   createUserAlert(data: InsertUserAlert, userId?: string): Promise<UserAlert>;
-  updateUserAlert(id: number, data: Partial<InsertUserAlert>): Promise<UserAlert>;
+  updateUserAlert(id: number, userId: string, data: Partial<InsertUserAlert>): Promise<UserAlert | null>;
   listUserAlerts(userId?: string): Promise<UserAlert[]>;
-  deleteUserAlert(id: number): Promise<void>;
+  deleteUserAlert(id: number, userId: string): Promise<void>;
 
   getManualInstitutions(): Promise<ManualInstitution[]>;
   createManualInstitution(data: InsertManualInstitution): Promise<ManualInstitution>;
@@ -2377,9 +2377,11 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateUserAlert(id: number, data: Partial<InsertUserAlert>): Promise<UserAlert> {
-    const [row] = await db.update(userAlerts).set(data).where(eq(userAlerts.id, id)).returning();
-    return row;
+  async updateUserAlert(id: number, userId: string, data: Partial<InsertUserAlert>): Promise<UserAlert | null> {
+    const [row] = await db.update(userAlerts).set(data)
+      .where(and(eq(userAlerts.id, id), eq(userAlerts.userId, userId)))
+      .returning();
+    return row ?? null;
   }
 
   async listUserAlerts(userId?: string): Promise<UserAlert[]> {
@@ -2389,8 +2391,8 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(userAlerts).orderBy(desc(userAlerts.createdAt));
   }
 
-  async deleteUserAlert(id: number): Promise<void> {
-    await db.delete(userAlerts).where(eq(userAlerts.id, id));
+  async deleteUserAlert(id: number, userId: string): Promise<void> {
+    await db.delete(userAlerts).where(and(eq(userAlerts.id, id), eq(userAlerts.userId, userId)));
   }
 
   async getManualInstitutions(): Promise<ManualInstitution[]> {
