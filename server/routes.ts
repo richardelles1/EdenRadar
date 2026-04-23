@@ -1013,7 +1013,10 @@ export async function registerRoutes(
     try {
       const org = await storage.getOrgForUser(userId);
       if (!org) return;
-      const actorName = await resolveAuthorName(userId);
+      // Prefer org_members.member_name (set at invite time), fall back to profile name
+      const member = await storage.getOrgMemberByUserId(org.id, userId);
+      const actorName =
+        (member?.memberName?.trim() || null) ?? (await resolveAuthorName(userId));
       await storage.createTeamActivity({
         orgId: org.id,
         userId,

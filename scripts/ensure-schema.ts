@@ -40,7 +40,7 @@ async function run() {
         user_id    TEXT NOT NULL,
         actor_name TEXT NOT NULL,
         action     TEXT NOT NULL,
-        asset_id   INTEGER,
+        asset_id   INTEGER REFERENCES saved_assets(id) ON DELETE SET NULL,
         asset_name TEXT NOT NULL,
         metadata   JSONB,
         created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -49,6 +49,32 @@ async function run() {
     await client.query(`
       CREATE INDEX IF NOT EXISTS team_activities_org_created_idx
         ON team_activities (org_id, created_at DESC)
+    `);
+    // Add action CHECK constraint if not already present
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'team_activities_action_check' AND conrelid = 'team_activities'::regclass
+        ) THEN
+          ALTER TABLE team_activities
+            ADD CONSTRAINT team_activities_action_check
+            CHECK (action IN ('saved_asset','moved_asset','added_note','removed_asset','moved_pipeline'));
+        END IF;
+      END $$
+    `);
+    // Add asset_id FK if not already present (table may exist from initial create)
+    await client.query(`
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conname = 'team_activities_asset_id_fkey' AND conrelid = 'team_activities'::regclass
+        ) THEN
+          ALTER TABLE team_activities
+            ADD CONSTRAINT team_activities_asset_id_fkey
+            FOREIGN KEY (asset_id) REFERENCES saved_assets(id) ON DELETE SET NULL;
+        END IF;
+      END $$
     `);
 
     await client.query("COMMIT");

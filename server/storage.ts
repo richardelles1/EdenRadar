@@ -336,6 +336,7 @@ export interface IStorage {
   getSharedLinkByToken(token: string): Promise<SharedLink | undefined>;
 
   // Team Activities
+  getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined>;
   createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
   getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
 }
@@ -2909,6 +2910,15 @@ export class DatabaseStorage implements IStorage {
 
   async getSharedLinkByToken(token: string): Promise<SharedLink | undefined> {
     const [row] = await db.select().from(sharedLinks).where(eq(sharedLinks.token, token)).limit(1);
+    return row;
+  }
+
+  async getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined> {
+    const [row] = await db
+      .select()
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)))
+      .limit(1);
     return row;
   }
 
