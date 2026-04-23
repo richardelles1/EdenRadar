@@ -46,8 +46,7 @@ async function matchAssetsForAlert(
           : undefined,
       ),
     )
-    .orderBy(desc(ingestedAssets.firstSeenAt))
-    .limit(15);
+    .orderBy(desc(ingestedAssets.firstSeenAt));
 
   return rows.map((a) => ({
     id: a.id,
@@ -102,7 +101,12 @@ async function evaluateAlerts(): Promise<void> {
 
   if (alerts.length === 0) return;
 
-  const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+  // Stable boundary for this evaluation run. All assets with firstSeenAt <=
+  // evaluationStartedAt are in scope. The watermark for each sent alert advances
+  // to this timestamp so assets ingested during the send loop are deferred to the
+  // next cycle rather than silently skipped.
+  const evaluationStartedAt = new Date();
+  const fortyEightHoursAgo = new Date(evaluationStartedAt.getTime() - 48 * 60 * 60 * 1000);
 
   // Resolve user emails via Supabase admin API — fully paginated so every user
   // is covered regardless of team size.
@@ -198,11 +202,12 @@ async function evaluateAlerts(): Promise<void> {
         isTest: false,
       });
 
-      // Advance the watermark to the exact moment of send for this alert,
-      // preventing any assets ingested during the send loop from being re-sent.
+      // Advance the watermark to evaluationStartedAt (captured before any sends),
+      // not to send-time. Assets ingested between evaluation start and now will be
+      // picked up cleanly by the next cycle; none are silently skipped.
       await db
         .update(userAlerts)
-        .set({ lastAlertSentAt: new Date() })
+        .set({ lastAlertSentAt: evaluationStartedAt })
         .where(eq(userAlerts.id, alert.id));
     } catch (err: any) {
       console.error(`[alertMailer] Unexpected error for alert ${alert.id}:`, err?.message);
