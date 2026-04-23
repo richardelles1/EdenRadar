@@ -7628,7 +7628,10 @@ If multiple assets appear, return each as a separate array item.`;
         success_url: `${baseUrl}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
         cancel_url: `${baseUrl}/pricing`,
         metadata: { orgId: String(org.id), planId },
-        subscription_data: { metadata: { orgId: String(org.id), planId } },
+        subscription_data: {
+          trial_period_days: 3,
+          metadata: { orgId: String(org.id), planId },
+        },
       });
 
       res.json({ url: session.url });
@@ -7721,7 +7724,7 @@ If multiple assets appear, return each as a separate array item.`;
       }
 
       // Extract subscription details from the expanded Stripe response
-      type ExpandedSub = { id: string; status: string; current_period_end: number; items: { data: { price: { id: string } }[] } };
+      type ExpandedSub = { id: string; status: string; current_period_end: number; trial_end: number | null; items: { data: { price: { id: string } }[] } };
       const sub: ExpandedSub | null =
         session.subscription && typeof session.subscription === "object"
           ? (session.subscription as ExpandedSub)
@@ -7729,6 +7732,7 @@ If multiple assets appear, return each as a separate array item.`;
       const subscriptionId = sub?.id ?? (typeof session.subscription === "string" ? session.subscription : "");
       const stripeStatus = sub?.status ?? "active";
       const stripePriceId = sub?.items?.data?.[0]?.price?.id ?? "";
+      const stripeTrialEnd = sub?.trial_end ? new Date(sub.trial_end * 1000).toISOString() : null;
 
       // Write Stripe fields + grant plan access
       const periodEnd = sub?.current_period_end ? new Date(sub.current_period_end * 1000) : null;
@@ -7757,6 +7761,7 @@ If multiple assets appear, return each as a separate array item.`;
         orgName: updatedOrg?.name ?? null,
         nextBillingAt,
         stripeStatus,
+        stripeTrialEnd,
       });
     } catch (err: any) {
       console.error("[stripe/verify-session]", err?.message);

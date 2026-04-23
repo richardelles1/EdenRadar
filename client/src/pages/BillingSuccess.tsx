@@ -10,6 +10,7 @@ interface VerifyResult {
   orgName: string | null;
   nextBillingAt: string | null;
   stripeStatus: string;
+  stripeTrialEnd: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -101,73 +102,92 @@ export default function BillingSuccess() {
         )}
 
         {/* Success */}
-        {state === "success" && result && (
-          <div
-            className="rounded-xl border bg-card overflow-hidden"
-            style={{ borderColor: "hsl(142 52% 36% / 0.4)", boxShadow: "0 0 0 4px hsl(142 52% 36% / 0.06)" }}
-            data-testid="billing-success-card"
-          >
+        {state === "success" && result && (() => {
+          const isTrial = result.stripeStatus === "trialing";
+          const trialEndDate = formatDate(result.stripeTrialEnd);
+          const billingDate = formatDate(result.nextBillingAt);
+          return (
             <div
-              className="px-7 py-6 text-center space-y-2"
-              style={{ background: "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))" }}
+              className="rounded-xl border bg-card overflow-hidden"
+              style={{ borderColor: "hsl(142 52% 36% / 0.4)", boxShadow: "0 0 0 4px hsl(142 52% 36% / 0.06)" }}
+              data-testid="billing-success-card"
             >
-              <div className="flex justify-center">
-                <CheckCircle2 className="w-12 h-12" style={{ color: "hsl(142 52% 36%)" }} />
+              <div
+                className="px-7 py-6 text-center space-y-2"
+                style={{ background: "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))" }}
+              >
+                <div className="flex justify-center">
+                  <CheckCircle2 className="w-12 h-12" style={{ color: "hsl(142 52% 36%)" }} />
+                </div>
+                <h1 className="text-2xl font-bold text-foreground" data-testid="text-billing-success-title">
+                  {isTrial ? "Your free trial has started!" : "You're subscribed!"}
+                </h1>
+                <p className="text-sm text-muted-foreground">
+                  {isTrial
+                    ? `Full access for 3 days, free of charge${result.orgName ? ` — ${result.orgName}` : ""}.`
+                    : `Welcome to EdenScout${result.orgName ? ` — ${result.orgName}` : ""}.`}
+                </p>
               </div>
-              <h1 className="text-2xl font-bold text-foreground" data-testid="text-billing-success-title">
-                You're subscribed!
-              </h1>
-              <p className="text-sm text-muted-foreground">
-                Welcome to EdenScout{result.orgName ? ` — ${result.orgName}` : ""}.
-              </p>
-            </div>
 
-            <div className="px-7 py-5 space-y-3 border-t border-border">
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Plan</span>
-                <span className="font-semibold text-foreground" data-testid="text-billing-plan">
-                  {PLAN_LABELS[result.planId] ?? result.planTier}
-                </span>
-              </div>
-              <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Status</span>
-                <span
-                  className="text-xs font-semibold px-2 py-0.5 rounded-full"
-                  style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
-                  data-testid="text-billing-status"
-                >
-                  {result.stripeStatus === "active" ? "Active" : result.stripeStatus}
-                </span>
-              </div>
-              {result.nextBillingAt && (
+              <div className="px-7 py-5 space-y-3 border-t border-border">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Next billing</span>
-                  <span className="font-medium text-foreground" data-testid="text-billing-next-date">
-                    {formatDate(result.nextBillingAt)}
+                  <span className="text-muted-foreground">Plan</span>
+                  <span className="font-semibold text-foreground" data-testid="text-billing-plan">
+                    {PLAN_LABELS[result.planId] ?? result.planTier}
                   </span>
                 </div>
-              )}
-            </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Status</span>
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full"
+                    style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                    data-testid="text-billing-status"
+                  >
+                    {isTrial ? "Free trial" : result.stripeStatus === "active" ? "Active" : result.stripeStatus}
+                  </span>
+                </div>
+                {isTrial && trialEndDate ? (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Trial ends</span>
+                    <span className="font-medium text-foreground" data-testid="text-billing-trial-end">
+                      {trialEndDate}
+                    </span>
+                  </div>
+                ) : billingDate ? (
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-muted-foreground">Next billing</span>
+                    <span className="font-medium text-foreground" data-testid="text-billing-next-date">
+                      {billingDate}
+                    </span>
+                  </div>
+                ) : null}
+                {isTrial && (
+                  <p className="text-[11px] text-muted-foreground pt-1 leading-relaxed border-t border-border/60">
+                    You won't be charged until {trialEndDate ?? "your trial ends"}. Cancel anytime from your billing settings.
+                  </p>
+                )}
+              </div>
 
-            <div className="px-7 pb-7 pt-2 space-y-2">
-              <Link href="/industry/dashboard">
-                <Button
-                  className="w-full font-semibold"
-                  style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
-                  data-testid="button-billing-go-to-app"
-                >
-                  Go to dashboard
-                  <ArrowRight className="w-4 h-4 ml-1.5" />
-                </Button>
-              </Link>
-              <Link href="/pricing">
-                <Button variant="ghost" className="w-full text-sm text-muted-foreground">
-                  View plans
-                </Button>
-              </Link>
+              <div className="px-7 pb-7 pt-2 space-y-2">
+                <Link href="/industry/dashboard">
+                  <Button
+                    className="w-full font-semibold"
+                    style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
+                    data-testid="button-billing-go-to-app"
+                  >
+                    {isTrial ? "Explore the platform" : "Go to dashboard"}
+                    <ArrowRight className="w-4 h-4 ml-1.5" />
+                  </Button>
+                </Link>
+                <Link href="/pricing">
+                  <Button variant="ghost" className="w-full text-sm text-muted-foreground">
+                    View plans
+                  </Button>
+                </Link>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Error */}
         {state === "error" && (

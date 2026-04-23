@@ -155,21 +155,24 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
   }
 
   return (
-    <Button
-      className="w-full font-semibold h-9 text-sm"
-      variant={plan.highlighted ? "default" : "outline"}
-      style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
-      onClick={handleSubscribe}
-      disabled={loading}
-      data-testid={`button-pricing-${plan.id}`}
-    >
-      {loading ? (
-        <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
-      ) : (
-        <ArrowRight className="w-3.5 h-3.5 mr-1 order-last" />
-      )}
-      {loading ? "Redirecting to checkout…" : "Subscribe"}
-    </Button>
+    <div className="space-y-1.5">
+      <Button
+        className="w-full font-semibold h-9 text-sm"
+        variant={plan.highlighted ? "default" : "outline"}
+        style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+        onClick={handleSubscribe}
+        disabled={loading}
+        data-testid={`button-pricing-${plan.id}`}
+      >
+        {loading ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <ArrowRight className="w-3.5 h-3.5 mr-1 order-last" />
+        )}
+        {loading ? "Redirecting to checkout…" : "Start 3-day free trial"}
+      </Button>
+      <p className="text-center text-[10px] text-muted-foreground">No charge for 3 days · Cancel anytime</p>
+    </div>
   );
 }
 

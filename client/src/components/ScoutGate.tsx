@@ -174,23 +174,26 @@ export function ScoutGate({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link href="/pricing">
-            <Button
-              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-11 px-6"
-              data-testid="scout-gate-see-plans"
+        <div className="flex flex-col items-center justify-center gap-2">
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+            <Link href="/pricing">
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white gap-2 h-11 px-6"
+                data-testid="scout-gate-see-plans"
+              >
+                Start 3-day free trial
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </Link>
+            <a
+              href="mailto:sales@edenradar.com"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="scout-gate-contact-sales"
             >
-              See all plans
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </Link>
-          <a
-            href="mailto:sales@edenradar.com"
-            className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            data-testid="scout-gate-contact-sales"
-          >
-            Talk to sales instead
-          </a>
+              Talk to sales instead
+            </a>
+          </div>
+          <p className="text-[11px] text-muted-foreground">No charge for 3 days · Cancel anytime</p>
         </div>
 
         <p className="text-center text-[11px] text-muted-foreground">
