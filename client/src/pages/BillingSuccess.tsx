@@ -150,13 +150,13 @@ export default function BillingSuccess() {
             </div>
 
             <div className="px-7 pb-7 pt-2 space-y-2">
-              <Link href="/">
+              <Link href="/industry/dashboard">
                 <Button
                   className="w-full font-semibold"
                   style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
                   data-testid="button-billing-go-to-app"
                 >
-                  Go to EdenScout
+                  Go to dashboard
                   <ArrowRight className="w-4 h-4 ml-1.5" />
                 </Button>
               </Link>
@@ -193,13 +193,13 @@ export default function BillingSuccess() {
                   Back to pricing
                 </Button>
               </Link>
-              <Link href="/">
+              <Link href="/industry/dashboard">
                 <Button
                   className="text-sm"
                   style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}
                   data-testid="button-billing-error-app"
                 >
-                  Go to app
+                  Go to dashboard
                 </Button>
               </Link>
             </div>
