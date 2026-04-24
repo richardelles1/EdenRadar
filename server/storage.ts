@@ -325,6 +325,8 @@ export interface IStorage {
   getBillingHistory(orgId: number): Promise<StripeBillingEvent[]>;
   markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
   releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void>;
+  markPaymentFailedEmailSent(orgId: number, invId: string): Promise<boolean>;
+  releasePaymentFailedEmailClaim(orgId: number, invId: string): Promise<void>;
 
   // Org Members
   getOrgMembers(orgId: number): Promise<OrgMember[]>;
@@ -2881,6 +2883,28 @@ export class DatabaseStorage implements IStorage {
       .where(and(
         eq(organizations.id, orgId),
         eq(organizations.welcomeEmailSentSubId, subId),
+      ));
+  }
+
+  async markPaymentFailedEmailSent(orgId: number, invId: string): Promise<boolean> {
+    const rows = await db
+      .update(organizations)
+      .set({ paymentFailedEmailSentInvId: invId, updatedAt: new Date() })
+      .where(and(
+        eq(organizations.id, orgId),
+        sql`payment_failed_email_sent_inv_id IS DISTINCT FROM ${invId}`,
+      ))
+      .returning({ id: organizations.id });
+    return rows.length > 0;
+  }
+
+  async releasePaymentFailedEmailClaim(orgId: number, invId: string): Promise<void> {
+    await db
+      .update(organizations)
+      .set({ paymentFailedEmailSentInvId: null, updatedAt: new Date() })
+      .where(and(
+        eq(organizations.id, orgId),
+        eq(organizations.paymentFailedEmailSentInvId, invId),
       ));
   }
 

@@ -1,6 +1,6 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "EdenRadar <noreply@edenradar.com>";
-const APP_URL = "https://edenradar.com";
+export const APP_URL = process.env.APP_URL ?? "https://edenradar.com";
 const LOGIN_URL = `${APP_URL}/login`;
 
 if (!process.env.RESEND_FROM_ADDRESS) {
@@ -267,6 +267,55 @@ export function sendSubscriptionWelcomeEmail(
     </p>
   `);
   return sendEmail(to, "Welcome to EdenScout — your subscription is active.", html, "EdenScout <onboarding@edenradar.com>");
+}
+
+export function sendPaymentFailedEmail(
+  to: string,
+  orgName: string,
+  billingPortalUrl: string,
+): Promise<void> {
+  const greeting = orgName ? `Hi ${orgName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Action required: payment failed</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} we were unable to process your EdenScout subscription payment. To keep your
+      access uninterrupted, please update your payment method as soon as possible.
+    </p>
+    <a href="${billingPortalUrl}"
+       style="display:inline-block;background:#dc2626;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Update payment method
+    </a>
+    <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      If you have already updated your details, you can ignore this email. Stripe will automatically
+      retry the charge. Questions? Reply to this email or contact
+      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+    </p>
+  `);
+  return sendEmail(to, "Your EdenScout payment failed — action required", html, "EdenScout <billing@edenradar.com>");
+}
+
+export function sendRenewalConfirmationEmail(
+  to: string,
+  orgName: string,
+  amountFormatted: string,
+): Promise<void> {
+  const greeting = orgName ? `Hi ${orgName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout subscription has renewed</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} your EdenScout subscription has been successfully renewed. Your payment of
+      <strong>${amountFormatted}</strong> was processed and your access continues without interruption.
+    </p>
+    <a href="${APP_URL}"
+       style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open EdenScout
+    </a>
+    <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      You can manage your subscription and view invoices in your
+      <a href="${APP_URL}/industry/settings" style="color:#059669;text-decoration:none;">billing settings</a>.
+    </p>
+  `);
+  return sendEmail(to, "EdenScout subscription renewed successfully", html, "EdenScout <billing@edenradar.com>");
 }
 
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {

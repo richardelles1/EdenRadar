@@ -33,7 +33,7 @@ import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, 
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, APP_URL } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -8368,6 +8368,47 @@ If multiple assets appear, return each as a separate array item.`;
             stripeStatus: "past_due",
           });
           console.warn(`[stripe/webhook] invoice.payment_failed: org ${orgFail.id} (${invCustomerId}) — payment failed, status → past_due`);
+
+          // Send branded payment failure email with idempotency guard keyed on invoice ID
+          const invId = String(inv["id"] ?? "");
+          const failBillingEmail = orgFail.billingEmail ?? undefined;
+          if (invId && failBillingEmail) {
+            try {
+              const claimed = await storage.markPaymentFailedEmailSent(orgFail.id, invId);
+              if (!claimed) {
+                console.log(`[stripe/webhook] Payment failure email already sent for invoice ${invId} — skipping`);
+              } else {
+                // Generate a Stripe billing portal URL so the subscriber can update their payment method directly
+                const settingsUrl = `${APP_URL}/industry/settings`;
+                let portalUrl = settingsUrl;
+                try {
+                  const stripeInst = getStripe();
+                  if (stripeInst && orgFail.stripeCustomerId) {
+                    const portalSession = await stripeInst.billingPortal.sessions.create({
+                      customer: orgFail.stripeCustomerId,
+                      return_url: settingsUrl,
+                    });
+                    portalUrl = portalSession.url;
+                  }
+                } catch (portalErr: unknown) {
+                  console.warn("[stripe/webhook] Could not create billing portal session for failure email:", (portalErr as Error)?.message);
+                }
+                try {
+                  await sendPaymentFailedEmail(failBillingEmail, orgFail.name ?? "", portalUrl);
+                  console.log(`[stripe/webhook] Payment failure email sent to ${failBillingEmail} for org ${orgFail.id}, invoice ${invId}`);
+                } catch (sendErr: unknown) {
+                  console.error("[stripe/webhook] Payment failure email delivery failed — releasing claim:", (sendErr as Error)?.message);
+                  await storage.releasePaymentFailedEmailClaim(orgFail.id, invId).catch((e: unknown) =>
+                    console.error("[stripe/webhook] Failed to release payment failure email claim:", (e as Error)?.message)
+                  );
+                }
+              }
+            } catch (emailErr: unknown) {
+              console.error("[stripe/webhook] Error preparing payment failure email:", (emailErr as Error)?.message);
+            }
+          } else if (!failBillingEmail) {
+            console.warn(`[stripe/webhook] invoice.payment_failed: no billingEmail for org ${orgFail.id} — skipping failure email`);
+          }
           break;
         }
 
@@ -8401,6 +8442,19 @@ If multiple assets appear, return each as a separate array item.`;
             stripeStatus: "active",
           });
           console.log(`[stripe/webhook] invoice.payment_succeeded: org ${orgOk.id} — payment recorded, amount=${amountPaid}`);
+
+          // Send renewal confirmation email for subscription cycle renewals (not the initial checkout invoice)
+          const billingReason = String(invOk["billing_reason"] ?? "");
+          const renewBillingEmail = orgOk.billingEmail ?? undefined;
+          if (billingReason === "subscription_cycle" && renewBillingEmail) {
+            try {
+              const amountFormatted = `$${(amountPaid / 100).toFixed(2)}`;
+              await sendRenewalConfirmationEmail(renewBillingEmail, orgOk.name ?? "", amountFormatted);
+              console.log(`[stripe/webhook] Renewal confirmation email sent to ${renewBillingEmail} for org ${orgOk.id}, amount=${amountPaid}`);
+            } catch (sendErr: unknown) {
+              console.error("[stripe/webhook] Renewal confirmation email delivery failed:", (sendErr as Error)?.message);
+            }
+          }
           break;
         }
 

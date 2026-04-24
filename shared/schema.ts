@@ -664,6 +664,9 @@ export const organizations = pgTable("organizations", {
   // Idempotency guard: set to the subscription ID after welcome email is sent.
   // Prevents duplicate welcome emails on Stripe webhook retries or server restarts.
   welcomeEmailSentSubId: text("welcome_email_sent_sub_id"),
+  // Idempotency guard: set to the invoice ID after a payment failure email is sent.
+  // Prevents duplicate failure emails when Stripe retries the webhook.
+  paymentFailedEmailSentInvId: text("payment_failed_email_sent_inv_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
