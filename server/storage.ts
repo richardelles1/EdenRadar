@@ -319,7 +319,7 @@ export interface IStorage {
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
-  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
+  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
   markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
   releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void>;
 
@@ -2816,7 +2816,7 @@ export class DatabaseStorage implements IStorage {
 
   async applyStripeSubscription(
     orgId: number,
-    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null },
+    data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null },
   ): Promise<Organization | undefined> {
     const [row] = await db
       .update(organizations)

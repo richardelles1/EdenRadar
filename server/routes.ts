@@ -8155,6 +8155,7 @@ If multiple assets appear, return each as a separate array item.`;
           const paymentStatusC = String(sess["payment_status"] ?? "paid");
           const initialStripeStatus = paymentStatusC === "no_payment_required" ? "trialing" : "active";
           if (customerC && orgId) {
+            const seatLimitC = isStripePlanId(rawPlanIdC) ? PLAN_SEAT_MAP[rawPlanIdC] : undefined;
             await storage.applyStripeSubscription(orgId, {
               stripeCustomerId: customerC,
               stripeSubscriptionId: subC,
@@ -8163,6 +8164,7 @@ If multiple assets appear, return each as a separate array item.`;
               // The subsequent customer.subscription.updated event will overwrite with the confirmed value.
               stripePriceId: STRIPE_PRICE_MAP[planIdC] ?? "",
               planTier: planTierC,
+              ...(seatLimitC !== undefined ? { seatLimit: seatLimitC } : {}),
             }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
             console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}`);
 
