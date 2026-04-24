@@ -31,6 +31,7 @@ import {
   Send,
   Trash2,
   RotateCcw,
+  Clock,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
@@ -703,6 +704,15 @@ export default function IndustrySettings() {
                       </p>
                     )}
                   </div>
+                  {member.inviteStatus === "pending" && (
+                    <span
+                      className="inline-flex items-center gap-1 px-1.5 py-0 rounded text-[10px] font-medium bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400 shrink-0"
+                      data-testid={`badge-pending-${member.userId}`}
+                    >
+                      <Clock className="w-2.5 h-2.5" />
+                      Pending
+                    </span>
+                  )}
                   <Badge
                     variant="outline"
                     className={cn("text-[10px] px-1.5 py-0 h-4 border capitalize", roleBadgeClass(member.role))}

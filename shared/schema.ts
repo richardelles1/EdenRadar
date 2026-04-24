@@ -678,7 +678,9 @@ export const orgMembers = pgTable("org_members", {
   email: text("email"),
   memberName: text("member_name"),
   role: text("role").notNull().default("member"), // owner | admin | member
-  invitedBy: text("invited_by"),
+  invitedBy: text("invited_by"),                  // userId of inviter or "admin"
+  inviteSource: text("invite_source"),             // "admin" | "self_service"
+  inviteStatus: text("invite_status").default("pending"), // "pending" | "active"
   joinedAt: timestamp("joined_at").defaultNow().notNull(),
 });
 export const insertOrgMemberSchema = createInsertSchema(orgMembers).omit({ id: true, joinedAt: true });

@@ -57,6 +57,8 @@ interface OrgMember {
   memberName: string | null;
   role: string;
   invitedBy: string | null;
+  inviteSource: string | null;
+  inviteStatus: string | null;
   joinedAt: string;
 }
 
@@ -545,6 +547,18 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                     <p className="text-xs text-muted-foreground">
                                       Joined {new Date(m.joinedAt).toLocaleDateString()}
                                     </p>
+                                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                                      {m.inviteSource && (
+                                        <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${m.inviteSource === "self_service" ? "bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}>
+                                          {m.inviteSource === "self_service" ? "Self-service" : "Admin"}
+                                        </span>
+                                      )}
+                                      {m.inviteStatus && (
+                                        <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${m.inviteStatus === "pending" ? "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"}`}>
+                                          {m.inviteStatus === "pending" ? "Pending" : "Active"}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                   <Select
                                     value={m.role}

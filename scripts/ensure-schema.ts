@@ -205,6 +205,13 @@ async function run() {
       ADD COLUMN IF NOT EXISTS user_id text
     `);
 
+    // Task #511 -- invite tracking columns on org_members
+    await client.query(`
+      ALTER TABLE org_members
+      ADD COLUMN IF NOT EXISTS invite_source text,
+      ADD COLUMN IF NOT EXISTS invite_status text DEFAULT 'pending'
+    `);
+
     console.log("ensure-schema: all column checks passed");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

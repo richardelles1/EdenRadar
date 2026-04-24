@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { CheckCircle2, ArrowRight, Loader2, AlertTriangle, Sprout, UserPlus, Send, X, Mail } from "lucide-react";
+import { CheckCircle2, ArrowRight, Loader2, AlertTriangle, Sprout, UserPlus, Send, Mail, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface VerifyResult {
   planTier: string;
@@ -32,24 +33,29 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-interface SentInvite {
-  email: string;
-  name: string;
-}
-
 function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId: string }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const maxInvites = PLAN_MAX_INVITES[planId] ?? 0;
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
-  const [sent, setSent] = useState<SentInvite[]>([]);
+
+  const { data: orgData } = useQuery<{ members: any[] }>({
+    queryKey: ["/api/industry/org"],
+    queryFn: () =>
+      fetch("/api/industry/org", { headers: { Authorization: `Bearer ${accessToken}` } }).then((r) => r.json()),
+    enabled: !!accessToken,
+  });
+
+  const invitedMembers = (orgData?.members ?? []).filter((m: any) => m.role !== "owner");
+  const remaining = Math.max(0, maxInvites - invitedMembers.length);
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim() || !fullName.trim()) return;
-    if (sent.length >= maxInvites) {
-      toast({ title: "Seat limit reached", description: `You've filled all available seats for this plan.`, variant: "destructive" });
+    if (remaining <= 0) {
+      toast({ title: "Seat limit reached", description: "All available seats are filled.", variant: "destructive" });
       return;
     }
     setLoading(true);
@@ -64,7 +70,7 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
         toast({ title: "Invite failed", description: data.error ?? "Something went wrong.", variant: "destructive" });
         return;
       }
-      setSent((prev) => [...prev, { email: email.trim(), name: fullName.trim() }]);
+      await queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
       setEmail("");
       setFullName("");
       toast({ title: "Invite sent", description: `${fullName.trim()} will receive an email to set their password.` });
@@ -74,8 +80,6 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
       setLoading(false);
     }
   }
-
-  const remaining = maxInvites - sent.length;
 
   return (
     <div
@@ -146,18 +150,30 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
         </form>
       )}
 
-      {sent.length > 0 && (
+      {invitedMembers.length > 0 && (
         <div className="px-6 pb-4 space-y-1.5" data-testid="list-sent-invites">
-          {sent.map((inv) => (
+          {invitedMembers.map((m: any) => (
             <div
-              key={inv.email}
+              key={m.userId}
               className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
               style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.15)" }}
+              data-testid={`invite-row-${m.userId}`}
             >
               <Mail className="w-3 h-3 flex-shrink-0" style={{ color: "hsl(142 52% 36%)" }} />
-              <span className="font-medium text-foreground truncate">{inv.name}</span>
-              <span className="text-muted-foreground truncate">{inv.email}</span>
-              <span className="ml-auto text-[10px] font-medium" style={{ color: "hsl(142 52% 36%)" }}>Invited</span>
+              <span className="font-medium text-foreground truncate">{m.memberName ?? m.email}</span>
+              {m.email && m.memberName && (
+                <span className="text-muted-foreground truncate">{m.email}</span>
+              )}
+              <span className="ml-auto flex items-center gap-1">
+                {m.inviteStatus === "pending" ? (
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                    <Clock className="w-2.5 h-2.5" />
+                    Pending
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-medium" style={{ color: "hsl(142 52% 36%)" }}>Active</span>
+                )}
+              </span>
             </div>
           ))}
         </div>
@@ -189,10 +205,8 @@ export default function BillingSuccess() {
       return;
     }
 
-    // Auth is still loading — wait
     if (authLoading) return;
 
-    // Auth done but no session — redirect to login preserving the return path
     if (!session?.access_token) {
       navigate(`/login?redirect=/billing/success${encodeURIComponent("?session_id=" + sessionId)}`);
       return;

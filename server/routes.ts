@@ -5547,7 +5547,7 @@ If a field cannot be determined, use "N/A".`
       }
 
       // Add to org_members — store email/name for display in admin UI
-      const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role });
+      const member = await storage.addOrgMember({ orgId, userId, email, memberName: fullName, role, invitedBy: "admin", inviteSource: "admin", inviteStatus: "pending" });
 
       // Set industry_profiles.org_id (creates profile row if missing)
       await storage.setIndustryProfileOrg(userId, orgId);
@@ -5779,7 +5779,7 @@ If a field cannot be determined, use "N/A".`
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
-      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role });
+      const newMember = await storage.addOrgMember({ orgId: org.id, userId: newUserId, email, memberName: fullName, role, invitedBy: ctx.userId, inviteSource: "self_service", inviteStatus: "pending" });
       await storage.setIndustryProfileOrg(newUserId, org.id);
       await sendTeamInviteEmail(email, fullName, org.name, org.planTier ?? "individual", setPasswordLink).catch((err) =>
         console.error("[email] Self-service invite email failed:", err)
@@ -5798,7 +5798,7 @@ If a field cannot be determined, use "N/A".`
       const ctx = await requireOrgOwner(req, res);
       if (!ctx) return;
       const { org, userId: callerId } = ctx;
-      const { memberId } = req.params;
+      const memberId = req.params.memberId as string;
       if (memberId === callerId) {
         return res.status(400).json({ error: "You cannot remove yourself from the organization" });
       }
@@ -5815,7 +5815,7 @@ If a field cannot be determined, use "N/A".`
       const ctx = await requireOrgOwner(req, res);
       if (!ctx) return;
       const { org } = ctx;
-      const { memberId } = req.params;
+      const memberId = req.params.memberId as string;
 
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
@@ -7821,7 +7821,7 @@ If multiple assets appear, return each as a separate array item.`;
       seatLimit: PLAN_SEAT_MAP[planId],
       billingMethod: "stripe",
     });
-    await storage.addOrgMember({ orgId: newOrg.id, userId, role: "owner" });
+    await storage.addOrgMember({ orgId: newOrg.id, userId, role: "owner", inviteSource: "self_service", inviteStatus: "active" });
     await storage.setIndustryProfileOrg(userId, newOrg.id);
     console.log(`[stripe] Auto-created org ${newOrg.id} for user ${userId}`);
     return newOrg;
@@ -7960,7 +7960,7 @@ If multiple assets appear, return each as a separate array item.`;
           seatLimit: PLAN_SEAT_MAP[planId],
           billingMethod: "stripe",
         });
-        await storage.addOrgMember({ orgId: org.id, userId, role: "owner" });
+        await storage.addOrgMember({ orgId: org.id, userId, role: "owner", inviteSource: "self_service", inviteStatus: "active" });
         await storage.setIndustryProfileOrg(userId, org.id);
         orgSource = "created";
         console.log(`[stripe/verify-session] Auto-created org ${org.id} for user ${userId}`);
