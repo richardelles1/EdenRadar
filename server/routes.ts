@@ -8034,6 +8034,71 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  // POST /api/stripe/upgrade-plan — upgrade a team5 subscription to team10 mid-cycle with proration
+  app.post("/api/stripe/upgrade-plan", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe is not configured on this server yet" });
+
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(400).json({ error: "Missing user id" });
+
+      const org = await storage.getOrgForUser(userId);
+      if (!org) return res.status(404).json({ error: "No organisation found for this user" });
+
+      // Verify caller is an owner of the org
+      const members = await storage.getOrgMembers(org.id);
+      const callerMember = members.find((m) => m.userId === userId);
+      if (!callerMember || callerMember.role !== "owner") {
+        return res.status(403).json({ error: "Only the org owner can upgrade the plan" });
+      }
+
+      if (org.planTier !== "team5") {
+        return res.status(400).json({ error: "Only team5 subscriptions can be upgraded to team10 via this endpoint" });
+      }
+
+      if (!org.stripeSubscriptionId) {
+        return res.status(400).json({ error: "No active Stripe subscription found for this organisation" });
+      }
+
+      const newPriceId = STRIPE_PRICE_MAP["team10"];
+      if (!newPriceId) {
+        return res.status(503).json({ error: "STRIPE_PRICE_TEAM10 env var not set" });
+      }
+
+      // Retrieve the current subscription to get the subscription item ID
+      const currentSub = await stripe.subscriptions.retrieve(org.stripeSubscriptionId);
+      const itemId = currentSub.items?.data?.[0]?.id;
+      if (!itemId) {
+        return res.status(500).json({ error: "Could not find subscription item to update" });
+      }
+
+      // Swap the price with proration
+      const updatedSub = await stripe.subscriptions.update(org.stripeSubscriptionId, {
+        items: [{ id: itemId, price: newPriceId }],
+        proration_behavior: "create_prorations",
+      });
+
+      const newStripePriceId = updatedSub.items?.data?.[0]?.price?.id ?? newPriceId;
+      const newStatus = updatedSub.status ?? "active";
+
+      // Persist the plan change to the DB immediately
+      await storage.updateOrganization(org.id, {
+        planTier: "team10",
+        seatLimit: PLAN_SEAT_MAP["team10"],
+        stripePriceId: newStripePriceId,
+        stripeStatus: newStatus,
+      });
+
+      console.log(`[stripe/upgrade-plan] Org ${org.id} upgraded from team5 → team10 (sub ${org.stripeSubscriptionId})`);
+
+      return res.json({ ok: true, planTier: "team10", seatLimit: PLAN_SEAT_MAP["team10"] });
+    } catch (err: any) {
+      console.error("[stripe/upgrade-plan]", err?.message);
+      return res.status(500).json({ error: err.message ?? "Failed to upgrade plan" });
+    }
+  });
+
   // POST /api/stripe/webhook — handle Stripe events
   // Signature verification is REQUIRED. Returns 503 when STRIPE_WEBHOOK_SECRET is absent.
   app.post("/api/stripe/webhook", async (req, res) => {

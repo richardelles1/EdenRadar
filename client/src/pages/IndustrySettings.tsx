@@ -254,6 +254,7 @@ export default function IndustrySettings() {
   const [pwModalOpen, setPwModalOpen] = useState(false);
   const [lastAlertSentAt, setLastAlertSentAt] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [upgradeLoading, setUpgradeLoading] = useState(false);
 
   // Team invite modal state
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -430,6 +431,28 @@ export default function IndustrySettings() {
       toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
     } finally {
       setPortalLoading(false);
+    }
+  }
+
+  async function handleUpgradePlan() {
+    if (!session?.access_token) return;
+    setUpgradeLoading(true);
+    try {
+      const res = await fetch("/api/stripe/upgrade-plan", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Upgrade failed", description: data.error ?? "Please try again.", variant: "destructive" });
+        return;
+      }
+      toast({ title: "Plan upgraded", description: "You're now on the 10-seat plan. Your team limit has been increased." });
+      queryClient.invalidateQueries({ queryKey: ["/api/industry/org"] });
+    } catch {
+      toast({ title: "Network error", description: "Failed to connect. Please try again.", variant: "destructive" });
+    } finally {
+      setUpgradeLoading(false);
     }
   }
 
@@ -648,6 +671,33 @@ export default function IndustrySettings() {
             </Link>
           )}
         </div>
+
+        {/* Upgrade CTA — visible only to team5 org owners with an active subscription */}
+        {isOwner && org?.planTier === "team5" && org?.stripeSubscriptionId && (org.stripeStatus === "active" || org.stripeStatus === "trialing") && (
+          <>
+            <Separator className="my-3" />
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-foreground">Need more seats?</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Upgrade to 10 seats — you'll only pay the prorated difference for the rest of your billing cycle.
+                </p>
+              </div>
+              <Button
+                size="sm"
+                onClick={handleUpgradePlan}
+                disabled={upgradeLoading}
+                data-testid="button-upgrade-to-team10"
+                className="gap-1.5 shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {upgradeLoading ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : null}
+                {upgradeLoading ? "Upgrading…" : "Upgrade to 10 seats"}
+              </Button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Team */}
