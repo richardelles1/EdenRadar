@@ -123,7 +123,7 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
         <form onSubmit={handleInvite} className="px-6 py-4 space-y-3">
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
-              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name</Label>
+              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name (optional)</Label>
               <Input
                 id="invite-name"
                 placeholder="Jane Smith"
@@ -151,7 +151,7 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
           <Button
             type="submit"
             size="sm"
-            disabled={loading || !email.trim() || !fullName.trim()}
+            disabled={loading || !email.trim()}
             data-testid="button-send-invite"
             className="gap-1.5 w-full"
             style={{ background: "hsl(142 52% 36%)", color: "white", border: "none" }}

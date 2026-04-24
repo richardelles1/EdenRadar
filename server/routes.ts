@@ -5759,10 +5759,11 @@ If a field cannot be determined, use "N/A".`
 
       const memberSchema = z.object({
         email: z.string().email(),
-        fullName: z.string().min(1),
+        fullName: z.string().optional(),
         role: z.enum(["admin", "member"]).default("member"),
       });
-      const { email, fullName, role } = memberSchema.parse(req.body);
+      const { email, fullName: rawFullName, role } = memberSchema.parse(req.body);
+      const fullName = rawFullName?.trim() || email.split("@")[0];
 
       const currentCount = await storage.getOrgMemberCount(org.id);
       if (currentCount >= org.seatLimit) {

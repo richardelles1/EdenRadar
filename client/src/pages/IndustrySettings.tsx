@@ -271,7 +271,7 @@ export default function IndustrySettings() {
 
   async function handleInvite(e: React.FormEvent) {
     e.preventDefault();
-    if (!session?.access_token || !inviteEmail.trim() || !inviteFullName.trim()) return;
+    if (!session?.access_token || !inviteEmail.trim()) return;
     setInviteLoading(true);
     try {
       const res = await fetch("/api/org/members", {
@@ -722,15 +722,17 @@ export default function IndustrySettings() {
                   </Badge>
                   {isOwner && !isSelf && (
                     <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        onClick={() => handleResend(member.userId)}
-                        disabled={isBeingResent || isBeingRemoved}
-                        title="Resend invite"
-                        data-testid={`button-resend-${member.userId}`}
-                        className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                      >
-                        {isBeingResent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                      </button>
+                      {member.inviteStatus === "pending" && (
+                        <button
+                          onClick={() => handleResend(member.userId)}
+                          disabled={isBeingResent || isBeingRemoved}
+                          title="Resend invite"
+                          data-testid={`button-resend-${member.userId}`}
+                          className="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                        >
+                          {isBeingResent ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+                        </button>
+                      )}
                       <button
                         onClick={() => handleRemove(member.userId, displayName)}
                         disabled={isBeingRemoved || isBeingResent}
@@ -760,7 +762,7 @@ export default function IndustrySettings() {
           </DialogHeader>
           <form onSubmit={handleInvite} className="space-y-4 pt-1">
             <div className="space-y-1">
-              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name</Label>
+              <Label htmlFor="invite-name" className="text-xs text-muted-foreground">Full name (optional)</Label>
               <Input
                 id="invite-name"
                 placeholder="Jane Smith"
@@ -789,7 +791,7 @@ export default function IndustrySettings() {
               </Button>
               <Button
                 type="submit"
-                disabled={inviteLoading || !inviteEmail.trim() || !inviteFullName.trim()}
+                disabled={inviteLoading || !inviteEmail.trim()}
                 data-testid="button-send-invite-modal"
                 className="gap-1.5"
               >
