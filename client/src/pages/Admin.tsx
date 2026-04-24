@@ -9057,6 +9057,13 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <h1 className="text-lg font-semibold text-foreground">EdenRadar Admin</h1>
           </div>
           <div className="flex items-center gap-3">
+            <a
+              href="/admin/mobile"
+              className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground px-2 py-1.5 rounded-md hover:bg-muted transition-colors"
+              data-testid="link-mobile-admin"
+            >
+              Mobile view →
+            </a>
             <Button
               variant="ghost"
               size="sm"

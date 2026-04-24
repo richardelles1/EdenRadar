@@ -15,6 +15,7 @@ import Institutions from "@/pages/Institutions";
 import InstitutionDetail from "@/pages/InstitutionDetail";
 import Sources from "@/pages/Sources";
 import Admin from "@/pages/Admin";
+import AdminMobile from "@/pages/AdminMobile";
 import ResearchDashboard from "@/pages/ResearchDashboard";
 import CreateDiscovery from "@/pages/CreateDiscovery";
 import MyDiscoveries from "@/pages/MyDiscoveries";
@@ -237,6 +238,7 @@ function Router() {
       </Route>
 
       <Route path="/admin" component={Admin} />
+      <Route path="/admin/mobile" component={AdminMobile} />
 
       <Route path="/research">
         <ResearchLayout>
