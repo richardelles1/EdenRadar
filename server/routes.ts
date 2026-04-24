@@ -8156,17 +8156,34 @@ If multiple assets appear, return each as a separate array item.`;
           const initialStripeStatus = paymentStatusC === "no_payment_required" ? "trialing" : "active";
           if (customerC && orgId) {
             const seatLimitC = isStripePlanId(rawPlanIdC) ? PLAN_SEAT_MAP[rawPlanIdC] : undefined;
+
+            // Retrieve the subscription early so we can record the exact Stripe Price ID.
+            let resolvedPriceId: string = STRIPE_PRICE_MAP[planIdC] ?? "";
+            let preloadedStripeSub: import("stripe").Stripe.Subscription | null = null;
+            if (subC) {
+              try {
+                const stripeInstance = getStripe();
+                if (stripeInstance) {
+                  const fetchedSub = await stripeInstance.subscriptions.retrieve(subC);
+                  preloadedStripeSub = fetchedSub;
+                  const actualPriceId = fetchedSub.items.data[0]?.price?.id;
+                  if (actualPriceId) resolvedPriceId = actualPriceId;
+                }
+              } catch (subPreloadErr: unknown) {
+                console.warn("[stripe/webhook] Could not retrieve subscription for price ID:", (subPreloadErr as Error)?.message);
+                console.warn(`[stripe/webhook] Falling back to mapped price ID for plan '${planIdC}' — actual Stripe price may differ`);
+              }
+            }
+
             await storage.applyStripeSubscription(orgId, {
               stripeCustomerId: customerC,
               stripeSubscriptionId: subC,
               stripeStatus: initialStripeStatus,
-              // Use price ID from our own constants — the Stripe-side line_items are not expanded here.
-              // The subsequent customer.subscription.updated event will overwrite with the confirmed value.
-              stripePriceId: STRIPE_PRICE_MAP[planIdC] ?? "",
+              stripePriceId: resolvedPriceId,
               planTier: planTierC,
               ...(seatLimitC !== undefined ? { seatLimit: seatLimitC } : {}),
             }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
-            console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}`);
+            console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}, priceId=${resolvedPriceId}`);
 
             if (subC) {
               try {
@@ -8187,9 +8204,12 @@ If multiple assets appear, return each as a separate array item.`;
                     const seatCount = isStripePlanId(rawPlanIdC) ? PLAN_SEAT_MAP[rawPlanIdC] : 1;
                     let nextBillingDate = "—";
                     try {
-                      const stripeInstance = getStripe();
-                      if (stripeInstance) {
-                        const stripeSub = await stripeInstance.subscriptions.retrieve(subC);
+                      // Reuse the already-retrieved subscription when available.
+                      const stripeSub = preloadedStripeSub ?? await (async () => {
+                        const stripeInstance = getStripe();
+                        return stripeInstance ? stripeInstance.subscriptions.retrieve(subC) : null;
+                      })();
+                      if (stripeSub) {
                         const periodEnd: number = stripeSub.current_period_end;
                         nextBillingDate = new Date(periodEnd * 1000).toLocaleDateString("en-US", {
                           year: "numeric", month: "long", day: "numeric",
