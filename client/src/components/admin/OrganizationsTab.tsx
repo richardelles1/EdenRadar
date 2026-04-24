@@ -1,5 +1,6 @@
 import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import type { StripeBillingEvent } from "@shared/schema";
 import { queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -167,6 +168,12 @@ export function OrganizationsTab({ pw }: { pw: string }) {
   const { data: detailData, isLoading: detailLoading } = useQuery<Organization & { members: OrgMember[] }>({
     queryKey: ["/api/admin/organizations", expandedId],
     queryFn: () => adminFetch(`/api/admin/organizations/${expandedId}`, {}, pw),
+    enabled: expandedId !== null,
+  });
+
+  const { data: billingHistory = [], isLoading: billingHistoryLoading } = useQuery<StripeBillingEvent[]>({
+    queryKey: ["/api/admin/organizations", expandedId, "billing-history"],
+    queryFn: () => adminFetch(`/api/admin/organizations/${expandedId}/billing-history`, {}, pw),
     enabled: expandedId !== null,
   });
 
@@ -499,6 +506,85 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                             value={seatLimit > 0 ? Math.min(100, (seatCount / seatLimit) * 100) : 0}
                             className="h-1.5"
                           />
+                        </div>
+
+                        {/* Billing History */}
+                        <div className="space-y-2">
+                          <span className="text-sm font-medium">Billing History</span>
+                          {billingHistoryLoading ? (
+                            <div className="text-xs text-muted-foreground py-2">Loading billing history...</div>
+                          ) : billingHistory.length === 0 ? (
+                            <p className="text-xs text-muted-foreground py-2">No billing events recorded.</p>
+                          ) : (
+                            <div className="rounded-md border border-border overflow-hidden">
+                              <table className="w-full text-xs" data-testid={`table-billing-history-${expandedId}`}>
+                                <thead>
+                                  <tr className="bg-muted/50 text-muted-foreground uppercase tracking-wide text-[10px]">
+                                    <th className="text-left px-3 py-2 font-semibold">Event</th>
+                                    <th className="text-left px-3 py-2 font-semibold">Plan Change</th>
+                                    <th className="text-left px-3 py-2 font-semibold">Price ID Change</th>
+                                    <th className="text-left px-3 py-2 font-semibold">Stripe Status</th>
+                                    <th className="text-left px-3 py-2 font-semibold">Timestamp</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {[...billingHistory].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).map((event, i) => (
+                                    <tr
+                                      key={event.id}
+                                      className={i % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                                      data-testid={`row-billing-event-${event.id}`}
+                                    >
+                                      <td className="px-3 py-2 font-mono text-[10px]" data-testid={`text-event-type-${event.id}`}>
+                                        {event.eventType}
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground" data-testid={`text-plan-change-${event.id}`}>
+                                        {event.oldPlanTier || event.newPlanTier ? (
+                                          <span>
+                                            <span>{PLAN_TIER_LABELS[event.oldPlanTier ?? ""] ?? event.oldPlanTier ?? "—"}</span>
+                                            <span className="mx-1 text-muted-foreground/50">→</span>
+                                            <span>{PLAN_TIER_LABELS[event.newPlanTier ?? ""] ?? event.newPlanTier ?? "—"}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground/50">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 font-mono text-[10px] text-muted-foreground" data-testid={`text-price-change-${event.id}`}>
+                                        {event.oldPriceId || event.newPriceId ? (
+                                          <span>
+                                            <span>{event.oldPriceId ?? "—"}</span>
+                                            <span className="mx-1 text-muted-foreground/50">→</span>
+                                            <span>{event.newPriceId ?? "—"}</span>
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground/50">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2" data-testid={`text-stripe-status-${event.id}`}>
+                                        {event.stripeStatus ? (
+                                          <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${
+                                            event.stripeStatus === "active"
+                                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400"
+                                              : event.stripeStatus === "past_due"
+                                              ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400"
+                                              : event.stripeStatus === "canceled"
+                                              ? "bg-rose-50 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400"
+                                              : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400"
+                                          }`}>
+                                            {event.stripeStatus}
+                                          </span>
+                                        ) : (
+                                          <span className="text-muted-foreground/50">—</span>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-muted-foreground whitespace-nowrap" data-testid={`text-billing-timestamp-${event.id}`}>
+                                        {new Date(event.createdAt).toLocaleString()}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
                         </div>
 
                         {/* Members */}
