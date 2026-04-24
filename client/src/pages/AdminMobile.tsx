@@ -97,13 +97,11 @@ interface NewArrivalsResponse {
 interface AdminUser {
   id: string;
   email: string;
-  name: string | null;
   contactEmail: string | null;
   role: string | null;
   subscribedToDigest: boolean;
   createdAt: string;
   lastSignInAt: string | null;
-  orgName: string | null;
 }
 
 interface Discovery {
@@ -899,10 +897,8 @@ function AccountCenterTab({ pw }: { pw: string }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    {user.name && <p className="text-sm font-medium text-foreground truncate">{user.name}</p>}
-                    <p className={`text-muted-foreground truncate ${user.name ? "text-[11px]" : "text-sm text-foreground"}`}>{user.email}</p>
+                    <p className="text-sm text-foreground truncate">{user.email}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {user.orgName && <span className="font-medium text-foreground">{user.orgName} · </span>}
                       {formatRelative(user.lastSignInAt ?? user.createdAt)} · {user.subscribedToDigest ? "digest ✓" : "no digest"}
                     </p>
                   </div>
@@ -1537,23 +1533,10 @@ function ReviewTab({ pw }: { pw: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/research-queue-mobile"] }),
   });
 
-  const conceptMutation = useMutation({
-    mutationFn: async ({ id, credibilityScore }: { id: number; credibilityScore: number }) => {
-      const res = await adminFetch(`/api/admin/concepts/${id}`, pw, {
-        method: "PATCH",
-        body: JSON.stringify({ credibilityScore }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Concept update failed");
-      return d;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/concepts-mobile"] }),
-  });
-
   const pendingResearch = (researchData?.cards ?? []).filter(c => c.adminStatus === "pending");
   const unreviewedConcepts = (conceptData?.concepts ?? []).filter(c => c.credibilityScore === null);
 
-  // Build unified queue: research items first, then concept items
+  // Build unified queue: research items first (actionable), then concept items (read-only)
   const queue: QueueItem[] = [
     ...pendingResearch.map(c => ({ kind: "research" as const, id: c.id, title: c.assetName, subtitle: c.institution })),
     ...unreviewedConcepts.map(c => ({
@@ -1563,8 +1546,6 @@ function ReviewTab({ pw }: { pw: string }) {
       subtitle: `${c.submitterName}${c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}`,
     })),
   ];
-
-  const isMutating = researchMutation.isPending || conceptMutation.isPending;
 
   if (loadingResearch || loadingConcepts) return (
     <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
@@ -1616,30 +1597,34 @@ function ReviewTab({ pw }: { pw: string }) {
                 </div>
                 <p className="text-sm font-medium text-foreground line-clamp-2 mb-0.5">{item.title}</p>
                 <p className="text-xs text-muted-foreground mb-2">{item.subtitle}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "approved" });
-                      else conceptMutation.mutate({ id: item.id, credibilityScore: 80 });
-                    }}
-                    disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                    data-testid={`button-approve-${item.kind}-${item.id}`}
+                {item.kind === "research" ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => researchMutation.mutate({ id: item.id, adminStatus: "approved" })}
+                      disabled={researchMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                      data-testid={`button-approve-research-${item.id}`}
+                    >
+                      <Check className="h-3.5 w-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => researchMutation.mutate({ id: item.id, adminStatus: "rejected" })}
+                      disabled={researchMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                      data-testid={`button-reject-research-${item.id}`}
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject
+                    </button>
+                  </div>
+                ) : (
+                  <a
+                    href="/admin"
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-muted text-muted-foreground text-xs font-medium"
+                    data-testid={`link-desktop-concept-${item.id}`}
                   >
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "rejected" });
-                      else conceptMutation.mutate({ id: item.id, credibilityScore: 10 });
-                    }}
-                    disabled={isMutating}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                    data-testid={`button-reject-${item.kind}-${item.id}`}
-                  >
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
-                </div>
+                    <ArrowRight className="h-3.5 w-3.5" /> Review on Desktop
+                  </a>
+                )}
               </div>
             ))}
           </div>
