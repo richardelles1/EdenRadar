@@ -32,8 +32,11 @@ import {
   Trash2,
   RotateCcw,
   Clock,
+  Receipt,
+  XCircle,
 } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { StripeBillingEvent } from "@shared/schema";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { supabase } from "@/lib/supabase";
@@ -263,6 +266,18 @@ export default function IndustrySettings() {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
+
+  const { data: billingHistory = [], isLoading: billingLoading } = useQuery<StripeBillingEvent[]>({
+    queryKey: ["/api/billing/history"],
+    queryFn: async () => {
+      const res = await fetch("/api/billing/history", {
+        headers: { Authorization: `Bearer ${session?.access_token}` },
+      });
+      if (!res.ok) throw new Error("Failed to fetch billing history");
+      return res.json();
+    },
+    enabled: !!session?.access_token && isIndustry,
+  });
 
   const isOwner = org?.members?.some((m: any) => m.userId === user?.id && m.role === "owner") ?? false;
   const isTeamPlan = org?.planTier === "team5" || org?.planTier === "team10";
@@ -699,6 +714,114 @@ export default function IndustrySettings() {
           </>
         )}
       </div>
+
+      {/* Billing History */}
+      {isIndustry && (
+        <div className="rounded-xl border border-card-border bg-card p-4" data-testid="section-billing-history">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center shrink-0 mt-0.5">
+              <Receipt className="w-4 h-4 text-emerald-500" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Billing History</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Your recent payment activity</p>
+            </div>
+          </div>
+          {billingLoading ? (
+            <div className="flex items-center justify-center py-6" data-testid="billing-history-loading">
+              <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : billingHistory.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 gap-2 text-center" data-testid="billing-history-empty">
+              <Receipt className="w-8 h-8 text-muted-foreground/40" />
+              <p className="text-sm text-muted-foreground">No payment history yet</p>
+              <p className="text-xs text-muted-foreground/70">Payments will appear here once your subscription is active.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border" data-testid="billing-history-list">
+              {billingHistory
+                .filter((e) => e.eventType === "payment_succeeded" || e.eventType === "payment_failed")
+                .slice(0, 10)
+                .map((event) => {
+                  const isPaid = event.eventType === "payment_succeeded";
+                  const date = new Date(event.createdAt).toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  });
+                  const planLabel = event.newPlanTier
+                    ? planTierLabel(event.newPlanTier)
+                    : event.oldPlanTier
+                    ? planTierLabel(event.oldPlanTier)
+                    : null;
+                  const amountFormatted = event.amountCents != null
+                    ? new Intl.NumberFormat("en-US", {
+                        style: "currency",
+                        currency: event.currency ?? "usd",
+                        maximumFractionDigits: 2,
+                      }).format(event.amountCents / 100)
+                    : null;
+                  return (
+                    <div
+                      key={event.id}
+                      className="flex items-center justify-between py-2.5 gap-3"
+                      data-testid={`billing-event-${event.id}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        {isPaid ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                        ) : (
+                          <XCircle className="w-4 h-4 text-destructive shrink-0" />
+                        )}
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-foreground" data-testid={`billing-event-type-${event.id}`}>
+                            {isPaid ? "Payment successful" : "Payment failed"}
+                          </p>
+                          {planLabel && (
+                            <p className="text-xs text-muted-foreground truncate" data-testid={`billing-event-plan-${event.id}`}>
+                              {planLabel}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        {amountFormatted && (
+                          <p className="text-sm font-semibold text-foreground" data-testid={`billing-event-amount-${event.id}`}>
+                            {amountFormatted}
+                          </p>
+                        )}
+                        {event.stripeStatus && (
+                          <Badge
+                            variant="secondary"
+                            className={cn(
+                              "border text-xs px-1.5 py-0 h-4 capitalize",
+                              isPaid
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                                : "bg-destructive/10 text-destructive border-destructive/20"
+                            )}
+                            data-testid={`billing-event-status-${event.id}`}
+                          >
+                            {event.stripeStatus}
+                          </Badge>
+                        )}
+                        <p className="text-xs text-muted-foreground" data-testid={`billing-event-date-${event.id}`}>
+                          {date}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              {billingHistory.filter((e) => e.eventType === "payment_succeeded" || e.eventType === "payment_failed").length === 0 && (
+                <div className="flex flex-col items-center justify-center py-6 gap-2 text-center" data-testid="billing-history-no-payments">
+                  <Receipt className="w-8 h-8 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">No payment history yet</p>
+                  <p className="text-xs text-muted-foreground/70">Payments will appear here once your subscription is active.</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Team */}
       {org && isTeamPlan && (

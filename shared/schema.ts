@@ -754,6 +754,8 @@ export const stripeBillingEvents = pgTable("stripe_billing_events", {
   oldPlanTier: text("old_plan_tier"),
   newPlanTier: text("new_plan_tier"),
   stripeStatus: text("stripe_status"),
+  amountCents: integer("amount_cents"),
+  currency: text("currency"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 export const insertStripeBillingEventSchema = createInsertSchema(stripeBillingEvents).omit({ id: true, createdAt: true });

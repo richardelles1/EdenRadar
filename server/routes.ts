@@ -8361,11 +8361,15 @@ If multiple assets appear, return each as a separate array item.`;
             await storage.updateOrganization(orgFail.id, { stripeStatus: "past_due" });
           }
           // Always record the payment failure in billing history for auditability
+          const failAmountDue = typeof inv["amount_due"] === "number" ? inv["amount_due"] : null;
+          const failCurrency = typeof inv["currency"] === "string" ? inv["currency"] : null;
           await storage.logBillingEvent({
             orgId: orgFail.id,
             stripeSubscriptionId: invSubId || null,
             eventType: "payment_failed",
             stripeStatus: "past_due",
+            amountCents: failAmountDue,
+            currency: failCurrency,
           });
           console.warn(`[stripe/webhook] invoice.payment_failed: org ${orgFail.id} (${invCustomerId}) — payment failed, status → past_due`);
 
@@ -8433,6 +8437,7 @@ If multiple assets appear, return each as a separate array item.`;
             console.warn(`[stripe/webhook] invoice.payment_succeeded: no org for customer ${invOkCustomerId} / sub ${invOkSubId}`);
             break;
           }
+          const okCurrency = typeof invOk["currency"] === "string" ? invOk["currency"] : null;
           await storage.logBillingEvent({
             orgId: orgOk.id,
             stripeSubscriptionId: invOkSubId || null,
@@ -8440,6 +8445,8 @@ If multiple assets appear, return each as a separate array item.`;
             // Use "active" as the canonical post-payment status rather than reading current
             // org state, which may still reflect "past_due" before subscription.updated arrives.
             stripeStatus: "active",
+            amountCents: amountPaid > 0 ? amountPaid : null,
+            currency: okCurrency,
           });
           console.log(`[stripe/webhook] invoice.payment_succeeded: org ${orgOk.id} — payment recorded, amount=${amountPaid}`);
 
@@ -8468,6 +8475,20 @@ If multiple assets appear, return each as a separate array item.`;
     }
 
     res.json({ received: true });
+  });
+
+  // GET /api/billing/history — returns billing events for the authenticated user's org
+  app.get("/api/billing/history", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org) return res.status(404).json({ error: "No organization found for this account" });
+      const events = await storage.getBillingHistory(org.id);
+      res.json(events);
+    } catch (err: any) {
+      console.error("[billing/history]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to fetch billing history" });
+    }
   });
 
   // POST /api/stripe/portal — create a Stripe Customer Portal session for self-serve plan management

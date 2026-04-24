@@ -869,9 +869,13 @@ async function createStripeBillingEventsTable() {
         old_plan_tier         TEXT,
         new_plan_tier         TEXT,
         stripe_status         TEXT,
+        amount_cents          INTEGER,
+        currency              TEXT,
         created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
       )
     `);
+    await db.execute(sql`ALTER TABLE stripe_billing_events ADD COLUMN IF NOT EXISTS amount_cents INTEGER`);
+    await db.execute(sql`ALTER TABLE stripe_billing_events ADD COLUMN IF NOT EXISTS currency TEXT`);
     await db.execute(sql`
       CREATE INDEX IF NOT EXISTS stripe_billing_events_org_created_idx
         ON stripe_billing_events (org_id, created_at DESC)
