@@ -855,6 +855,33 @@ async function createSavedAssetNotesTable() {
   }
 }
 
+// ── Ensure stripe_billing_events table exists ─────────────────────────────────
+async function createStripeBillingEventsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS stripe_billing_events (
+        id                    SERIAL PRIMARY KEY,
+        org_id                INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        stripe_subscription_id TEXT,
+        event_type            TEXT NOT NULL,
+        old_price_id          TEXT,
+        new_price_id          TEXT,
+        old_plan_tier         TEXT,
+        new_plan_tier         TEXT,
+        stripe_status         TEXT,
+        created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS stripe_billing_events_org_created_idx
+        ON stripe_billing_events (org_id, created_at DESC)
+    `);
+    log("[startup] stripe_billing_events table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] stripe_billing_events table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure shared_links table exists ──────────────────────────────────────────
 async function createSharedLinksTable() {
   try {
@@ -977,6 +1004,8 @@ async function migrateAssetStatusValues() {
       createSavedAssetNotesTable().catch(() => {});
       // ── Ensure shared_links table exists (idempotent) ──────────────────
       createSharedLinksTable().catch(() => {});
+      // ── Ensure stripe_billing_events table exists (idempotent) ─────────
+      createStripeBillingEventsTable().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────

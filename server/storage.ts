@@ -26,6 +26,7 @@ import {
   orgMembers, type OrgMember, type InsertOrgMember,
   sharedLinks, type SharedLink,
   teamActivities, type TeamActivity, type InsertTeamActivity,
+  stripeBillingEvents, type StripeBillingEvent, type InsertStripeBillingEvent,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -319,7 +320,9 @@ export interface IStorage {
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
-  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
+  applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }, eventType?: string): Promise<Organization | undefined>;
+  logBillingEvent(data: InsertStripeBillingEvent): Promise<StripeBillingEvent>;
+  getBillingHistory(orgId: number): Promise<StripeBillingEvent[]>;
   markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
   releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void>;
 
@@ -2817,13 +2820,46 @@ export class DatabaseStorage implements IStorage {
   async applyStripeSubscription(
     orgId: number,
     data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null },
+    eventType: string = "subscription_updated",
   ): Promise<Organization | undefined> {
-    const [row] = await db
-      .update(organizations)
-      .set({ ...data, updatedAt: new Date() })
-      .where(eq(organizations.id, orgId))
-      .returning();
+    return db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(organizations)
+        .where(eq(organizations.id, orgId))
+        .limit(1);
+      const [row] = await tx
+        .update(organizations)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(organizations.id, orgId))
+        .returning();
+      if (row) {
+        await tx.insert(stripeBillingEvents).values({
+          orgId,
+          stripeSubscriptionId: data.stripeSubscriptionId || null,
+          eventType,
+          oldPriceId: existing?.stripePriceId ?? null,
+          newPriceId: data.stripePriceId || null,
+          oldPlanTier: existing?.planTier ?? null,
+          newPlanTier: data.planTier || null,
+          stripeStatus: data.stripeStatus || null,
+        });
+      }
+      return row;
+    });
+  }
+
+  async logBillingEvent(data: InsertStripeBillingEvent): Promise<StripeBillingEvent> {
+    const [row] = await db.insert(stripeBillingEvents).values(data).returning();
     return row;
+  }
+
+  async getBillingHistory(orgId: number): Promise<StripeBillingEvent[]> {
+    return db
+      .select()
+      .from(stripeBillingEvents)
+      .where(eq(stripeBillingEvents.orgId, orgId))
+      .orderBy(desc(stripeBillingEvents.createdAt));
   }
 
   async markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean> {

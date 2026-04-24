@@ -5483,6 +5483,19 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // Billing history — returns all billing events for an org in reverse-chronological order
+  app.get("/api/admin/organizations/:id/billing-history", async (req, res) => {
+    try {
+      if (!adminGuard(req, res)) return;
+      const orgId = Number(req.params.id);
+      if (!orgId) return res.status(400).json({ error: "Invalid org id" });
+      const events = await storage.getBillingHistory(orgId);
+      res.json(events);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Logo upload — stores a URL or base64 data URL in logoUrl field
   app.post("/api/admin/organizations/:id/logo", async (req, res) => {
     try {
@@ -7765,6 +7778,22 @@ If multiple assets appear, return each as a separate array item.`;
   //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
   //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_status TEXT;
   //   ALTER TABLE organizations ADD COLUMN IF NOT EXISTS stripe_price_id TEXT;
+  //
+  // BILLING EVENTS MIGRATION: stripe_billing_events table for audit log.
+  // Applied automatically on startup via createStripeBillingEventsTable() in server/index.ts.
+  // Manual equivalent:
+  //   CREATE TABLE IF NOT EXISTS stripe_billing_events (
+  //     id SERIAL PRIMARY KEY,
+  //     org_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+  //     stripe_subscription_id TEXT,
+  //     event_type TEXT NOT NULL,
+  //     old_price_id TEXT,
+  //     new_price_id TEXT,
+  //     old_plan_tier TEXT,
+  //     new_plan_tier TEXT,
+  //     stripe_status TEXT,
+  //     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP NOT NULL
+  //   );
 
   type StripePlanId = "individual" | "team5" | "team10";
 
@@ -8183,7 +8212,7 @@ If multiple assets appear, return each as a separate array item.`;
               stripePriceId: resolvedPriceId,
               planTier: planTierC,
               ...(seatLimitC !== undefined ? { seatLimit: seatLimitC } : {}),
-            }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
+            }, "checkout_completed");
             console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}, priceId=${resolvedPriceId}`);
 
             if (subC) {
@@ -8279,7 +8308,7 @@ If multiple assets appear, return each as a separate array item.`;
             seatLimit: seatLimitU,
             stripeCurrentPeriodEnd: periodEndU,
             stripeCancelAt: cancelAtU,
-          }).catch((e: unknown) => console.error("[stripe/webhook] subscription.updated write failed:", (e as Error)?.message));
+          }, "subscription_updated");
           console.log(`[stripe/webhook] Updated org ${orgU.id} → planTier=${planTierU}, seatLimit=${seatLimitU}, status=${sub["status"]}, priceId=${priceId}`);
           break;
         }
@@ -8307,7 +8336,7 @@ If multiple assets appear, return each as a separate array item.`;
             planTier: "none",
             stripeCurrentPeriodEnd: null,
             stripeCancelAt: null,
-          }).catch((e: unknown) => console.error("[stripe/webhook] subscription.deleted write failed:", (e as Error)?.message));
+          }, "subscription_deleted");
           console.log(`[stripe/webhook] Org ${orgDel.id} subscription canceled — planTier set to "none", access revoked`);
           break;
         }
@@ -8342,6 +8371,7 @@ If multiple assets appear, return each as a separate array item.`;
       }
     } catch (err: any) {
       console.error(`[stripe/webhook] Error handling event ${eventType}:`, err?.message);
+      return res.status(500).json({ error: "Internal error processing webhook — Stripe will retry" });
     }
 
     res.json({ received: true });

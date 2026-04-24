@@ -739,6 +739,24 @@ export const insertSharedLinkSchema = createInsertSchema(sharedLinks).omit({ id:
 export type InsertSharedLink = z.infer<typeof insertSharedLinkSchema>;
 export type SharedLink = typeof sharedLinks.$inferSelect;
 
+// ── Stripe Billing Events (audit log) ─────────────────────────────────────────
+
+export const stripeBillingEvents = pgTable("stripe_billing_events", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  eventType: text("event_type").notNull(), // checkout_completed | subscription_updated | subscription_deleted
+  oldPriceId: text("old_price_id"),
+  newPriceId: text("new_price_id"),
+  oldPlanTier: text("old_plan_tier"),
+  newPlanTier: text("new_plan_tier"),
+  stripeStatus: text("stripe_status"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export const insertStripeBillingEventSchema = createInsertSchema(stripeBillingEvents).omit({ id: true, createdAt: true });
+export type InsertStripeBillingEvent = z.infer<typeof insertStripeBillingEventSchema>;
+export type StripeBillingEvent = typeof stripeBillingEvents.$inferSelect;
+
 // ── App Events (usage analytics) ──────────────────────────────────────────────
 
 export const APP_EVENT_TYPES = [
