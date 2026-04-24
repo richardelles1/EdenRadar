@@ -888,43 +888,53 @@ function SyncTab({ pw }: { pw: string }) {
             const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
             const isSyncPending = pendingSyncInst === row.institution;
             const isSyncingNow = rowSyncMutation.isPending && rowSyncMutation.variables === row.institution;
+            const isCurrentlyRunning = scheduler?.currentInstitutions?.includes(row.institution) ?? false;
             const isExpanded = expandedInstitution === row.institution;
+            const toggleExpand = () => setExpandedInstitution(prev => prev === row.institution ? null : row.institution);
             return (
               <React.Fragment key={row.institution}>
                 <div className="flex items-center" data-testid={`row-health-${instSlug}`}>
-                  {/* Expand area */}
+                  {/* Expand area: dot + name + timestamp (no chevron here) */}
                   <div
                     className="flex-1 flex items-center gap-3 pl-4 pr-2 py-2.5 cursor-pointer active:bg-muted/50 min-w-0"
-                    onClick={() => setExpandedInstitution(prev => prev === row.institution ? null : row.institution)}
+                    onClick={toggleExpand}
                     role="button"
                     tabIndex={0}
-                    onKeyDown={(e) => e.key === "Enter" && setExpandedInstitution(prev => prev === row.institution ? null : row.institution)}
+                    onKeyDown={(e) => e.key === "Enter" && toggleExpand()}
                   >
                     <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${healthDot(row.health)}`} />
                     <span className="flex-1 text-sm text-foreground truncate">{row.institution}</span>
                     <span className="text-[11px] text-muted-foreground shrink-0">{formatRelative(row.lastSyncAt)}</span>
-                    <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                   </div>
-                  {/* Inline sync button */}
+                  {/* Inline sync button (before chevron) */}
                   <button
                     onClick={(e) => handleRowSyncClick(e, row.institution)}
-                    disabled={isSyncingNow || (rowSyncMutation.isPending && rowSyncMutation.variables !== row.institution)}
-                    className={`mr-2 p-2 rounded-xl shrink-0 transition-colors active:opacity-70 disabled:opacity-40 ${
+                    disabled={isSyncingNow || isCurrentlyRunning || (rowSyncMutation.isPending && rowSyncMutation.variables !== row.institution)}
+                    className={`flex items-center gap-1 px-2 py-1.5 rounded-xl shrink-0 transition-colors active:opacity-70 disabled:opacity-40 text-xs font-medium ${
                       isSyncPending
                         ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
-                        : isSyncingNow
+                        : isSyncingNow || isCurrentlyRunning
                         ? "text-primary"
                         : "text-muted-foreground hover:bg-muted"
                     }`}
                     data-testid={`button-row-sync-${instSlug}`}
-                    title={isSyncPending ? "Tap again to confirm sync" : "Start sync"}
+                    title={isSyncPending ? "Tap again to confirm sync" : isCurrentlyRunning ? "Sync running" : "Start sync"}
                   >
-                    {isSyncingNow
+                    {isSyncingNow || isCurrentlyRunning
                       ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       : isSyncPending
-                      ? <RefreshCw className="h-3.5 w-3.5" />
+                      ? <><RefreshCw className="h-3.5 w-3.5" /><span>Tap again</span></>
                       : <Play className="h-3.5 w-3.5" />
                     }
+                  </button>
+                  {/* Chevron expand indicator */}
+                  <button
+                    onClick={toggleExpand}
+                    className="p-2 mr-1 text-muted-foreground shrink-0 active:opacity-60"
+                    tabIndex={-1}
+                    aria-label={isExpanded ? "Collapse" : "Expand"}
+                  >
+                    <ChevronRight className={`h-3.5 w-3.5 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                   </button>
                 </div>
                 {isExpanded && (
