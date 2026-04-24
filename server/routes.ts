@@ -7861,6 +7861,15 @@ If multiple assets appear, return each as a separate array item.`;
       // Resolve or auto-create the user's org
       const org = await resolveOrCreateOrgForUser(userId, planId);
 
+      // Block duplicate subscriptions — prevent a second checkout while active/trialing.
+      // (Past-due is allowed so the user can update payment by starting a fresh session.)
+      if (org.stripeStatus === "active" || org.stripeStatus === "trialing") {
+        return res.status(409).json({
+          error: "You already have an active subscription. Manage or upgrade your plan from Settings.",
+          redirect: "/industry/settings",
+        });
+      }
+
       // Find or create Stripe customer
       let customerId: string;
       if (org.stripeCustomerId) {
@@ -7894,7 +7903,9 @@ If multiple assets appear, return each as a separate array item.`;
         cancel_url: `${baseUrl}/pricing`,
         metadata: { orgId: String(org.id), planId },
         subscription_data: {
-          trial_period_days: 3,
+          // Only offer the free trial to first-time subscribers.
+          // If the org already has (or had) a Stripe subscription, skip the trial.
+          ...(org.stripeSubscriptionId ? {} : { trial_period_days: 3 }),
           metadata: { orgId: String(org.id), planId },
         },
       });
@@ -8148,7 +8159,9 @@ If multiple assets appear, return each as a separate array item.`;
               stripeCustomerId: customerC,
               stripeSubscriptionId: subC,
               stripeStatus: initialStripeStatus,
-              stripePriceId: "",
+              // Use price ID from our own constants — the Stripe-side line_items are not expanded here.
+              // The subsequent customer.subscription.updated event will overwrite with the confirmed value.
+              stripePriceId: STRIPE_PRICE_MAP[planIdC] ?? "",
               planTier: planTierC,
             }).catch((e: unknown) => console.error("[stripe/webhook] checkout.session.completed write failed:", (e as Error)?.message));
             console.log(`[stripe/webhook] checkout.session.completed: org ${orgId} → ${planTierC}`);
@@ -8247,23 +8260,52 @@ If multiple assets appear, return each as a separate array item.`;
         case "customer.subscription.deleted": {
           const sub = event.data.object as Record<string, unknown>;
           const stripeCustomerId = String(sub["customer"] ?? "");
-          const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
-          if (!org) {
-            console.warn(`[stripe/webhook] subscription.deleted: no org for customer ${stripeCustomerId}`);
+          const stripeSubscriptionId = String(sub["id"] ?? "");
+          // Resolve org by customer ID first, fall back to subscription ID (mirrors subscription.updated)
+          let orgDel = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+          if (!orgDel && stripeSubscriptionId) {
+            orgDel = await storage.getOrgByStripeSubscriptionId(stripeSubscriptionId) ?? null;
+          }
+          if (!orgDel) {
+            console.warn(`[stripe/webhook] subscription.deleted: no org for customer ${stripeCustomerId} / sub ${stripeSubscriptionId}`);
             break;
           }
           const items = sub["items"] as { data: { price: { id: string } }[] } | undefined;
           // Revoke access: planTier "none" is not in PAID_PLANS → ScoutGate blocks
-          await storage.applyStripeSubscription(org.id, {
+          await storage.applyStripeSubscription(orgDel.id, {
             stripeCustomerId,
-            stripeSubscriptionId: String(sub["id"] ?? ""),
+            stripeSubscriptionId,
             stripeStatus: "canceled",
             stripePriceId: items?.data?.[0]?.price?.id ?? "",
             planTier: "none",
             stripeCurrentPeriodEnd: null,
             stripeCancelAt: null,
           }).catch((e: unknown) => console.error("[stripe/webhook] subscription.deleted write failed:", (e as Error)?.message));
-          console.log(`[stripe/webhook] Org ${org.id} subscription canceled — planTier set to "none", access revoked`);
+          console.log(`[stripe/webhook] Org ${orgDel.id} subscription canceled — planTier set to "none", access revoked`);
+          break;
+        }
+
+        case "invoice.payment_failed": {
+          // Stripe also fires customer.subscription.updated (status → past_due) shortly after, which
+          // is the primary handler. This case provides an extra safety net to log and ensure the status
+          // is updated even if subscription.updated is missed or arrives out of order.
+          const inv = event.data.object as Record<string, unknown>;
+          const invCustomerId = String(inv["customer"] ?? "");
+          const invSubId = String(inv["subscription"] ?? "");
+          let orgFail = invCustomerId ? await storage.getOrgByStripeCustomer(invCustomerId) : null;
+          if (!orgFail && invSubId) {
+            orgFail = await storage.getOrgByStripeSubscriptionId(invSubId) ?? null;
+          }
+          if (!orgFail) {
+            console.warn(`[stripe/webhook] invoice.payment_failed: no org for customer ${invCustomerId} / sub ${invSubId}`);
+            break;
+          }
+          // Only write if status is not already past_due (avoid redundant updates)
+          if (orgFail.stripeStatus !== "past_due") {
+            await storage.updateOrganization(orgFail.id, { stripeStatus: "past_due" })
+              .catch((e: unknown) => console.error("[stripe/webhook] invoice.payment_failed status write failed:", (e as Error)?.message));
+          }
+          console.warn(`[stripe/webhook] invoice.payment_failed: org ${orgFail.id} (${invCustomerId}) — payment failed, status → past_due`);
           break;
         }
 

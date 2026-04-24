@@ -730,6 +730,26 @@ export default function IndustrySettings() {
             )}
           </div>
 
+          {seatsUsed > seatLimit && (
+            <div
+              className="rounded-lg px-3 py-2.5 flex items-start gap-2.5 mb-4"
+              style={{ background: "hsl(38 92% 50% / 0.07)", border: "1px solid hsl(38 92% 50% / 0.25)" }}
+              data-testid="banner-seat-overflow"
+            >
+              <div
+                className="w-4 h-4 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+                style={{ background: "hsl(38 92% 50% / 0.15)" }}
+              >
+                <span className="text-[9px] font-bold" style={{ color: "hsl(38 92% 50%)" }}>!</span>
+              </div>
+              <p className="text-xs leading-relaxed" style={{ color: "hsl(38 70% 45%)" }}>
+                <span className="font-semibold">Seat limit exceeded.</span>{" "}
+                Your plan supports {seatLimit} seat{seatLimit !== 1 ? "s" : ""} but you currently have {seatsUsed} active members.
+                Remove members to stay within your plan, or upgrade to add more seats.
+              </p>
+            </div>
+          )}
+
           <div className="space-y-2">
             {org.members.map((member: any) => {
               const initials = (member.memberName ?? member.email ?? "?").trim().slice(0, 2).toUpperCase();

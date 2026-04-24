@@ -1,9 +1,11 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users } from "lucide-react";
+import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
+import { useOrg } from "@/hooks/use-org";
+import type { OrgContext } from "@/hooks/use-org";
 import { useToast } from "@/hooks/use-toast";
 
 const CONTACT_SALES = "sales@edenradar.com";
@@ -113,11 +115,112 @@ const FREE_TIERS = [
   },
 ];
 
-function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session: Session | null }) {
+// Plan ordering for upgrade/downgrade detection
+const PLAN_ORDER: Record<string, number> = { individual: 1, team5: 2, team10: 3 };
+
+function PlanCTA({
+  plan,
+  session,
+  org,
+}: {
+  plan: typeof SCOUT_PLANS[number];
+  session: Session | null;
+  org: OrgContext | null | undefined;
+}) {
   const [loading, setLoading] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
+  const currentStatus = org?.stripeStatus;
+  const currentPlan = org?.planTier;
+  const isActiveOrTrialing = currentStatus === "active" || currentStatus === "trialing";
+  const isPastDue = currentStatus === "past_due";
+  const isThisPlan = currentPlan === plan.id;
+
+  // ── Active or trialing subscriber ───────────────────────────────────────────
+  if (isActiveOrTrialing) {
+    if (isThisPlan) {
+      return (
+        <div className="space-y-1.5">
+          <div
+            className="w-full h-9 rounded-md flex items-center justify-center gap-1.5 text-sm font-semibold"
+            style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
+            data-testid={`status-current-plan-${plan.id}`}
+          >
+            <Check className="w-3.5 h-3.5" />
+            Current plan
+          </div>
+          <Link href="/industry/settings">
+            <p className="text-center text-[10px] text-muted-foreground hover:text-foreground cursor-pointer transition-colors flex items-center justify-center gap-1">
+              <Settings className="w-2.5 h-2.5" />
+              Manage billing in Settings
+            </p>
+          </Link>
+        </div>
+      );
+    }
+
+    // Upgrade path: team5 → team10 (self-service via upgrade route in Settings)
+    const currentOrder = PLAN_ORDER[currentPlan ?? ""] ?? 0;
+    const thisOrder = PLAN_ORDER[plan.id] ?? 0;
+    if (thisOrder > currentOrder) {
+      return (
+        <div className="space-y-1.5">
+          <Link href="/industry/settings">
+            <Button
+              className="w-full font-semibold h-9 text-sm"
+              variant={plan.highlighted ? "default" : "outline"}
+              style={plan.highlighted ? { background: "hsl(142 52% 36%)", color: "white", border: "none" } : undefined}
+              data-testid={`button-pricing-upgrade-${plan.id}`}
+            >
+              Upgrade plan
+              <ArrowRight className="w-3.5 h-3.5 ml-1 order-last" />
+            </Button>
+          </Link>
+          <p className="text-center text-[10px] text-muted-foreground">Upgrade or switch plans in Settings</p>
+        </div>
+      );
+    }
+
+    // Downgrade or cross-tier: direct to Settings / billing portal
+    return (
+      <div className="space-y-1.5">
+        <Link href="/industry/settings">
+          <Button
+            className="w-full font-semibold h-9 text-sm"
+            variant="outline"
+            data-testid={`button-pricing-manage-${plan.id}`}
+          >
+            <Settings className="w-3.5 h-3.5 mr-1" />
+            Manage billing
+          </Button>
+        </Link>
+        <p className="text-center text-[10px] text-muted-foreground">Change or cancel your plan in Settings</p>
+      </div>
+    );
+  }
+
+  // ── Past-due subscriber ──────────────────────────────────────────────────────
+  if (isPastDue && isThisPlan) {
+    return (
+      <div className="space-y-1.5">
+        <Link href="/industry/settings">
+          <Button
+            className="w-full font-semibold h-9 text-sm"
+            variant="outline"
+            style={{ borderColor: "hsl(38 92% 50% / 0.5)", color: "hsl(38 92% 50%)" }}
+            data-testid={`button-pricing-pastdue-${plan.id}`}
+          >
+            Update payment method
+            <ArrowRight className="w-3.5 h-3.5 ml-1 order-last" />
+          </Button>
+        </Link>
+        <p className="text-center text-[10px] text-muted-foreground">Your last payment failed — update billing in Settings</p>
+      </div>
+    );
+  }
+
+  // ── Default: standard checkout CTA ──────────────────────────────────────────
   async function handleSubscribe() {
     if (!session?.access_token) {
       navigate(`/login?mode=signup&redirect=/pricing`);
@@ -138,10 +241,13 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
       const data = await res.json();
 
       if (!res.ok) {
+        if (res.status === 409 && data.redirect) {
+          navigate(data.redirect);
+        }
         toast({
-          title: "Could not start checkout",
+          title: res.status === 409 ? "Already subscribed" : "Could not start checkout",
           description: data.error ?? "Something went wrong. Please try again.",
-          variant: "destructive",
+          variant: res.status === 409 ? "default" : "destructive",
         });
         return;
       }
@@ -186,6 +292,10 @@ function PlanCTA({ plan, session }: { plan: typeof SCOUT_PLANS[number]; session:
 
 export default function Pricing() {
   const { session } = useAuth();
+  const { data: org } = useOrg();
+
+  const isSubscribed = org?.stripeStatus === "active" || org?.stripeStatus === "trialing";
+  const isPastDue = org?.stripeStatus === "past_due";
 
   return (
     <div className="min-h-screen bg-background">
@@ -218,121 +328,184 @@ export default function Pricing() {
           </div>
         </div>
 
-        {/* ACH payment notice */}
-        <div
-          className="rounded-lg px-4 py-3 flex items-start gap-3"
-          style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }}
-        >
+        {/* Active subscription banner */}
+        {(isSubscribed || isPastDue) && (
           <div
-            className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
-            style={{ background: "hsl(142 52% 36% / 0.15)" }}
+            className="rounded-lg px-4 py-3 flex items-start gap-3"
+            style={
+              isPastDue
+                ? { background: "hsl(38 92% 50% / 0.06)", border: "1px solid hsl(38 92% 50% / 0.2)" }
+                : { background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }
+            }
+            data-testid="banner-subscription-status"
           >
-            <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+            <div
+              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+              style={
+                isPastDue
+                  ? { background: "hsl(38 92% 50% / 0.15)" }
+                  : { background: "hsl(142 52% 36% / 0.15)" }
+              }
+            >
+              {isPastDue
+                ? <Settings className="w-3 h-3" style={{ color: "hsl(38 92% 50%)" }} />
+                : <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+              }
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {isPastDue ? (
+                  <>
+                    <span className="font-semibold text-foreground">Payment issue on your account.</span>{" "}
+                    Your last payment failed. Update your payment method to restore full access.{" "}
+                    <Link href="/industry/settings">
+                      <span className="underline cursor-pointer" style={{ color: "hsl(38 92% 50%)" }}>Go to Settings →</span>
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <span className="font-semibold text-foreground">You have an active EdenScout subscription.</span>{" "}
+                    Your current plan is highlighted below. Manage billing, upgrade, or cancel from{" "}
+                    <Link href="/industry/settings">
+                      <span className="underline cursor-pointer" style={{ color: "hsl(142 52% 36%)" }}>Settings →</span>
+                    </Link>
+                  </>
+                )}
+              </p>
+            </div>
           </div>
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="font-semibold text-foreground">ACH bank transfer accepted.</span>{" "}
-            Pay by bank account (ACH) or credit card at checkout — bank transfer is the default. No card required.
-          </p>
-        </div>
+        )}
+
+        {/* ACH payment notice */}
+        {!isSubscribed && !isPastDue && (
+          <div
+            className="rounded-lg px-4 py-3 flex items-start gap-3"
+            style={{ background: "hsl(142 52% 36% / 0.06)", border: "1px solid hsl(142 52% 36% / 0.2)" }}
+          >
+            <div
+              className="w-5 h-5 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
+              style={{ background: "hsl(142 52% 36% / 0.15)" }}
+            >
+              <Check className="w-3 h-3" style={{ color: "hsl(142 52% 36%)" }} />
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              <span className="font-semibold text-foreground">ACH bank transfer accepted.</span>{" "}
+              Pay by bank account (ACH) or credit card at checkout — bank transfer is the default. No card required.
+            </p>
+          </div>
+        )}
 
         {/* EdenScout Paid Plans */}
         <div className="space-y-4">
           <h2 className="text-lg font-semibold text-foreground">EdenScout (Paid)</h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {SCOUT_PLANS.map((plan) => (
-              <div
-                key={plan.id + plan.seats}
-                className="relative flex flex-col rounded-xl overflow-hidden"
-                style={{
-                  border: plan.highlighted
-                    ? "2px solid hsl(142 52% 36%)"
-                    : "1px solid hsl(var(--border))",
-                  boxShadow: plan.highlighted ? "0 0 0 4px hsl(142 52% 36% / 0.08)" : undefined,
-                }}
-                data-testid={`pricing-card-${plan.id}`}
-              >
-                {plan.highlighted && (
-                  <div
-                    className="absolute top-0 left-0 right-0 h-0.5"
-                    style={{ background: "hsl(142 52% 36%)" }}
-                  />
-                )}
-
-                {/* Card header */}
+            {SCOUT_PLANS.map((plan) => {
+              const isCurrentPlan = org?.planTier === plan.id && (isSubscribed || isPastDue);
+              return (
                 <div
-                  className="px-5 py-5"
+                  key={plan.id + plan.seats}
+                  className="relative flex flex-col rounded-xl overflow-hidden"
                   style={{
-                    background: plan.highlighted
-                      ? "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))"
-                      : "hsl(var(--card))",
-                    borderBottom: "1px solid hsl(var(--border))",
+                    border: isCurrentPlan
+                      ? "2px solid hsl(142 52% 36%)"
+                      : plan.highlighted
+                        ? "2px solid hsl(142 52% 36%)"
+                        : "1px solid hsl(var(--border))",
+                    boxShadow: isCurrentPlan || plan.highlighted ? "0 0 0 4px hsl(142 52% 36% / 0.08)" : undefined,
                   }}
+                  data-testid={`pricing-card-${plan.id}`}
                 >
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="text-3xl font-black text-foreground">{plan.price}</span>
-                    <span className="text-sm text-muted-foreground">{plan.period}</span>
-                    {plan.highlighted && (
+                  {(isCurrentPlan || plan.highlighted) && (
+                    <div
+                      className="absolute top-0 left-0 right-0 h-0.5"
+                      style={{ background: "hsl(142 52% 36%)" }}
+                    />
+                  )}
+
+                  {/* Card header */}
+                  <div
+                    className="px-5 py-5"
+                    style={{
+                      background: isCurrentPlan || plan.highlighted
+                        ? "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))"
+                        : "hsl(var(--card))",
+                      borderBottom: "1px solid hsl(var(--border))",
+                    }}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-3xl font-black text-foreground">{plan.price}</span>
+                      <span className="text-sm text-muted-foreground">{plan.period}</span>
+                      {isCurrentPlan ? (
+                        <span
+                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                          style={{ background: "hsl(142 52% 36% / 0.15)", color: "hsl(142 52% 36%)" }}
+                          data-testid={`badge-current-plan-${plan.id}`}
+                        >
+                          Your plan
+                        </span>
+                      ) : plan.highlighted ? (
+                        <span
+                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                          style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                        >
+                          Most popular
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
                       <span
-                        className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                        style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+                        style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
                       >
-                        Most popular
+                        {plan.isTeam && <Users className="w-3 h-3" />}
+                        {plan.seats}
                       </span>
+                      <span className="text-xs font-semibold text-foreground">{plan.name}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
+                    {plan.teamCallout && (
+                      <p
+                        className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
+                        style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
+                      >
+                        {plan.teamCallout}
+                      </p>
                     )}
                   </div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <span
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-                      style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
-                    >
-                      {plan.isTeam && <Users className="w-3 h-3" />}
-                      {plan.seats}
-                    </span>
-                    <span className="text-xs font-semibold text-foreground">{plan.name}</span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
-                  {plan.teamCallout && (
-                    <p
-                      className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
-                      style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
-                    >
-                      {plan.teamCallout}
-                    </p>
-                  )}
-                </div>
 
-                {/* Features */}
-                <div className="flex-1 px-5 py-4 bg-card space-y-2.5">
-                  {plan.features.map((f) => {
-                    const isEscalator = f.startsWith("Everything in");
-                    return (
-                      <div key={f} className="flex items-start gap-2.5">
-                        <div
-                          className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                          style={{
-                            background: isEscalator
-                              ? "hsl(var(--muted))"
-                              : "hsl(142 52% 36% / 0.12)",
-                          }}
-                        >
-                          {isEscalator
-                            ? <ArrowRight className="w-2 h-2 text-muted-foreground" />
-                            : <Check className="w-2.5 h-2.5" style={{ color: "hsl(142 52% 36%)" }} />}
+                  {/* Features */}
+                  <div className="flex-1 px-5 py-4 bg-card space-y-2.5">
+                    {plan.features.map((f) => {
+                      const isEscalator = f.startsWith("Everything in");
+                      return (
+                        <div key={f} className="flex items-start gap-2.5">
+                          <div
+                            className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
+                            style={{
+                              background: isEscalator
+                                ? "hsl(var(--muted))"
+                                : "hsl(142 52% 36% / 0.12)",
+                            }}
+                          >
+                            {isEscalator
+                              ? <ArrowRight className="w-2 h-2 text-muted-foreground" />
+                              : <Check className="w-2.5 h-2.5" style={{ color: "hsl(142 52% 36%)" }} />}
+                          </div>
+                          <span className={`text-xs leading-relaxed ${isEscalator ? "text-muted-foreground italic font-medium" : "text-foreground"}`}>
+                            {f}
+                          </span>
                         </div>
-                        <span className={`text-xs leading-relaxed ${isEscalator ? "text-muted-foreground italic font-medium" : "text-foreground"}`}>
-                          {f}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                      );
+                    })}
+                  </div>
 
-                {/* CTA */}
-                <div className="px-5 py-4 bg-card border-t border-border">
-                  <PlanCTA plan={plan} session={session} />
+                  {/* CTA */}
+                  <div className="px-5 py-4 bg-card border-t border-border">
+                    <PlanCTA plan={plan} session={session} org={org} />
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
