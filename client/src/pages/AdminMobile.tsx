@@ -23,6 +23,7 @@ interface HealthRow {
   totalInDb: number;
   biotechRelevant: number;
   consecutiveFailures: number;
+  tier?: number;
 }
 
 interface SchedulerStatus {
@@ -37,6 +38,9 @@ interface SchedulerStatus {
   cycleCount: number;
   avgSyncMs: number | null;
   estimatedRemainingMs: number | null;
+  maxConcurrency?: number;
+  currentTier?: 1 | 2 | 3 | 4 | null;
+  tierOnly?: number | null;
 }
 
 interface CollectorHealth {
@@ -451,9 +455,29 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
 
 // ── Sync Tab ───────────────────────────────────────────────────────────────────
 
+const TIER_COLORS: Record<number, { badge: string; label: string }> = {
+  1: { badge: "text-sky-600 border-sky-500/30 bg-sky-500/5", label: "T1" },
+  2: { badge: "text-violet-600 border-violet-500/30 bg-violet-500/5", label: "T2" },
+  3: { badge: "text-emerald-600 border-emerald-500/30 bg-emerald-500/5", label: "T3" },
+  4: { badge: "text-orange-600 border-orange-500/30 bg-orange-500/5", label: "T4" },
+};
+
+const TIER_TITLES: Record<number, string> = {
+  1: "T1: API/RSS (fastest)",
+  2: "T2: Platform factory",
+  3: "T3: Custom bespoke HTML",
+  4: "T4: Playwright (headless)",
+};
+
+type LastSyncFilter = "all" | "7d" | "30d" | "never";
+
 function SyncTab({ pw }: { pw: string }) {
   const [sortMode, setSortMode] = useState<"health" | "alpha">("health");
+  const [filterTier, setFilterTier] = useState<number | null>(null);
+  const [filterLastSync, setFilterLastSync] = useState<LastSyncFilter>("all");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
+  const [pendingTier, setPendingTier] = useState<1 | 2 | 3 | 4 | null>(null);
+  const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data, isLoading, refetch, isRefetching } = useQuery<CollectorHealth>({
     queryKey: ["/api/admin/collector-health-mobile", pw],
@@ -485,10 +509,70 @@ function SyncTab({ pw }: { pw: string }) {
     onSuccess: () => refetch(),
   });
 
+  const concurrencyMutation = useMutation({
+    mutationFn: async (concurrency: 1 | 2 | 3) => {
+      const res = await adminFetch("/api/ingest/scheduler/concurrency", pw, {
+        method: "POST",
+        body: JSON.stringify({ concurrency }),
+      });
+      if (!res.ok) throw new Error("Failed to set concurrency");
+      return res.json();
+    },
+    onSuccess: () => refetch(),
+  });
+
+  const tierMutation = useMutation({
+    mutationFn: async (tier: 1 | 2 | 3 | 4) => {
+      const res = await adminFetch("/api/ingest/scheduler/run-tier", pw, {
+        method: "POST",
+        body: JSON.stringify({ tier }),
+      });
+      if (!res.ok) throw new Error("Failed to start tier sync");
+      return res.json();
+    },
+    onSuccess: () => { setPendingTier(null); refetch(); },
+    onError: () => setPendingTier(null),
+  });
+
+  const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
+    const sched = data?.scheduler;
+    if (sched?.state === "paused" && sched.tierOnly === tier) {
+      startMutation.mutate();
+      return;
+    }
+    if (pendingTier !== tier) {
+      setPendingTier(tier);
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      tierConfirmTimer.current = setTimeout(() => setPendingTier(null), 4000);
+    } else {
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+      tierMutation.mutate(tier);
+    }
+  };
+
   const scheduler = data?.scheduler;
   const rows = data?.rows ?? [];
+  const concurrency = scheduler?.maxConcurrency ?? 1;
+  const schedRunning = scheduler?.state === "running";
+  const schedPaused = scheduler?.state === "paused";
 
-  const sortedRows = [...rows].sort((a, b) => {
+  // Apply tier + last-sync filters
+  const now = Date.now();
+  const filteredRows = rows.filter((row) => {
+    if (filterTier !== null && row.tier !== filterTier) return false;
+    if (filterLastSync === "never") return !row.lastSyncAt;
+    if (filterLastSync === "7d") {
+      if (!row.lastSyncAt) return false;
+      return (now - new Date(row.lastSyncAt).getTime()) > 7 * 24 * 3600 * 1000;
+    }
+    if (filterLastSync === "30d") {
+      if (!row.lastSyncAt) return false;
+      return (now - new Date(row.lastSyncAt).getTime()) > 30 * 24 * 3600 * 1000;
+    }
+    return true;
+  });
+
+  const sortedRows = [...filteredRows].sort((a, b) => {
     if (sortMode === "alpha") return a.institution.localeCompare(b.institution);
     const issueStatuses = new Set(["failing", "degraded", "warning", "network_blocked", "site_down", "rate_limited", "parser_failure", "blocked"]);
     const rank = (r: HealthRow) =>
@@ -496,16 +580,17 @@ function SyncTab({ pw }: { pw: string }) {
       : r.health === "stale" ? 1
       : r.health === "syncing" ? 2
       : r.health === "ok" ? 3
-      : 4; // never
+      : 4;
     const diff = rank(a) - rank(b);
     return diff !== 0 ? diff : b.consecutiveFailures - a.consecutiveFailures;
   });
 
-  const stateLabel = scheduler?.state === "running" ? "Running" : scheduler?.state === "paused" ? "Paused" : "Idle";
-  const stateColor = scheduler?.state === "running" ? "text-emerald-600 dark:text-emerald-400"
-    : scheduler?.state === "paused" ? "text-amber-600 dark:text-amber-400"
+  const stateLabel = schedRunning ? "Running" : schedPaused ? "Paused" : "Idle";
+  const stateColor = schedRunning ? "text-emerald-600 dark:text-emerald-400"
+    : schedPaused ? "text-amber-600 dark:text-amber-400"
     : "text-muted-foreground";
   const isActing = startMutation.isPending || pauseMutation.isPending;
+  const anyTierBusy = schedRunning || tierMutation.isPending;
 
   if (isLoading) return (
     <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
@@ -517,6 +602,7 @@ function SyncTab({ pw }: { pw: string }) {
     <div className="space-y-4 px-4 pt-4">
       {/* Scheduler card */}
       <div className="rounded-2xl border border-border bg-card p-4 space-y-3">
+        {/* State row */}
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Scheduler</p>
@@ -527,7 +613,7 @@ function SyncTab({ pw }: { pw: string }) {
               className="p-2 rounded-xl text-muted-foreground hover:bg-muted active:opacity-60" data-testid="button-refresh-sync">
               <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
             </button>
-            {scheduler?.state === "running" ? (
+            {schedRunning ? (
               <button onClick={() => pauseMutation.mutate()} disabled={isActing}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 font-semibold text-sm active:opacity-70"
                 data-testid="button-pause-scheduler">
@@ -537,26 +623,81 @@ function SyncTab({ pw }: { pw: string }) {
               <button onClick={() => startMutation.mutate()} disabled={isActing}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 font-semibold text-sm active:opacity-70"
                 data-testid="button-start-scheduler">
-                {isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />} Start
+                {isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                {schedPaused ? (scheduler?.tierOnly != null ? `Resume T${scheduler.tierOnly}` : "Resume") : "Start"}
               </button>
             )}
           </div>
         </div>
-        {scheduler?.state === "running" && (scheduler.currentInstitution || scheduler.currentInstitutions?.length > 0) && (
+
+        {/* Running progress */}
+        {schedRunning && (scheduler?.currentInstitution || (scheduler?.currentInstitutions?.length ?? 0) > 0) && (
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm">
               <Zap className="h-3.5 w-3.5 text-blue-500 shrink-0" />
               <span className="text-foreground font-medium truncate">
-                {scheduler.currentInstitutions?.length > 0 ? scheduler.currentInstitutions.join(", ") : scheduler.currentInstitution}
+                {(scheduler?.currentInstitutions?.length ?? 0) > 0 ? scheduler!.currentInstitutions.join(", ") : scheduler!.currentInstitution}
               </span>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>{scheduler.queuePosition}/{scheduler.queueTotal}</span>
-              <span>{scheduler.completedThisCycle} done</span>
-              {scheduler.failedThisCycle > 0 && <span className="text-red-500">{scheduler.failedThisCycle} failed</span>}
+              <span>{scheduler!.queuePosition}/{scheduler!.queueTotal}</span>
+              <span>{scheduler!.completedThisCycle} done</span>
+              {(scheduler!.failedThisCycle ?? 0) > 0 && <span className="text-red-500">{scheduler!.failedThisCycle} failed</span>}
             </div>
           </div>
         )}
+
+        {/* Concurrency: 1x / 2x / 3x */}
+        <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+          <span className="text-xs text-muted-foreground font-medium shrink-0">Concurrency:</span>
+          <div className="flex items-center rounded-xl border border-border overflow-hidden text-xs font-semibold" data-testid="concurrency-selector">
+            {([1, 2, 3] as const).map((n, i) => (
+              <button
+                key={n}
+                onClick={() => concurrencyMutation.mutate(n)}
+                disabled={concurrencyMutation.isPending || concurrency === n}
+                className={`px-3 py-1.5 transition-colors ${i > 0 ? "border-l border-border" : ""} ${concurrency === n ? "bg-primary text-primary-foreground" : "text-muted-foreground active:opacity-60"}`}
+                data-testid={`button-concurrency-${n}`}
+                title={n === 1 ? "Serial: one at a time" : n === 2 ? "Parallel: two at once" : "High-speed: three at once"}
+              >{n}x</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tier sync buttons */}
+        <div className="flex items-center gap-2 pt-1 border-t border-border/40 flex-wrap">
+          <span className="text-xs text-muted-foreground font-medium shrink-0">Sync tier:</span>
+          {([1, 2, 3, 4] as const).map((tier) => {
+            const isConfirming = pendingTier === tier;
+            const isTierRunning = schedRunning && scheduler?.currentTier === tier;
+            const isTierPaused = schedPaused && scheduler?.tierOnly === tier;
+            const tc = TIER_COLORS[tier];
+            return (
+              <button
+                key={tier}
+                onClick={() => handleTierClick(tier)}
+                disabled={anyTierBusy}
+                className={`px-3 py-1 rounded-xl border text-xs font-semibold transition-colors active:opacity-70 disabled:opacity-40 ${
+                  isTierRunning
+                    ? "border-emerald-400/60 text-emerald-700 dark:text-emerald-400 bg-emerald-500/10"
+                    : isTierPaused
+                    ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                    : isConfirming
+                    ? "border-amber-400/60 text-amber-700 dark:text-amber-400 bg-amber-500/10"
+                    : `border-border ${tc.badge}`
+                }`}
+                data-testid={`button-sync-tier-${tier}`}
+                title={TIER_TITLES[tier]}
+              >
+                {isTierRunning ? (
+                  <span className="flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" />T{tier}</span>
+                ) : isTierPaused ? `Resume T${tier}`
+                  : isConfirming ? `Confirm T${tier}?`
+                  : `Sync T${tier}`}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* Summary stats */}
@@ -582,8 +723,14 @@ function SyncTab({ pw }: { pw: string }) {
 
       {/* Institution health list */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
+        {/* Header: title + sort toggle */}
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
-          <p className="text-sm font-semibold text-foreground">Institutions <span className="text-muted-foreground font-normal">({rows.length})</span></p>
+          <p className="text-sm font-semibold text-foreground">
+            Institutions{" "}
+            <span className="text-muted-foreground font-normal">
+              ({filteredRows.length}{filteredRows.length !== rows.length ? `/${rows.length}` : ""})
+            </span>
+          </p>
           <button
             onClick={() => setSortMode(s => s === "health" ? "alpha" : "health")}
             className="text-xs text-primary font-medium px-2 py-1 rounded-lg bg-primary/10 active:opacity-60"
@@ -592,6 +739,47 @@ function SyncTab({ pw }: { pw: string }) {
             {sortMode === "health" ? "A–Z" : "By health"}
           </button>
         </div>
+
+        {/* Tier filter chips */}
+        <div className="px-4 py-2 border-b border-border/60 flex items-center gap-2 overflow-x-auto">
+          <span className="text-[11px] text-muted-foreground font-medium shrink-0">Tier:</span>
+          <button
+            onClick={() => setFilterTier(null)}
+            className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors active:opacity-60 ${filterTier === null ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+            data-testid="button-filter-tier-all"
+          >All</button>
+          {([1, 2, 3, 4] as const).map((tier) => {
+            const tc = TIER_COLORS[tier];
+            const active = filterTier === tier;
+            return (
+              <button
+                key={tier}
+                onClick={() => setFilterTier(active ? null : tier)}
+                className={`shrink-0 px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors active:opacity-60 ${active ? "bg-primary text-primary-foreground border-primary" : `border ${tc.badge}`}`}
+                data-testid={`button-filter-tier-${tier}`}
+                title={TIER_TITLES[tier]}
+              >T{tier}</button>
+            );
+          })}
+        </div>
+
+        {/* Last sync filter chips */}
+        <div className="px-4 py-2 border-b border-border/60 flex items-center gap-2 overflow-x-auto">
+          <span className="text-[11px] text-muted-foreground font-medium shrink-0">Last sync:</span>
+          {(["all", "7d", "30d", "never"] as const).map((f) => {
+            const labels: Record<LastSyncFilter, string> = { all: "All", "7d": ">7 days", "30d": ">30 days", never: "Never" };
+            return (
+              <button
+                key={f}
+                onClick={() => setFilterLastSync(f)}
+                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors active:opacity-60 ${filterLastSync === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                data-testid={`button-filter-lastsync-${f}`}
+              >{labels[f]}</button>
+            );
+          })}
+        </div>
+
+        {/* Rows */}
         <div className="divide-y divide-border">
           {sortedRows.map((row) => (
             <React.Fragment key={row.institution}>
@@ -602,6 +790,12 @@ function SyncTab({ pw }: { pw: string }) {
               >
                 <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${healthDot(row.health)}`} />
                 <span className="flex-1 text-sm text-foreground truncate">{row.institution}</span>
+                {row.tier != null && TIER_COLORS[row.tier] && (
+                  <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${TIER_COLORS[row.tier].badge}`}
+                    title={TIER_TITLES[row.tier]}>
+                    T{row.tier}
+                  </span>
+                )}
                 <span className="text-[11px] text-muted-foreground shrink-0">{formatRelative(row.lastSyncAt)}</span>
                 <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${expandedInstitution === row.institution ? "rotate-90" : ""}`} />
               </button>
@@ -615,8 +809,10 @@ function SyncTab({ pw }: { pw: string }) {
               )}
             </React.Fragment>
           ))}
-          {rows.length === 0 && (
-            <div className="px-4 py-6 text-center text-sm text-muted-foreground">No data yet</div>
+          {sortedRows.length === 0 && (
+            <div className="px-4 py-6 text-center text-sm text-muted-foreground">
+              {rows.length === 0 ? "No data yet" : "No institutions match the current filters"}
+            </div>
           )}
         </div>
       </div>
