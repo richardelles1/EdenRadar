@@ -787,16 +787,17 @@ export async function registerRoutes(
   app.get("/api/assets/:fingerprint/intelligence", aiRateLimit, async (req, res) => {
     try {
       const { fingerprint } = req.params;
-      if (!fingerprint) return res.status(400).json({ error: "Fingerprint required" });
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+      if (!fingerprintStr) return res.status(400).json({ error: "Fingerprint required" });
 
       let [enrichedRecord] = await db
         .select()
         .from(ingestedAssets)
-        .where(eq(ingestedAssets.fingerprint, fingerprint))
+        .where(eq(ingestedAssets.fingerprint, fingerprintStr))
         .limit(1);
 
       if (!enrichedRecord) {
-        const numericId = parseInt(fingerprint, 10);
+        const numericId = parseInt(fingerprintStr, 10);
         if (!isNaN(numericId)) {
           [enrichedRecord] = await db
             .select()
@@ -8258,14 +8259,18 @@ If multiple assets appear, return each as a separate array item.`;
             break;
           }
           const items = sub["items"] as { data: { price: { id: string } }[] } | undefined;
-          const priceId = items?.data?.[0]?.price?.id ?? orgU.stripePriceId ?? "";
+          const rawPriceId = items?.data?.[0]?.price?.id;
+          if (!rawPriceId) {
+            console.warn(`[stripe/webhook] subscription.updated: no price ID in payload for org ${orgU.id} — retaining existing priceId=${orgU.stripePriceId ?? "(none)"}`);
+          }
+          const priceId = rawPriceId ?? orgU.stripePriceId ?? "";
           const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0];
           const resolvedPlanId: StripePlanId | null = matchedPlanId && isStripePlanId(matchedPlanId) ? matchedPlanId : null;
           const planTierU = resolvedPlanId ? PLAN_TIER_MAP[resolvedPlanId] : orgU.planTier;
           const seatLimitU = resolvedPlanId ? PLAN_SEAT_MAP[resolvedPlanId] : orgU.seatLimit;
           const periodEndU = typeof sub["current_period_end"] === "number" ? new Date(sub["current_period_end"] * 1000) : null;
           const cancelAtU = typeof sub["cancel_at"] === "number" ? new Date(sub["cancel_at"] * 1000) : null;
-          await storage.updateOrganization(orgU.id, {
+          await storage.applyStripeSubscription(orgU.id, {
             stripeCustomerId,
             stripeSubscriptionId,
             stripeStatus: String(sub["status"] ?? "active"),
@@ -8275,7 +8280,7 @@ If multiple assets appear, return each as a separate array item.`;
             stripeCurrentPeriodEnd: periodEndU,
             stripeCancelAt: cancelAtU,
           }).catch((e: unknown) => console.error("[stripe/webhook] subscription.updated write failed:", (e as Error)?.message));
-          console.log(`[stripe/webhook] Updated org ${orgU.id} → planTier=${planTierU}, seatLimit=${seatLimitU}, status=${sub["status"]}`);
+          console.log(`[stripe/webhook] Updated org ${orgU.id} → planTier=${planTierU}, seatLimit=${seatLimitU}, status=${sub["status"]}, priceId=${priceId}`);
           break;
         }
 

@@ -956,10 +956,10 @@ export default function Alerts() {
     queryFn: async () => {
       const authHeaders = await getAuthHeaders();
       const r = await fetch(alertsDeltaUrl, { credentials: "include", headers: authHeaders });
-      if (!r.ok) return { byAlert: [], total: 0 } as AlertsDeltaResponse;
+      if (!r.ok) return { byAlert: [], total: 0, since: "" } as AlertsDeltaResponse;
       const json = await r.json();
       // Guard: ensure shape is correct even if server returns unexpected payload
-      if (!Array.isArray(json?.byAlert)) return { byAlert: [], total: 0 } as AlertsDeltaResponse;
+      if (!Array.isArray(json?.byAlert)) return { byAlert: [], total: 0, since: "" } as AlertsDeltaResponse;
       return json as AlertsDeltaResponse;
     },
     staleTime: 5 * 60 * 1000,
