@@ -7,11 +7,12 @@ const SITE_KEY = "eden-access";
 
 export function SiteGate({ children }: { children: React.ReactNode }) {
   const PUBLIC_PATHS = ["/pitch", "/tos", "/privacy", "/pricing"];
-  // /admin routes have their own separate password gate ("eden") and do not
-  // need the site-wide beta code — they should be bookmarkable on mobile.
+  // /admin/mobile has its own separate password gate ("eden") and does not
+  // need the site-wide beta code — it should be bookmarkable on mobile.
+  // The desktop /admin keeps both layers (site gate + admin password gate).
   const isPublic = PUBLIC_PATHS.includes(window.location.pathname) ||
     window.location.pathname.startsWith("/share/") ||
-    window.location.pathname.startsWith("/admin");
+    window.location.pathname === "/admin/mobile";
   const [unlocked, setUnlocked] = useState(() => isPublic || localStorage.getItem(SITE_KEY) === "true");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(false);

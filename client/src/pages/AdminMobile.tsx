@@ -86,6 +86,8 @@ interface ConceptCard {
   title: string;
   oneLiner: string;
   credibilityScore: number | null;
+  submitterName: string;
+  submitterAffiliation: string | null;
 }
 
 interface Organization {
@@ -482,10 +484,10 @@ function QueuesTab({ pw }: { pw: string }) {
               ))
             )}
             {pendingResearch.length > 0 && (
-              <div className="px-4 py-3 bg-muted/30">
-                <p className="text-xs text-muted-foreground text-center">
+              <div className="px-4 py-3 bg-muted/30 text-center">
+                <a href="/admin" className="text-xs text-primary font-medium underline underline-offset-2">
                   Open desktop admin to approve or reject →
-                </p>
+                </a>
               </div>
             )}
           </div>
@@ -526,7 +528,9 @@ function QueuesTab({ pw }: { pw: string }) {
               unreviewedConcepts.slice(0, 10).map((c) => (
                 <div key={c.id} className="px-4 py-3" data-testid={`card-concept-${c.id}`}>
                   <p className="text-sm font-medium text-foreground line-clamp-1">{c.title}</p>
-                  {c.oneLiner && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.oneLiner}</p>}
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {c.submitterName}{c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}
+                  </p>
                 </div>
               ))
             )}
@@ -536,10 +540,10 @@ function QueuesTab({ pw }: { pw: string }) {
               </div>
             )}
             {unreviewedConcepts.length > 0 && (
-              <div className="px-4 py-3 bg-muted/30">
-                <p className="text-xs text-muted-foreground text-center">
+              <div className="px-4 py-3 bg-muted/30 text-center">
+                <a href="/admin" className="text-xs text-primary font-medium underline underline-offset-2">
                   Open desktop admin to review →
-                </p>
+                </a>
               </div>
             )}
           </div>
