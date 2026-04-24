@@ -97,13 +97,11 @@ interface NewArrivalsResponse {
 interface AdminUser {
   id: string;
   email: string;
-  name: string | null;
   contactEmail: string | null;
   role: string | null;
   subscribedToDigest: boolean;
   createdAt: string;
   lastSignInAt: string | null;
-  orgName: string | null;
 }
 
 interface Discovery {
@@ -899,10 +897,8 @@ function AccountCenterTab({ pw }: { pw: string }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    {user.name && <p className="text-sm font-medium text-foreground truncate">{user.name}</p>}
-                    <p className={`truncate ${user.name ? "text-[11px] text-muted-foreground" : "text-sm text-foreground"}`}>{user.email}</p>
+                    <p className="text-sm text-foreground truncate">{user.email}</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {user.orgName && <span className="font-medium text-foreground">{user.orgName} · </span>}
                       {formatRelative(user.lastSignInAt ?? user.createdAt)} · {user.subscribedToDigest ? "digest ✓" : "no digest"}
                     </p>
                   </div>
@@ -1165,13 +1161,13 @@ function ManualDispatchMode({ pw }: { pw: string }) {
 
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => previewMutation.mutate()}
+            onClick={() => { setShowPreview(true); if (!previewHtml) previewMutation.mutate(); }}
             disabled={stagedIds.length === 0 || previewMutation.isPending}
             className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border text-sm font-semibold active:opacity-70 disabled:opacity-40"
             data-testid="button-preview-dispatch"
           >
             {previewMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Eye className="h-4 w-4" />}
-            Preview Email
+            {showPreview ? "Hide Preview" : "Preview Email"}
           </button>
           <div className="grid grid-cols-2 gap-2">
             <button
@@ -1195,22 +1191,49 @@ function ManualDispatchMode({ pw }: { pw: string }) {
         </div>
       </div>
 
-      {/* Preview overlay */}
-      {showPreview && previewHtml && (
-        <div className="fixed inset-0 z-50 bg-background flex flex-col" data-testid="overlay-preview">
-          <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-card/80 backdrop-blur-sm">
+      {/* Inline live preview panel */}
+      {showPreview && (
+        <div className="rounded-2xl border border-border bg-card overflow-hidden" data-testid="panel-preview">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border">
             <p className="text-sm font-semibold text-foreground">Email Preview</p>
-            <button onClick={() => setShowPreview(false)} className="p-2 rounded-lg text-muted-foreground active:opacity-60">
-              <X className="h-5 w-5" />
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => previewMutation.mutate()}
+                disabled={previewMutation.isPending}
+                className="text-xs text-primary font-medium px-2 py-1 rounded-lg bg-primary/10 active:opacity-60 disabled:opacity-40 flex items-center gap-1"
+                data-testid="button-refresh-preview"
+              >
+                {previewMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
+                Refresh
+              </button>
+              <button onClick={() => setShowPreview(false)} className="p-1.5 rounded-lg text-muted-foreground active:opacity-60" data-testid="button-close-preview">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-          <div className="flex-1 overflow-auto">
+          {previewMutation.isPending && !previewHtml ? (
+            <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Loading preview…</span>
+            </div>
+          ) : previewHtml ? (
             <iframe
               srcDoc={previewHtml}
-              style={{ width: "100%", height: "100%", border: "none", minHeight: "600px" }}
+              style={{ width: "100%", height: "480px", border: "none" }}
               title="Email preview"
+              data-testid="iframe-preview"
             />
-          </div>
+          ) : (
+            <div className="flex items-center justify-center py-12">
+              <button
+                onClick={() => previewMutation.mutate()}
+                disabled={previewMutation.isPending || stagedIds.length === 0}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold active:opacity-70 disabled:opacity-40"
+              >
+                {previewMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Eye className="h-3.5 w-3.5" />}
+                Load Preview
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1537,23 +1560,10 @@ function ReviewTab({ pw }: { pw: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/research-queue-mobile"] }),
   });
 
-  const conceptMutation = useMutation({
-    mutationFn: async ({ id, credibilityScore }: { id: number; credibilityScore: number }) => {
-      const res = await adminFetch(`/api/admin/concepts/${id}`, pw, {
-        method: "PATCH",
-        body: JSON.stringify({ credibilityScore }),
-      });
-      const d = await res.json();
-      if (!res.ok) throw new Error(d.error ?? "Concept update failed");
-      return d;
-    },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/concepts-mobile"] }),
-  });
-
   const pendingResearch = (researchData?.cards ?? []).filter(c => c.adminStatus === "pending");
   const unreviewedConcepts = (conceptData?.concepts ?? []).filter(c => c.credibilityScore === null);
 
-  // Build unified queue: research items first, then concept items
+  // Build unified queue: research items first (actionable), concept items (read-only)
   const queue: QueueItem[] = [
     ...pendingResearch.map(c => ({ kind: "research" as const, id: c.id, title: c.assetName, subtitle: c.institution })),
     ...unreviewedConcepts.map(c => ({
@@ -1614,30 +1624,34 @@ function ReviewTab({ pw }: { pw: string }) {
                 </div>
                 <p className="text-sm font-medium text-foreground line-clamp-2 mb-0.5">{item.title}</p>
                 <p className="text-xs text-muted-foreground mb-2">{item.subtitle}</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => {
-                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "approved" });
-                      else conceptMutation.mutate({ id: item.id, credibilityScore: 80 });
-                    }}
-                    disabled={researchMutation.isPending || conceptMutation.isPending}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                    data-testid={`button-approve-${item.kind}-${item.id}`}
+                {item.kind === "research" ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => researchMutation.mutate({ id: item.id, adminStatus: "approved" })}
+                      disabled={researchMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                      data-testid={`button-approve-research-${item.id}`}
+                    >
+                      <Check className="h-3.5 w-3.5" /> Approve
+                    </button>
+                    <button
+                      onClick={() => researchMutation.mutate({ id: item.id, adminStatus: "rejected" })}
+                      disabled={researchMutation.isPending}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                      data-testid={`button-reject-research-${item.id}`}
+                    >
+                      <X className="h-3.5 w-3.5" /> Reject
+                    </button>
+                  </div>
+                ) : (
+                  <a
+                    href="/admin"
+                    className="flex items-center justify-center gap-1.5 py-2 rounded-xl bg-muted text-muted-foreground text-xs font-medium"
+                    data-testid={`link-desktop-concept-${item.id}`}
                   >
-                    <Check className="h-3.5 w-3.5" /> Approve
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "rejected" });
-                      else conceptMutation.mutate({ id: item.id, credibilityScore: 10 });
-                    }}
-                    disabled={researchMutation.isPending || conceptMutation.isPending}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                    data-testid={`button-reject-${item.kind}-${item.id}`}
-                  >
-                    <X className="h-3.5 w-3.5" /> Reject
-                  </button>
-                </div>
+                    Review on Desktop
+                  </a>
+                )}
               </div>
             ))}
           </div>
