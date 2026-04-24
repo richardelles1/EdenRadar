@@ -335,6 +335,10 @@ function InstitutionSyncPanel({
     }
   }, [session?.status, isRunning]);
 
+  useEffect(() => {
+    return () => { if (confirmStartTimer.current) clearTimeout(confirmStartTimer.current); };
+  }, []);
+
   const startMutation = useMutation({
     mutationFn: async () => {
       const res = await adminFetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, pw, { method: "POST" });
@@ -577,6 +581,13 @@ function SyncTab({ pw }: { pw: string }) {
   const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingSyncInst, setPendingSyncInst] = useState<string | null>(null);
   const pendingSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pendingSyncTimer.current) clearTimeout(pendingSyncTimer.current);
+      if (tierConfirmTimer.current) clearTimeout(tierConfirmTimer.current);
+    };
+  }, []);
 
   const { data, isLoading, refetch, isRefetching } = useQuery<CollectorHealth>({
     queryKey: ["/api/admin/collector-health-mobile", pw],
