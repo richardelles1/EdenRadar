@@ -273,9 +273,29 @@ function PasswordGate({ onAuth }: { onAuth: () => void }) {
 
 // ── Per-Institution Sync Panel ─────────────────────────────────────────────────
 
-function InstitutionSyncPanel({ institution, pw, onClose, health }: { institution: string; pw: string; onClose: () => void; health?: string }) {
+interface SyncHistorySession {
+  sessionId: string;
+  status: string;
+  rawCount: number;
+  relevantCount: number;
+  pushedCount: number;
+  completedAt: string | null;
+  errorMessage: string | null;
+}
+
+function InstitutionSyncPanel({
+  institution, pw, onClose, health, tier,
+}: {
+  institution: string;
+  pw: string;
+  onClose: () => void;
+  health?: string;
+  tier?: number;
+}) {
   const qc = useQueryClient();
   const [polling, setPolling] = useState(true);
+  const [confirmStart, setConfirmStart] = useState(false);
+  const confirmStartTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data, refetch } = useQuery<SyncStatusResponse>({
     queryKey: ["/api/ingest/sync/status-mobile", institution, pw],
@@ -287,17 +307,29 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
     refetchInterval: polling ? 3000 : false,
   });
 
+  const { data: historyData, refetch: refetchHistory } = useQuery<{ sessions: SyncHistorySession[] }>({
+    queryKey: ["/api/ingest/sync/history-mobile", institution, pw],
+    queryFn: async () => {
+      const res = await adminFetch(`/api/ingest/sync/${encodeURIComponent(institution)}/history`, pw);
+      if (!res.ok) return { sessions: [] };
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+
   const session = data?.session;
   const isRunning = session?.status === "running" || (data?.syncRunning && data.syncRunningFor === institution);
   const isEnriched = session?.status === "enriched" && !isRunning;
   const isPushed = session?.status === "pushed";
   const isFailed = session?.status === "failed";
+  const isAnomalous = session?.status === "anomalous";
 
   useEffect(() => {
     const terminal = ["enriched", "pushed", "failed", "anomalous"];
     if (session?.status && terminal.includes(session.status) && !isRunning) {
       setPolling(false);
       qc.invalidateQueries({ queryKey: ["/api/admin/collector-health-mobile"] });
+      refetchHistory();
     } else if (isRunning && !polling) {
       setPolling(true);
     }
@@ -310,7 +342,8 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
       if (!res.ok) throw new Error(d.error ?? "Start failed");
       return d;
     },
-    onSuccess: () => { setPolling(true); refetch(); },
+    onSuccess: () => { setPolling(true); setConfirmStart(false); refetch(); },
+    onError: () => setConfirmStart(false),
   });
 
   const cancelMutation = useMutation({
@@ -330,8 +363,19 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
       if (!res.ok) throw new Error(d.error ?? "Push failed");
       return d;
     },
-    onSuccess: () => { refetch(); qc.invalidateQueries({ queryKey: ["/api/admin/collector-health-mobile"] }); },
+    onSuccess: () => { refetch(); refetchHistory(); qc.invalidateQueries({ queryKey: ["/api/admin/collector-health-mobile"] }); },
   });
+
+  const handleStartClick = () => {
+    if (!confirmStart) {
+      setConfirmStart(true);
+      if (confirmStartTimer.current) clearTimeout(confirmStartTimer.current);
+      confirmStartTimer.current = setTimeout(() => setConfirmStart(false), 3000);
+    } else {
+      if (confirmStartTimer.current) clearTimeout(confirmStartTimer.current);
+      startMutation.mutate();
+    }
+  };
 
   const phaseLabel =
     session?.phase === "scraping" ? "Collecting listings…"
@@ -348,11 +392,32 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
 
   const isActing = startMutation.isPending || cancelMutation.isPending || pushMutation.isPending;
 
+  const recentHistory = (historyData?.sessions ?? [])
+    .filter(s => ["pushed", "failed", "enriched", "anomalous"].includes(s.status))
+    .slice(0, 4);
+
+  const tierInfo = tier != null && TIER_COLORS[tier] ? { color: TIER_COLORS[tier], title: TIER_TITLES[tier] } : null;
+
   return (
     <div className="border-t border-border bg-muted/20 px-4 py-4 space-y-3" data-testid={`sync-panel-${institution}`}>
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-semibold text-foreground">{institution}</p>
-        <button onClick={onClose} className="text-muted-foreground p-1 rounded-lg active:opacity-60" data-testid="button-close-sync-panel">
+      {/* Panel header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-foreground truncate">{institution}</p>
+            {tierInfo && (
+              <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${tierInfo.color.badge}`} title={tierInfo.title}>
+                T{tier}
+              </span>
+            )}
+          </div>
+          {session?.errorMessage && !isRunning && (
+            <p className="text-[11px] text-red-500/80 truncate mt-0.5 max-w-[260px]" title={session.errorMessage}>
+              {session.errorMessage.length > 70 ? session.errorMessage.slice(0, 70) + "…" : session.errorMessage}
+            </p>
+          )}
+        </div>
+        <button onClick={onClose} className="text-muted-foreground p-1 rounded-lg active:opacity-60 shrink-0" data-testid="button-close-sync-panel">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -364,25 +429,30 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
         </div>
       ) : !data.found || !session ? (
         <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">No sync session found for this institution.</p>
+          <p className="text-xs text-muted-foreground">No sync session found. This institution hasn't been synced yet.</p>
           <button
-            onClick={() => startMutation.mutate()}
+            onClick={handleStartClick}
             disabled={isActing}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold w-full justify-center active:opacity-70"
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold w-full justify-center active:opacity-70 transition-colors ${
+              confirmStart
+                ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                : "bg-primary text-primary-foreground"
+            }`}
             data-testid="button-start-sync"
           >
-            {isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-            Start Sync
+            {startMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+            {confirmStart ? "Confirm Start?" : "Start Sync"}
           </button>
           {startMutation.error && <p className="text-xs text-destructive">{(startMutation.error as Error).message}</p>}
         </div>
       ) : (
         <div className="space-y-3">
           {/* Status badge */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {isRunning && <Loader2 className="h-4 w-4 animate-spin text-blue-500" />}
             {isPushed && <CheckCircle2 className="h-4 w-4 text-emerald-500" />}
             {isFailed && <XCircle className="h-4 w-4 text-red-500" />}
+            {isAnomalous && <AlertTriangle className="h-4 w-4 text-orange-500" />}
             {isEnriched && <Database className="h-4 w-4 text-amber-500" />}
             <span className="text-sm font-medium text-foreground capitalize">{session.status}</span>
             {session.rawCount > 0 && <span className="text-xs text-muted-foreground">{session.rawCount} collected</span>}
@@ -403,13 +473,17 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
           <div className="flex flex-wrap gap-2">
             {!isRunning && session.status !== "pushed" && (
               <button
-                onClick={() => startMutation.mutate()}
+                onClick={handleStartClick}
                 disabled={isActing || data.syncRunning}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold active:opacity-70 disabled:opacity-50 transition-colors ${
+                  confirmStart
+                    ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                    : "bg-primary text-primary-foreground"
+                }`}
                 data-testid="button-start-sync"
               >
                 {startMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                {session.status === "failed" || session.status === "anomalous" ? "Re-sync" : "Start Sync"}
+                {confirmStart ? "Confirm?" : (session.status === "failed" || isAnomalous ? "Re-sync" : "Start Sync")}
               </button>
             )}
 
@@ -449,6 +523,32 @@ function InstitutionSyncPanel({ institution, pw, onClose, health }: { institutio
           )}
         </div>
       )}
+
+      {/* Past sessions history */}
+      {recentHistory.length > 0 && (
+        <div className="pt-3 border-t border-border/40 space-y-1">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Past Sessions</p>
+          {recentHistory.map((s, i) => (
+            <div key={s.sessionId ?? i} className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-muted/40 text-xs gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                {s.status === "pushed"
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                  : s.status === "failed"
+                  ? <XCircle className="h-3.5 w-3.5 text-red-500 shrink-0" />
+                  : s.status === "anomalous"
+                  ? <AlertTriangle className="h-3.5 w-3.5 text-orange-500 shrink-0" />
+                  : <Clock className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
+                <span className="text-muted-foreground truncate">{s.completedAt ? formatRelative(s.completedAt) : "In progress"}</span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground/70 shrink-0 tabular-nums">
+                <span>{s.rawCount} raw</span>
+                {s.relevantCount > 0 && <span className="text-emerald-600 dark:text-emerald-400 font-medium">{s.relevantCount} rel</span>}
+                {s.pushedCount > 0 && <span className="text-primary font-medium">{s.pushedCount} pushed</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -469,15 +569,14 @@ const TIER_TITLES: Record<number, string> = {
   4: "T4: Playwright (headless)",
 };
 
-type LastSyncFilter = "all" | "7d" | "30d" | "never";
-
 function SyncTab({ pw }: { pw: string }) {
-  const [sortMode, setSortMode] = useState<"health" | "alpha">("health");
+  const [sortMode, setSortMode] = useState<"health" | "alpha" | "recent">("health");
   const [filterTier, setFilterTier] = useState<number | null>(null);
-  const [filterLastSync, setFilterLastSync] = useState<LastSyncFilter>("all");
   const [expandedInstitution, setExpandedInstitution] = useState<string | null>(null);
   const [pendingTier, setPendingTier] = useState<1 | 2 | 3 | 4 | null>(null);
   const tierConfirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pendingSyncInst, setPendingSyncInst] = useState<string | null>(null);
+  const pendingSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { data, isLoading, refetch, isRefetching } = useQuery<CollectorHealth>({
     queryKey: ["/api/admin/collector-health-mobile", pw],
@@ -534,6 +633,30 @@ function SyncTab({ pw }: { pw: string }) {
     onError: () => setPendingTier(null),
   });
 
+  const rowSyncMutation = useMutation({
+    mutationFn: async (institution: string) => {
+      const res = await adminFetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, pw, { method: "POST" });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Sync failed");
+      return d;
+    },
+    onSettled: () => { setPendingSyncInst(null); refetch(); },
+  });
+
+  const handleRowSyncClick = (e: React.MouseEvent, institution: string) => {
+    e.stopPropagation();
+    if (rowSyncMutation.isPending) return;
+    if (pendingSyncInst !== institution) {
+      setPendingSyncInst(institution);
+      if (pendingSyncTimer.current) clearTimeout(pendingSyncTimer.current);
+      pendingSyncTimer.current = setTimeout(() => setPendingSyncInst(null), 3000);
+    } else {
+      if (pendingSyncTimer.current) clearTimeout(pendingSyncTimer.current);
+      setPendingSyncInst(null);
+      rowSyncMutation.mutate(institution);
+    }
+  };
+
   const handleTierClick = (tier: 1 | 2 | 3 | 4) => {
     const sched = data?.scheduler;
     if (sched?.state === "paused" && sched.tierOnly === tier) {
@@ -556,24 +679,20 @@ function SyncTab({ pw }: { pw: string }) {
   const schedRunning = scheduler?.state === "running";
   const schedPaused = scheduler?.state === "paused";
 
-  // Apply tier + last-sync filters
-  const now = Date.now();
+  // Apply tier filter only
   const filteredRows = rows.filter((row) => {
     if (filterTier !== null && row.tier !== filterTier) return false;
-    if (filterLastSync === "never") return !row.lastSyncAt;
-    if (filterLastSync === "7d") {
-      if (!row.lastSyncAt) return false;
-      return (now - new Date(row.lastSyncAt).getTime()) > 7 * 24 * 3600 * 1000;
-    }
-    if (filterLastSync === "30d") {
-      if (!row.lastSyncAt) return false;
-      return (now - new Date(row.lastSyncAt).getTime()) > 30 * 24 * 3600 * 1000;
-    }
     return true;
   });
 
   const sortedRows = [...filteredRows].sort((a, b) => {
     if (sortMode === "alpha") return a.institution.localeCompare(b.institution);
+    if (sortMode === "recent") {
+      if (!a.lastSyncAt && !b.lastSyncAt) return a.institution.localeCompare(b.institution);
+      if (!a.lastSyncAt) return 1;
+      if (!b.lastSyncAt) return -1;
+      return new Date(b.lastSyncAt).getTime() - new Date(a.lastSyncAt).getTime();
+    }
     const issueStatuses = new Set(["failing", "degraded", "warning", "network_blocked", "site_down", "rate_limited", "parser_failure", "blocked"]);
     const rank = (r: HealthRow) =>
       issueStatuses.has(r.health) ? 0
@@ -732,11 +851,11 @@ function SyncTab({ pw }: { pw: string }) {
             </span>
           </p>
           <button
-            onClick={() => setSortMode(s => s === "health" ? "alpha" : "health")}
+            onClick={() => setSortMode(s => s === "health" ? "alpha" : s === "alpha" ? "recent" : "health")}
             className="text-xs text-primary font-medium px-2 py-1 rounded-lg bg-primary/10 active:opacity-60"
             data-testid="button-sort-toggle"
           >
-            {sortMode === "health" ? "A–Z" : "By health"}
+            {sortMode === "health" ? "A–Z" : sortMode === "alpha" ? "Recent" : "By Health"}
           </button>
         </div>
 
@@ -763,52 +882,63 @@ function SyncTab({ pw }: { pw: string }) {
           })}
         </div>
 
-        {/* Last sync filter chips */}
-        <div className="px-4 py-2 border-b border-border/60 flex items-center gap-2 overflow-x-auto">
-          <span className="text-[11px] text-muted-foreground font-medium shrink-0">Last sync:</span>
-          {(["all", "7d", "30d", "never"] as const).map((f) => {
-            const labels: Record<LastSyncFilter, string> = { all: "All", "7d": ">7 days", "30d": ">30 days", never: "Never" };
-            return (
-              <button
-                key={f}
-                onClick={() => setFilterLastSync(f)}
-                className={`shrink-0 px-2.5 py-1 rounded-lg text-xs font-medium transition-colors active:opacity-60 ${filterLastSync === f ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
-                data-testid={`button-filter-lastsync-${f}`}
-              >{labels[f]}</button>
-            );
-          })}
-        </div>
-
         {/* Rows */}
         <div className="divide-y divide-border">
-          {sortedRows.map((row) => (
-            <React.Fragment key={row.institution}>
-              <button
-                className="w-full flex items-center gap-3 px-4 py-2.5 active:bg-muted/50 text-left"
-                onClick={() => setExpandedInstitution(prev => prev === row.institution ? null : row.institution)}
-                data-testid={`row-health-${row.institution.replace(/\s+/g, "-").toLowerCase()}`}
-              >
-                <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${healthDot(row.health)}`} />
-                <span className="flex-1 text-sm text-foreground truncate">{row.institution}</span>
-                {row.tier != null && TIER_COLORS[row.tier] && (
-                  <span className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded border ${TIER_COLORS[row.tier].badge}`}
-                    title={TIER_TITLES[row.tier]}>
-                    T{row.tier}
-                  </span>
+          {sortedRows.map((row) => {
+            const instSlug = row.institution.replace(/\s+/g, "-").toLowerCase();
+            const isSyncPending = pendingSyncInst === row.institution;
+            const isSyncingNow = rowSyncMutation.isPending && rowSyncMutation.variables === row.institution;
+            const isExpanded = expandedInstitution === row.institution;
+            return (
+              <React.Fragment key={row.institution}>
+                <div className="flex items-center" data-testid={`row-health-${instSlug}`}>
+                  {/* Expand area */}
+                  <div
+                    className="flex-1 flex items-center gap-3 pl-4 pr-2 py-2.5 cursor-pointer active:bg-muted/50 min-w-0"
+                    onClick={() => setExpandedInstitution(prev => prev === row.institution ? null : row.institution)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && setExpandedInstitution(prev => prev === row.institution ? null : row.institution)}
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${healthDot(row.health)}`} />
+                    <span className="flex-1 text-sm text-foreground truncate">{row.institution}</span>
+                    <span className="text-[11px] text-muted-foreground shrink-0">{formatRelative(row.lastSyncAt)}</span>
+                    <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                  </div>
+                  {/* Inline sync button */}
+                  <button
+                    onClick={(e) => handleRowSyncClick(e, row.institution)}
+                    disabled={isSyncingNow || (rowSyncMutation.isPending && rowSyncMutation.variables !== row.institution)}
+                    className={`mr-2 p-2 rounded-xl shrink-0 transition-colors active:opacity-70 disabled:opacity-40 ${
+                      isSyncPending
+                        ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                        : isSyncingNow
+                        ? "text-primary"
+                        : "text-muted-foreground hover:bg-muted"
+                    }`}
+                    data-testid={`button-row-sync-${instSlug}`}
+                    title={isSyncPending ? "Tap again to confirm sync" : "Start sync"}
+                  >
+                    {isSyncingNow
+                      ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      : isSyncPending
+                      ? <RefreshCw className="h-3.5 w-3.5" />
+                      : <Play className="h-3.5 w-3.5" />
+                    }
+                  </button>
+                </div>
+                {isExpanded && (
+                  <InstitutionSyncPanel
+                    institution={row.institution}
+                    pw={pw}
+                    health={row.health}
+                    tier={row.tier}
+                    onClose={() => setExpandedInstitution(null)}
+                  />
                 )}
-                <span className="text-[11px] text-muted-foreground shrink-0">{formatRelative(row.lastSyncAt)}</span>
-                <ChevronRight className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${expandedInstitution === row.institution ? "rotate-90" : ""}`} />
-              </button>
-              {expandedInstitution === row.institution && (
-                <InstitutionSyncPanel
-                  institution={row.institution}
-                  pw={pw}
-                  health={row.health}
-                  onClose={() => setExpandedInstitution(null)}
-                />
-              )}
-            </React.Fragment>
-          ))}
+              </React.Fragment>
+            );
+          })}
           {sortedRows.length === 0 && (
             <div className="px-4 py-6 text-center text-sm text-muted-foreground">
               {rows.length === 0 ? "No data yet" : "No institutions match the current filters"}
