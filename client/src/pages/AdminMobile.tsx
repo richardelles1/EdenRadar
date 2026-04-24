@@ -12,8 +12,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertTriangle,
-  XCircle,
-  Clock,
   Zap,
   Database,
   Users,
@@ -22,8 +20,6 @@ import {
   Lightbulb,
   RefreshCw,
   ChevronRight,
-  Wifi,
-  WifiOff,
 } from "lucide-react";
 
 const ADMIN_KEY = "eden-admin-pw";
@@ -88,7 +84,8 @@ interface ResearchCard {
 interface ConceptCard {
   id: number;
   title: string;
-  oneLiner: string | null;
+  oneLiner: string;
+  credibilityScore: number | null;
 }
 
 interface Organization {
@@ -283,7 +280,7 @@ function SyncTab({ pw }: { pw: string }) {
   const okRows = rows.filter((r) => r.health === "ok").sort((a, b) =>
     (b.lastSyncAt ? new Date(b.lastSyncAt).getTime() : 0) - (a.lastSyncAt ? new Date(a.lastSyncAt).getTime() : 0)
   );
-  const sortedRows = [...syncingRows, ...issueRows, ...okRows, ...rows.filter((r) => r.health === "never")];
+  const sortedRows = [...issueRows, ...syncingRows, ...okRows, ...rows.filter((r) => r.health === "never")];
 
   const stateColor =
     scheduler?.state === "running" ? "text-emerald-600 dark:text-emerald-400"
@@ -442,6 +439,7 @@ function QueuesTab({ pw }: { pw: string }) {
   const researchCards = researchData?.cards ?? [];
   const pendingResearch = researchCards.filter((c) => c.adminStatus === "pending");
   const concepts = conceptData?.concepts ?? [];
+  const unreviewedConcepts = concepts.filter((c) => c.credibilityScore === null);
 
   return (
     <div className="space-y-4 px-4 pt-4">
@@ -512,8 +510,8 @@ function QueuesTab({ pw }: { pw: string }) {
             {conceptLoading ? (
               <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
             ) : (
-              <span className="text-sm font-bold px-2 py-0.5 rounded-full bg-muted text-muted-foreground" data-testid="badge-concept-count">
-                {concepts.length} total
+              <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${unreviewedConcepts.length > 0 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300" : "bg-muted text-muted-foreground"}`} data-testid="badge-concept-pending">
+                {unreviewedConcepts.length} unreviewed
               </span>
             )}
             <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${showConcept ? "rotate-90" : ""}`} />
@@ -522,19 +520,26 @@ function QueuesTab({ pw }: { pw: string }) {
 
         {showConcept && (
           <div className="border-t border-border divide-y divide-border">
-            {concepts.length === 0 ? (
-              <div className="px-4 py-5 text-center text-sm text-muted-foreground">No concept cards yet</div>
+            {unreviewedConcepts.length === 0 ? (
+              <div className="px-4 py-5 text-center text-sm text-muted-foreground">All concepts reviewed</div>
             ) : (
-              concepts.slice(0, 10).map((c) => (
+              unreviewedConcepts.slice(0, 10).map((c) => (
                 <div key={c.id} className="px-4 py-3" data-testid={`card-concept-${c.id}`}>
                   <p className="text-sm font-medium text-foreground line-clamp-1">{c.title}</p>
                   {c.oneLiner && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{c.oneLiner}</p>}
                 </div>
               ))
             )}
-            {concepts.length > 10 && (
+            {unreviewedConcepts.length > 10 && (
               <div className="px-4 py-2.5 text-center text-xs text-muted-foreground bg-muted/30">
-                +{concepts.length - 10} more — see desktop admin
+                +{unreviewedConcepts.length - 10} more — see desktop admin
+              </div>
+            )}
+            {unreviewedConcepts.length > 0 && (
+              <div className="px-4 py-3 bg-muted/30">
+                <p className="text-xs text-muted-foreground text-center">
+                  Open desktop admin to review →
+                </p>
               </div>
             )}
           </div>
@@ -550,8 +555,8 @@ function QueuesTab({ pw }: { pw: string }) {
         </div>
         <div className="rounded-2xl border border-border bg-card p-4 text-center">
           <Lightbulb className="h-5 w-5 text-muted-foreground mx-auto mb-1.5" />
-          <p className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-total-concepts">{concepts.length}</p>
-          <p className="text-xs text-muted-foreground">Concept cards</p>
+          <p className="text-2xl font-bold text-foreground tabular-nums" data-testid="stat-unreviewed-concepts">{unreviewedConcepts.length}</p>
+          <p className="text-xs text-muted-foreground">Unreviewed concepts</p>
         </div>
       </div>
     </div>
@@ -686,27 +691,37 @@ function StatsTab({ pw }: { pw: string }) {
     );
   }
 
-  const statCards = [
-    { label: "Total Assets", value: stats?.totalAssets ?? 0, icon: Database, color: "text-foreground" },
-    { label: "Biotech Relevant", value: stats?.relevantAssets ?? 0, icon: TrendingUp, color: "text-primary" },
-    { label: "Total Users", value: stats?.totalUsers ?? 0, icon: Users, color: "text-foreground" },
-    { label: "Institutions", value: stats?.totalInstitutions ?? healthData?.totalInstitutions ?? 0, icon: Building2, color: "text-foreground" },
-    { label: "EDEN Sessions (24h)", value: stats?.edenSessions24h ?? 0, icon: Zap, color: "text-violet-600 dark:text-violet-400" },
-    { label: "EDEN Sessions (7d)", value: stats?.edenSessions7d ?? 0, icon: Zap, color: "text-violet-600 dark:text-violet-400" },
-    { label: "Research Projects", value: stats?.researchProjects ?? 0, icon: Microscope, color: "text-foreground" },
-    { label: "Concept Cards", value: stats?.conceptCards ?? 0, icon: Lightbulb, color: "text-amber-600 dark:text-amber-400" },
-  ];
+  const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  const institutionsSynced7d = (healthData?.rows ?? []).filter(
+    (r) => r.lastSyncAt && new Date(r.lastSyncAt).getTime() > sevenDaysAgo
+  ).length;
+  const pendingIssues = healthData?.issueCount ?? 0;
 
   return (
     <div className="space-y-4 px-4 pt-4">
       <div className="grid grid-cols-2 gap-3">
-        {statCards.map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="rounded-2xl border border-border bg-card p-4" data-testid={`stat-${label.replace(/\s+/g, "-").toLowerCase()}`}>
-            <Icon className={`h-4 w-4 mb-2 ${color}`} />
-            <p className={`text-2xl font-bold tabular-nums ${color}`}>{value.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-0.5 leading-tight">{label}</p>
-          </div>
-        ))}
+        <div className="rounded-2xl border border-border bg-card p-4" data-testid="stat-total-assets">
+          <Database className="h-4 w-4 mb-2 text-foreground" />
+          <p className="text-2xl font-bold tabular-nums text-foreground">{(stats?.totalAssets ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">Total Assets</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4" data-testid="stat-biotech-relevant">
+          <TrendingUp className="h-4 w-4 mb-2 text-primary" />
+          <p className="text-2xl font-bold tabular-nums text-primary">{(stats?.relevantAssets ?? 0).toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">Biotech-Relevant</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4" data-testid="stat-institutions-synced-7d">
+          <Activity className="h-4 w-4 mb-2 text-foreground" />
+          <p className="text-2xl font-bold tabular-nums text-foreground">{institutionsSynced7d.toLocaleString()}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">Institutions Synced (7d)</p>
+        </div>
+        <div className="rounded-2xl border border-border bg-card p-4" data-testid="stat-pending-issues">
+          <AlertTriangle className="h-4 w-4 mb-2 text-foreground" />
+          <p className={`text-2xl font-bold tabular-nums ${pendingIssues > 0 ? "text-red-500" : "text-foreground"}`}>
+            {pendingIssues.toLocaleString()}
+          </p>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-tight">Pending Issues</p>
+        </div>
       </div>
     </div>
   );
