@@ -5,7 +5,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, orgMembers, organizations } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -5049,6 +5049,26 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.patch("/api/admin/concepts/:id", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const id = parseInt(req.params.id, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const schema = z.object({ credibilityScore: z.number().int().min(0).max(100) });
+      const { credibilityScore } = schema.parse(req.body);
+      const [updated] = await db
+        .update(conceptCards)
+        .set({ credibilityScore })
+        .where(eq(conceptCards.id, id))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Concept not found" });
+      res.json({ concept: updated });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.get("/api/admin/industry-projects", async (req, res) => {
     try {
       const pw = req.headers["x-admin-password"];
@@ -5268,15 +5288,22 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
       const { data, error } = await adminSupabase.auth.admin.listUsers({ perPage: 500 });
       if (error) return res.status(500).json({ error: error.message });
-      const users = (data?.users ?? []).map((u) => ({
+      const rawUsers = (data?.users ?? []).map((u) => ({
         id: u.id,
         email: u.email ?? "",
+        name: (u.user_metadata?.fullName as string | undefined) ?? null,
         contactEmail: u.user_metadata?.contactEmail ?? null,
         role: u.user_metadata?.role ?? null,
         subscribedToDigest: u.user_metadata?.subscribedToDigest === true,
         createdAt: u.created_at,
         lastSignInAt: u.last_sign_in_at ?? null,
       }));
+      const memberships = await db
+        .select({ userId: orgMembers.userId, orgName: organizations.name })
+        .from(orgMembers)
+        .leftJoin(organizations, eq(orgMembers.orgId, organizations.id));
+      const orgByUser = new Map(memberships.map((m) => [m.userId, m.orgName ?? null]));
+      const users = rawUsers.map((u) => ({ ...u, orgName: orgByUser.get(u.id) ?? null }));
       res.json({ users });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
