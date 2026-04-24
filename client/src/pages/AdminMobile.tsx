@@ -97,11 +97,13 @@ interface NewArrivalsResponse {
 interface AdminUser {
   id: string;
   email: string;
+  name: string | null;
   contactEmail: string | null;
   role: string | null;
   subscribedToDigest: boolean;
   createdAt: string;
   lastSignInAt: string | null;
+  orgName: string | null;
 }
 
 interface Discovery {
@@ -482,12 +484,13 @@ function SyncTab({ pw }: { pw: string }) {
 
   const sortedRows = [...rows].sort((a, b) => {
     if (sortMode === "alpha") return a.institution.localeCompare(b.institution);
+    const issueStatuses = new Set(["failing", "degraded", "warning", "network_blocked", "site_down", "rate_limited", "parser_failure", "blocked"]);
     const rank = (r: HealthRow) =>
-      healthIsIssue(r.health) ? 0
-      : r.health === "syncing" ? 1
-      : r.health === "stale" ? 2
+      issueStatuses.has(r.health) ? 0
+      : r.health === "stale" ? 1
+      : r.health === "syncing" ? 2
       : r.health === "ok" ? 3
-      : 4;
+      : 4; // never
     const diff = rank(a) - rank(b);
     return diff !== 0 ? diff : b.consecutiveFailures - a.consecutiveFailures;
   });
@@ -726,6 +729,11 @@ function IndexingQueueTab({ pw }: { pw: string }) {
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-foreground truncate">{asset.assetName}</p>
                           <p className="text-[11px] text-muted-foreground">{formatRelative(asset.firstSeenAt)}</p>
+                          {asset.sourceUrl && (
+                            <a href={asset.sourceUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-primary underline underline-offset-1 truncate block" data-testid={`link-source-${asset.id}`}>
+                              {asset.sourceUrl.replace(/^https?:\/\//, "").slice(0, 50)}
+                            </a>
+                          )}
                         </div>
                         {confirmReject === asset.id ? (
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -891,8 +899,12 @@ function AccountCenterTab({ pw }: { pw: string }) {
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground truncate">{user.email}</p>
-                    <p className="text-[11px] text-muted-foreground">{formatRelative(user.lastSignInAt ?? user.createdAt)} · {user.subscribedToDigest ? "digest ✓" : "no digest"}</p>
+                    {user.name && <p className="text-sm font-medium text-foreground truncate">{user.name}</p>}
+                    <p className={`text-muted-foreground truncate ${user.name ? "text-[11px]" : "text-sm text-foreground"}`}>{user.email}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {user.orgName && <span className="font-medium text-foreground">{user.orgName} · </span>}
+                      {formatRelative(user.lastSignInAt ?? user.createdAt)} · {user.subscribedToDigest ? "digest ✓" : "no digest"}
+                    </p>
                   </div>
                   <button
                     onClick={() => handleDeleteTap(user.id)}
@@ -1209,6 +1221,7 @@ function SmartDispatchMode({ pw }: { pw: string }) {
   const [windowHours, setWindowHours] = useState(168);
   const [selectedSubscriber, setSelectedSubscriber] = useState<SubscriberMatch | null>(null);
   const [sendResult, setSendResult] = useState<string | null>(null);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
   const { data: matchData, isLoading } = useQuery<{ subscribers: SubscriberMatch[]; windowHours: number }>({
     queryKey: ["/api/admin/dispatch/subscriber-matches-mobile", pw, windowHours],
@@ -1250,10 +1263,40 @@ function SmartDispatchMode({ pw }: { pw: string }) {
       if (!res.ok) throw new Error(d.error ?? "Send failed");
       return d;
     },
-    onSuccess: (d, vars) => setSendResult(`✓ Sent ${d.sentTo ? vars.assetIds.length : 0} asset(s) to ${vars.subscriber.email}`),
+    onSuccess: (d, vars) => setSendResult(`✓ Sent to ${vars.subscriber.email}`),
   });
 
   const subscribers = matchData?.subscribers ?? [];
+  const matchedSubscribers = subscribers.filter(s => s.totalMatches > 0);
+
+  async function sendToAllMatched() {
+    if (matchedSubscribers.length === 0) return;
+    setBulkProgress({ done: 0, total: matchedSubscribers.length });
+    setSendResult(null);
+    let successCount = 0;
+    for (let i = 0; i < matchedSubscribers.length; i++) {
+      const sub = matchedSubscribers[i];
+      try {
+        const assetIds = sub.top5AssetIds ?? [];
+        if (assetIds.length === 0) { setBulkProgress({ done: i + 1, total: matchedSubscribers.length }); continue; }
+        const res = await adminFetch("/api/admin/dispatch/send", pw, {
+          method: "POST",
+          body: JSON.stringify({
+            subject: "EdenRadar: {count} assets matched to your profile",
+            assetIds: assetIds.slice(0, 20),
+            windowHours,
+            isTest: false,
+            colorMode: "light",
+            recipients: [sub.email],
+          }),
+        });
+        if (res.ok) successCount++;
+      } catch {}
+      setBulkProgress({ done: i + 1, total: matchedSubscribers.length });
+    }
+    setBulkProgress(null);
+    setSendResult(`✓ Sent to ${successCount}/${matchedSubscribers.length} matched subscribers`);
+  }
   const suggestions = suggData?.assets ?? [];
 
   return (
@@ -1278,9 +1321,25 @@ function SmartDispatchMode({ pw }: { pw: string }) {
 
       {/* Subscriber matches */}
       <div className="rounded-2xl border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border">
-          <p className="text-sm font-semibold text-foreground">Subscriber Matches</p>
-          <p className="text-xs text-muted-foreground">{subscribers.filter(s => s.totalMatches > 0).length} subscribers with matches</p>
+        <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-2">
+          <div>
+            <p className="text-sm font-semibold text-foreground">Subscriber Matches</p>
+            <p className="text-xs text-muted-foreground">{matchedSubscribers.length} subscribers with matches</p>
+          </div>
+          {matchedSubscribers.length > 0 && (
+            <button
+              onClick={sendToAllMatched}
+              disabled={!!bulkProgress}
+              className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-xs font-semibold active:opacity-70 disabled:opacity-50"
+              data-testid="button-send-all-matched"
+            >
+              {bulkProgress ? (
+                <><Loader2 className="h-3.5 w-3.5 animate-spin" />{bulkProgress.done}/{bulkProgress.total}</>
+              ) : (
+                <><Send className="h-3.5 w-3.5" />Send All</>
+              )}
+            </button>
+          )}
         </div>
         {isLoading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -1436,6 +1495,10 @@ function DispatchTab({ pw }: { pw: string }) {
 
 // ── Review Tab ─────────────────────────────────────────────────────────────────
 
+type QueueItem =
+  | { kind: "research"; id: number; title: string; subtitle: string }
+  | { kind: "concept"; id: number; title: string; subtitle: string };
+
 function ReviewTab({ pw }: { pw: string }) {
   const qc = useQueryClient();
 
@@ -1461,7 +1524,7 @@ function ReviewTab({ pw }: { pw: string }) {
     enabled: !!pw,
   });
 
-  const reviewMutation = useMutation({
+  const researchMutation = useMutation({
     mutationFn: async ({ id, adminStatus }: { id: number; adminStatus: string }) => {
       const res = await adminFetch(`/api/admin/research-queue/${id}`, pw, {
         method: "PATCH",
@@ -1474,18 +1537,40 @@ function ReviewTab({ pw }: { pw: string }) {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/research-queue-mobile"] }),
   });
 
-  const pendingCards = (researchData?.cards ?? []).filter(c => c.adminStatus === "pending");
+  const conceptMutation = useMutation({
+    mutationFn: async ({ id, credibilityScore }: { id: number; credibilityScore: number }) => {
+      const res = await adminFetch(`/api/admin/concepts/${id}`, pw, {
+        method: "PATCH",
+        body: JSON.stringify({ credibilityScore }),
+      });
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error ?? "Concept update failed");
+      return d;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/admin/concepts-mobile"] }),
+  });
+
+  const pendingResearch = (researchData?.cards ?? []).filter(c => c.adminStatus === "pending");
   const unreviewedConcepts = (conceptData?.concepts ?? []).filter(c => c.credibilityScore === null);
 
-  const isLoading = loadingResearch || loadingConcepts;
+  // Build unified queue: research items first, then concept items
+  const queue: QueueItem[] = [
+    ...pendingResearch.map(c => ({ kind: "research" as const, id: c.id, title: c.assetName, subtitle: c.institution })),
+    ...unreviewedConcepts.map(c => ({
+      kind: "concept" as const,
+      id: c.id,
+      title: c.title,
+      subtitle: `${c.submitterName}${c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}`,
+    })),
+  ];
 
-  if (isLoading) return (
+  const isMutating = researchMutation.isPending || conceptMutation.isPending;
+
+  if (loadingResearch || loadingConcepts) return (
     <div className="flex items-center justify-center py-20 gap-2 text-muted-foreground">
       <Loader2 className="h-5 w-5 animate-spin" /><span>Loading review queue…</span>
     </div>
   );
-
-  const totalPending = pendingCards.length + unreviewedConcepts.length;
 
   return (
     <div className="space-y-4 px-4 pt-4">
@@ -1493,7 +1578,7 @@ function ReviewTab({ pw }: { pw: string }) {
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-2xl border border-border bg-card p-3 text-center">
           <Microscope className="h-4 w-4 text-muted-foreground mx-auto mb-1" />
-          <p className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-pending-research">{pendingCards.length}</p>
+          <p className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-pending-research">{pendingResearch.length}</p>
           <p className="text-[10px] text-muted-foreground">Pending research</p>
         </div>
         <div className="rounded-2xl border border-border bg-card p-3 text-center">
@@ -1503,83 +1588,62 @@ function ReviewTab({ pw }: { pw: string }) {
         </div>
       </div>
 
-      {totalPending === 0 ? (
+      {queue.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card px-4 py-8 text-center">
           <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto mb-2" />
           <p className="text-sm font-medium text-foreground">All caught up</p>
           <p className="text-xs text-muted-foreground mt-1">No items pending review</p>
         </div>
       ) : (
-        <>
-          {/* Research cards */}
-          {pendingCards.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <Microscope className="h-4 w-4 text-primary" />
-                <p className="text-sm font-semibold text-foreground">Research Cards</p>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ml-auto">
-                  {pendingCards.length} pending
-                </span>
+        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+          <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+            <p className="text-sm font-semibold text-foreground">Review Queue</p>
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">
+              {queue.length} pending
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {queue.map(item => (
+              <div key={`${item.kind}-${item.id}`} className="px-4 py-3" data-testid={`card-${item.kind}-${item.id}`}>
+                <div className="flex items-center gap-2 mb-1.5">
+                  {item.kind === "research"
+                    ? <Microscope className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                    : <Lightbulb className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                  }
+                  <span className="text-[10px] text-muted-foreground font-medium uppercase tracking-widest">
+                    {item.kind === "research" ? "Research" : "Concept"}
+                  </span>
+                </div>
+                <p className="text-sm font-medium text-foreground line-clamp-2 mb-0.5">{item.title}</p>
+                <p className="text-xs text-muted-foreground mb-2">{item.subtitle}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "approved" });
+                      else conceptMutation.mutate({ id: item.id, credibilityScore: 80 });
+                    }}
+                    disabled={isMutating}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                    data-testid={`button-approve-${item.kind}-${item.id}`}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Approve
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (item.kind === "research") researchMutation.mutate({ id: item.id, adminStatus: "rejected" });
+                      else conceptMutation.mutate({ id: item.id, credibilityScore: 10 });
+                    }}
+                    disabled={isMutating}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
+                    data-testid={`button-reject-${item.kind}-${item.id}`}
+                  >
+                    <X className="h-3.5 w-3.5" /> Reject
+                  </button>
+                </div>
               </div>
-              <div className="divide-y divide-border">
-                {pendingCards.map(card => (
-                  <div key={card.id} className="px-4 py-3" data-testid={`card-research-${card.id}`}>
-                    <div className="mb-2">
-                      <p className="text-sm font-medium text-foreground line-clamp-2">{card.assetName}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{card.institution}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => reviewMutation.mutate({ id: card.id, adminStatus: "approved" })}
-                        disabled={reviewMutation.isPending}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                        data-testid={`button-approve-research-${card.id}`}
-                      >
-                        <Check className="h-3.5 w-3.5" /> Approve
-                      </button>
-                      <button
-                        onClick={() => reviewMutation.mutate({ id: card.id, adminStatus: "rejected" })}
-                        disabled={reviewMutation.isPending}
-                        className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300 text-xs font-semibold active:opacity-70 disabled:opacity-50"
-                        data-testid={`button-reject-research-${card.id}`}
-                      >
-                        <X className="h-3.5 w-3.5" /> Reject
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Concept cards — read-only, no admin review endpoint */}
-          {unreviewedConcepts.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card overflow-hidden">
-              <div className="px-4 py-3 border-b border-border flex items-center gap-2">
-                <Lightbulb className="h-4 w-4 text-amber-500" />
-                <p className="text-sm font-semibold text-foreground">Concept Cards</p>
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 ml-auto">
-                  {unreviewedConcepts.length} unreviewed
-                </span>
-              </div>
-              <div className="divide-y divide-border">
-                {unreviewedConcepts.map(c => (
-                  <div key={c.id} className="px-4 py-3" data-testid={`card-concept-${c.id}`}>
-                    <p className="text-sm font-medium text-foreground line-clamp-1">{c.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {c.submitterName}{c.submitterAffiliation ? ` · ${c.submitterAffiliation}` : ""}
-                    </p>
-                  </div>
-                ))}
-              </div>
-              <div className="px-4 py-3 bg-muted/30 text-center border-t border-border">
-                <a href="/admin" className="text-xs text-primary font-medium underline underline-offset-2">
-                  Open desktop admin to set credibility scores →
-                </a>
-              </div>
-            </div>
-          )}
-        </>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );
