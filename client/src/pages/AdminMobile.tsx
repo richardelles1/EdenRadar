@@ -1191,7 +1191,7 @@ function ManualDispatchMode({ pw }: { pw: string }) {
 
         <div className="flex flex-col gap-2">
           <button
-            onClick={() => { setShowPreview(true); if (!previewHtml) previewMutation.mutate(); }}
+            onClick={() => { if (showPreview) { setShowPreview(false); } else { setShowPreview(true); if (!previewHtml) previewMutation.mutate(); } }}
             disabled={stagedIds.length === 0 || previewMutation.isPending}
             className="flex items-center justify-center gap-2 py-2.5 rounded-xl border border-border text-sm font-semibold active:opacity-70 disabled:opacity-40"
             data-testid="button-preview-dispatch"
