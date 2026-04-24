@@ -8343,8 +8343,8 @@ If multiple assets appear, return each as a separate array item.`;
 
         case "invoice.payment_failed": {
           // Stripe also fires customer.subscription.updated (status → past_due) shortly after, which
-          // is the primary handler. This case provides an extra safety net to log and ensure the status
-          // is updated even if subscription.updated is missed or arrives out of order.
+          // is the primary handler. This case provides an extra safety net and writes a billing event
+          // so the failure appears in the org's billing history timeline.
           const inv = event.data.object as Record<string, unknown>;
           const invCustomerId = String(inv["customer"] ?? "");
           const invSubId = String(inv["subscription"] ?? "");
@@ -8356,12 +8356,49 @@ If multiple assets appear, return each as a separate array item.`;
             console.warn(`[stripe/webhook] invoice.payment_failed: no org for customer ${invCustomerId} / sub ${invSubId}`);
             break;
           }
-          // Only write if status is not already past_due (avoid redundant updates)
+          // Only write status if not already past_due (avoid redundant updates)
           if (orgFail.stripeStatus !== "past_due") {
-            await storage.updateOrganization(orgFail.id, { stripeStatus: "past_due" })
-              .catch((e: unknown) => console.error("[stripe/webhook] invoice.payment_failed status write failed:", (e as Error)?.message));
+            await storage.updateOrganization(orgFail.id, { stripeStatus: "past_due" });
           }
+          // Always record the payment failure in billing history for auditability
+          await storage.logBillingEvent({
+            orgId: orgFail.id,
+            stripeSubscriptionId: invSubId || null,
+            eventType: "payment_failed",
+            stripeStatus: "past_due",
+          });
           console.warn(`[stripe/webhook] invoice.payment_failed: org ${orgFail.id} (${invCustomerId}) — payment failed, status → past_due`);
+          break;
+        }
+
+        case "invoice.payment_succeeded": {
+          // Fires on every successful charge: trial conversion, renewal, and reactivation after past_due.
+          // The downstream customer.subscription.updated event updates the org record; this handler's
+          // sole job is to write a billing event so successful payments appear in the billing timeline.
+          const invOk = event.data.object as Record<string, unknown>;
+          const invOkCustomerId = String(invOk["customer"] ?? "");
+          const invOkSubId = String(invOk["subscription"] ?? "");
+          // Skip initial trial invoices (amount_paid = 0) — they're not real payments
+          const amountPaid = typeof invOk["amount_paid"] === "number" ? invOk["amount_paid"] : -1;
+          if (amountPaid === 0) {
+            console.log(`[stripe/webhook] invoice.payment_succeeded: skipping zero-amount invoice (trial) for customer ${invOkCustomerId}`);
+            break;
+          }
+          let orgOk = invOkCustomerId ? await storage.getOrgByStripeCustomer(invOkCustomerId) : null;
+          if (!orgOk && invOkSubId) {
+            orgOk = await storage.getOrgByStripeSubscriptionId(invOkSubId) ?? null;
+          }
+          if (!orgOk) {
+            console.warn(`[stripe/webhook] invoice.payment_succeeded: no org for customer ${invOkCustomerId} / sub ${invOkSubId}`);
+            break;
+          }
+          await storage.logBillingEvent({
+            orgId: orgOk.id,
+            stripeSubscriptionId: invOkSubId || null,
+            eventType: "payment_succeeded",
+            stripeStatus: orgOk.stripeStatus ?? "active",
+          });
+          console.log(`[stripe/webhook] invoice.payment_succeeded: org ${orgOk.id} — payment recorded, amount=${amountPaid}`);
           break;
         }
 
