@@ -8396,7 +8396,9 @@ If multiple assets appear, return each as a separate array item.`;
             orgId: orgOk.id,
             stripeSubscriptionId: invOkSubId || null,
             eventType: "payment_succeeded",
-            stripeStatus: orgOk.stripeStatus ?? "active",
+            // Use "active" as the canonical post-payment status rather than reading current
+            // org state, which may still reflect "past_due" before subscription.updated arrives.
+            stripeStatus: "active",
           });
           console.log(`[stripe/webhook] invoice.payment_succeeded: org ${orgOk.id} — payment recorded, amount=${amountPaid}`);
           break;

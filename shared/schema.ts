@@ -745,7 +745,7 @@ export const stripeBillingEvents = pgTable("stripe_billing_events", {
   id: serial("id").primaryKey(),
   orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
   stripeSubscriptionId: text("stripe_subscription_id"),
-  eventType: text("event_type").notNull(), // checkout_completed | subscription_updated | subscription_deleted
+  eventType: text("event_type").notNull(), // checkout_completed | subscription_updated | subscription_deleted | payment_failed | payment_succeeded
   oldPriceId: text("old_price_id"),
   newPriceId: text("new_price_id"),
   oldPlanTier: text("old_plan_tier"),
