@@ -329,6 +329,7 @@ export interface IStorage {
   removeOrgMember(orgId: number, userId: string): Promise<void>;
   deleteUserAccount(userId: string): Promise<void>;
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
+  updateOrgMemberInviteStatus(orgId: number, userId: string, status: string): Promise<void>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
   getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null>;
 
@@ -2870,6 +2871,13 @@ export class DatabaseStorage implements IStorage {
     await db
       .update(orgMembers)
       .set({ role })
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
+  }
+
+  async updateOrgMemberInviteStatus(orgId: number, userId: string, status: string): Promise<void> {
+    await db
+      .update(orgMembers)
+      .set({ inviteStatus: status })
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)));
   }
 

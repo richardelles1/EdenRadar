@@ -5719,6 +5719,12 @@ If a field cannot be determined, use "N/A".`
       const org = await storage.getOrgForUser(userId);
       if (!org) return res.json(null);
       const members = await storage.getOrgMembers(org.id);
+      // Auto-transition: mark invited member as active on first org access
+      const self = members.find((m) => m.userId === userId);
+      if (self && self.inviteStatus === "pending") {
+        await storage.updateOrgMemberInviteStatus(org.id, userId, "active");
+        self.inviteStatus = "active";
+      }
       res.json({ ...org, members });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -5801,6 +5807,11 @@ If a field cannot be determined, use "N/A".`
       const memberId = req.params.memberId as string;
       if (memberId === callerId) {
         return res.status(400).json({ error: "You cannot remove yourself from the organization" });
+      }
+      // Validate target member belongs to this org before removal
+      const targetMember = await storage.getOrgMemberByUserId(org.id, memberId);
+      if (!targetMember) {
+        return res.status(404).json({ error: "Member not found in your organization" });
       }
       await storage.removeOrgMember(org.id, memberId);
       res.json({ ok: true });

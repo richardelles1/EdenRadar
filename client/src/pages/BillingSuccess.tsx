@@ -17,6 +17,18 @@ interface VerifyResult {
   stripeTrialEnd: string | null;
 }
 
+interface OrgMemberSummary {
+  userId: string;
+  memberName: string | null;
+  email: string | null;
+  role: string;
+  inviteStatus: string | null;
+}
+
+interface OrgResponse {
+  members: OrgMemberSummary[];
+}
+
 const PLAN_LABELS: Record<string, string> = {
   individual: "Individual",
   team5: "Team (5 seats)",
@@ -41,14 +53,14 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
   const [fullName, setFullName] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const { data: orgData } = useQuery<{ members: any[] }>({
+  const { data: orgData } = useQuery<OrgResponse>({
     queryKey: ["/api/industry/org"],
     queryFn: () =>
       fetch("/api/industry/org", { headers: { Authorization: `Bearer ${accessToken}` } }).then((r) => r.json()),
     enabled: !!accessToken,
   });
 
-  const invitedMembers = (orgData?.members ?? []).filter((m: any) => m.role !== "owner");
+  const invitedMembers = (orgData?.members ?? []).filter((m) => m.role !== "owner");
   const remaining = Math.max(0, maxInvites - invitedMembers.length);
 
   async function handleInvite(e: React.FormEvent) {
@@ -152,7 +164,7 @@ function TeamInvitePanel({ accessToken, planId }: { accessToken: string; planId:
 
       {invitedMembers.length > 0 && (
         <div className="px-6 pb-4 space-y-1.5" data-testid="list-sent-invites">
-          {invitedMembers.map((m: any) => (
+          {invitedMembers.map((m) => (
             <div
               key={m.userId}
               className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
