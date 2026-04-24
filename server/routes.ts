@@ -8212,27 +8212,35 @@ If multiple assets appear, return each as a separate array item.`;
         case "customer.subscription.updated": {
           const sub = event.data.object as Record<string, unknown>;
           const stripeCustomerId = String(sub["customer"] ?? "");
-          const org = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
-          if (!org) {
-            console.warn(`[stripe/webhook] subscription.updated: no org for customer ${stripeCustomerId}`);
+          const stripeSubscriptionId = String(sub["id"] ?? "");
+          // Resolve org by customer ID first, fall back to subscription ID
+          let orgU = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+          if (!orgU && stripeSubscriptionId) {
+            orgU = await storage.getOrgByStripeSubscriptionId(stripeSubscriptionId) ?? null;
+          }
+          if (!orgU) {
+            console.warn(`[stripe/webhook] subscription.updated: no org for customer ${stripeCustomerId} / sub ${stripeSubscriptionId}`);
             break;
           }
           const items = sub["items"] as { data: { price: { id: string } }[] } | undefined;
-          const priceId = items?.data?.[0]?.price?.id ?? org.stripePriceId ?? "";
+          const priceId = items?.data?.[0]?.price?.id ?? orgU.stripePriceId ?? "";
           const matchedPlanId = Object.entries(STRIPE_PRICE_MAP).find(([, pid]) => pid === priceId)?.[0];
-          const planTierU = matchedPlanId && isStripePlanId(matchedPlanId) ? PLAN_TIER_MAP[matchedPlanId] : org.planTier;
+          const resolvedPlanId: StripePlanId | null = matchedPlanId && isStripePlanId(matchedPlanId) ? matchedPlanId : null;
+          const planTierU = resolvedPlanId ? PLAN_TIER_MAP[resolvedPlanId] : orgU.planTier;
+          const seatLimitU = resolvedPlanId ? PLAN_SEAT_MAP[resolvedPlanId] : orgU.seatLimit;
           const periodEndU = typeof sub["current_period_end"] === "number" ? new Date(sub["current_period_end"] * 1000) : null;
           const cancelAtU = typeof sub["cancel_at"] === "number" ? new Date(sub["cancel_at"] * 1000) : null;
-          await storage.applyStripeSubscription(org.id, {
+          await storage.updateOrganization(orgU.id, {
             stripeCustomerId,
-            stripeSubscriptionId: String(sub["id"] ?? ""),
+            stripeSubscriptionId,
             stripeStatus: String(sub["status"] ?? "active"),
             stripePriceId: priceId,
             planTier: planTierU,
+            seatLimit: seatLimitU,
             stripeCurrentPeriodEnd: periodEndU,
             stripeCancelAt: cancelAtU,
           }).catch((e: unknown) => console.error("[stripe/webhook] subscription.updated write failed:", (e as Error)?.message));
-          console.log(`[stripe/webhook] Updated org ${org.id} → planTier=${planTierU}, status=${sub["status"]}`);
+          console.log(`[stripe/webhook] Updated org ${orgU.id} → planTier=${planTierU}, seatLimit=${seatLimitU}, status=${sub["status"]}`);
           break;
         }
 

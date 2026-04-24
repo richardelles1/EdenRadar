@@ -318,6 +318,7 @@ export interface IStorage {
   updateOrganization(id: number, data: Partial<InsertOrganization>): Promise<Organization | undefined>;
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
+  getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
   applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }): Promise<Organization | undefined>;
   markWelcomeEmailSent(orgId: number, subId: string): Promise<boolean>;
   releaseWelcomeEmailClaim(orgId: number, subId: string): Promise<void>;
@@ -2800,6 +2801,15 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(organizations)
       .where(eq(organizations.stripeCustomerId, stripeCustomerId))
+      .limit(1);
+    return row;
+  }
+
+  async getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined> {
+    const [row] = await db
+      .select()
+      .from(organizations)
+      .where(eq(organizations.stripeSubscriptionId, stripeSubscriptionId))
       .limit(1);
     return row;
   }
