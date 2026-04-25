@@ -672,8 +672,9 @@ function scheduleNext(): void {
  * the Supabase connection being dropped, or our own server restarting mid-sync —
  * NOT from the target website failing.
  * These are transient infrastructure blips and must NOT count as scraper failures or
- * increment consecutiveFailures, which would trigger multi-day backoff. */
-function isTransientDbError(msg: string): boolean {
+ * increment consecutiveFailures, which would trigger multi-day backoff.
+ * Exported so the manual sync route can apply the same guard. */
+export function isTransientDbError(msg: string): boolean {
   const m = msg.toLowerCase();
   return (
     m.includes("connection failure") ||

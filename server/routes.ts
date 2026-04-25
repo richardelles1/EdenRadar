@@ -23,7 +23,7 @@ import { isFatalOpenAIError } from "./lib/llm";
 import type { BuyerProfile, ScoredAsset } from "./lib/types";
 import { z } from "zod";
 import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapingProgress, getUpsertProgress, isSyncRunning, getSyncRunningFor, getActiveSyncs, runInstitutionSync, tryAcquireSyncLock, releaseSyncLock } from "./lib/ingestion";
-import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync } from "./lib/scheduler";
+import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
@@ -2040,13 +2040,16 @@ export async function registerRoutes(
       res.json({ message: "Sync started", institution, sessionId });
 
       runInstitutionSync(institution, sessionId)
-        .then(() => {
-          updateScraperHealth(institution, true).catch(() => {});
+        .then((result) => {
+          updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount).catch(() => {});
           invalidateHealthCacheEntry(institution);
         })
         .catch((err) => {
-          console.error(`[sync] Background sync failed for ${institution}:`, err?.message);
-          updateScraperHealth(institution, false, err?.message).catch(() => {});
+          const msg = err?.message ?? "";
+          console.error(`[sync] Background sync failed for ${institution}:`, msg);
+          if (!isTransientDbError(msg)) {
+            updateScraperHealth(institution, false, msg).catch(() => {});
+          }
         });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Sync failed" });
