@@ -468,15 +468,36 @@ export function startTierOnly(tier: 1 | 2 | 3 | 4): { ok: boolean; message: stri
   return { ok: true, message: `Tier ${tier} scan started — ${tieredQueue.length} institutions` };
 }
 
-export function invalidateHealthCacheEntry(institution: string): void {
-  const entry = scraperHealthCache.get(institution);
-  if (entry) {
+export function invalidateHealthCacheEntry(
+  institution: string,
+  successData?: { newCount?: number; rawCount?: number },
+): void {
+  const existing = scraperHealthCache.get(institution);
+  if (existing) {
     scraperHealthCache.set(institution, {
-      ...entry,
+      ...existing,
       consecutiveFailures: 0,
       backoffUntil: null,
       lastFailureReason: null,
       lastFailureAt: null,
+      ...(successData !== undefined
+        ? {
+            lastSuccessAt: new Date(),
+            lastSuccessNewCount: successData.newCount ?? null,
+            lastSuccessRawCount: successData.rawCount ?? null,
+          }
+        : {}),
+    });
+  } else if (successData !== undefined) {
+    scraperHealthCache.set(institution, {
+      institution,
+      consecutiveFailures: 0,
+      backoffUntil: null,
+      lastFailureReason: null,
+      lastFailureAt: null,
+      lastSuccessAt: new Date(),
+      lastSuccessNewCount: successData.newCount ?? null,
+      lastSuccessRawCount: successData.rawCount ?? null,
     });
   }
 }

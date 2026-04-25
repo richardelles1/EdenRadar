@@ -2042,7 +2042,7 @@ export async function registerRoutes(
       runInstitutionSync(institution, sessionId)
         .then((result) => {
           updateScraperHealth(institution, true, undefined, result.newCount, result.rawCount).catch(() => {});
-          invalidateHealthCacheEntry(institution);
+          invalidateHealthCacheEntry(institution, { newCount: result.newCount, rawCount: result.rawCount });
         })
         .catch((err) => {
           const msg = err?.message ?? "";
