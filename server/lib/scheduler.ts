@@ -634,9 +634,6 @@ function scheduleNext(): void {
       `${skippedThisCycle} backoff-skipped.`
     );
     lastCycleCompletedAt = new Date();
-    schedulerState = "idle";
-    tierOnlyActive = null;
-    persistState(true).catch(() => {});
     currentInstitutions = [];
     loadAllScraperHealth().then((h) => { scraperHealthCache = new Map(h); }).catch(() => {});
     // Evaluate all user alert subscriptions once per cycle — avoids per-institution
@@ -645,6 +642,29 @@ function scheduleNext(): void {
       console.error(`[scheduler] Alert email error after cycle #${cycleCount}:`, err?.message);
     });
 
+    if (tierOnlyActive !== null) {
+      // Tier-only scan is a one-shot operation — stop and go idle.
+      schedulerState = "idle";
+      tierOnlyActive = null;
+      persistState(true).catch(() => {});
+    } else {
+      // Full cycle completed — begin the next cycle after a short cooldown so
+      // health stays fresh without requiring manual admin intervention after each
+      // pass. The 2-minute delay prevents a tight spin when all institutions are
+      // within their freshness window and would be immediately skipped.
+      tierOnlyActive = null;
+      tieredQueue = buildTieredQueue();
+      queueIndex = 0;
+      completedThisCycle = 0;
+      failedThisCycle = 0;
+      skippedThisCycle = 0;
+      freshSkippedThisCycle = 0;
+      cycleStartedAt = new Date();
+      cycleCount++;
+      console.log(`[scheduler] Cycle complete — starting cycle #${cycleCount} in 2 min (${tieredQueue.length} institutions)`);
+      persistState(true).catch(() => {});
+      schedulerTimer = setTimeout(() => scheduleNext(), 2 * 60 * 1000);
+    }
   }
 }
 

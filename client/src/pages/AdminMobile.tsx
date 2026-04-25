@@ -761,12 +761,12 @@ function SyncTab({ pw }: { pw: string }) {
         </div>
 
         {/* Running progress */}
-        {schedRunning && (scheduler?.currentInstitution || (scheduler?.currentInstitutions?.length ?? 0) > 0) && (
+        {schedRunning && (scheduler?.currentInstitutions?.length ?? 0) > 0 && (
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm">
               <Zap className="h-3.5 w-3.5 text-blue-500 shrink-0" />
               <span className="text-foreground font-medium truncate">
-                {(scheduler?.currentInstitutions?.length ?? 0) > 0 ? scheduler!.currentInstitutions.join(", ") : scheduler!.currentInstitution}
+                {scheduler!.currentInstitutions.join(", ")}
               </span>
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
@@ -774,6 +774,12 @@ function SyncTab({ pw }: { pw: string }) {
               <span>{scheduler!.completedThisCycle} done</span>
               {(scheduler!.failedThisCycle ?? 0) > 0 && <span className="text-red-500">{scheduler!.failedThisCycle} failed</span>}
             </div>
+          </div>
+        )}
+        {schedRunning && (scheduler?.currentInstitutions?.length ?? 0) === 0 && (
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin shrink-0" />
+            <span>Cycle #{scheduler?.cycleCount} — queuing next batch…</span>
           </div>
         )}
 
