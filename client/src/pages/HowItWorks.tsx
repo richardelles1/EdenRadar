@@ -124,10 +124,10 @@ const TIERS = [
     colorDim: "hsl(142 65% 48% / 0.08)",
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
-    price: "$799",
-    ...derivedYearly(799),
+    price: "$1,999",
+    ...derivedYearly(1999),
     period: "/mo",
-    tagline: "Full platform access for serious BD teams",
+    tagline: "For BD teams and licensing executives.",
     popular: true,
     features: [],
   },
@@ -277,6 +277,12 @@ function ScoutCard({ isYearly }: { isYearly: boolean }) {
             )}
           </div>
         </div>
+        <p className="mt-3 text-[11px] text-white/50 text-right">
+          Individual, Team &amp; Enterprise plans &mdash;{" "}
+          <Link to="/pricing" className="text-white/70 underline underline-offset-2 hover:text-white transition-colors">
+            see all plans &rarr;
+          </Link>
+        </p>
       </div>
 
       {/* Top half — 2x2 icon + label tiles */}
