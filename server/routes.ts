@@ -5332,6 +5332,10 @@ If a field cannot be determined, use "N/A".`
         user_metadata: { ...existing.user.user_metadata, subscribedToDigest },
       });
       if (error) return res.status(500).json({ error: error.message });
+      // Sync to industry_profiles so alertMailer (which reads that table) sees the change
+      await storage.setIndustryProfileSubscription(id, subscribedToDigest).catch((e: any) => {
+        console.warn("[admin/subscribed] industry_profiles sync failed:", e?.message);
+      });
       res.json({
         id: data.user.id,
         subscribedToDigest: data.user.user_metadata?.subscribedToDigest ?? false,

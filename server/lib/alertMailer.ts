@@ -107,12 +107,26 @@ async function evaluateAlerts(): Promise<void> {
     return;
   }
 
-  const alerts = await db
-    .select()
-    .from(userAlerts)
-    .where(isNotNull(userAlerts.userId));
+  // Fetch all saved alerts. Wrap in try-catch in case user_alerts table is missing
+  // (e.g. first deploy before db:push runs — createUserAlertsTable handles this on boot).
+  let alerts: typeof userAlerts.$inferSelect[];
+  try {
+    alerts = await db
+      .select()
+      .from(userAlerts)
+      .where(isNotNull(userAlerts.userId));
+  } catch (err: any) {
+    console.error("[alertMailer] Failed to query user_alerts table:", err?.message,
+      "— table may not exist yet; will retry next cycle");
+    return;
+  }
 
-  if (alerts.length === 0) return;
+  if (alerts.length === 0) {
+    console.log("[alertMailer] No saved alerts found — skipping cycle");
+    return;
+  }
+
+  console.log(`[alertMailer] Evaluating ${alerts.length} saved alert(s)`);
 
   // Stable boundary for this evaluation run. All assets with firstSeenAt <=
   // evaluationStartedAt are in scope. The watermark for each sent alert advances
@@ -156,12 +170,22 @@ async function evaluateAlerts(): Promise<void> {
   const { Resend } = await import("resend");
   const resend = new Resend(apiKey);
 
+  let sentCount = 0;
+  let skippedCount = 0;
+
   for (const alert of alerts) {
     if (!alert.userId) continue;
 
     // Only send to users who have opted in to email digest
     const profile = profileMap.get(alert.userId);
-    if (!profile?.subscribedToDigest) {
+    if (!profile) {
+      console.log(`[alertMailer] Alert ${alert.id} — skip: no industry_profile for user ${alert.userId}`);
+      skippedCount++;
+      continue;
+    }
+    if (!profile.subscribedToDigest) {
+      console.log(`[alertMailer] Alert ${alert.id} — skip: user ${alert.userId} not subscribed to digest`);
+      skippedCount++;
       continue;
     }
 
@@ -169,8 +193,14 @@ async function evaluateAlerts(): Promise<void> {
     const frequency = (profile.notificationPrefs as { frequency?: string } | null)?.frequency ?? "daily";
     if (frequency !== "realtime") {
       const windowHours = frequencyWindowHours(frequency);
+      const elapsed = alert.lastAlertSentAt
+        ? ((Date.now() - alert.lastAlertSentAt.getTime()) / (1000 * 60 * 60)).toFixed(1)
+        : "never sent";
       if (!shouldSendNow(alert.lastAlertSentAt ?? null, windowHours)) {
-        console.log(`[alertMailer] Skipping alert ${alert.id} — frequency gate (${frequency})`);
+        console.log(
+          `[alertMailer] Alert ${alert.id} — skip: frequency gate (${frequency}, ${elapsed}h elapsed, need ${windowHours}h)`
+        );
+        skippedCount++;
         continue;
       }
     }
@@ -183,15 +213,20 @@ async function evaluateAlerts(): Promise<void> {
     try {
       matched = await matchAssetsForAlert(alert, since);
     } catch (err: any) {
-      console.error(`[alertMailer] Match error for alert ${alert.id}:`, err?.message);
+      console.error(`[alertMailer] Alert ${alert.id} — match error:`, err?.message);
       continue;
     }
 
-    if (matched.length === 0) continue;
+    if (matched.length === 0) {
+      console.log(`[alertMailer] Alert ${alert.id} ("${alert.name ?? "Unnamed"}") — skip: no new matches since ${since.toISOString()}`);
+      skippedCount++;
+      continue;
+    }
 
     const email = userEmailMap.get(alert.userId);
     if (!email) {
-      console.log(`[alertMailer] No email for user ${alert.userId} — skipping alert ${alert.id}`);
+      console.log(`[alertMailer] Alert ${alert.id} — skip: no email address for user ${alert.userId}`);
+      skippedCount++;
       continue;
     }
 
@@ -221,15 +256,16 @@ async function evaluateAlerts(): Promise<void> {
 
       if (sendError) {
         console.error(
-          `[alertMailer] Send error for alert ${alert.id} → ${email}:`,
+          `[alertMailer] Alert ${alert.id} — send error → ${email}:`,
           sendError.message,
         );
         continue;
       }
 
       console.log(
-        `[alertMailer] Sent alert "${alertName}" → ${email} | ${matched.length} asset(s)`,
+        `[alertMailer] Sent alert "${alertName}" → ${email} | ${matched.length} asset(s) matched`,
       );
+      sentCount++;
 
       // Record in dispatch_logs so admin can audit all outbound alert emails
       await storage.createDispatchLog({
@@ -239,7 +275,9 @@ async function evaluateAlerts(): Promise<void> {
         assetNames: matched.map((a) => a.assetName),
         assetSourceUrls: matched.map((a) => a.sourceUrl ?? ""),
         assetCount: matched.length,
-        windowHours: 0,
+        windowHours: frequencyWindowHours(
+          (profile.notificationPrefs as { frequency?: string } | null)?.frequency ?? "daily"
+        ),
         isTest: false,
       });
 
@@ -251,7 +289,11 @@ async function evaluateAlerts(): Promise<void> {
         .set({ lastAlertSentAt: evaluationStartedAt })
         .where(eq(userAlerts.id, alert.id));
     } catch (err: any) {
-      console.error(`[alertMailer] Unexpected error for alert ${alert.id}:`, err?.message);
+      console.error(`[alertMailer] Alert ${alert.id} — unexpected error:`, err?.message);
     }
   }
+
+  console.log(
+    `[alertMailer] Cycle complete — sent: ${sentCount}, skipped: ${skippedCount}, total alerts: ${alerts.length}`
+  );
 }

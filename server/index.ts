@@ -886,6 +886,74 @@ async function createStripeBillingEventsTable() {
   }
 }
 
+// ── Ensure user_alerts table exists ───────────────────────────────────────────
+// Critical for the digest/alert pipeline. Created idempotently so it survives
+// fresh deploys where db:push may not have been run yet.
+async function createUserAlertsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS user_alerts (
+        id              SERIAL PRIMARY KEY,
+        user_id         TEXT,
+        name            TEXT,
+        query           TEXT,
+        modalities      TEXT[],
+        stages          TEXT[],
+        institutions    TEXT[],
+        created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        last_alert_sent_at TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS user_alerts_user_id_idx ON user_alerts (user_id)
+    `);
+    log("[startup] user_alerts table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] user_alerts table check: ${err?.message}`, "startup");
+  }
+}
+
+// ── Backfill industry_profiles for Supabase digest subscribers ────────────────
+// The alertMailer reads subscribed_to_digest from industry_profiles (local DB),
+// but the toggle can be set in Supabase user_metadata without syncing here.
+// On every boot, we upsert a minimal industry_profiles row for every Supabase
+// user who has subscribedToDigest=true so the mailer can always see them.
+async function syncSubscribersFromSupabase() {
+  const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+  const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+  if (!sbUrl || !sbKey) {
+    log("[startup] Supabase not configured — skipping subscriber backfill", "startup");
+    return;
+  }
+  try {
+    const { createClient } = await import("@supabase/supabase-js");
+    const admin = createClient(sbUrl, sbKey);
+    let page = 1;
+    let synced = 0;
+    while (true) {
+      const { data, error } = await admin.auth.admin.listUsers({ perPage: 1000, page });
+      if (error) {
+        log(`[startup] Supabase subscriber backfill error: ${error.message}`, "startup");
+        break;
+      }
+      const users = data?.users ?? [];
+      for (const u of users) {
+        if (u.user_metadata?.subscribedToDigest === true) {
+          await storage.setIndustryProfileSubscription(u.id, true).catch(() => {});
+          synced++;
+        }
+      }
+      if (users.length < 1000) break;
+      page++;
+    }
+    if (synced > 0) {
+      log(`[startup] Backfilled ${synced} digest subscriber(s) into industry_profiles`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Subscriber backfill failed: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure shared_links table exists ──────────────────────────────────────────
 async function createSharedLinksTable() {
   try {
@@ -1010,6 +1078,10 @@ async function migrateAssetStatusValues() {
       createSharedLinksTable().catch(() => {});
       // ── Ensure stripe_billing_events table exists (idempotent) ─────────
       createStripeBillingEventsTable().catch(() => {});
+      // ── Ensure user_alerts table exists (digest pipeline) ───────────────
+      createUserAlertsTable().catch(() => {});
+      // ── Backfill industry_profiles for Supabase digest subscribers ───────
+      syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────
