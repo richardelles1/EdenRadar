@@ -153,8 +153,9 @@ export function renderDispatchEmail(opts: {
   isTest?: boolean;
   colorMode?: "light" | "dark";
   totalCount?: number;
+  settingsUrl?: string;
 }): string {
-  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount } = opts;
+  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount, settingsUrl = "https://edenradar.com/industry/settings" } = opts;
   const isLight = colorMode === "light";
 
   const byInstitution = new Map<string, DispatchAsset[]>();
@@ -383,6 +384,7 @@ export function renderDispatchEmail(opts: {
                   <p style="margin:0 0 12px 0;font-size:11px;color:${footerSubtitle};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
                   <p style="margin:0;font-size:11px;color:${footerBody};line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
                     You received this digest because you are subscribed to EdenRadar TTO intelligence alerts.<br />
+                    To manage your preferences or unsubscribe, <a href="${settingsUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">visit your notification settings</a>.<br />
                     &copy; ${year} EdenRadar. All rights reserved.
                   </p>
                 </td>

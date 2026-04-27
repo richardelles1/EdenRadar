@@ -244,6 +244,7 @@ async function evaluateAlerts(): Promise<void> {
       isTest: false,
       colorMode: "light",
       totalCount,
+      settingsUrl: "https://edenradar.com/industry/settings",
     });
 
     try {

@@ -7232,7 +7232,7 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
       const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
-      const html = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode });
+      const html = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode, settingsUrl: "https://edenradar.com/industry/settings" });
       return res.json({ html, resolvedSubject });
     } catch (err: any) {
       console.error("[dispatch/preview] Error:", err);
@@ -7277,7 +7277,7 @@ If multiple assets appear, return each as a separate array item.`;
       };
       const windowLabel = windowOptions[windowHours] ?? `${windowHours}h window`;
       const resolvedSubject = resolveSubjectTokens(subject, selectedAssets);
-      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode });
+      const htmlBody = renderDispatchEmail({ subject: resolvedSubject, assets: selectedAssets, windowLabel, isTest, colorMode, settingsUrl: "https://edenradar.com/industry/settings" });
 
       const apiKey = process.env.RESEND_API_KEY;
       if (!apiKey) {
