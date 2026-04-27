@@ -937,11 +937,20 @@ async function syncSubscribersFromSupabase() {
         break;
       }
       const users = data?.users ?? [];
+      let failed = 0;
       for (const u of users) {
         if (u.user_metadata?.subscribedToDigest === true) {
-          await storage.setIndustryProfileSubscription(u.id, true).catch(() => {});
-          synced++;
+          try {
+            await storage.setIndustryProfileSubscription(u.id, true);
+            synced++;
+          } catch (uErr: any) {
+            failed++;
+            log(`[startup] Subscriber backfill failed for ${u.id}: ${uErr?.message}`, "startup");
+          }
         }
+      }
+      if (failed > 0) {
+        log(`[startup] Subscriber backfill: ${failed} user(s) could not be synced — check logs above`, "startup");
       }
       if (users.length < 1000) break;
       page++;
