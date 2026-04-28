@@ -1,6 +1,10 @@
 import type { RawSignal } from "../types";
 
-const BASE = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
+const BASE = "https://api.uspto.gov/api/v1/patent/applications/search";
+
+function getApiKey(): string | undefined {
+  return process.env.USPTO_ODP_API_KEY;
+}
 
 function inferOwnerType(assignee: string): "university" | "company" | "unknown" {
   const lower = assignee.toLowerCase();
@@ -15,47 +19,24 @@ function inferOwnerType(assignee: string): "university" | "company" | "unknown" 
   return "unknown";
 }
 
-const SHORT_BIOTECH_ALLOWLIST = new Set([
-  "pd", "t1", "t2", "t3", "hb", "il", "ab", "cd", "tc", "nk", "rx",
-]);
+function buildSearchQuery(rawQuery: string): string {
+  const trimmed = rawQuery.trim();
+  if (!trimmed) return "*";
 
-function inDateRange(dateStr: string, sinceDate?: string, beforeDate?: string): boolean {
-  if (!sinceDate && !beforeDate) return true;
-  if (!dateStr) return false;
-  const d = dateStr.slice(0, 10);
-  if (sinceDate && d < sinceDate) return false;
-  if (beforeDate && d >= beforeDate) return false;
-  return true;
-}
+  const tokens = trimmed.split(/\s+/);
+  const isSingleShortToken = tokens.length === 1 && trimmed.length <= 8;
 
-function buildPatentQuery(rawQuery: string, sinceDate?: string, beforeDate?: string): string {
-  const tokens = rawQuery.trim().split(/\s+/);
-
-  const expandedTokens = tokens
-    .filter((t) => t.length >= 3 || SHORT_BIOTECH_ALLOWLIST.has(t.toLowerCase()))
-    .map((t) => {
-      if (t.includes("-")) {
-        const upper = t.toUpperCase();
-        const spaced = `"${t.replace(/-/g, " ")}"`;
-        return `(${upper} OR ${spaced})`;
-      }
-      return t;
-    });
-
-  let query = expandedTokens.join(" AND ");
-  if (!query) query = rawQuery.trim();
-
-  query += " src:PAT";
-
-  if (sinceDate && beforeDate) {
-    query += ` FIRST_PDATE:[${sinceDate.slice(0, 10)} TO ${beforeDate.slice(0, 10)}]`;
-  } else if (sinceDate) {
-    query += ` FIRST_PDATE:[${sinceDate.slice(0, 10)} TO *]`;
-  } else if (beforeDate) {
-    query += ` FIRST_PDATE:[* TO ${beforeDate.slice(0, 10)}]`;
+  if (isSingleShortToken && trimmed.includes("-")) {
+    const upper = trimmed.toUpperCase();
+    const spaced = trimmed.replace(/-/g, " ");
+    return `"${upper}" OR "${spaced}"`;
   }
 
-  return query;
+  if (tokens.length <= 3) {
+    return `"${trimmed}"`;
+  }
+
+  return trimmed;
 }
 
 export async function searchPatents(
@@ -64,67 +45,101 @@ export async function searchPatents(
   sinceDate?: string,
   beforeDate?: string
 ): Promise<RawSignal[]> {
-  try {
-    const builtQuery = buildPatentQuery(query, sinceDate, beforeDate);
-    const tokens = query.trim().split(/\s+/);
-    const isShortQuery = tokens.length <= 2 && tokens.every((w) => w.length <= 8);
-    const pageSize = Math.min(maxResults * 3, 50);
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    console.warn("[search] USPTO_ODP_API_KEY not set — patent search disabled");
+    return [];
+  }
 
-    const params = new URLSearchParams({
-      query: builtQuery,
-      format: "json",
-      resultType: "core",
-      pageSize: String(pageSize),
-    });
-    if (isShortQuery) {
-      params.set("synonym", "true");
+  try {
+    const q = buildSearchQuery(query);
+    const limit = Math.min(maxResults * 2, 25);
+
+    let fullQuery = q;
+    if (sinceDate && beforeDate) {
+      fullQuery += ` AND applicationMetaData.filingDate:[${sinceDate.slice(0, 10)} TO ${beforeDate.slice(0, 10)}]`;
+    } else if (sinceDate) {
+      fullQuery += ` AND applicationMetaData.filingDate:[${sinceDate.slice(0, 10)} TO *]`;
+    } else if (beforeDate) {
+      fullQuery += ` AND applicationMetaData.filingDate:[* TO ${beforeDate.slice(0, 10)}]`;
     }
 
-    const res = await fetch(`${BASE}?${params}`, {
+    const body: Record<string, unknown> = {
+      q: fullQuery,
+      filters: [
+        {
+          name: "applicationMetaData.applicationTypeLabelName",
+          value: ["Utility"],
+        },
+      ],
+      sort: [{ field: "applicationMetaData.filingDate", order: "desc" }],
+      fields: [
+        "applicationNumberText",
+        "applicationMetaData.inventionTitle",
+        "applicationMetaData.filingDate",
+        "applicationMetaData.grantDate",
+        "applicationMetaData.applicationStatusDescriptionText",
+        "applicationMetaData.inventorBag",
+        "assignmentBag",
+      ],
+      pagination: { offset: 0, limit },
+    };
+
+    const res = await fetch(BASE, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-KEY": apiKey,
+      },
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(12000),
     });
 
     if (!res.ok) {
-      console.warn(`[search] Europe PMC patents API error: ${res.status}`);
+      const text = await res.text().catch(() => "");
+      console.warn(`[search] USPTO ODP patents error ${res.status}: ${text.slice(0, 120)}`);
       return [];
     }
 
     const data = await res.json();
-    const results: any[] = data?.resultList?.result ?? [];
+    const results: any[] = data?.patentFileWrapperDataBag ?? [];
 
-    const filtered = results
-      .filter((r) => r.title && r.source === "PAT")
-      .filter((r) => r.abstractText && r.abstractText.length > 60)
-      .filter((r) => inDateRange(r.firstPublicationDate ?? "", sinceDate, beforeDate));
+    return results.slice(0, maxResults).map((r): RawSignal => {
+      const meta = r.applicationMetaData ?? {};
+      const appNum: string = r.applicationNumberText ?? "";
+      const title: string = meta.inventionTitle ?? "Untitled Patent";
+      const filingDate: string = meta.filingDate ?? "";
+      const grantDate: string = meta.grantDate ?? "";
+      const statusText: string = meta.applicationStatusDescriptionText ?? "";
+      const isGranted = !!grantDate || /patent/i.test(statusText);
 
-    return filtered.slice(0, maxResults).map((r): RawSignal => {
-      const patentId: string = r.id ?? r.pmid ?? r.accession ?? "";
-      const assignee: string = r.affiliation ?? "";
-      const primaryAssignee = assignee.split(",")[0].trim();
+      const assigneeName: string =
+        r.assignmentBag?.[0]?.assigneeBag?.[0]?.assigneeNameText ?? "";
 
-      const url = patentId
-        ? `https://europepmc.org/article/PAT/${patentId}`
-        : "https://europepmc.org";
+      const inventors: string = (meta.inventorBag ?? [])
+        .map((inv: any) => inv.inventorNameText ?? "")
+        .filter(Boolean)
+        .join(", ");
 
-      const stableId = patentId
-        ? `patent-${patentId}`
-        : `patent-${Buffer.from(r.title ?? "").toString("base64").slice(0, 16)}`;
+      const url = appNum
+        ? `https://patentcenter.uspto.gov/applications/${appNum}`
+        : "https://patentcenter.uspto.gov";
 
       return {
-        id: stableId,
+        id: `patent-${appNum || Buffer.from(title).toString("base64").slice(0, 16)}`,
         source_type: "patent",
-        title: r.title ?? "Untitled Patent",
-        text: r.abstractText ?? "",
-        authors_or_owner: r.authorString ?? "",
-        institution_or_sponsor: primaryAssignee,
-        date: r.firstPublicationDate ?? "",
+        title,
+        text: title,
+        authors_or_owner: inventors,
+        institution_or_sponsor: assigneeName,
+        date: filingDate,
         stage_hint: "discovery",
         url,
         metadata: {
-          patent_id: patentId,
-          filing_date: r.firstPublicationDate ?? "",
-          owner_type: inferOwnerType(primaryAssignee),
-          patent_status: "patented",
+          patent_id: appNum,
+          filing_date: filingDate,
+          owner_type: inferOwnerType(assigneeName),
+          patent_status: isGranted ? "patented" : "pending",
         },
       };
     });
