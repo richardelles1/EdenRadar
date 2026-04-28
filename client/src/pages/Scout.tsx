@@ -266,6 +266,9 @@ export default function Scout() {
       setCurrentQuery(q);
       setResearchResults([]);
       setPatentResults([]);
+      setPatentSortMode("newest");
+      setPatentOwnerFilter("all");
+      setPatentAssigneeSearch("");
       setResultTab("assets");
       searchMutation.mutate({ query: q });
       patentMutation.mutate({ query: q });
@@ -492,6 +495,9 @@ export default function Scout() {
     setInputQuery(query);
     setResearchResults([]);
     setPatentResults([]);
+    setPatentSortMode("newest");
+    setPatentOwnerFilter("all");
+    setPatentAssigneeSearch("");
     setResultTab("assets");
     searchMutation.mutate({ query });
     patentMutation.mutate({ query });
