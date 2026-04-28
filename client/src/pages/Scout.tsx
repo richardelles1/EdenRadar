@@ -198,7 +198,7 @@ function SourcesDropdown({
         <div className="px-3 py-2.5 border-b border-border shrink-0">
           <p className="text-[11px] font-semibold text-foreground">Academic Sources</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Search academic databases alongside TTO assets. Patents have their own tab.
+            Search academic databases alongside TTO assets. Patents and clinical trials each have their own dedicated tab.
             {researchSources.length > 0 && (
               <button
                 className="ml-1.5 text-primary hover:underline"
@@ -330,6 +330,7 @@ export default function Scout() {
       setTrialPhaseFilter("all");
       setTrialStatusFilter("all");
       setTrialSponsorSearch("");
+      setTrialSortMode("newest");
       setResultTab("assets");
       searchMutation.mutate({ query: q });
       patentMutation.mutate({ query: q });
@@ -611,6 +612,7 @@ export default function Scout() {
     setTrialPhaseFilter("all");
     setTrialStatusFilter("all");
     setTrialSponsorSearch("");
+    setTrialSortMode("newest");
     setResultTab("assets");
     searchMutation.mutate({ query });
     patentMutation.mutate({ query });
@@ -641,6 +643,7 @@ export default function Scout() {
     setTrialPhaseFilter("all");
     setTrialStatusFilter("all");
     setTrialSponsorSearch("");
+    setTrialSortMode("newest");
     try { sessionStorage.removeItem("scout-include-research"); } catch {}
   };
 
