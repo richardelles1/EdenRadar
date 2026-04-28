@@ -20,13 +20,14 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
+import { PatentCard } from "@/components/PatentCard";
 
 type SearchResponse = {
   assets: ScoredAsset[];
@@ -78,7 +79,6 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "biorxiv",          label: "bioRxiv",              desc: "Biology preprints" },
   { key: "medrxiv",          label: "medRxiv",              desc: "Clinical preprints" },
   { key: "clinicaltrials",   label: "ClinicalTrials.gov",   desc: "Active trials" },
-  { key: "patents",          label: "Patents",               desc: "Patent databases" },
   { key: "nih_reporter",     label: "NIH Reporter",         desc: "Federal grants" },
   { key: "harvard",          label: "Harvard LibraryCloud", desc: "Harvard Library catalog: theses, journals, datasets" },
   { key: "openalex",         label: "OpenAlex",             desc: "Academic publications" },
@@ -159,9 +159,9 @@ function SourcesDropdown({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0 max-h-[420px] overflow-hidden flex flex-col">
         <div className="px-3 py-2.5 border-b border-border shrink-0">
-          <p className="text-[11px] font-semibold text-foreground">External Paper Sources</p>
+          <p className="text-[11px] font-semibold text-foreground">Academic Sources</p>
           <p className="text-[10px] text-muted-foreground mt-0.5">
-            Search academic databases alongside TTO assets.
+            Search academic databases alongside TTO assets. Patents have their own tab.
             {researchSources.length > 0 && (
               <button
                 className="ml-1.5 text-primary hover:underline"
@@ -230,6 +230,7 @@ export default function Scout() {
 
   const [searchResults, setSearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-results", []));
   const [researchResults, setResearchResults] = useState<ScoredAsset[]>(() => ssGet("scout-research-results", []));
+  const [patentResults, setPatentResults] = useState<ScoredAsset[]>(() => ssGet("scout-patent-results", []));
   const [hasSearched, setHasSearched] = useState<boolean>(() => ssGet("scout-has-searched", false));
   const [currentQuery, setCurrentQuery] = useState<string>(() => ssGet("scout-query", ""));
   const [inputQuery, setInputQuery] = useState<string>(() => ssGet("scout-query", ""));
@@ -242,7 +243,7 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [resultTab, setResultTab] = useState<"assets" | "research">(() => ssGet("scout-result-tab", "assets"));
+  const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
@@ -260,8 +261,10 @@ export default function Scout() {
       setInputQuery(q);
       setCurrentQuery(q);
       setResearchResults([]);
+      setPatentResults([]);
       setResultTab("assets");
       searchMutation.mutate({ query: q });
+      patentMutation.mutate({ query: q });
       if (researchSources.length > 0) {
         researchMutation.mutate({ query: q, sources: researchSources });
       }
@@ -277,12 +280,13 @@ export default function Scout() {
     try {
       sessionStorage.setItem("scout-results", JSON.stringify(searchResults));
       sessionStorage.setItem("scout-research-results", JSON.stringify(researchResults));
+      sessionStorage.setItem("scout-patent-results", JSON.stringify(patentResults));
       sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-research-sources", JSON.stringify(researchSources));
       sessionStorage.setItem("scout-result-tab", JSON.stringify(resultTab));
     } catch {}
-  }, [searchResults, researchResults, hasSearched, currentQuery, researchSources, resultTab]);
+  }, [searchResults, researchResults, patentResults, hasSearched, currentQuery, researchSources, resultTab]);
 
   useEffect(() => {
     if (skipNextPersist.current) {
@@ -390,6 +394,39 @@ export default function Scout() {
     },
   });
 
+  const patentMutation = useMutation({
+    mutationFn: async ({ query }: { query: string }) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, sources: ["patents"], maxPerSource: 10, buyerProfile }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Patent search failed");
+        }
+        return res.json() as Promise<SearchResponse>;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          throw new Error("Patent search timed out.");
+        }
+        throw err;
+      }
+    },
+    onSuccess: (data) => {
+      setPatentResults(data.assets ?? []);
+    },
+    onError: () => {
+      setPatentResults([]);
+    },
+  });
+
   const reportMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
       const controller = new AbortController();
@@ -450,8 +487,10 @@ export default function Scout() {
     setCurrentQuery(query);
     setInputQuery(query);
     setResearchResults([]);
+    setPatentResults([]);
     setResultTab("assets");
     searchMutation.mutate({ query });
+    patentMutation.mutate({ query });
     if (researchSources.length > 0) {
       researchMutation.mutate({ query, sources: researchSources });
     }
@@ -467,6 +506,7 @@ export default function Scout() {
     setInputQuery("");
     setSearchResults([]);
     setResearchResults([]);
+    setPatentResults([]);
     setHasSearched(false);
     setStageFilter("all");
     setModalityFilter("all");
@@ -641,12 +681,32 @@ export default function Scout() {
             </div>
           )}
 
+          {/* Patents compiling banner — shows alongside TTO results while patent search is pending */}
+          {hasSearched && !searchMutation.isPending && patentMutation.isPending && (
+            <div className="px-4 sm:px-6 pb-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-muted-foreground" data-testid="patents-compiling-banner">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
+                <span>Searching patent databases...</span>
+              </div>
+            </div>
+          )}
+
+          {/* Patents failed banner */}
+          {hasSearched && !searchMutation.isPending && patentMutation.isError && (
+            <div className="px-4 sm:px-6 pb-2">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-card-border text-xs text-muted-foreground" data-testid="patents-error-banner">
+                <Radio className="w-3 h-3 shrink-0 opacity-40" />
+                <span>Patent database unavailable. Showing TTO results only.</span>
+              </div>
+            </div>
+          )}
+
           {/* Research signals compiling banner — shows alongside TTO results while research is still pending */}
           {hasSearched && !searchMutation.isPending && researchMutation.isPending && researchSources.length > 0 && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/15 text-xs text-muted-foreground" data-testid="research-compiling-banner">
                 <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
-                <span>Compiling research signals from PubMed, clinical trials, patents...</span>
+                <span>Compiling research signals from PubMed, clinical trials, and more...</span>
               </div>
             </div>
           )}
@@ -656,13 +716,13 @@ export default function Scout() {
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-card-border text-xs text-muted-foreground" data-testid="research-error-banner">
                 <Radio className="w-3 h-3 shrink-0 opacity-40" />
-                <span>Research signals unavailable. Showing TTO results only.</span>
+                <span>Research signals unavailable.</span>
               </div>
             </div>
           )}
 
-          {/* Dual-tab toggle — shown as soon as TTO is done and research sources are checked */}
-          {hasSearched && !searchMutation.isPending && researchSources.length > 0 && (
+          {/* Tab toggle — shown as soon as TTO is done; always shows TTO + Patents, Research shown when sources are active */}
+          {hasSearched && !searchMutation.isPending && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex justify-center">
                 <div className="inline-flex items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
@@ -676,7 +736,7 @@ export default function Scout() {
                     data-testid="result-tab-assets"
                   >
                     <Building2 className="w-4 h-4 shrink-0" />
-                    Tech Transfer Assets
+                    TTO Assets
                     <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
                       resultTab === "assets" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
                     }`}>
@@ -685,29 +745,58 @@ export default function Scout() {
                   </button>
                   <div className="w-px bg-border shrink-0" />
                   <button
-                    onClick={() => setResultTab("research")}
+                    onClick={() => setResultTab("patents")}
                     className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
-                      resultTab === "research"
-                        ? "bg-primary text-primary-foreground"
+                      resultTab === "patents"
+                        ? "bg-amber-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
                     }`}
-                    data-testid="result-tab-research"
+                    data-testid="result-tab-patents"
                   >
-                    {researchMutation.isPending
+                    {patentMutation.isPending
                       ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                      : <FlaskConical className="w-4 h-4 shrink-0" />
+                      : <ScrollText className="w-4 h-4 shrink-0" />
                     }
-                    External Research Papers
-                    {researchMutation.isPending ? (
-                      <span className={`ml-1 text-[10px] italic font-normal opacity-70`}>Compiling...</span>
+                    Patents
+                    {patentMutation.isPending ? (
+                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Searching...</span>
                     ) : (
                       <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
-                        resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
+                        resultTab === "patents" ? "bg-white/25 text-white" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                       }`}>
-                        {researchResults.length}
+                        {patentResults.length}
                       </span>
                     )}
                   </button>
+                  {researchSources.length > 0 && (
+                    <>
+                      <div className="w-px bg-border shrink-0" />
+                      <button
+                        onClick={() => setResultTab("research")}
+                        className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                          resultTab === "research"
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="result-tab-research"
+                      >
+                        {researchMutation.isPending
+                          ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                          : <FlaskConical className="w-4 h-4 shrink-0" />
+                        }
+                        Research Papers
+                        {researchMutation.isPending ? (
+                          <span className="ml-1 text-[10px] italic font-normal opacity-70">Compiling...</span>
+                        ) : (
+                          <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                            resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
+                          }`}>
+                            {researchResults.length}
+                          </span>
+                        )}
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -737,8 +826,8 @@ export default function Scout() {
           )}
 
           <div className="flex-1 px-4 sm:px-6 pb-10 space-y-6">
-            {/* Assets tab — TTO results shown immediately once TTO query resolves; not blocked by research loading */}
-            {(researchSources.length === 0 || !hasSearched || resultTab === "assets") && !searchMutation.isPending && (
+            {/* Assets tab — TTO results shown immediately once TTO query resolves; not blocked by patent/research loading */}
+            {(resultTab === "assets" || !hasSearched) && !searchMutation.isPending && (
               <>
                 {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
                 {hasSearched && (
@@ -800,7 +889,7 @@ export default function Scout() {
                   </div>
                 )}
 
-                {hasSearched && researchSources.length > 0 && filteredResults.length === 0 ? (
+                {hasSearched && filteredResults.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
                     <Search className="w-8 h-8 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">
@@ -821,13 +910,54 @@ export default function Scout() {
               </>
             )}
 
+            {/* Patents tab — loading state */}
+            {hasSearched && resultTab === "patents" && !searchMutation.isPending && patentMutation.isPending && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="patents-loading-state">
+                <Loader2 className="w-8 h-8 animate-spin text-amber-500 opacity-70" />
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-1">Searching patent databases...</p>
+                  <p className="text-xs text-muted-foreground">Querying USPTO PatentsView for "{currentQuery}"</p>
+                </div>
+              </div>
+            )}
+
+            {/* Patents tab — results */}
+            {hasSearched && resultTab === "patents" && !searchMutation.isPending && !patentMutation.isPending && (
+              <>
+                {patentResults.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                    <ScrollText className="w-8 h-8 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">
+                      No patents found for <span className="font-medium text-foreground">"{currentQuery}"</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">Try broader terms or a different indication.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-muted-foreground" data-testid="patents-results-count">
+                      <span className="text-foreground font-semibold">{patentResults.length}</span> patent{patentResults.length !== 1 ? "s" : ""} found
+                      {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
+                    </p>
+                    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                      {patentResults.map((asset) => (
+                        <PatentCard
+                          key={asset.id + "-patent"}
+                          asset={asset}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Research Signals tab — loading state while compiling */}
             {hasSearched && resultTab === "research" && researchSources.length > 0 && !searchMutation.isPending && researchMutation.isPending && (
               <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="research-loading-state">
                 <Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" />
                 <div>
                   <p className="text-sm font-medium text-foreground mb-1">Compiling research signals...</p>
-                  <p className="text-xs text-muted-foreground">Searching PubMed, clinical trials, patents, and {researchSources.length - 3 > 0 ? `${researchSources.length - 3} more sources` : "more sources"}.</p>
+                  <p className="text-xs text-muted-foreground">Searching PubMed, clinical trials, and {researchSources.length - 3 > 0 ? `${researchSources.length - 3} more sources` : "more sources"}.</p>
                 </div>
               </div>
             )}
