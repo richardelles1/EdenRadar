@@ -433,7 +433,7 @@ export default function Scout() {
       } catch (err: any) {
         clearTimeout(timeoutId);
         if (err.name === "AbortError") {
-          throw new Error("Research signals timed out after 90 seconds.");
+          throw new Error("Research signals timed out after 40 seconds.");
         }
         throw err;
       }
