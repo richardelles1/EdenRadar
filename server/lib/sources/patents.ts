@@ -1,6 +1,10 @@
 import type { RawSignal } from "../types";
 
 const BASE = "https://api.uspto.gov/api/v1/patent/applications/search";
+const DETAIL_BASE = "https://api.uspto.gov/api/v1/patent/applications";
+
+const ABSTRACT_FETCH_TIMEOUT_MS = 5000;
+const MAX_ABSTRACT_FETCH = 10;
 
 function getApiKey(): string | undefined {
   return process.env.USPTO_ODP_API_KEY;
@@ -37,6 +41,33 @@ function buildSearchQuery(rawQuery: string): string {
   }
 
   return trimmed;
+}
+
+async function fetchPatentAbstract(appNum: string, apiKey: string): Promise<string> {
+  try {
+    const res = await fetch(`${DETAIL_BASE}/${appNum}`, {
+      headers: {
+        "X-API-KEY": apiKey,
+      },
+      signal: AbortSignal.timeout(ABSTRACT_FETCH_TIMEOUT_MS),
+    });
+
+    if (!res.ok) return "";
+
+    const data = await res.json();
+    const wrapper = data?.patentFileWrapperData ?? data;
+    const meta = wrapper?.applicationMetaData ?? {};
+
+    const abstract: string =
+      meta.abstractText ??
+      wrapper?.abstractText ??
+      data?.abstractText ??
+      "";
+
+    return abstract.trim();
+  } catch {
+    return "";
+  }
 }
 
 export async function searchPatents(
@@ -104,7 +135,7 @@ export async function searchPatents(
     const data = await res.json();
     const results: any[] = data?.patentFileWrapperDataBag ?? [];
 
-    return results.slice(0, maxResults).map((r): RawSignal => {
+    const signals: RawSignal[] = results.slice(0, maxResults).map((r): RawSignal => {
       const meta = r.applicationMetaData ?? {};
       const appNum: string = r.applicationNumberText ?? "";
       const title: string = meta.inventionTitle ?? "Untitled Patent";
@@ -143,6 +174,22 @@ export async function searchPatents(
         },
       };
     });
+
+    const enrichCount = Math.min(signals.length, MAX_ABSTRACT_FETCH);
+    const abstractFetches = signals.slice(0, enrichCount).map(async (signal) => {
+      const appNum = signal.metadata?.patent_id as string | undefined;
+      if (!appNum) return;
+
+      const abstract = await fetchPatentAbstract(appNum, apiKey);
+      if (abstract) {
+        signal.text = abstract;
+        (signal.metadata as Record<string, unknown>).abstract = abstract;
+      }
+    });
+
+    await Promise.allSettled(abstractFetches);
+
+    return signals;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (!msg.includes("abort") && !msg.includes("timeout")) {
