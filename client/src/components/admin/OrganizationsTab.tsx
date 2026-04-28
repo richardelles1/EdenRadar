@@ -61,6 +61,7 @@ interface OrgMember {
   inviteSource: string | null;
   inviteStatus: string | null;
   joinedAt: string;
+  lastSignInAt: string | null;
 }
 
 const PLAN_LABELS: Record<string, string> = {
@@ -642,6 +643,11 @@ export function OrganizationsTab({ pw }: { pw: string }) {
                                       {m.inviteStatus && (
                                         <span className={`inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium ${m.inviteStatus === "pending" ? "bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400" : "bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400"}`}>
                                           {m.inviteStatus === "pending" ? "Pending" : "Active"}
+                                        </span>
+                                      )}
+                                      {m.lastSignInAt === null && (
+                                        <span className="inline-flex items-center px-1.5 py-0 rounded text-[10px] font-medium bg-orange-50 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400" data-testid={`badge-pending-setup-${m.userId}`}>
+                                          Pending setup
                                         </span>
                                       )}
                                     </div>

@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { apiRequest, getAuthHeaders } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import {
@@ -105,19 +106,22 @@ function formatNoteTime(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
+function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta, currentUserId }: {
   asset: TeamSavedAsset;
   onDelete: (id: number) => void;
   onMove: (id: number, pipelineListId: number | null) => void;
   pipelines: PipelineWithCount[];
   /** When true, hides the delete button and pipeline move select (team view) */
   restrictMeta?: boolean;
+  currentUserId?: string | null;
 }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [notesOpen, setNotesOpen] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [localStatus, setLocalStatus] = useState<string | null>(asset.status ?? null);
+  const [editingNoteId, setEditingNoteId] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState("");
   useEffect(() => { setLocalStatus(asset.status ?? null); }, [asset.status]);
   const notesEndRef = useRef<HTMLDivElement>(null);
 
@@ -177,6 +181,30 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
     },
     onError: (err: any) => toast({ title: "Note failed", description: err.message, variant: "destructive" }),
+  });
+
+  const editNoteMutation = useMutation({
+    mutationFn: async ({ noteId, content }: { noteId: number; content: string }) => {
+      const res = await apiRequest("PATCH", `/api/saved-assets/${asset.id}/notes/${noteId}`, { content });
+      return res.json();
+    },
+    onSuccess: () => {
+      setEditingNoteId(null);
+      setEditingContent("");
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+    },
+    onError: (err: any) => toast({ title: "Edit failed", description: err.message, variant: "destructive" }),
+  });
+
+  const deleteNoteMutation = useMutation({
+    mutationFn: async (noteId: number) => {
+      await apiRequest("DELETE", `/api/saved-assets/${asset.id}/notes/${noteId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets", asset.id, "notes"] });
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+    },
+    onError: (err: any) => toast({ title: "Delete failed", description: err.message, variant: "destructive" }),
   });
 
   const handleStatusChange = (val: string) => {
@@ -347,7 +375,7 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
               notes.map((note) => (
                 <div
                   key={note.id}
-                  className={`text-xs ${note.isSystemEvent ? "flex items-center gap-1 text-muted-foreground/70 italic" : "flex flex-col gap-0.5"}`}
+                  className={`text-xs group/note ${note.isSystemEvent ? "flex items-center gap-1 text-muted-foreground/70 italic" : "flex flex-col gap-0.5"}`}
                   data-testid={`note-item-${note.id}`}
                 >
                   {note.isSystemEvent ? (
@@ -355,6 +383,39 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
                       <Clock className="w-2.5 h-2.5 shrink-0" />
                       <span>{note.content}</span>
                       <span className="ml-auto text-[10px] shrink-0 pl-2">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                    </>
+                  ) : editingNoteId === note.id ? (
+                    <>
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <span className="w-4 h-4 rounded-full bg-primary/20 text-primary flex items-center justify-center font-semibold text-[8px] leading-none shrink-0">
+                          {getInitials(note.authorName)}
+                        </span>
+                        <span className="font-medium text-foreground text-[11px]">{note.authorName}</span>
+                      </div>
+                      <Textarea
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="text-xs min-h-[48px] max-h-20 resize-none bg-background pl-5"
+                        data-testid={`textarea-edit-note-${note.id}`}
+                        autoFocus
+                      />
+                      <div className="flex gap-1 mt-1 pl-5">
+                        <button
+                          onClick={() => editNoteMutation.mutate({ noteId: note.id, content: editingContent.trim() })}
+                          disabled={!editingContent.trim() || editNoteMutation.isPending}
+                          className="text-[10px] px-2 py-0.5 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40 transition-colors"
+                          data-testid={`button-save-edit-note-${note.id}`}
+                        >
+                          {editNoteMutation.isPending ? "Saving…" : "Save"}
+                        </button>
+                        <button
+                          onClick={() => { setEditingNoteId(null); setEditingContent(""); }}
+                          className="text-[10px] px-2 py-0.5 rounded border border-card-border text-muted-foreground hover:text-foreground transition-colors"
+                          data-testid={`button-cancel-edit-note-${note.id}`}
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </>
                   ) : (
                     <>
@@ -364,6 +425,31 @@ function AssetCard({ asset, onDelete, onMove, pipelines, restrictMeta }: {
                         </span>
                         <span className="font-medium text-foreground text-[11px]">{note.authorName}</span>
                         <span className="text-muted-foreground text-[10px] ml-auto">{formatNoteTime(note.createdAt as unknown as string)}</span>
+                        {currentUserId && note.userId === currentUserId && (
+                          <div className="flex gap-0.5 opacity-0 group-hover/note:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => { setEditingNoteId(note.id); setEditingContent(note.content); }}
+                              className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit note"
+                              data-testid={`button-edit-note-${note.id}`}
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (window.confirm("Delete this note?")) {
+                                  deleteNoteMutation.mutate(note.id);
+                                }
+                              }}
+                              disabled={deleteNoteMutation.isPending}
+                              className="w-4 h-4 rounded flex items-center justify-center text-muted-foreground hover:text-destructive transition-colors disabled:opacity-40"
+                              title="Delete note"
+                              data-testid={`button-delete-note-${note.id}`}
+                            >
+                              <Trash2 className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
+                        )}
                       </div>
                       <p className="text-foreground/90 pl-5.5 leading-relaxed">{note.content}</p>
                     </>
@@ -687,7 +773,48 @@ export default function Assets() {
   const [copied, setCopied] = useState(false);
   const [teamScope, setTeamScope] = useState(false);
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { data: org } = useOrg();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setCurrentUserId(data.session?.user?.id ?? null);
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!currentUserId) return;
+    let es: EventSource | null = null;
+    supabase.auth.getSession().then(({ data }) => {
+      const token = data.session?.access_token;
+      if (!token) return;
+      es = new EventSource(`/api/saved-assets/events?token=${encodeURIComponent(token)}`);
+      es.addEventListener("note_added", (e: MessageEvent) => {
+        try {
+          const { savedAssetId } = JSON.parse(e.data);
+          qc.invalidateQueries({ queryKey: ["/api/saved-assets", savedAssetId, "notes"] });
+          qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+        } catch {}
+      });
+      es.addEventListener("note_updated", (e: MessageEvent) => {
+        try {
+          const { savedAssetId } = JSON.parse(e.data);
+          qc.invalidateQueries({ queryKey: ["/api/saved-assets", savedAssetId, "notes"] });
+        } catch {}
+      });
+      es.addEventListener("note_deleted", (e: MessageEvent) => {
+        try {
+          const { savedAssetId } = JSON.parse(e.data);
+          qc.invalidateQueries({ queryKey: ["/api/saved-assets", savedAssetId, "notes"] });
+          qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+        } catch {}
+      });
+      es.addEventListener("status_changed", () => {
+        qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      });
+    });
+    return () => { es?.close(); };
+  }, [currentUserId, qc]);
   const hasTeamOrg = !!(org && org.planTier !== "individual");
 
   const { data: pipelinesData, isLoading: pipelinesLoading } = useQuery<PipelinesResponse>({
@@ -1071,6 +1198,7 @@ export default function Assets() {
                       onMove={(id, pipelineListId) => moveMutation.mutate({ id, pipelineListId })}
                       pipelines={pipelines}
                       restrictMeta={teamScope}
+                      currentUserId={currentUserId}
                     />
                   ))}
                 </div>

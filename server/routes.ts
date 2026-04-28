@@ -31,6 +31,7 @@ import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
+import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
 import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, APP_URL } from "./email";
@@ -1019,6 +1020,36 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/saved-assets/events", async (req, res) => {
+    const token = (req.headers.authorization?.replace("Bearer ", "") || req.query.token) as string | undefined;
+    let userId: string | undefined;
+    if (token) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        const adminSupabase = createClient(
+          process.env.SUPABASE_URL!,
+          process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          { auth: { autoRefreshToken: false, persistSession: false } }
+        );
+        const { data } = await adminSupabase.auth.getUser(token);
+        userId = data.user?.id;
+      } catch {}
+    }
+    if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+    const userOrg = await storage.getOrgForUser(userId);
+    if (!userOrg) return res.status(403).json({ error: "No organisation found" });
+
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    res.write("event: connected\ndata: {}\n\n");
+
+    registerClient(userOrg.id, res);
+    req.on("close", () => unregisterClient(userOrg.id, res));
+  });
+
   app.patch("/api/saved-assets/:id/pipeline", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -1160,6 +1191,8 @@ export async function registerRoutes(
         }).catch(() => {});
       }
 
+      const statusOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
+      if (statusOrg) broadcastToOrg(statusOrg.id, "status_changed", { savedAssetId: id });
       res.json({ asset });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to update status" });
@@ -1209,9 +1242,50 @@ export async function registerRoutes(
         isSystemEvent: false,
       });
       logTeamActivity(userId ?? null, "added_note", id, asset.assetName).catch(() => {});
+      const noteOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_added", { savedAssetId: id });
       res.status(201).json({ note });
     } catch (err: any) {
       res.status(400).json({ error: err.message ?? "Failed to create note" });
+    }
+  });
+
+  app.patch("/api/saved-assets/:id/notes/:noteId", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const noteId = parseInt(req.params.noteId);
+      if (isNaN(id) || isNaN(noteId)) return res.status(400).json({ error: "Invalid ID" });
+      const { content } = z.object({ content: z.string().min(1).max(2000) }).parse(req.body);
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const updated = await storage.updateAssetNote(noteId, content, userId);
+      if (!updated) return res.status(404).json({ error: "Note not found or not owned by you" });
+
+      const noteOrg = await storage.getOrgForUser(userId).catch(() => null);
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_updated", { savedAssetId: id });
+      res.json({ note: updated });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to update note" });
+    }
+  });
+
+  app.delete("/api/saved-assets/:id/notes/:noteId", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const noteId = parseInt(req.params.noteId);
+      if (isNaN(id) || isNaN(noteId)) return res.status(400).json({ error: "Invalid ID" });
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+
+      const deleted = await storage.deleteAssetNote(noteId, userId);
+      if (!deleted) return res.status(404).json({ error: "Note not found or not owned by you" });
+
+      const noteOrg = await storage.getOrgForUser(userId).catch(() => null);
+      if (noteOrg) broadcastToOrg(noteOrg.id, "note_deleted", { savedAssetId: id });
+      res.status(204).end();
+    } catch (err: any) {
+      res.status(400).json({ error: err.message ?? "Failed to delete note" });
     }
   });
 

@@ -80,6 +80,8 @@ export interface IStorage {
   createAssetNote(data: InsertSavedAssetNote): Promise<SavedAssetNote>;
   getAssetNotes(savedAssetId: number, limit?: number, offset?: number): Promise<SavedAssetNote[]>;
   getAssetNoteMeta(savedAssetIds: number[]): Promise<Record<number, { count: number; lastNoteAt: Date | null }>>;
+  updateAssetNote(noteId: number, content: string, userId: string): Promise<SavedAssetNote | null>;
+  deleteAssetNote(noteId: number, userId: string): Promise<boolean>;
 
   getPipelineLists(userId?: string, orgId?: number): Promise<PipelineList[]>;
   getPipelineList(id: number): Promise<PipelineList | undefined>;
@@ -490,6 +492,23 @@ export class DatabaseStorage implements IStorage {
       .orderBy(savedAssetNotes.createdAt)
       .limit(limit)
       .offset(offset);
+  }
+
+  async updateAssetNote(noteId: number, content: string, userId: string): Promise<SavedAssetNote | null> {
+    const [row] = await db
+      .update(savedAssetNotes)
+      .set({ content })
+      .where(and(eq(savedAssetNotes.id, noteId), eq(savedAssetNotes.userId, userId)))
+      .returning();
+    return row ?? null;
+  }
+
+  async deleteAssetNote(noteId: number, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(savedAssetNotes)
+      .where(and(eq(savedAssetNotes.id, noteId), eq(savedAssetNotes.userId, userId)))
+      .returning({ id: savedAssetNotes.id });
+    return result.length > 0;
   }
 
   async getAssetNoteMeta(savedAssetIds: number[]): Promise<Record<number, { count: number; lastNoteAt: Date | null }>> {
