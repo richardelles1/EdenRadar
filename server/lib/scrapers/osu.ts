@@ -181,9 +181,13 @@ export const osuScraper: InstitutionScraper = {
       for (const u of urls) allUrls.add(u);
     }
 
+    // Normalize URLs the same way the ingestion layer does before storing them,
+    // so the knownUrls lookup hits correctly (strips ?query and #hash fragments).
+    const normalizeUrl = (u: string) => u.replace(/[?#].*$/, "");
+
     const urlList = Array.from(allUrls);
     const newUrls = knownUrls
-      ? urlList.filter((u) => !knownUrls.has(u))
+      ? urlList.filter((u) => !knownUrls.has(normalizeUrl(u)))
       : urlList;
     const skippedCount = urlList.length - newUrls.length;
 
