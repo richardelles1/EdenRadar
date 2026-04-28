@@ -106,7 +106,9 @@ function buildFallback(signal: RawSignal): Partial<ScoredAsset> {
 function buildMerged(extracted: Partial<ScoredAsset>, signal: RawSignal): Partial<ScoredAsset> {
   return applyStructuredOverrides({
     id: crypto.randomUUID().slice(0, 8),
-    asset_name: extracted.asset_name ?? "unknown",
+    asset_name: (extracted.asset_name && extracted.asset_name !== "unknown")
+      ? extracted.asset_name
+      : signal.title || "unknown",
     target: extracted.target ?? "unknown",
     modality: extracted.modality ?? "unknown",
     indication: extracted.indication ?? "unknown",
