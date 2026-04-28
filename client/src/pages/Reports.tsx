@@ -1,36 +1,87 @@
-import { Link } from "wouter";
+import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Download, Plus, Search } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { FileText, Plus, Search, Trash2, Calendar, Building2 } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { SavedReport } from "@shared/schema";
+import type { ReportPayload } from "@/lib/types";
 
-const MOCK_REPORTS = [
-  {
-    id: "r1",
-    title: "CAR-T Solid Tumor Opportunities, Q1 2026",
-    assetCount: 8,
-    generatedAt: "3 days ago",
-    institutions: ["Stanford University", "MD Anderson Cancer Center", "UCSF"],
-    summary: "Analysis of 8 licensable CAR-T assets targeting solid tumor indications, with emphasis on early-stage preclinical programs from leading TTOs.",
-  },
-  {
-    id: "r2",
-    title: "Next-Gen ADC Licensing Landscape",
-    assetCount: 12,
-    generatedAt: "1 week ago",
-    institutions: ["MIT", "Harvard University", "Columbia University"],
-    summary: "Comprehensive survey of 12 antibody-drug conjugate programs emerging from university tech transfer offices, covering novel linker and payload chemistries.",
-  },
-  {
-    id: "r3",
-    title: "RNA Therapeutics: University Pipeline Survey",
-    assetCount: 6,
-    generatedAt: "2 weeks ago",
-    institutions: ["Johns Hopkins University", "University of Pennsylvania", "Yale University"],
-    summary: "Six high-priority mRNA and siRNA therapeutic assets identified across top research universities, spanning rare disease and oncology indications.",
-  },
-];
+function formatDate(d: Date | string) {
+  return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function topInstitutions(assetsJson: Record<string, unknown>[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const a of assetsJson) {
+    const inst = (a.institution ?? a.owner_name) as string | undefined;
+    if (inst && inst !== "unknown" && !seen.has(inst)) {
+      seen.add(inst);
+      result.push(inst);
+      if (result.length >= 3) break;
+    }
+  }
+  return result;
+}
+
+function ReportCardSkeleton() {
+  return (
+    <div className="flex flex-col gap-4 p-5 rounded-lg border border-card-border bg-card">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          <Skeleton className="w-9 h-9 rounded-md shrink-0" />
+          <div className="min-w-0 flex-1 space-y-2">
+            <Skeleton className="h-4 w-3/4" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+        </div>
+        <Skeleton className="h-5 w-16 shrink-0" />
+      </div>
+      <Skeleton className="h-4 w-full" />
+      <Skeleton className="h-4 w-2/3" />
+      <div className="flex gap-1.5">
+        <Skeleton className="h-5 w-20 rounded-full" />
+        <Skeleton className="h-5 w-24 rounded-full" />
+      </div>
+    </div>
+  );
+}
 
 export default function Reports() {
+  const [, setLocation] = useLocation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  const { data: reports, isLoading } = useQuery<SavedReport[]>({
+    queryKey: ["/api/saved-reports"],
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/saved-reports/${id}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-reports"] });
+      toast({ title: "Report deleted" });
+    },
+    onError: () => {
+      toast({ title: "Delete failed", variant: "destructive" });
+    },
+  });
+
+  function openReport(report: SavedReport) {
+    try {
+      const payload = report.reportJson as unknown as ReportPayload;
+      sessionStorage.setItem("current-report", JSON.stringify(payload));
+      setLocation("/report");
+    } catch {
+      toast({ title: "Could not load report", variant: "destructive" });
+    }
+  }
+
   return (
     <div className="min-h-full bg-background">
       <div className="border-b border-border bg-card/30">
@@ -42,18 +93,24 @@ export default function Reports() {
                 Opportunity briefs and buyer intelligence reports generated from Scout searches.
               </p>
             </div>
-            <Link href="/scout">
-              <Button className="gap-2" data-testid="button-generate-new-report">
-                <Plus className="w-4 h-4" />
-                Generate New
-              </Button>
-            </Link>
+            <Button
+              className="gap-2"
+              onClick={() => setLocation("/scout")}
+              data-testid="button-generate-new-report"
+            >
+              <Plus className="w-4 h-4" />
+              Generate New
+            </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-8">
-        {MOCK_REPORTS.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {[1, 2, 3].map((i) => <ReportCardSkeleton key={i} />)}
+          </div>
+        ) : !reports || reports.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center gap-5">
             <div className="w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center">
               <FileText className="w-8 h-8 text-primary" />
@@ -61,81 +118,96 @@ export default function Reports() {
             <div className="space-y-2">
               <h2 className="text-xl font-bold text-foreground">No reports yet</h2>
               <p className="text-muted-foreground max-w-sm">
-                Run a Scout search to generate your first report.
+                Run a Scout search and click "Generate Report" to create your first buyer intelligence report.
               </p>
             </div>
-            <Link href="/scout">
-              <Button className="gap-2 mt-2" data-testid="button-reports-go-scout">
-                <Search className="w-4 h-4" />
-                Go to Scout
-              </Button>
-            </Link>
+            <Button
+              className="gap-2 mt-2"
+              onClick={() => setLocation("/scout")}
+              data-testid="button-reports-go-scout"
+            >
+              <Search className="w-4 h-4" />
+              Go to Scout
+            </Button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {MOCK_REPORTS.map((report) => (
-              <div
-                key={report.id}
-                className="flex flex-col gap-4 p-5 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
-                data-testid={`report-card-${report.id}`}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                      <FileText className="w-4 h-4 text-primary" />
+            {reports.map((report) => {
+              const assets = (report.assetsJson ?? []) as Record<string, unknown>[];
+              const institutions = topInstitutions(assets);
+              return (
+                <div
+                  key={report.id}
+                  className="flex flex-col gap-4 p-5 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
+                  data-testid={`report-card-${report.id}`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-3 min-w-0">
+                      <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <FileText className="w-4 h-4 text-primary" />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="font-semibold text-foreground leading-snug line-clamp-2">{report.title}</h3>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          {formatDate(report.createdAt)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-foreground leading-snug">{report.title}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Generated {report.generatedAt}</p>
-                    </div>
-                  </div>
-                  <Badge
-                    variant="secondary"
-                    className="shrink-0 text-[11px] font-semibold bg-primary/10 text-primary border-0"
-                    data-testid={`badge-asset-count-${report.id}`}
-                  >
-                    {report.assetCount} assets
-                  </Badge>
-                </div>
-
-                <p className="text-sm text-muted-foreground leading-relaxed line-clamp-2">
-                  {report.summary}
-                </p>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {report.institutions.map((inst) => (
-                    <span
-                      key={inst}
-                      className="text-[10px] px-2 py-0.5 rounded-full border border-card-border bg-muted/30 text-muted-foreground"
+                    <Badge
+                      variant="secondary"
+                      className="shrink-0 text-[11px] font-semibold bg-primary/10 text-primary border-0"
+                      data-testid={`badge-asset-count-${report.id}`}
                     >
-                      {inst}
-                    </span>
-                  ))}
-                </div>
+                      {assets.length} assets
+                    </Badge>
+                  </div>
 
-                <div className="flex items-center gap-2 pt-1 border-t border-card-border">
-                  <Link href="/report" className="flex-1">
+                  {report.query && (
+                    <p className="text-xs text-muted-foreground italic truncate">
+                      Query: "{report.query}"
+                    </p>
+                  )}
+
+                  {institutions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {institutions.map((inst) => (
+                        <span
+                          key={inst}
+                          className="text-[10px] px-2 py-0.5 rounded-full border border-card-border bg-muted/30 text-muted-foreground flex items-center gap-1"
+                        >
+                          <Building2 className="w-2.5 h-2.5" />
+                          {inst}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 pt-1 border-t border-card-border">
                     <Button
                       size="sm"
                       variant="outline"
-                      className="w-full gap-2 h-8 text-xs border-card-border"
+                      className="flex-1 gap-2 h-8 text-xs border-card-border"
+                      onClick={() => openReport(report)}
                       data-testid={`button-view-report-${report.id}`}
                     >
                       View Report
                     </Button>
-                  </Link>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                    title="Download PDF"
-                    data-testid={`button-download-report-${report.id}`}
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                  </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      title="Delete report"
+                      disabled={deleteMutation.isPending}
+                      onClick={() => deleteMutation.mutate(report.id)}
+                      data-testid={`button-delete-report-${report.id}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

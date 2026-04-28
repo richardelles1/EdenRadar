@@ -772,6 +772,52 @@ export async function registerRoutes(
     }
   });
 
+  const savedReportBodySchema = z.object({
+    title: z.string().min(1).max(300),
+    query: z.string().min(1),
+    assetsJson: z.array(z.record(z.unknown())).default([]),
+    reportJson: z.record(z.unknown()).default({}),
+  });
+
+  app.post("/api/saved-reports", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const body = savedReportBodySchema.parse(req.body);
+      const report = await storage.createSavedReport({ userId, ...body });
+      return res.status(201).json(report);
+    } catch (err: any) {
+      console.error("[saved-reports POST]", err);
+      return res.status(500).json({ error: "Failed to save report" });
+    }
+  });
+
+  app.get("/api/saved-reports", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const reports = await storage.getSavedReports(userId);
+      return res.json(reports);
+    } catch (err: any) {
+      console.error("[saved-reports GET]", err);
+      return res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  app.delete("/api/saved-reports/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      const id = parseInt(req.params["id"] as string, 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid report id" });
+      await storage.deleteSavedReport(id, userId);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[saved-reports DELETE]", err);
+      return res.status(500).json({ error: "Failed to delete report" });
+    }
+  });
+
   app.post("/api/dossier", aiRateLimit, async (req, res) => {
     try {
       const { asset } = dossierBodySchema.parse(req.body);

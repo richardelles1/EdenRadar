@@ -783,3 +783,19 @@ export const appEvents = pgTable("app_events", {
 export const insertAppEventSchema = createInsertSchema(appEvents).omit({ id: true, createdAt: true });
 export type InsertAppEvent = z.infer<typeof insertAppEventSchema>;
 export type AppEvent = typeof appEvents.$inferSelect;
+
+// ── Saved Reports ─────────────────────────────────────────────────────────────
+
+export const savedReports = pgTable("saved_reports", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  title: text("title").notNull(),
+  query: text("query").notNull(),
+  assetsJson: jsonb("assets_json").$type<Record<string, unknown>[]>().notNull().default([]),
+  reportJson: jsonb("report_json").$type<Record<string, unknown>>().notNull().default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertSavedReportSchema = createInsertSchema(savedReports).omit({ id: true, createdAt: true });
+export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
+export type SavedReport = typeof savedReports.$inferSelect;

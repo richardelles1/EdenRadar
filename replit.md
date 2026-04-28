@@ -249,6 +249,25 @@ All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash
 - `STRIPE_PRICE_TEAM5` — Stripe price ID for Team (5 seats)
 - `STRIPE_PRICE_TEAM10` — Stripe price ID for Team (10 seats)
 
+## Saved Reports (Task #554)
+- `saved_reports` table: id, user_id, title, query, assets_json (JSONB), report_json (JSONB), created_at
+- Created via startup migration in `server/index.ts` (`createSavedReportsTable()`)
+- API routes: `POST /api/saved-reports`, `GET /api/saved-reports`, `DELETE /api/saved-reports/:id` (all use `verifyAnyAuth`)
+- Scout saves report on `reportMutation.onSuccess` (fire-and-forget)
+- Reports page (`client/src/pages/Reports.tsx`) fetches from API with loading skeleton, empty state, and delete button
+
+## Trial Ending Reminder Email (Task #555)
+- `sendTrialEndingEmail()` in `server/email.ts` — sent to `org.billingEmail` when trial expires within 3 days
+- `scheduleTrialEndingReminders()` cron in `server/index.ts` — runs at startup + every 24h
+- Queries orgs where `stripeStatus='trialing'` and `stripeCurrentPeriodEnd` is 2–4 days away
+- Deduplication via `stripe_billing_events` table: inserts `event_type='trial_ending_reminder'` after sending
+
+## Sentry Error Monitoring (Task #556)
+- Packages: `@sentry/node` (server), `@sentry/react` (frontend), `@sentry/vite-plugin` (installed, not yet configured for source maps)
+- Server init in `server/index.ts` (top of file) — gated on `SENTRY_DSN` env var, calls `Sentry.setupExpressErrorHandler(app)` after routes
+- Frontend init in `client/src/main.tsx` — gated on `VITE_SENTRY_DSN` env var
+- Both gracefully no-op if DSN is not set (safe for development)
+
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
 - `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)
@@ -257,6 +276,8 @@ All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash
 - `VITE_SUPABASE_URL`: Supabase project URL (frontend)
 - `VITE_SUPABASE_ANON_KEY`: Supabase anon/public API key (frontend)
 - `RESEND_API_KEY`: Resend transactional email API key
+- `SENTRY_DSN` *(optional)*: Sentry DSN for server-side error tracking — if set, Sentry is initialized
+- `VITE_SENTRY_DSN` *(optional)*: Sentry DSN for frontend error tracking — if set, Sentry is initialized
 - `IEDISON_API_KEY` *(optional)*: NIH iEdison REST API key. When set, the iEdison scraper
   uses authenticated JSON API requests (Bearer token + X-API-Key header) enabling full
   date-range access and higher rate limits. Obtain from https://iedison.nih.gov/iEdison/api/v1/publicInventions.

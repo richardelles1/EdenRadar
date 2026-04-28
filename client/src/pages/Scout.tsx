@@ -418,6 +418,12 @@ export default function Scout() {
     onSuccess: (report) => {
       sessionStorage.setItem("current-report", JSON.stringify(report));
       setLocation("/report");
+      apiRequest("POST", "/api/saved-reports", {
+        title: report.title || `Report: ${currentQuery}`,
+        query: report.query ?? currentQuery,
+        assetsJson: report.top_assets as unknown as Record<string, unknown>[],
+        reportJson: report as unknown as Record<string, unknown>,
+      }).catch(() => {});
     },
     onError: (err: any) => {
       toast({ title: "Report failed", description: err.message, variant: "destructive" });

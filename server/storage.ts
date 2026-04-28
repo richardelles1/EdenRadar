@@ -27,6 +27,7 @@ import {
   sharedLinks, type SharedLink,
   teamActivities, type TeamActivity, type InsertTeamActivity,
   stripeBillingEvents, type StripeBillingEvent, type InsertStripeBillingEvent,
+  savedReports, type SavedReport, type InsertSavedReport,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -348,6 +349,11 @@ export interface IStorage {
   getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined>;
   createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
   getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
+
+  // Saved Reports
+  createSavedReport(data: InsertSavedReport): Promise<SavedReport>;
+  getSavedReports(userId: string): Promise<SavedReport[]>;
+  deleteSavedReport(id: number, userId: string): Promise<void>;
 }
 
 export type SubscriberMatchEntry = {
@@ -3028,6 +3034,32 @@ export class DatabaseStorage implements IStorage {
       .where(eq(teamActivities.orgId, orgId))
       .orderBy(desc(teamActivities.createdAt))
       .limit(limit);
+  }
+
+  async createSavedReport(data: InsertSavedReport): Promise<SavedReport> {
+    const [row] = await db
+      .insert(savedReports)
+      .values({
+        ...data,
+        assetsJson: (data.assetsJson ?? []) as unknown as Record<string, unknown>[],
+        reportJson: (data.reportJson ?? {}) as unknown as Record<string, unknown>,
+      })
+      .returning();
+    return row;
+  }
+
+  async getSavedReports(userId: string): Promise<SavedReport[]> {
+    return db
+      .select()
+      .from(savedReports)
+      .where(eq(savedReports.userId, userId))
+      .orderBy(desc(savedReports.createdAt));
+  }
+
+  async deleteSavedReport(id: number, userId: string): Promise<void> {
+    await db
+      .delete(savedReports)
+      .where(and(eq(savedReports.id, id), eq(savedReports.userId, userId)));
   }
 }
 

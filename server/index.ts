@@ -1,3 +1,13 @@
+import * as Sentry from "@sentry/node";
+
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn: process.env.SENTRY_DSN,
+    environment: process.env.NODE_ENV ?? "development",
+    tracesSampleRate: 0.2,
+  });
+}
+
 import express, { type Request, Response, NextFunction } from "express";
 import cors from "cors";
 import { registerRoutes } from "./routes";
@@ -10,6 +20,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
+import { sendTrialEndingEmail } from "./email";
 import pg from "pg";
 
 const app = express();
@@ -985,6 +996,73 @@ async function createSharedLinksTable() {
   }
 }
 
+// ── Daily trial-ending reminder emails ────────────────────────────────────────
+async function sendTrialEndingReminders() {
+  try {
+    const now = new Date();
+    const windowStart = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);  // 2 days from now
+    const windowEnd   = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);  // 4 days from now
+    // Find trialing orgs whose trial ends in the 2–4 day window
+    const rows = await db.execute(sql`
+      SELECT o.id, o.name, o.billing_email, o.stripe_current_period_end
+      FROM organizations o
+      WHERE o.stripe_status = 'trialing'
+        AND o.stripe_current_period_end >= ${windowStart}
+        AND o.stripe_current_period_end <  ${windowEnd}
+    `);
+    const orgs = (rows as any).rows ?? rows;
+    for (const org of orgs) {
+      const orgId: number = org.id;
+      const billingEmail: string | null = org.billing_email;
+      if (!billingEmail) continue;
+      // Dedup: skip if we already sent a trial_ending_reminder for this org
+      const existing = await db.execute(sql`
+        SELECT id FROM stripe_billing_events
+        WHERE org_id = ${orgId} AND event_type = 'trial_ending_reminder'
+        LIMIT 1
+      `);
+      const existingRows = (existing as any).rows ?? existing;
+      if (existingRows.length > 0) continue;
+      const trialEndDate = new Date(org.stripe_current_period_end).toLocaleDateString("en-US", {
+        year: "numeric", month: "long", day: "numeric",
+      });
+      await sendTrialEndingEmail(billingEmail, org.name ?? "", trialEndDate);
+      await db.execute(sql`
+        INSERT INTO stripe_billing_events (org_id, event_type, stripe_status)
+        VALUES (${orgId}, 'trial_ending_reminder', 'trialing')
+      `);
+      log(`[trial-reminder] Sent trial ending email to ${billingEmail} (org ${orgId})`, "startup");
+    }
+  } catch (err: any) {
+    log(`[trial-reminder] Error sending trial ending reminders: ${err?.message}`, "startup");
+  }
+}
+
+function scheduleTrialEndingReminders() {
+  sendTrialEndingReminders();
+  setInterval(() => sendTrialEndingReminders(), 24 * 60 * 60 * 1000);
+}
+
+// ── Ensure saved_reports table exists ─────────────────────────────────────────
+async function createSavedReportsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS saved_reports (
+        id          SERIAL PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        title       TEXT NOT NULL,
+        query       TEXT NOT NULL,
+        assets_json JSONB NOT NULL DEFAULT '[]'::jsonb,
+        report_json JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at  TIMESTAMP NOT NULL DEFAULT NOW()
+      )
+    `);
+    log("[startup] saved_reports table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] saved_reports table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── One-time migration: relabel old saved_asset status values ─────────────────
 // Old constraint: ('viewing', 'evaluating', 'contacted')
 // New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
@@ -1067,12 +1145,21 @@ async function migrateAssetStatusValues() {
   // ── Register API routes ───────────────────────────────────────────────────
   await registerRoutes(httpServer, app);
 
+  // ── Sentry Express error handler (must come before our own error handler) ──
+  if (process.env.SENTRY_DSN) {
+    Sentry.setupExpressErrorHandler(app);
+  }
+
   // ── Error handler middleware ──────────────────────────────────────────────
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
     console.error("Internal Server Error:", err);
+
+    if (process.env.SENTRY_DSN && status >= 500) {
+      Sentry.captureException(err);
+    }
 
     if (res.headersSent) {
       return next(err);
@@ -1113,6 +1200,10 @@ async function migrateAssetStatusValues() {
       createStripeBillingEventsTable().catch(() => {});
       // ── Ensure user_alerts table exists (digest pipeline) ───────────────
       createUserAlertsTable().catch(() => {});
+      // ── Ensure saved_reports table exists (idempotent) ──────────────────
+      createSavedReportsTable().catch(() => {});
+      // ── Trial-ending reminder emails (daily) ─────────────────────────────
+      scheduleTrialEndingReminders();
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
