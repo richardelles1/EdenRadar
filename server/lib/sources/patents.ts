@@ -15,9 +15,13 @@ function inferOwnerType(assignee: string): "university" | "company" | "unknown" 
   return "unknown";
 }
 
+const SHORT_BIOTECH_ALLOWLIST = new Set([
+  "pd", "t1", "t2", "t3", "hb", "il", "ab", "cd", "tc", "nk", "rx",
+]);
+
 function inDateRange(dateStr: string, sinceDate?: string, beforeDate?: string): boolean {
   if (!sinceDate && !beforeDate) return true;
-  if (!dateStr) return true;
+  if (!dateStr) return false;
   const d = dateStr.slice(0, 10);
   if (sinceDate && d < sinceDate) return false;
   if (beforeDate && d >= beforeDate) return false;
@@ -28,7 +32,7 @@ function buildPatentQuery(rawQuery: string, sinceDate?: string, beforeDate?: str
   const tokens = rawQuery.trim().split(/\s+/);
 
   const expandedTokens = tokens
-    .filter((t) => t.length >= 2)
+    .filter((t) => t.length >= 3 || SHORT_BIOTECH_ALLOWLIST.has(t.toLowerCase()))
     .map((t) => {
       if (t.includes("-")) {
         const upper = t.toUpperCase();
@@ -43,10 +47,12 @@ function buildPatentQuery(rawQuery: string, sinceDate?: string, beforeDate?: str
 
   query += " src:PAT";
 
-  if (sinceDate || beforeDate) {
-    const from = sinceDate ?? "1900-01-01";
-    const to = beforeDate ? beforeDate.slice(0, 10) : "3000-01-01";
-    query += ` FIRST_PDATE:[${from} TO ${to}]`;
+  if (sinceDate && beforeDate) {
+    query += ` FIRST_PDATE:[${sinceDate.slice(0, 10)} TO ${beforeDate.slice(0, 10)}]`;
+  } else if (sinceDate) {
+    query += ` FIRST_PDATE:[${sinceDate.slice(0, 10)} TO *]`;
+  } else if (beforeDate) {
+    query += ` FIRST_PDATE:[* TO ${beforeDate.slice(0, 10)}]`;
   }
 
   return query;
