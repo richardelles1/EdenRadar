@@ -50,7 +50,9 @@ export default function Login() {
     : null;
 
   const _rawRedirectParam = _searchParams.get("redirect") ?? "";
-  const _redirectParam = _rawRedirectParam.startsWith("/") ? _rawRedirectParam : null;
+  const _redirectParam = _rawRedirectParam.startsWith("/") && !_rawRedirectParam.startsWith("//")
+    ? _rawRedirectParam
+    : null;
 
   const initialMode = portalRole != null
     ? "signup"
@@ -98,11 +100,13 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
-      const dest = _redirectParam ?? (
-        role === "industry" ? "/industry/dashboard" :
-        role === "researcher" ? "/research" :
-        "/discovery"
-      );
+      const dest = (view === "auth" && _redirectParam)
+        ? _redirectParam
+        : (
+          role === "industry" ? "/industry/dashboard" :
+          role === "researcher" ? "/research" :
+          "/discovery"
+        );
       navigate(dest, { replace: true });
     }
   }, [authLoading, session, role, isPasswordRecovery, navigate, view]);
