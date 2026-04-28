@@ -281,7 +281,7 @@ export default function Scout() {
   const [patentAssigneeSearch, setPatentAssigneeSearch] = useState<string>(() => ssGet("scout-patent-assignee", ""));
   const [patentDateFilter, setPatentDateFilter] = useState<"any" | "6m" | "2024" | "2023" | "2022">(() => ssGet("scout-patent-date", "any"));
   const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
-  const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
+  const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");
@@ -416,12 +416,12 @@ export default function Scout() {
     mutationFn: async ({ query, sources }: { query: string; sources: string[] }) => {
       const backendSources = sources.map((k) => k === "harvard" ? "harvard_librarycloud" : k);
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90_000);
+      const timeoutId = setTimeout(() => controller.abort(), 40_000);
       try {
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 30, buyerProfile }),
+          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 20, buyerProfile }),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -813,7 +813,9 @@ export default function Scout() {
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/15 text-xs text-muted-foreground" data-testid="research-compiling-banner">
                 <Loader2 className="w-3 h-3 animate-spin text-primary shrink-0" />
-                <span>Compiling research signals from PubMed, clinical trials, and more...</span>
+                <span>Compiling research signals from {researchSources.length === 1
+                  ? (RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0])
+                  : `${researchSources.length} sources`}...</span>
               </div>
             </div>
           )}
@@ -832,10 +834,10 @@ export default function Scout() {
           {hasSearched && !searchMutation.isPending && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex justify-center w-full">
-                <div className="flex w-full max-w-2xl items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
+                <div className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
                   <button
                     onClick={() => setResultTab("assets")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "assets"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -853,7 +855,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("patents")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "patents"
                         ? "bg-amber-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -878,7 +880,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("research")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "research"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
