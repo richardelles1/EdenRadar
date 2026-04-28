@@ -1404,6 +1404,98 @@ export default function Scout() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Phase + Status summary bar */}
+                    {(() => {
+                      const phaseCounts: Record<string, number> = {};
+                      const statusCounts: Record<string, number> = {};
+                      for (const a of trialResults) {
+                        const stage = (a.development_stage ?? "").toLowerCase().trim();
+                        if (stage) phaseCounts[stage] = (phaseCounts[stage] ?? 0) + 1;
+                        const st = ((a.signals?.[0]?.metadata?.status as string) ?? "").toLowerCase();
+                        if (st) statusCounts[st] = (statusCounts[st] ?? 0) + 1;
+                      }
+                      type PhaseFilterKey = "phase 1" | "phase 2" | "phase 3" | "preclinical";
+                      type StatusFilterKey = "recruiting" | "active" | "completed";
+                      const PHASE_DEFS: { rawKey: string; label: string; filterKey: PhaseFilterKey | null; colorClass: string }[] = [
+                        { rawKey: "phase 3",    label: "Phase 3",    filterKey: "phase 3",    colorClass: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20" },
+                        { rawKey: "phase 2",    label: "Phase 2",    filterKey: "phase 2",    colorClass: "text-violet-700 dark:text-violet-400 bg-violet-500/10 border-violet-500/25 hover:bg-violet-500/20" },
+                        { rawKey: "phase 1",    label: "Phase 1",    filterKey: "phase 1",    colorClass: "text-sky-700 dark:text-sky-400 bg-sky-500/10 border-sky-500/25 hover:bg-sky-500/20" },
+                        { rawKey: "approved",   label: "Approved",   filterKey: null,         colorClass: "text-emerald-800 dark:text-emerald-300 bg-emerald-600/10 border-emerald-600/25 opacity-70" },
+                        { rawKey: "preclinical",label: "Preclinical",filterKey: "preclinical",colorClass: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/25 hover:bg-zinc-500/20" },
+                      ];
+                      const STATUS_DEFS: { rawKey: string; label: string; filterKey: StatusFilterKey | null; colorClass: string }[] = [
+                        { rawKey: "recruiting",            label: "Recruiting",  filterKey: "recruiting", colorClass: "text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 border-emerald-500/25 hover:bg-emerald-500/20" },
+                        { rawKey: "active_not_recruiting", label: "Active",      filterKey: "active",     colorClass: "text-sky-700 dark:text-sky-400 bg-sky-500/10 border-sky-500/25 hover:bg-sky-500/20" },
+                        { rawKey: "completed",             label: "Completed",   filterKey: "completed",  colorClass: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/25 hover:bg-zinc-500/20" },
+                        { rawKey: "not_yet_recruiting",    label: "Not Started", filterKey: null,         colorClass: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/25 opacity-70" },
+                        { rawKey: "suspended",             label: "Suspended",   filterKey: null,         colorClass: "text-amber-700 dark:text-amber-400 bg-amber-500/10 border-amber-500/25 opacity-70" },
+                        { rawKey: "terminated",            label: "Terminated",  filterKey: null,         colorClass: "text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/25 opacity-70" },
+                        { rawKey: "withdrawn",             label: "Withdrawn",   filterKey: null,         colorClass: "text-rose-700 dark:text-rose-400 bg-rose-500/10 border-rose-500/25 opacity-70" },
+                      ];
+                      const knownPhaseKeys = new Set(PHASE_DEFS.map(d => d.rawKey));
+                      const knownStatusKeys = new Set(STATUS_DEFS.map(d => d.rawKey));
+                      const otherPhaseCount = Object.entries(phaseCounts).filter(([k]) => !knownPhaseKeys.has(k)).reduce((s, [, v]) => s + v, 0);
+                      const otherStatusCount = Object.entries(statusCounts).filter(([k]) => !knownStatusKeys.has(k)).reduce((s, [, v]) => s + v, 0);
+                      const phaseEntries = PHASE_DEFS.filter(e => (phaseCounts[e.rawKey] ?? 0) > 0);
+                      const statusEntries = STATUS_DEFS.filter(e => (statusCounts[e.rawKey] ?? 0) > 0);
+                      const hasAny = phaseEntries.length > 0 || otherPhaseCount > 0 || statusEntries.length > 0 || otherStatusCount > 0;
+                      if (!hasAny) return null;
+                      return (
+                        <div className="flex flex-wrap items-center gap-1.5" data-testid="trial-summary-bar">
+                          {phaseEntries.map(e => {
+                            const isActive = e.filterKey !== null && trialPhaseFilter === e.filterKey;
+                            const pill = (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${e.colorClass} ${isActive ? "ring-1 ring-offset-0 ring-current !opacity-100" : ""}`}
+                                data-testid={`trial-summary-phase-${e.rawKey.replace(/ /g, "-")}`}
+                              >
+                                {e.label}
+                                <span className="font-bold">{phaseCounts[e.rawKey]}</span>
+                              </span>
+                            );
+                            return e.filterKey !== null ? (
+                              <button key={e.rawKey} onClick={() => setTrialPhaseFilter(trialPhaseFilter === e.filterKey ? "all" : e.filterKey!)} className="focus:outline-none">
+                                {pill}
+                              </button>
+                            ) : (
+                              <span key={e.rawKey} title="No filter available for this phase">{pill}</span>
+                            );
+                          })}
+                          {otherPhaseCount > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border text-zinc-500 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/25 opacity-70" data-testid="trial-summary-phase-other">
+                              Other <span className="font-bold">{otherPhaseCount}</span>
+                            </span>
+                          )}
+                          {(phaseEntries.length > 0 || otherPhaseCount > 0) && (statusEntries.length > 0 || otherStatusCount > 0) && (
+                            <span className="text-muted-foreground/40 text-xs select-none">·</span>
+                          )}
+                          {statusEntries.map(e => {
+                            const isActive = e.filterKey !== null && trialStatusFilter === e.filterKey;
+                            const pill = (
+                              <span
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border transition-colors ${e.colorClass} ${isActive ? "ring-1 ring-offset-0 ring-current !opacity-100" : ""}`}
+                                data-testid={`trial-summary-status-${e.rawKey}`}
+                              >
+                                {e.label}
+                                <span className="font-bold">{statusCounts[e.rawKey]}</span>
+                              </span>
+                            );
+                            return e.filterKey !== null ? (
+                              <button key={e.rawKey} onClick={() => setTrialStatusFilter(trialStatusFilter === e.filterKey ? "all" : e.filterKey!)} className="focus:outline-none">
+                                {pill}
+                              </button>
+                            ) : (
+                              <span key={e.rawKey} title="No filter available for this status">{pill}</span>
+                            );
+                          })}
+                          {otherStatusCount > 0 && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border text-zinc-500 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/25 opacity-70" data-testid="trial-summary-status-other">
+                              Other <span className="font-bold">{otherStatusCount}</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                     {/* Trial controls */}
                     <div className="flex flex-wrap items-center gap-3">
                       {/* Sort toggle */}
