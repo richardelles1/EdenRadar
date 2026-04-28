@@ -21,7 +21,7 @@ export interface InstitutionScraper {
   tier?: 1 | 2 | 3 | 4;
   /** Override the default per-type timeout for this scraper (milliseconds). */
   scraperTimeoutMs?: number;
-  scrape(signal?: AbortSignal): Promise<ScrapedListing[]>;
+  scrape(signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]>;
   probe?(maxResults?: number): Promise<ScrapedListing[]>;
 }
 

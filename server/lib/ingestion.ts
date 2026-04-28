@@ -460,6 +460,15 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 
     console.log(`[sync] ${institutionName}: starting sync (type=${scraperType}, timeout=${Math.round(SCRAPER_TIMEOUT_MS / 1000)}s, ${currentIndexed} currently indexed)...`);
 
+    // Collect known fingerprints + URLs BEFORE running the scraper so that
+    // scrapers that accept knownUrls can skip detail-page fetches for already-indexed
+    // listings. This dramatically reduces sync time for large-catalog institutions on
+    // repeat runs (e.g. OSU: 400+ detail fetches → only truly new ones fetched).
+    // Old pending staging rows (not yet pushed) are included so assets already queued
+    // from a previous scan are not re-staged as "new" on this scan.
+    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
+    console.log(`[sync] ${institutionName}: ${existingUrls.size} URLs already indexed (passing to scraper for skip-optimization)`);
+
     let listings: ScrapedListing[] | undefined;
     let lastScrapeError: Error | null = null;
     for (let attempt = 1; attempt <= SCRAPE_MAX_ATTEMPTS; attempt++) {
@@ -467,7 +476,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
       let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
       try {
         listings = await Promise.race([
-          scraper.scrape(scrapeController.signal),
+          scraper.scrape(scrapeController.signal, existingUrls),
           new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
               scrapeController.abort();
@@ -509,12 +518,7 @@ export async function runInstitutionSync(institutionName: string, providedSessio
 
     await storage.updateSyncSession(sessionId, { rawCount, phase: "comparing", lastRefreshedAt: new Date() });
 
-    // Step 1: Collect known fingerprints + URLs BEFORE superseding old staging rows.
-    // Old pending staging rows (not yet pushed) must contribute to the known set so that
-    // assets already queued from a previous scan are not re-staged as "new" on this scan.
-    const { fingerprints: existingFps, sourceUrls: existingUrls } = await storage.getExistingFingerprints(institutionName);
-
-    // Step 2: Supersede stale non-enriched staging rows for this institution.
+    // Step 1: Supersede stale non-enriched staging rows for this institution.
     // Only rows from sessions that are NOT yet in 'enriched' state are cleaned up
     // (e.g. stuck/running/failed sessions from a previous crashed sync).
     // Rows from completed 'enriched' sessions are the Indexing Queue — they are

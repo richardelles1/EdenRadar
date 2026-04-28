@@ -57,12 +57,17 @@ export const stanfordScraper: InstitutionScraper = {
 
       // Step 2: adaptive parallel window scan (no pagination-link detection).
       // Fetch PAGE_WINDOW pages at once; stop when any page in the batch returns
-      // zero matching elements (end of results), OR when ≥2 pages in the batch
-      // fail to load (CDN partial throttle — continuing would just burn time).
+      // zero matching elements (end of results), OR when N consecutive batches
+      // ALL fail to load (true CDN block). Sporadic individual page failures
+      // (1 to PAGE_WINDOW-1 per batch) are tolerated — just skipped and logged.
       // EMERGENCY_CEIL is a runaway-loop guard only.
+      // Stanford has ~100-150 list pages × 20s worst-case = well within the 20-min limit.
       const EMERGENCY_CEIL = 500;
+      // Stop only after this many consecutive batches where EVERY page failed.
+      const CDN_BLOCK_CEIL = 2;
       let offset = 1;
       let skipped = 0;
+      let consecutiveFullFails = 0;
 
       while (!signal?.aborted && offset < EMERGENCY_CEIL) {
         const pageNums: number[] = [];
@@ -85,13 +90,24 @@ export const stanfordScraper: InstitutionScraper = {
         console.log(
           `[scraper] ${INST}: scanned pages ${offset}–${batchEnd}` +
           ` — ${results.length} listings so far` +
-          (fetchFails ? ` (${fetchFails} page(s) failed to load)` : "")
+          (fetchFails ? ` (${fetchFails}/${pageNums.length} page(s) failed to load)` : "")
         );
 
-        // Break when we hit an empty page OR when ≥2 pages failed (CDN partial throttle).
-        // Requiring ALL pages to fail before stopping would let a partially-throttled
-        // CDN keep the loop running through all batches, each taking the full timeout.
-        if (hitEmpty || fetchFails > 1) break;
+        if (hitEmpty) break;
+
+        if (fetchFails >= pageNums.length) {
+          // Every page in the batch failed — possible full CDN block.
+          consecutiveFullFails++;
+          if (consecutiveFullFails >= CDN_BLOCK_CEIL) {
+            console.warn(
+              `[scraper] ${INST}: ${CDN_BLOCK_CEIL} consecutive all-fail batches — CDN blocking, stopping early`
+            );
+            break;
+          }
+        } else {
+          consecutiveFullFails = 0; // partial failures are sporadic, reset counter
+        }
+
         offset += PAGE_WINDOW;
       }
 

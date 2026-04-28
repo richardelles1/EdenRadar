@@ -5,7 +5,7 @@ import { fetchHtml, cleanText } from "./utils";
 const INST = "Ohio State University";
 const BASE = "https://innovate.osu.edu";
 const LISTING_BASE = `${BASE}/available_technologies/`;
-const DETAIL_CONCURRENCY = 4;
+const DETAIL_CONCURRENCY = 8;
 const LARGE_LIMIT = 500;
 const FALLBACK_LIMIT = 1000;
 
@@ -169,8 +169,9 @@ async function fetchDetail(url: string): Promise<ScrapedListing | null> {
 
 export const osuScraper: InstitutionScraper = {
   institution: INST,
+  scraperTimeoutMs: 20 * 60 * 1000, // 20 min — initial full sync fetches 400+ detail pages
 
-  async scrape(): Promise<ScrapedListing[]> {
+  async scrape(_signal?: AbortSignal, knownUrls?: Set<string>): Promise<ScrapedListing[]> {
     console.log(`[scraper] ${INST}: collecting listings from ${CATEGORIES.length} categories...`);
 
     const allUrls = new Set<string>();
@@ -180,20 +181,29 @@ export const osuScraper: InstitutionScraper = {
       for (const u of urls) allUrls.add(u);
     }
 
-    console.log(`[scraper] ${INST}: ${allUrls.size} unique listings, fetching details...`);
-
     const urlList = Array.from(allUrls);
+    const newUrls = knownUrls
+      ? urlList.filter((u) => !knownUrls.has(u))
+      : urlList;
+    const skippedCount = urlList.length - newUrls.length;
+
+    console.log(
+      `[scraper] ${INST}: ${urlList.length} unique listings` +
+      (skippedCount > 0 ? `, ${skippedCount} already indexed (skipping detail fetch)` : "") +
+      `, fetching details for ${newUrls.length}...`
+    );
+
     const listings: ScrapedListing[] = [];
 
-    for (let i = 0; i < urlList.length; i += DETAIL_CONCURRENCY) {
-      const batch = urlList.slice(i, i + DETAIL_CONCURRENCY);
+    for (let i = 0; i < newUrls.length; i += DETAIL_CONCURRENCY) {
+      const batch = newUrls.slice(i, i + DETAIL_CONCURRENCY);
       const results = await Promise.all(batch.map(fetchDetail));
       for (const r of results) {
         if (r) listings.push(r);
       }
     }
 
-    console.log(`[scraper] ${INST}: scraped ${listings.length} listings with details`);
+    console.log(`[scraper] ${INST}: scraped ${listings.length} new listings with details`);
     return listings;
   },
 
