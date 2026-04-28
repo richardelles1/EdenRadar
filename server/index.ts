@@ -1026,6 +1026,7 @@ async function checkAndSendTrialReminders() {
     }
 
     for (const org of orgs) {
+      let sent = false;
       try {
         // Resolve recipient email: prefer org owner's Supabase auth email, fall back to billingEmail
         let recipientEmail: string | null = org.billingEmail ?? null;
@@ -1049,6 +1050,8 @@ async function checkAndSendTrialReminders() {
         }
         if (!recipientEmail) {
           log(`[trial-reminder] No email for org ${org.id} — skipping`, "startup");
+          // Release claim so we retry if email becomes available later
+          await storage.updateOrganization(org.id, { trialReminderSentAt: null });
           continue;
         }
         const trialEndDate = new Date(org.stripeCurrentPeriodEnd!).toLocaleDateString("en-US", {
@@ -1057,9 +1060,19 @@ async function checkAndSendTrialReminders() {
         const portalUrl = `${process.env.APP_URL ?? "https://edenradar.com"}/industry/settings`;
         const planName = planTierLabel(org.planTier);
         await sendTrialEndingEmail(recipientEmail, org.name ?? "", trialEndDate, portalUrl, planName);
+        sent = true;
         log(`[trial-reminder] Sent trial-ending email to ${recipientEmail} (org ${org.id}, plan: ${planName}, ends ${trialEndDate})`, "startup");
       } catch (orgErr: any) {
         log(`[trial-reminder] Failed for org ${org.id}: ${orgErr?.message}`, "startup");
+      } finally {
+        // If send was not confirmed, release the claim so the next run retries
+        if (!sent) {
+          try {
+            await storage.updateOrganization(org.id, { trialReminderSentAt: null });
+          } catch (releaseErr: any) {
+            log(`[trial-reminder] Could not release claim for org ${org.id}: ${releaseErr?.message}`, "startup");
+          }
+        }
       }
     }
   } catch (err: any) {
