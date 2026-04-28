@@ -109,6 +109,9 @@ function Router() {
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
 
+      <Route path="/register">
+        {() => <Redirect to={`/login${window.location.search}`} />}
+      </Route>
       <Route path="/discover">
         <Redirect to="/scout" />
       </Route>
