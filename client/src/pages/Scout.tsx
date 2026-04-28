@@ -159,9 +159,13 @@ function loadBuyerProfile(): BuyerProfile {
 function SourcesDropdown({
   researchSources,
   onSourcesChange,
+  open,
+  onOpenChange,
 }: {
   researchSources: string[];
   onSourcesChange: (sources: string[]) => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   function toggleSource(key: string) {
     const next = researchSources.includes(key)
@@ -175,7 +179,7 @@ function SourcesDropdown({
     : `Sources · ${researchSources.length}`;
 
   return (
-    <Popover>
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
         <button
           className={`inline-flex items-center gap-1 text-[11px] transition-colors shrink-0 ${
@@ -288,6 +292,8 @@ export default function Scout() {
       return raw ? JSON.parse(raw) : DEFAULT_RESEARCH_SOURCES;
     } catch { return DEFAULT_RESEARCH_SOURCES; }
   });
+
+  const [sourcesDropdownOpen, setSourcesDropdownOpen] = useState(false);
 
   const PATENT_PAGE_SIZE = 25;
   const RESEARCH_PAGE_SIZE = 30;
@@ -775,6 +781,8 @@ export default function Scout() {
               <SourcesDropdown
                 researchSources={researchSources}
                 onSourcesChange={setResearchSources}
+                open={sourcesDropdownOpen}
+                onOpenChange={setSourcesDropdownOpen}
               />
             </div>
 
@@ -1228,6 +1236,26 @@ export default function Scout() {
                     <p className="text-sm text-muted-foreground">
                       Try refining your search for <span className="font-medium text-foreground">"{currentQuery}"</span>
                     </p>
+                    {researchSources.length === 1 && (
+                      <div
+                        className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30 px-3.5 py-2.5 max-w-sm text-left mt-1"
+                        data-testid="callout-expand-sources-empty"
+                      >
+                        <span className="text-amber-500 mt-0.5 shrink-0 text-base leading-none">&#9888;</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] text-amber-800 dark:text-amber-300 leading-snug">
+                            No results from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add ClinicalTrials.gov or preprint sources for broader coverage.
+                          </p>
+                        </div>
+                        <button
+                          className="shrink-0 text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 underline underline-offset-2 transition-colors whitespace-nowrap"
+                          onClick={() => setSourcesDropdownOpen(true)}
+                          data-testid="button-open-sources-from-callout-empty"
+                        >
+                          Add sources
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-4">
@@ -1266,6 +1294,26 @@ export default function Scout() {
                         </Button>
                       </div>
                     </div>
+                    {researchResults.length < 5 && researchSources.length === 1 && (
+                      <div
+                        className="flex items-start gap-2.5 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800/50 dark:bg-amber-950/30 px-3.5 py-2.5"
+                        data-testid="callout-expand-sources"
+                      >
+                        <span className="text-amber-500 mt-0.5 shrink-0 text-base leading-none">&#9888;</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[12px] text-amber-800 dark:text-amber-300 leading-snug">
+                            Only {researchResults.length} result{researchResults.length !== 1 ? "s" : ""} from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add ClinicalTrials.gov or preprint sources for broader coverage.
+                          </p>
+                        </div>
+                        <button
+                          className="shrink-0 text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-200 underline underline-offset-2 transition-colors whitespace-nowrap"
+                          onClick={() => setSourcesDropdownOpen(true)}
+                          data-testid="button-open-sources-from-callout"
+                        >
+                          Add sources
+                        </button>
+                      </div>
+                    )}
                     <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
                       {researchResults.slice(0, shownResearchCount).map((asset) => (
                         <ResearchCard
