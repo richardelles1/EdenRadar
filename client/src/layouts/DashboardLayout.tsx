@@ -13,7 +13,9 @@ type DashboardLayoutProps = {
   children: React.ReactNode;
 };
 
-const PAST_DUE_DISMISS_KEY = "eden-past-due-banner-dismissed";
+function pastDueDismissKey(orgId: number | undefined) {
+  return `eden-past-due-banner-dismissed-${orgId ?? "unknown"}`;
+}
 
 function daysUntil(date: string | Date | null | undefined): number {
   if (!date) return 0;
@@ -58,7 +60,7 @@ function PastDueBanner({ onFixPayment, loading, onDismiss }: { onFixPayment: () 
 }
 
 function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: string | Date | null | undefined }) {
-  const label = daysLeft <= 1 ? "less than 1 day" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
+  const label = daysLeft === 0 ? "less than 1 day" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
   const chargeDate = periodEnd
     ? new Date(periodEnd).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null;
@@ -95,9 +97,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const orgColor = org?.primaryColor ?? null;
   const { toast } = useToast();
 
-  const [pastDueDismissed, setPastDueDismissed] = useState(
-    () => sessionStorage.getItem(PAST_DUE_DISMISS_KEY) === "1"
-  );
+  const [pastDueDismissed, setPastDueDismissed] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
 
   const isOwner = !!org?.members?.some(
@@ -108,8 +108,14 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const showTrial = isOwner && org?.stripeStatus === "trialing" && !showPastDue;
   const trialDaysLeft = showTrial ? daysUntil(org?.stripeCurrentPeriodEnd) : 0;
 
+  useEffect(() => {
+    if (org?.id) {
+      setPastDueDismissed(sessionStorage.getItem(pastDueDismissKey(org.id)) === "1");
+    }
+  }, [org?.id]);
+
   function dismissPastDue() {
-    sessionStorage.setItem(PAST_DUE_DISMISS_KEY, "1");
+    sessionStorage.setItem(pastDueDismissKey(org?.id), "1");
     setPastDueDismissed(true);
   }
 
