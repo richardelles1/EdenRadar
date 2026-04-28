@@ -68,7 +68,39 @@ function parseDateLoose(dateStr: string | undefined): Date | null {
   return null;
 }
 
+function scorePatentRelevance(asset: ScoredAsset): number {
+  let score = 0;
 
+  const meta = (asset.signals?.[0]?.metadata ?? {}) as Record<string, unknown>;
+
+  const filingDateStr = (meta.filing_date as string | undefined) ?? asset.latest_signal_date;
+  const filingDate = parseDateLoose(filingDateStr);
+  if (filingDate) {
+    const yearsAgo = (Date.now() - filingDate.getTime()) / (1000 * 60 * 60 * 24 * 365);
+    if (yearsAgo < 1) score += 40;
+    else if (yearsAgo < 2) score += 30;
+    else if (yearsAgo < 3) score += 20;
+    else if (yearsAgo < 5) score += 10;
+  }
+
+  const ownerType = ((meta.owner_type as string | undefined) ?? asset.owner_type ?? "unknown").toLowerCase().trim();
+  if (ownerType === "university") score += 30;
+  else if (ownerType === "unknown") score += 15;
+
+  const patentStatus = ((meta.patent_status as string | undefined) ?? asset.patent_status ?? "unknown").toLowerCase().trim();
+  if (patentStatus === "pending") score += 20;
+  else if (patentStatus === "patented") score += 10;
+
+  const authorsStr = (asset.signals?.[0]?.authors_or_owner as string | undefined) ?? "";
+  const inventorCount = authorsStr
+    ? authorsStr.split(",").map((s) => s.trim()).filter(Boolean).length
+    : 0;
+  if (inventorCount >= 3 && inventorCount <= 6) score += 10;
+  else if (inventorCount >= 2) score += 7;
+  else if (inventorCount === 1) score += 5;
+
+  return score;
+}
 
 type InstitutionsResponse = {
   institutions: { institution: string; count: number }[];
@@ -629,7 +661,9 @@ export default function Scout() {
       return ownerOk && assigneeOk && dateOk;
     });
     if (patentSortMode === "best_match") {
-      results = [...results].sort((a, b) => b.score - a.score);
+      const scored = results.map((a) => ({ asset: a, relevance: scorePatentRelevance(a) }));
+      scored.sort((a, b) => b.relevance - a.relevance);
+      results = scored.map((s) => s.asset);
     } else {
       results = [...results].sort((a, b) => {
         const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
