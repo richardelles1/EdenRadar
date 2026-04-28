@@ -207,8 +207,20 @@ export const osuScraper: InstitutionScraper = {
       }
     }
 
-    console.log(`[scraper] ${INST}: scraped ${listings.length} new listings with details`);
-    return listings;
+    // Return empty-title stubs for known (skipped) URLs so that rawCount correctly
+    // reflects the total number of listings found on the site, not just new ones.
+    // The ingestion layer's staging-row builder drops rows where title is empty
+    // (`if (!l.title || !l.institution) continue`), so stubs never create staging
+    // rows or appear in the Indexing Queue — but they do prevent the rawCount=0
+    // false-positive that triggers the "Parser failure" banner and push block.
+    const knownStubs: ScrapedListing[] = skippedCount > 0
+      ? urlList
+          .filter((u) => knownUrls!.has(normalizeUrl(u)))
+          .map((u) => ({ title: "", url: u, institution: INST, description: "" }))
+      : [];
+
+    console.log(`[scraper] ${INST}: ${listings.length} new listings fetched, ${knownStubs.length} already-indexed (counted for rawCount)`);
+    return [...listings, ...knownStubs];
   },
 
   async probe(maxResults = 3): Promise<ScrapedListing[]> {
