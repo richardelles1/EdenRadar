@@ -244,10 +244,10 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [patentSortMode, setPatentSortMode] = useState<"newest" | "best_match">("newest");
-  const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">("all");
-  const [patentAssigneeSearch, setPatentAssigneeSearch] = useState("");
-  const [patentDateFilter, setPatentDateFilter] = useState<"any" | "6m" | "2024" | "2023" | "2022">("any");
+  const [patentSortMode, setPatentSortMode] = useState<"newest" | "best_match">(() => ssGet("scout-patent-sort", "newest"));
+  const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">(() => ssGet("scout-patent-owner", "all"));
+  const [patentAssigneeSearch, setPatentAssigneeSearch] = useState<string>(() => ssGet("scout-patent-assignee", ""));
+  const [patentDateFilter, setPatentDateFilter] = useState<"any" | "6m" | "2024" | "2023" | "2022">(() => ssGet("scout-patent-date", "any"));
   const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
@@ -293,8 +293,12 @@ export default function Scout() {
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-research-sources", JSON.stringify(researchSources));
       sessionStorage.setItem("scout-result-tab", JSON.stringify(resultTab));
+      sessionStorage.setItem("scout-patent-sort", JSON.stringify(patentSortMode));
+      sessionStorage.setItem("scout-patent-owner", JSON.stringify(patentOwnerFilter));
+      sessionStorage.setItem("scout-patent-assignee", JSON.stringify(patentAssigneeSearch));
+      sessionStorage.setItem("scout-patent-date", JSON.stringify(patentDateFilter));
     } catch {}
-  }, [searchResults, researchResults, patentResults, hasSearched, currentQuery, researchSources, resultTab]);
+  }, [searchResults, researchResults, patentResults, hasSearched, currentQuery, researchSources, resultTab, patentSortMode, patentOwnerFilter, patentAssigneeSearch, patentDateFilter]);
 
   useEffect(() => {
     if (skipNextPersist.current) {
