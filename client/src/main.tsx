@@ -7,7 +7,7 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN as string,
     environment: import.meta.env.MODE,
-    release: import.meta.env.VITE_npm_package_version,
+    release: import.meta.env.VITE_APP_VERSION,
     tracesSampleRate: 0,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 0,
