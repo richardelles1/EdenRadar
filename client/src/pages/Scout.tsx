@@ -1330,6 +1330,20 @@ export default function Scout() {
                               "{patentAssigneeSearch}" ×
                             </Badge>
                           )}
+                          <button
+                            onClick={() => {
+                              setPatentOwnerFilter("all");
+                              setPatentAssigneeSearch("");
+                              setPatentDateFilter("any");
+                              if (patentDateFilter !== "any" && currentQuery) {
+                                patentMutation.mutate({ query: currentQuery });
+                              }
+                            }}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
+                            data-testid="button-clear-patent-filters"
+                          >
+                            Clear filters
+                          </button>
                         </div>
                       )}
                     </div>
