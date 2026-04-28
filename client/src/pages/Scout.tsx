@@ -262,8 +262,7 @@ export default function Scout() {
   const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
   const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
 
-  useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentResults]);
-  useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
+  useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
   useEffect(() => { setShownResearchCount(RESEARCH_PAGE_SIZE); }, [researchResults]);
 
   useEffect(() => {
@@ -420,7 +419,7 @@ export default function Scout() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
-        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 25, buyerProfile };
+        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 50, buyerProfile };
         if (patentSince && patentSince !== "any") {
           body.patentSince = patentSince;
         }
