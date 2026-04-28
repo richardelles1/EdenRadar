@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { supabase } from "@/lib/supabase";
-import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Sprout, Loader2, Lightbulb, FlaskConical, ArrowLeft, CheckCircle2, Mail, X } from "lucide-react";
 import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jpg";
 
 const PORTAL_STYLES = {
@@ -41,13 +41,24 @@ export default function Login() {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const [, navigate] = useLocation();
-  const initialMode = new URLSearchParams(window.location.search).get("mode") === "signup" ? "signup" : "signin";
+  const _searchParams = new URLSearchParams(window.location.search);
+  const _portalParam = _searchParams.get("portal");
+  const VALID_PORTAL_ROLES = ["industry", "researcher", "concept"] as const;
+  type ValidPortalRole = typeof VALID_PORTAL_ROLES[number];
+  const portalRole: ValidPortalRole | null = VALID_PORTAL_ROLES.includes(_portalParam as ValidPortalRole)
+    ? (_portalParam as ValidPortalRole)
+    : null;
+
+  const initialMode = portalRole != null
+    ? "signup"
+    : (_searchParams.get("mode") === "signup" ? "signup" : "signin");
   const [mode, setMode] = useState<"signin" | "signup">(initialMode);
   const [view, setView] = useState<View>(() => isPasswordRecovery ? "set-password" : "auth");
+  const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">("industry");
+  const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">(portalRole ?? "industry");
   const [tosAccepted, setTosAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -537,6 +548,36 @@ export default function Login() {
                       data-testid="link-forgot-password"
                     >
                       Forgot password?
+                    </button>
+                  </div>
+                )}
+
+                {/* Invite context notice */}
+                {mode === "signup" && portalRole && !inviteNoticeDismissed && (
+                  <div
+                    className={`flex items-start gap-2.5 rounded-lg px-3 py-2.5 text-xs border ${
+                      isDark
+                        ? "bg-emerald-500/8 border-emerald-500/20 text-emerald-300"
+                        : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                    }`}
+                    data-testid="notice-portal-invite"
+                  >
+                    <Mail className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span className="flex-1">
+                      You've been invited to join as an{" "}
+                      <strong>
+                        {portalRole === "industry" ? "Industry / BD" : portalRole === "researcher" ? "Researcher" : "Concept / Founder"}
+                      </strong>{" "}
+                      member — create your account below.
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setInviteNoticeDismissed(true)}
+                      aria-label="Dismiss"
+                      className="shrink-0 opacity-60 hover:opacity-100 transition-opacity"
+                      data-testid="button-dismiss-invite-notice"
+                    >
+                      <X className="w-3 h-3" />
                     </button>
                   </div>
                 )}
