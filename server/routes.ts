@@ -783,8 +783,11 @@ export async function registerRoutes(
     try {
       const userId = req.headers["x-user-id"] as string;
       if (!userId) return res.status(401).json({ error: "Authentication required" });
-      const body = savedReportBodySchema.parse(req.body);
-      const report = await storage.createSavedReport({ userId, ...body });
+      const parseResult = savedReportBodySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request body", details: parseResult.error.flatten() });
+      }
+      const report = await storage.createSavedReport({ userId, ...parseResult.data });
       return res.status(201).json(report);
     } catch (err: any) {
       console.error("[saved-reports POST]", err);

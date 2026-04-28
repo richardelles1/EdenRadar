@@ -138,8 +138,9 @@ export default function Reports() {
               return (
                 <div
                   key={report.id}
-                  className="flex flex-col gap-4 p-5 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200"
+                  className="flex flex-col gap-4 p-5 rounded-lg border border-card-border bg-card hover:border-primary/30 transition-colors duration-200 cursor-pointer"
                   data-testid={`report-card-${report.id}`}
+                  onClick={() => openReport(report)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-start gap-3 min-w-0">
@@ -199,7 +200,7 @@ export default function Reports() {
                       className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
                       title="Delete report"
                       disabled={deleteMutation.isPending}
-                      onClick={() => deleteMutation.mutate(report.id)}
+                      onClick={(e) => { e.stopPropagation(); deleteMutation.mutate(report.id); }}
                       data-testid={`button-delete-report-${report.id}`}
                     >
                       <Trash2 className="w-3.5 h-3.5" />
