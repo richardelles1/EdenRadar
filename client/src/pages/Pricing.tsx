@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
 import type { OrgContext } from "@/hooks/use-org";
 import { useToast } from "@/hooks/use-toast";
+import { PLAN_PRICES, formatPrice } from "@/lib/pricing";
 
 const CONTACT_SALES = "sales@edenradar.com";
 
@@ -14,7 +15,7 @@ const SCOUT_PLANS = [
   {
     id: "individual",
     name: "Individual",
-    price: "$1,999",
+    price: formatPrice(PLAN_PRICES.individual),
     period: "/mo",
     seats: "1 seat",
     isTeam: false,
@@ -33,7 +34,7 @@ const SCOUT_PLANS = [
   {
     id: "team5",
     name: "Team",
-    price: "$8,999",
+    price: formatPrice(PLAN_PRICES.team5),
     period: "/mo",
     seats: "5 seats",
     isTeam: true,
@@ -52,7 +53,7 @@ const SCOUT_PLANS = [
   {
     id: "team10",
     name: "Team",
-    price: "$16,999",
+    price: formatPrice(PLAN_PRICES.team10),
     period: "/mo",
     seats: "10 seats",
     isTeam: true,

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation, Link } from "wouter";
+import { PLAN_PRICES, formatPrice } from "@/lib/pricing";
 import { Nav } from "@/components/Nav";
 import { EdenNXBadge } from "@/components/EdenNXBadge";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
@@ -124,8 +125,8 @@ const TIERS = [
     colorDim: "hsl(142 65% 48% / 0.08)",
     borderColor: "hsl(142 65% 48% / 0.3)",
     headerBg: "hsl(142 52% 36%)",
-    price: "$1,999",
-    ...derivedYearly(1999),
+    price: formatPrice(PLAN_PRICES.individual),
+    ...derivedYearly(PLAN_PRICES.individual),
     period: "/mo",
     tagline: "For BD teams and licensing executives.",
     popular: true,
