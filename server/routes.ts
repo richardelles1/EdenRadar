@@ -5850,9 +5850,14 @@ If a field cannot be determined, use "N/A".`
       const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
       const membership = await storage.getOrgPlanByMembership(userId);
       if (!membership || !PAID_PLANS.includes(membership.plan as (typeof PAID_PLANS)[number])) {
-        return res.json({ plan: null, orgName: null });
+        return res.json({ plan: null, orgName: null, stripeStatus: null, stripeCurrentPeriodEnd: null });
       }
-      return res.json({ plan: membership.plan, orgName: membership.orgName });
+      return res.json({
+        plan: membership.plan,
+        orgName: membership.orgName,
+        stripeStatus: membership.stripeStatus ?? null,
+        stripeCurrentPeriodEnd: membership.stripeCurrentPeriodEnd ?? null,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

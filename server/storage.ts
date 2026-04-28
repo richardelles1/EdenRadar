@@ -341,7 +341,7 @@ export interface IStorage {
   updateOrgMemberRole(orgId: number, userId: string, role: string): Promise<void>;
   updateOrgMemberInviteStatus(orgId: number, userId: string, status: string): Promise<void>;
   getOrgForUser(userId: string): Promise<Organization | undefined>;
-  getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null>;
+  getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string; stripeStatus: string | null; stripeCurrentPeriodEnd: Date | null } | null>;
 
   createSharedLink(data: { type: string; entityId?: string; payload: Record<string, unknown>; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink>;
   getSharedLinkByToken(token: string): Promise<SharedLink | undefined>;
@@ -3007,9 +3007,14 @@ export class DatabaseStorage implements IStorage {
     return this.getOrganization(profile.orgId);
   }
 
-  async getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string } | null> {
+  async getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string; stripeStatus: string | null; stripeCurrentPeriodEnd: Date | null } | null> {
     const [row] = await db
-      .select({ plan: organizations.planTier, orgName: organizations.name })
+      .select({
+        plan: organizations.planTier,
+        orgName: organizations.name,
+        stripeStatus: organizations.stripeStatus,
+        stripeCurrentPeriodEnd: organizations.stripeCurrentPeriodEnd,
+      })
       .from(orgMembers)
       .innerJoin(organizations, eq(orgMembers.orgId, organizations.id))
       .where(eq(orgMembers.userId, userId))

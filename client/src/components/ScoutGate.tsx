@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Radar, CheckCircle2, ArrowRight, Lock, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-type PlanResponse = { plan: string | null; orgName: string | null };
+type PlanResponse = { plan: string | null; orgName: string | null; stripeStatus: string | null; stripeCurrentPeriodEnd: string | null };
 
 const PAID_PLANS = ["individual", "team5", "team10", "enterprise"] as const;
 
