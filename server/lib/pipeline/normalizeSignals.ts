@@ -2,7 +2,11 @@ import type { RawSignal, ScoredAsset } from "../types";
 import { extractAssetFromSignal, extractAssetsFromSignalBatch, isFatalOpenAIError } from "../llm";
 
 const BATCH_SIZE = 10;
-const INDIVIDUAL_TYPES = new Set(["tech_transfer", "patent"]);
+const INDIVIDUAL_TYPES = new Set(["tech_transfer"]);
+// Patents are NOT in INDIVIDUAL_TYPES — they skip LLM entirely (see normalizeSignals).
+// USPTO signals already carry structured metadata (title, assignee, inventors, abstract,
+// filing date, owner_type, patent_status) so LLM extraction adds nothing useful and
+// would serialize 100 individual OpenAI calls, exhausting timeouts.
 
 async function runWithConcurrency<T>(
   tasks: (() => Promise<T>)[],
@@ -140,7 +144,10 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
   const batchableIndices: number[] = [];
 
   signals.forEach((s, i) => {
-    if (INDIVIDUAL_TYPES.has(s.source_type)) {
+    if (s.source_type === "patent") {
+      // Patents skip LLM — all needed data is already in signal.metadata from USPTO.
+      output[i] = buildFallback(s);
+    } else if (INDIVIDUAL_TYPES.has(s.source_type)) {
       individualIndices.push(i);
     } else {
       batchableIndices.push(i);

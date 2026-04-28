@@ -322,18 +322,18 @@ export async function registerRoutes(
         }
       }
 
-      // When a patent date filter is set, call searchPatents directly so the date
-      // constraint is pushed into the USPTO PatentsView query rather than filtering
-      // client-side. Other sources are collected via the generic pipeline.
-      const hasPatentDateFilter = !!(patentSinceDate || patentBeforeDate);
+      // Always call searchPatents directly, bypassing collectAllSignals entirely.
+      // collectAllSignals wraps every source with a 3,500ms timeout — far too short
+      // for the USPTO API to return 100 results (typically 5–10s). searchPatents
+      // has its own 12,000ms budget and handles date filters natively.
       const patentInSources = effectiveSources.includes("patents" as SourceKey);
-      const nonPatentSources = hasPatentDateFilter && patentInSources
+      const nonPatentSources = patentInSources
         ? effectiveSources.filter((s) => s !== ("patents" as SourceKey))
         : effectiveSources;
 
       let signals = await collectAllSignals(enrichedQuery, nonPatentSources, maxPerSource);
 
-      if (hasPatentDateFilter && patentInSources) {
+      if (patentInSources) {
         const patentSignals = await searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate);
         signals = [...signals, ...patentSignals];
       }

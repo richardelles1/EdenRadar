@@ -801,7 +801,7 @@ export default function Scout() {
                 <div className="flex w-full max-w-2xl items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
                   <button
                     onClick={() => setResultTab("assets")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "assets"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -819,7 +819,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("patents")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "patents"
                         ? "bg-amber-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -844,7 +844,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("research")}
-                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
                       resultTab === "research"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
