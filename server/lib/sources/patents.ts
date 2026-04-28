@@ -15,13 +15,6 @@ function inferOwnerType(assignee: string): "university" | "company" | "unknown" 
   return "unknown";
 }
 
-function toTitleCase(str: string): string {
-  if (!str) return str;
-  return str
-    .toLowerCase()
-    .replace(/\b\w/g, (c) => c.toUpperCase());
-}
-
 function inDateRange(dateStr: string, sinceDate?: string, beforeDate?: string): boolean {
   if (!sinceDate && !beforeDate) return true;
   if (!dateStr) return true;
@@ -31,24 +24,53 @@ function inDateRange(dateStr: string, sinceDate?: string, beforeDate?: string): 
   return true;
 }
 
-function isLikelyAbbreviation(query: string): boolean {
-  const words = query.trim().split(/\s+/);
-  return words.length <= 2 && words.every((w) => w.length <= 8);
+function buildPatentQuery(rawQuery: string, sinceDate?: string, beforeDate?: string): string {
+  const tokens = rawQuery.trim().split(/\s+/);
+
+  const expandedTokens = tokens
+    .filter((t) => t.length >= 2)
+    .map((t) => {
+      if (t.includes("-")) {
+        const upper = t.toUpperCase();
+        const spaced = `"${t.replace(/-/g, " ")}"`;
+        return `(${upper} OR ${spaced})`;
+      }
+      return t;
+    });
+
+  let query = expandedTokens.join(" AND ");
+  if (!query) query = rawQuery.trim();
+
+  query += " src:PAT";
+
+  if (sinceDate || beforeDate) {
+    const from = sinceDate ?? "1900-01-01";
+    const to = beforeDate ? beforeDate.slice(0, 10) : "3000-01-01";
+    query += ` FIRST_PDATE:[${from} TO ${to}]`;
+  }
+
+  return query;
 }
 
-export async function searchPatents(query: string, maxResults = 10, sinceDate?: string, beforeDate?: string): Promise<RawSignal[]> {
+export async function searchPatents(
+  query: string,
+  maxResults = 10,
+  sinceDate?: string,
+  beforeDate?: string
+): Promise<RawSignal[]> {
   try {
-    const builtQuery = `${query.trim()} src:PAT`;
-    const useSynonyms = isLikelyAbbreviation(query);
-
+    const builtQuery = buildPatentQuery(query, sinceDate, beforeDate);
+    const tokens = query.trim().split(/\s+/);
+    const isShortQuery = tokens.length <= 2 && tokens.every((w) => w.length <= 8);
     const pageSize = Math.min(maxResults * 3, 50);
+
     const params = new URLSearchParams({
       query: builtQuery,
       format: "json",
       resultType: "core",
       pageSize: String(pageSize),
     });
-    if (useSynonyms) {
+    if (isShortQuery) {
       params.set("synonym", "true");
     }
 
@@ -70,7 +92,7 @@ export async function searchPatents(query: string, maxResults = 10, sinceDate?: 
       .filter((r) => inDateRange(r.firstPublicationDate ?? "", sinceDate, beforeDate));
 
     return filtered.slice(0, maxResults).map((r): RawSignal => {
-      const patentId: string = r.id ?? "";
+      const patentId: string = r.id ?? r.pmid ?? r.accession ?? "";
       const assignee: string = r.affiliation ?? "";
       const primaryAssignee = assignee.split(",")[0].trim();
 
@@ -78,13 +100,17 @@ export async function searchPatents(query: string, maxResults = 10, sinceDate?: 
         ? `https://europepmc.org/article/PAT/${patentId}`
         : "https://europepmc.org";
 
+      const stableId = patentId
+        ? `patent-${patentId}`
+        : `patent-${Buffer.from(r.title ?? "").toString("base64").slice(0, 16)}`;
+
       return {
-        id: `patent-${patentId || Math.random()}`,
+        id: stableId,
         source_type: "patent",
-        title: toTitleCase(r.title ?? "Untitled Patent"),
+        title: r.title ?? "Untitled Patent",
         text: r.abstractText ?? "",
         authors_or_owner: r.authorString ?? "",
-        institution_or_sponsor: toTitleCase(primaryAssignee),
+        institution_or_sponsor: primaryAssignee,
         date: r.firstPublicationDate ?? "",
         stage_hint: "discovery",
         url,
