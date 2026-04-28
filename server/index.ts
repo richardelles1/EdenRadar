@@ -990,6 +990,30 @@ async function createSharedLinksTable() {
 // New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
 // Mapping: 'viewing' -> 'watching', 'contacted' -> 'in_discussion'
 // The old DB-level check constraint is also dropped so the new values are accepted.
+async function backfillIndividualOrgNames() {
+  try {
+    const result = await db.execute(sql`
+      UPDATE organizations o
+      SET name = ip.company_name
+      FROM org_members om
+      JOIN industry_profiles ip ON ip.user_id = om.user_id
+      WHERE om.org_id = o.id
+        AND om.role = 'owner'
+        AND o.plan_tier = 'individual'
+        AND o.name IN ('My Organisation', 'Personal Workspace')
+        AND ip.company_name IS NOT NULL
+        AND ip.company_name != ''
+    `);
+    type PgResult = { rowCount: number | null };
+    const updated = ((result as unknown as PgResult).rowCount ?? 0);
+    if (updated > 0) {
+      log(`[startup] Backfilled org names: updated ${updated} individual org(s) from profile company name`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Org name backfill note: ${err?.message}`, "startup");
+  }
+}
+
 async function migrateAssetStatusValues() {
   try {
     await db.execute(sql`
@@ -1093,6 +1117,8 @@ async function migrateAssetStatusValues() {
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
+      // ── Backfill individual org names from profile company name ─────────
+      backfillIndividualOrgNames().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────
       // Runs 5 seconds after startup. Cleans old rows in small LIMIT batches,
       // then calls ensureStagingIndexes once the table is smaller.
