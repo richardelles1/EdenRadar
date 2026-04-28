@@ -996,25 +996,38 @@ async function createSharedLinksTable() {
   }
 }
 
+// Human-readable plan name mapping for trial reminder emails
+function planTierLabel(tier: string | null | undefined): string {
+  switch (tier) {
+    case "individual": return "Individual";
+    case "team5":      return "Team (5 seats)";
+    case "team10":     return "Team (10 seats)";
+    case "enterprise": return "Enterprise";
+    default:           return tier ?? "EdenScout";
+  }
+}
+
 // ── Trial-ending reminder emails (runs every 6h, sends when trial ends within 25h) ──
 async function checkAndSendTrialReminders() {
   try {
     const orgs = await storage.getOrgsWithTrialEndingSoon(25);
     if (orgs.length === 0) return;
+
     const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
     const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
-    let adminSupabase: ReturnType<typeof import("@supabase/supabase-js").createClient> | null = null;
+    let admin: Awaited<ReturnType<typeof import("@supabase/supabase-js").createClient>> | null = null;
     if (sbUrl && sbKey) {
       try {
         const { createClient } = await import("@supabase/supabase-js");
-        adminSupabase = createClient(sbUrl, sbKey);
+        admin = createClient(sbUrl, sbKey);
       } catch { /* no-op */ }
     }
+
     for (const org of orgs) {
       try {
-        // Resolve recipient email: prefer the org owner's Supabase auth email, fall back to billingEmail
+        // Resolve recipient email: prefer org owner's Supabase auth email, fall back to billingEmail
         let recipientEmail: string | null = org.billingEmail ?? null;
-        if (adminSupabase) {
+        if (admin) {
           try {
             const ownerRow = await db.execute(sql`
               SELECT user_id FROM org_members
@@ -1024,7 +1037,7 @@ async function checkAndSendTrialReminders() {
             const ownerRows = (ownerRow as any).rows ?? ownerRow;
             const ownerId: string | undefined = ownerRows[0]?.user_id;
             if (ownerId) {
-              const { data: userData } = await (adminSupabase as any).auth.admin.getUserById(ownerId);
+              const { data: userData } = await admin.auth.admin.getUserById(ownerId);
               const ownerEmail: string | undefined = userData?.user?.email;
               if (ownerEmail) recipientEmail = ownerEmail;
             }
@@ -1040,9 +1053,10 @@ async function checkAndSendTrialReminders() {
           year: "numeric", month: "long", day: "numeric",
         });
         const portalUrl = `${process.env.APP_URL ?? "https://edenradar.com"}/industry/settings`;
-        await sendTrialEndingEmail(recipientEmail, org.name ?? "", trialEndDate, portalUrl);
+        const planName = planTierLabel(org.planTier);
+        await sendTrialEndingEmail(recipientEmail, org.name ?? "", trialEndDate, portalUrl, planName);
         await storage.updateOrganization(org.id, { trialReminderSentAt: new Date() });
-        log(`[trial-reminder] Sent trial-ending email to ${recipientEmail} (org ${org.id}, ends ${trialEndDate})`, "startup");
+        log(`[trial-reminder] Sent trial-ending email to ${recipientEmail} (org ${org.id}, plan: ${planName}, ends ${trialEndDate})`, "startup");
       } catch (orgErr: any) {
         log(`[trial-reminder] Failed for org ${org.id}: ${orgErr?.message}`, "startup");
       }

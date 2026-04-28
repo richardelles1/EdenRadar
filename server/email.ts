@@ -323,16 +323,21 @@ export function sendTrialEndingEmail(
   orgName: string,
   trialEndDate: string,
   portalUrl?: string,
+  planName?: string,
 ): Promise<void> {
   const greeting = orgName ? `Hi ${orgName},` : "Hi,";
   const ctaUrl = portalUrl ?? `${APP_URL}/industry/settings`;
+  const planLine = planName
+    ? `<p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">Your current plan: <strong>${planName}</strong></p>`
+    : "";
   const html = baseHtml(`
     <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout trial expires tomorrow</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
       ${greeting} your EdenScout free trial expires on <strong>${trialEndDate}</strong>. After that date
-      you will be charged automatically unless you cancel. To stay on the plan — or to cancel — manage
-      your subscription in Settings.
+      you will be charged automatically unless you cancel first. To stay on the plan — or to cancel —
+      manage your subscription in Settings.
     </p>
+    ${planLine}
     <a href="${ctaUrl}"
        style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
       Manage subscription
