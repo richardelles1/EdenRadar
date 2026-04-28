@@ -49,6 +49,9 @@ export default function Login() {
     ? (_portalParam as ValidPortalRole)
     : null;
 
+  const _rawRedirectParam = _searchParams.get("redirect") ?? "";
+  const _redirectParam = _rawRedirectParam.startsWith("/") ? _rawRedirectParam : null;
+
   const initialMode = portalRole != null
     ? "signup"
     : (_searchParams.get("mode") === "signup" ? "signup" : "signin");
@@ -95,10 +98,11 @@ export default function Login() {
 
   useEffect(() => {
     if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
-      const dest =
+      const dest = _redirectParam ?? (
         role === "industry" ? "/industry/dashboard" :
         role === "researcher" ? "/research" :
-        "/discovery";
+        "/discovery"
+      );
       navigate(dest, { replace: true });
     }
   }, [authLoading, session, role, isPasswordRecovery, navigate, view]);
@@ -114,6 +118,14 @@ export default function Login() {
     );
   }
 
+  function redirectAfterSignIn(r: "industry" | "researcher" | "concept") {
+    if (_redirectParam) {
+      navigate(_redirectParam, { replace: true });
+    } else {
+      redirectByRole(r);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -123,7 +135,7 @@ export default function Login() {
       if (err) { setError(err); setLoading(false); return; }
       const { data } = await supabase.auth.getUser();
       const r = data.user?.user_metadata?.role;
-      if (r === "industry" || r === "researcher" || r === "concept") redirectByRole(r);
+      if (r === "industry" || r === "researcher" || r === "concept") redirectAfterSignIn(r);
       else { setError("Account has no role assigned"); setLoading(false); }
     } else {
       const { error: err } = await signUp(email, password, selectedRole);
