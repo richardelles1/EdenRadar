@@ -30,11 +30,13 @@ export function PatentCard({ asset }: PatentCardProps) {
       ? asset.owner_name
       : null;
 
-  const grantYear = asset.latest_signal_date
-    ? new Date(asset.latest_signal_date).getFullYear().toString()
-    : filingDate
-    ? new Date(filingDate).getFullYear().toString()
-    : null;
+  const grantDateStr = (() => {
+    const raw = asset.latest_signal_date || filingDate;
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  })();
 
   const excerpt = asset.summary
     ? asset.summary.length > 110
@@ -110,10 +112,10 @@ export function PatentCard({ asset }: PatentCardProps) {
               <ScrollText className="w-2.5 h-2.5" />
               Patent
             </span>
-            {grantYear && (
+            {grantDateStr && (
               <span className="flex items-center gap-0.5 text-[9px] font-medium text-zinc-500 dark:text-zinc-400">
                 <Calendar className="w-2.5 h-2.5" />
-                {grantYear}
+                {grantDateStr}
               </span>
             )}
           </div>

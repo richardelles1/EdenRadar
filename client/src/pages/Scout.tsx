@@ -686,7 +686,7 @@ export default function Scout() {
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-amber-500/5 border border-amber-500/15 text-xs text-muted-foreground" data-testid="patents-compiling-banner">
                 <Loader2 className="w-3 h-3 animate-spin text-amber-600 dark:text-amber-400 shrink-0" />
-                <span>Searching patent databases...</span>
+                <span>Compiling patents...</span>
               </div>
             </div>
           )}
@@ -736,7 +736,7 @@ export default function Scout() {
                     data-testid="result-tab-assets"
                   >
                     <Building2 className="w-4 h-4 shrink-0" />
-                    TTO Assets
+                    Tech Transfer Assets
                     <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
                       resultTab === "assets" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
                     }`}>
@@ -768,35 +768,31 @@ export default function Scout() {
                       </span>
                     )}
                   </button>
-                  {researchSources.length > 0 && (
-                    <>
-                      <div className="w-px bg-border shrink-0" />
-                      <button
-                        onClick={() => setResultTab("research")}
-                        className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
-                          resultTab === "research"
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-background text-muted-foreground hover:text-foreground"
-                        }`}
-                        data-testid="result-tab-research"
-                      >
-                        {researchMutation.isPending
-                          ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                          : <FlaskConical className="w-4 h-4 shrink-0" />
-                        }
-                        Research Papers
-                        {researchMutation.isPending ? (
-                          <span className="ml-1 text-[10px] italic font-normal opacity-70">Compiling...</span>
-                        ) : (
-                          <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
-                            resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
-                          }`}>
-                            {researchResults.length}
-                          </span>
-                        )}
-                      </button>
-                    </>
-                  )}
+                  <div className="w-px bg-border shrink-0" />
+                  <button
+                    onClick={() => setResultTab("research")}
+                    className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                      resultTab === "research"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                    data-testid="result-tab-research"
+                  >
+                    {researchMutation.isPending
+                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                      : <FlaskConical className="w-4 h-4 shrink-0" />
+                    }
+                    External Research Papers
+                    {researchMutation.isPending ? (
+                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Compiling...</span>
+                    ) : (
+                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                        resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
+                      }`}>
+                        {researchResults.length}
+                      </span>
+                    )}
+                  </button>
                 </div>
               </div>
             </div>
@@ -951,13 +947,22 @@ export default function Scout() {
               </>
             )}
 
+            {/* Research tab — no sources enabled nudge */}
+            {hasSearched && resultTab === "research" && researchSources.length === 0 && !searchMutation.isPending && (
+              <div className="flex flex-col items-center justify-center py-16 gap-3 text-center" data-testid="research-no-sources-state">
+                <FlaskConical className="w-8 h-8 text-muted-foreground/40" />
+                <p className="text-sm font-medium text-foreground">No academic sources selected</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Enable PubMed, ClinicalTrials.gov, or other sources using the Sources dropdown above to see research papers alongside your TTO results.</p>
+              </div>
+            )}
+
             {/* Research Signals tab — loading state while compiling */}
             {hasSearched && resultTab === "research" && researchSources.length > 0 && !searchMutation.isPending && researchMutation.isPending && (
               <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="research-loading-state">
                 <Loader2 className="w-8 h-8 animate-spin text-primary opacity-60" />
                 <div>
                   <p className="text-sm font-medium text-foreground mb-1">Compiling research signals...</p>
-                  <p className="text-xs text-muted-foreground">Searching PubMed, clinical trials, and {researchSources.length - 3 > 0 ? `${researchSources.length - 3} more sources` : "more sources"}.</p>
+                  <p className="text-xs text-muted-foreground">Searching {researchSources.length} academic source{researchSources.length !== 1 ? "s" : ""}.</p>
                 </div>
               </div>
             )}
