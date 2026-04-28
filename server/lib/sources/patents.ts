@@ -53,7 +53,7 @@ export async function searchPatents(
 
   try {
     const q = buildSearchQuery(query);
-    const limit = Math.min(maxResults * 2, 25);
+    const limit = Math.min(maxResults * 2, 50);
 
     let fullQuery = q;
     if (sinceDate && beforeDate) {

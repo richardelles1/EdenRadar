@@ -257,6 +257,15 @@ export default function Scout() {
     } catch { return DEFAULT_RESEARCH_SOURCES; }
   });
 
+  const PATENT_PAGE_SIZE = 15;
+  const RESEARCH_PAGE_SIZE = 20;
+  const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
+  const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
+
+  useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentResults]);
+  useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
+  useEffect(() => { setShownResearchCount(RESEARCH_PAGE_SIZE); }, [researchResults]);
+
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
     const qParam = params.get("q");
@@ -381,7 +390,7 @@ export default function Scout() {
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 15, buyerProfile }),
+          body: JSON.stringify({ query, sources: backendSources, maxPerSource: 30, buyerProfile }),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -411,7 +420,7 @@ export default function Scout() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
-        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 10, buyerProfile };
+        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 25, buyerProfile };
         if (patentSince && patentSince !== "any") {
           body.patentSince = patentSince;
         }
@@ -1108,9 +1117,13 @@ export default function Scout() {
                     </div>
 
                     <p className="text-sm text-muted-foreground" data-testid="patents-results-count">
-                      <span className="text-foreground font-semibold">{filteredPatentResults.length}</span>
+                      {filteredPatentResults.length > shownPatentCount ? (
+                        <>Showing <span className="text-foreground font-semibold">{shownPatentCount}</span> of <span className="text-foreground font-semibold">{filteredPatentResults.length}</span></>
+                      ) : (
+                        <span className="text-foreground font-semibold">{filteredPatentResults.length}</span>
+                      )}
                       {filteredPatentResults.length !== patentResults.length && (
-                        <span> of <span className="text-foreground font-semibold">{patentResults.length}</span></span>
+                        <span> of <span className="text-foreground font-semibold">{patentResults.length}</span> total</span>
                       )}{" "}
                       patent{filteredPatentResults.length !== 1 ? "s" : ""} found
                       {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
@@ -1122,14 +1135,29 @@ export default function Scout() {
                         <p className="text-sm text-muted-foreground">No patents match the current filters.</p>
                       </div>
                     ) : (
-                      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                        {filteredPatentResults.map((asset) => (
-                          <PatentCard
-                            key={asset.id + "-patent"}
-                            asset={asset}
-                          />
-                        ))}
-                      </div>
+                      <>
+                        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                          {filteredPatentResults.slice(0, shownPatentCount).map((asset) => (
+                            <PatentCard
+                              key={asset.id + "-patent"}
+                              asset={asset}
+                            />
+                          ))}
+                        </div>
+                        {shownPatentCount < filteredPatentResults.length && (
+                          <div className="flex justify-center pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-[11px] h-7 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-500/5"
+                              onClick={() => setShownPatentCount((c) => c + PATENT_PAGE_SIZE)}
+                              data-testid="button-load-more-patents"
+                            >
+                              Show {Math.min(PATENT_PAGE_SIZE, filteredPatentResults.length - shownPatentCount)} more patents
+                            </Button>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )}
@@ -1170,8 +1198,12 @@ export default function Scout() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <p className="text-sm text-muted-foreground" data-testid="research-results-count">
-                        <span className="text-foreground font-semibold">{researchResults.length}</span> research signal{researchResults.length !== 1 ? "s" : ""} found
-                        {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
+                        {researchResults.length > shownResearchCount ? (
+                          <>Showing <span className="text-foreground font-semibold">{shownResearchCount}</span> of <span className="text-foreground font-semibold">{researchResults.length}</span> research signals</>
+                        ) : (
+                          <><span className="text-foreground font-semibold">{researchResults.length}</span> research signal{researchResults.length !== 1 ? "s" : ""}</>
+                        )}
+                        {currentQuery ? <> found for "<span className="text-foreground">{currentQuery}</span>"</> : " found"}
                       </p>
                       <div className="flex items-center gap-2 shrink-0">
                         <button
@@ -1200,13 +1232,26 @@ export default function Scout() {
                       </div>
                     </div>
                     <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                      {researchResults.map((asset) => (
+                      {researchResults.slice(0, shownResearchCount).map((asset) => (
                         <ResearchCard
                           key={asset.id + "-research"}
                           asset={asset}
                         />
                       ))}
                     </div>
+                    {shownResearchCount < researchResults.length && (
+                      <div className="flex justify-center pt-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5"
+                          onClick={() => setShownResearchCount((c) => c + RESEARCH_PAGE_SIZE)}
+                          data-testid="button-load-more-research"
+                        >
+                          Show {Math.min(RESEARCH_PAGE_SIZE, researchResults.length - shownResearchCount)} more papers
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 )}
               </>
