@@ -27,6 +27,8 @@ import {
   Eye,
   EyeOff,
   Lock,
+  ScrollText,
+  Activity,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { SavedAsset } from "@shared/schema";
@@ -207,6 +209,12 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
   const noteCount = asset.noteCount ?? notes.length;
   const lastNoteAt = asset.lastNoteAt ?? (notes.length > 0 ? notes[notes.length - 1]?.createdAt : null);
 
+  const sourceType = asset.sourceName === "patent" ? "patent" : asset.sourceName === "clinical_trial" ? "trial" : "tto";
+  const bloomColor = sourceType === "patent" ? "rgba(217,119,6,0.55)" : sourceType === "trial" ? "rgba(13,148,136,0.55)" : "rgba(38,122,70,0.55)";
+  const accentColor = sourceType === "patent" ? "#d97706" : sourceType === "trial" ? "#0d9488" : "#22c55e";
+  const accentBorderClass = sourceType === "patent" ? "border-amber-500/40" : sourceType === "trial" ? "border-teal-500/40" : "border-emerald-500/40";
+  const stageTextClass = sourceType === "patent" ? "text-amber-600 dark:text-amber-400" : sourceType === "trial" ? "text-teal-600 dark:text-teal-400" : "text-emerald-600 dark:text-emerald-400";
+
   return (
     <div style={{ perspective: "1000px" }} data-testid={`pipeline-card-${asset.id}`}>
       <div
@@ -241,7 +249,7 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
             width: "56px",
             height: "56px",
             borderRadius: "50%",
-            background: "rgba(38, 122, 70, 0.55)",
+            background: bloomColor,
             top: "-28px",
             left: "-28px",
             transform: hovered ? "scale(26)" : "scale(1)",
@@ -251,15 +259,15 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
           }}
         />
 
-        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: "#22c55e" }} />
+        <div className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]" style={{ background: accentColor }} />
 
         <div
-          className="absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r border-emerald-500/40 bg-white dark:bg-zinc-900"
+          className={`absolute top-0 left-0 z-[5] flex flex-col items-center justify-center px-2 py-1 border-b border-r ${accentBorderClass} bg-white dark:bg-zinc-900`}
           style={{ borderRadius: "17px 0 10px 0", minWidth: "36px" }}
           data-testid={`pipeline-stage-badge-${asset.id}`}
         >
           <span className="text-[8px] font-bold tracking-[0.15em] uppercase leading-none text-muted-foreground">Stage</span>
-          <span className="font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
+          <span className={`font-mono text-xs font-bold leading-tight tabular-nums mt-0.5 ${stageTextClass}`}>
             {stageAbbr !== "unknown" ? stageAbbr : <span className="opacity-40">?</span>}
           </span>
         </div>
@@ -275,13 +283,31 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
 
         <div className="relative z-[4] pl-4 pr-3 pt-8 pb-3 flex flex-col gap-2.5">
           <div className="flex items-center gap-1.5 min-w-0">
-            <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            {sourceType === "patent" ? (
+              <ScrollText className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            ) : sourceType === "trial" ? (
+              <Activity className="w-3.5 h-3.5 text-teal-500 shrink-0" />
+            ) : (
+              <FlaskConical className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+            )}
             <span className="font-semibold text-sm text-foreground truncate leading-tight">
               {asset.assetName !== "unknown" ? asset.assetName : "Unnamed Asset"}
             </span>
           </div>
 
           <div className="flex flex-wrap gap-1">
+            {sourceType === "patent" && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border text-amber-600 dark:text-amber-400 bg-amber-500/10 border-amber-500/30">
+                <ScrollText className="w-2.5 h-2.5" />
+                Patent
+              </span>
+            )}
+            {sourceType === "trial" && (
+              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium border text-teal-600 dark:text-teal-400 bg-teal-500/10 border-teal-500/30">
+                <Activity className="w-2.5 h-2.5" />
+                Trial
+              </span>
+            )}
             {asset.modality && asset.modality !== "unknown" && (
               <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border ${modalityClass}`}>
                 {asset.modality}
@@ -446,6 +472,7 @@ export default function Pipeline() {
   const [showShareForm, setShowShareForm] = useState(false);
   const [shareBriefPassword, setShareBriefPassword] = useState("");
   const [shareBriefPasswordVisible, setShareBriefPasswordVisible] = useState(false);
+  const [sourceTypeFilter, setSourceTypeFilter] = useState<"all" | "tto" | "patent" | "trial">("all");
 
   const { data, isLoading } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
@@ -533,6 +560,15 @@ export default function Pipeline() {
 
   const savedAssets = data?.assets ?? [];
 
+  const filteredSavedAssets = sourceTypeFilter === "all"
+    ? savedAssets
+    : savedAssets.filter((a) => {
+        const sn = a.sourceName ?? "";
+        if (sourceTypeFilter === "patent") return sn === "patent";
+        if (sourceTypeFilter === "trial") return sn === "clinical_trial";
+        return sn !== "patent" && sn !== "clinical_trial";
+      });
+
   const handleExportJson = () => {
     const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -562,12 +598,13 @@ export default function Pipeline() {
 
   const assetsByStage = STAGES.map((stage) => ({
     ...stage,
-    assets: savedAssets.filter(
+    assets: filteredSavedAssets.filter(
       (a) => (a.developmentStage?.toLowerCase().trim() || "unknown") === stage.key
     ),
   }));
 
   const totalAssets = savedAssets.length;
+  const filteredCount = filteredSavedAssets.length;
   const nonEmptyStages = assetsByStage.filter((s) => s.assets.length > 0);
 
   return (
@@ -587,7 +624,9 @@ export default function Pipeline() {
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   {totalAssets > 0
-                    ? `${totalAssets} asset${totalAssets !== 1 ? "s" : ""} across ${nonEmptyStages.length} stage${nonEmptyStages.length !== 1 ? "s" : ""}`
+                    ? sourceTypeFilter === "all"
+                      ? `${totalAssets} asset${totalAssets !== 1 ? "s" : ""} across ${nonEmptyStages.length} stage${nonEmptyStages.length !== 1 ? "s" : ""}`
+                      : `${filteredCount} ${sourceTypeFilter === "patent" ? "patent" : sourceTypeFilter === "trial" ? "trial" : "TTO"} asset${filteredCount !== 1 ? "s" : ""} of ${totalAssets} total`
                     : "Save assets from Discover to build your pipeline"}
                 </p>
               </div>
@@ -638,8 +677,42 @@ export default function Pipeline() {
             </Link>
           </div>
         ) : (
+          <>
+            {totalAssets > 0 && (
+              <div className="border-b border-border bg-background">
+                <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0">View:</span>
+                  {([
+                    { key: "all",     label: "All" },
+                    { key: "tto",     label: "TTO Assets" },
+                    { key: "patent",  label: "Patents" },
+                    { key: "trial",   label: "Trials" },
+                  ] as const).map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setSourceTypeFilter(key)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
+                        sourceTypeFilter === key
+                          ? "border-primary bg-primary/15 text-primary font-medium"
+                          : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
+                      }`}
+                      data-testid={`filter-source-type-${key}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           <div className="flex-1 overflow-x-auto">
             <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
+              {filteredCount === 0 && totalAssets > 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
+                  <p className="text-sm font-medium text-foreground">No {sourceTypeFilter === "patent" ? "patent" : sourceTypeFilter === "trial" ? "trial" : "TTO"} assets in pipeline</p>
+                  <p className="text-xs text-muted-foreground">Save {sourceTypeFilter === "patent" ? "patents" : sourceTypeFilter === "trial" ? "clinical trials" : "TTO assets"} from Scout to see them here.</p>
+                  <button onClick={() => setSourceTypeFilter("all")} className="text-xs text-primary hover:underline mt-1" data-testid="button-clear-source-filter">Show all assets</button>
+                </div>
+              ) : (
               <div className="flex gap-4 min-w-max pb-4">
                 {assetsByStage.map((stage) => (
                   <div
@@ -695,8 +768,10 @@ export default function Pipeline() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           </div>
+          </>
         )}
       </main>
 

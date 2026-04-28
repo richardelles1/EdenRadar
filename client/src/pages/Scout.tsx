@@ -596,6 +596,34 @@ export default function Scout() {
     },
   });
 
+  const saveMutation = useMutation({
+    mutationFn: async (asset: ScoredAsset) => {
+      const signal = asset.signals?.[0];
+      const res = await apiRequest("POST", "/api/saved-assets", {
+        asset_name: asset.asset_name,
+        target: asset.target,
+        modality: asset.modality,
+        development_stage: asset.development_stage,
+        disease_indication: asset.indication,
+        summary: asset.summary,
+        source_title: signal?.title ?? asset.asset_name,
+        source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+        publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+        source_name: asset.source_types?.[0] ?? "unknown",
+        source_url: asset.source_urls?.[0] ?? undefined,
+        pmid: asset.id,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      toast({ title: "Saved to pipeline" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
   const savedAssets = savedData?.assets ?? [];
   const savedAssetIds = new Set(savedAssets.map((a) => a.pmid ?? a.assetName).filter(Boolean) as string[]);
 
@@ -1315,6 +1343,9 @@ export default function Scout() {
                             <PatentCard
                               key={asset.id + "-patent"}
                               asset={asset}
+                              isSaved={savedAssetIds.has(asset.id)}
+                              onSave={() => saveMutation.mutate(asset)}
+                              onUnsave={() => handleUnsave(asset.id)}
                             />
                           ))}
                         </div>
@@ -1489,6 +1520,9 @@ export default function Scout() {
                             <ClinicalTrialCard
                               key={asset.id + "-trial"}
                               asset={asset}
+                              isSaved={savedAssetIds.has(asset.id)}
+                              onSave={() => saveMutation.mutate(asset)}
+                              onUnsave={() => handleUnsave(asset.id)}
                             />
                           ))}
                         </div>

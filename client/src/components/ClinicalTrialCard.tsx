@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { ExternalLink, FlaskConical, Calendar, Building2, GraduationCap, Copy, Check, Activity, FileText } from "lucide-react";
+import { ExternalLink, FlaskConical, Calendar, Building2, GraduationCap, Copy, Check, Activity, FileText, Bookmark } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import type { ScoredAsset } from "@/lib/types";
 
 type ClinicalTrialCardProps = {
   asset: ScoredAsset;
+  isSaved?: boolean;
+  onSave?: () => void;
+  onUnsave?: () => void;
 };
 
 const PHASE_STYLES: Record<string, { label: string; className: string }> = {
@@ -26,7 +29,7 @@ const STATUS_STYLES: Record<string, { label: string; className: string }> = {
   NOT_YET_RECRUITING:     { label: "Not Started",  className: "text-zinc-600 dark:text-zinc-400 bg-zinc-500/10 border-zinc-500/30" },
 };
 
-export function ClinicalTrialCard({ asset }: ClinicalTrialCardProps) {
+export function ClinicalTrialCard({ asset, isSaved, onSave, onUnsave }: ClinicalTrialCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -257,7 +260,18 @@ export function ClinicalTrialCard({ asset }: ClinicalTrialCardProps) {
               <span className="text-[9px] text-zinc-400 dark:text-zinc-500 italic">
                 Click to expand
               </span>
-              {trialUrl && (
+              <div className="flex items-center gap-2 shrink-0">
+                {(onSave || onUnsave) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); isSaved ? onUnsave?.() : onSave?.(); }}
+                    className={`flex items-center gap-0.5 text-[10px] font-semibold transition-colors ${isSaved ? "text-teal-600 dark:text-teal-400" : "text-zinc-400 dark:text-zinc-500 hover:text-teal-600 dark:hover:text-teal-400"}`}
+                    data-testid={`button-save-trial-${asset.id}`}
+                    title={isSaved ? "Remove from pipeline" : "Save to pipeline"}
+                  >
+                    <Bookmark className="w-3 h-3" fill={isSaved ? "currentColor" : "none"} />
+                  </button>
+                )}
+                {trialUrl && (
                 <a
                   href={trialUrl}
                   target="_blank"
@@ -274,6 +288,7 @@ export function ClinicalTrialCard({ asset }: ClinicalTrialCardProps) {
           </div>
         </div>
       </div>
+    </div>
 
       {/* Detail drawer */}
       <Sheet open={open} onOpenChange={setOpen}>

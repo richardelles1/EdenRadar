@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { ExternalLink, ScrollText, Calendar, Building2, GraduationCap, Copy, Check, Users, FileText } from "lucide-react";
+import { ExternalLink, ScrollText, Calendar, Building2, GraduationCap, Copy, Check, Users, FileText, Bookmark } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import type { ScoredAsset } from "@/lib/types";
 
 type PatentCardProps = {
   asset: ScoredAsset;
+  isSaved?: boolean;
+  onSave?: () => void;
+  onUnsave?: () => void;
 };
 
-export function PatentCard({ asset }: PatentCardProps) {
+export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps) {
   const [hovered, setHovered] = useState(false);
   const [pressed, setPressed] = useState(false);
   const [open, setOpen] = useState(false);
@@ -212,7 +215,18 @@ export function PatentCard({ asset }: PatentCardProps) {
               <span className="text-[9px] text-zinc-400 dark:text-zinc-500 italic">
                 Click to expand
               </span>
-              {patentUrl && (
+              <div className="flex items-center gap-2 shrink-0">
+                {(onSave || onUnsave) && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); isSaved ? onUnsave?.() : onSave?.(); }}
+                    className={`flex items-center gap-0.5 text-[10px] font-semibold transition-colors ${isSaved ? "text-amber-600 dark:text-amber-400" : "text-zinc-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400"}`}
+                    data-testid={`button-save-patent-${asset.id}`}
+                    title={isSaved ? "Remove from pipeline" : "Save to pipeline"}
+                  >
+                    <Bookmark className="w-3 h-3" fill={isSaved ? "currentColor" : "none"} />
+                  </button>
+                )}
+                {patentUrl && (
                 <a
                   href={patentUrl}
                   target="_blank"
@@ -229,6 +243,7 @@ export function PatentCard({ asset }: PatentCardProps) {
           </div>
         </div>
       </div>
+    </div>
 
       {/* Detail drawer */}
       <Sheet open={open} onOpenChange={setOpen}>
