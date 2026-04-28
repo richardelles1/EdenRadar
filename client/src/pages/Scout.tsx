@@ -1603,6 +1603,13 @@ export default function Scout() {
                               "{trialSponsorSearch}" ×
                             </Badge>
                           )}
+                          <button
+                            onClick={() => { setTrialPhaseFilter("all"); setTrialStatusFilter("all"); setTrialSponsorSearch(""); }}
+                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
+                            data-testid="button-clear-trial-filters"
+                          >
+                            Clear filters
+                          </button>
                         </div>
                       )}
                     </div>
