@@ -59,6 +59,21 @@ function PastDueBanner({ onFixPayment, loading, onDismiss }: { onFixPayment: () 
   );
 }
 
+function NonOwnerPastDueBanner() {
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2.5 bg-amber-500/10 border-b border-amber-500/30 text-amber-700 dark:text-amber-400 text-sm"
+      data-testid="banner-past-due-nonowner"
+    >
+      <AlertTriangle className="w-4 h-4 shrink-0" />
+      <span className="flex-1 min-w-0">
+        <strong>Your organization's payment has failed.</strong>{" "}
+        Please ask your team owner to update the payment method to keep access.
+      </span>
+    </div>
+  );
+}
+
 function TrialBanner({ daysLeft, periodEnd }: { daysLeft: number; periodEnd: string | Date | null | undefined }) {
   const label = daysLeft === 0 ? "less than 1 day" : `${daysLeft} day${daysLeft === 1 ? "" : "s"}`;
   const chargeDate = periodEnd
@@ -105,6 +120,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   );
 
   const showPastDue = isOwner && org?.stripeStatus === "past_due" && !pastDueDismissed;
+  const showNonOwnerPastDue = !isOwner && org?.stripeStatus === "past_due";
   const showTrial = isOwner && org?.stripeStatus === "trialing" && !showPastDue;
   const trialDaysLeft = showTrial ? daysUntil(org?.stripeCurrentPeriodEnd) : 0;
 
@@ -182,6 +198,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
             onDismiss={dismissPastDue}
           />
         )}
+        {showNonOwnerPastDue && <NonOwnerPastDueBanner />}
         {showTrial && (
           <TrialBanner
             daysLeft={trialDaysLeft}
