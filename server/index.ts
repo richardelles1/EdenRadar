@@ -1010,7 +1010,9 @@ function planTierLabel(tier: string | null | undefined): string {
 // ── Trial-ending reminder emails (runs every 6h, sends when trial ends within 25h) ──
 async function checkAndSendTrialReminders() {
   try {
-    const orgs = await storage.getOrgsWithTrialEndingSoon(25);
+    // Atomic claim: UPDATE … RETURNING stamps trialReminderSentAt before we read results,
+    // so concurrent workers skip the same orgs even without row-level locking.
+    const orgs = await storage.claimOrgsForTrialReminder(25);
     if (orgs.length === 0) return;
 
     const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
@@ -1055,7 +1057,6 @@ async function checkAndSendTrialReminders() {
         const portalUrl = `${process.env.APP_URL ?? "https://edenradar.com"}/industry/settings`;
         const planName = planTierLabel(org.planTier);
         await sendTrialEndingEmail(recipientEmail, org.name ?? "", trialEndDate, portalUrl, planName);
-        await storage.updateOrganization(org.id, { trialReminderSentAt: new Date() });
         log(`[trial-reminder] Sent trial-ending email to ${recipientEmail} (org ${org.id}, plan: ${planName}, ends ${trialEndDate})`, "startup");
       } catch (orgErr: any) {
         log(`[trial-reminder] Failed for org ${org.id}: ${orgErr?.message}`, "startup");

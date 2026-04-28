@@ -323,7 +323,7 @@ export interface IStorage {
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
-  getOrgsWithTrialEndingSoon(windowHours: number): Promise<Organization[]>;
+  claimOrgsForTrialReminder(windowHours: number): Promise<Organization[]>;
   applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }, eventType?: string): Promise<Organization | undefined>;
   logBillingEvent(data: InsertStripeBillingEvent): Promise<StripeBillingEvent>;
   getBillingHistory(orgId: number): Promise<StripeBillingEvent[]>;
@@ -2845,12 +2845,15 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async getOrgsWithTrialEndingSoon(windowHours: number): Promise<Organization[]> {
+  async claimOrgsForTrialReminder(windowHours: number): Promise<Organization[]> {
     const now = new Date();
     const windowEnd = new Date(now.getTime() + windowHours * 60 * 60 * 1000);
+    // Atomic UPDATE … RETURNING: claims all eligible orgs in a single statement.
+    // Any concurrent worker will find trialReminderSentAt already set and skip them,
+    // eliminating the race window present in a separate SELECT then UPDATE.
     return db
-      .select()
-      .from(organizations)
+      .update(organizations)
+      .set({ trialReminderSentAt: now })
       .where(
         and(
           eq(organizations.stripeStatus, "trialing"),
@@ -2858,7 +2861,8 @@ export class DatabaseStorage implements IStorage {
           lte(organizations.stripeCurrentPeriodEnd, windowEnd),
           isNull(organizations.trialReminderSentAt),
         ),
-      );
+      )
+      .returning();
   }
 
   async applyStripeSubscription(
