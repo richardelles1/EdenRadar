@@ -21,7 +21,7 @@ import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText, Activity } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -29,6 +29,7 @@ import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 import { PatentCard } from "@/components/PatentCard";
+import { ClinicalTrialCard } from "@/components/ClinicalTrialCard";
 
 type SearchResponse = {
   assets: ScoredAsset[];
@@ -111,7 +112,6 @@ const RESEARCH_SOURCE_OPTIONS = [
   { key: "pubmed",           label: "PubMed",              desc: "Biomedical literature" },
   { key: "biorxiv",          label: "bioRxiv",              desc: "Biology preprints" },
   { key: "medrxiv",          label: "medRxiv",              desc: "Clinical preprints" },
-  { key: "clinicaltrials",   label: "ClinicalTrials.gov",   desc: "Active trials" },
   { key: "nih_reporter",     label: "NIH Reporter",         desc: "Federal grants" },
   { key: "harvard",          label: "Harvard LibraryCloud", desc: "Harvard Library catalog: theses, journals, datasets" },
   { key: "openalex",         label: "OpenAlex",             desc: "Academic publications" },
@@ -284,24 +284,34 @@ export default function Scout() {
   const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">(() => ssGet("scout-patent-owner", "all"));
   const [patentAssigneeSearch, setPatentAssigneeSearch] = useState<string>(() => ssGet("scout-patent-assignee", ""));
   const [patentDateFilter, setPatentDateFilter] = useState<"any" | "6m" | "2024" | "2023" | "2022">(() => ssGet("scout-patent-date", "any"));
-  const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
+  const [resultTab, setResultTab] = useState<"assets" | "patents" | "trials" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
     try {
       const raw = sessionStorage.getItem("scout-research-sources");
-      return raw ? JSON.parse(raw) : DEFAULT_RESEARCH_SOURCES;
+      const stored = raw ? JSON.parse(raw) as string[] : DEFAULT_RESEARCH_SOURCES;
+      return stored.filter((s: string) => s !== "clinicaltrials");
     } catch { return DEFAULT_RESEARCH_SOURCES; }
   });
 
   const [sourcesDropdownOpen, setSourcesDropdownOpen] = useState(false);
 
+  const [trialResults, setTrialResults] = useState<ScoredAsset[]>(() => ssGet("scout-trial-results", []));
+  const [trialSortMode, setTrialSortMode] = useState<"newest" | "by_phase">(() => ssGet("scout-trial-sort", "newest"));
+  const [trialPhaseFilter, setTrialPhaseFilter] = useState<"all" | "phase 1" | "phase 2" | "phase 3" | "preclinical">(() => ssGet("scout-trial-phase", "all"));
+  const [trialStatusFilter, setTrialStatusFilter] = useState<"all" | "recruiting" | "active" | "completed">(() => ssGet("scout-trial-status", "all"));
+  const [trialSponsorSearch, setTrialSponsorSearch] = useState<string>(() => ssGet("scout-trial-sponsor", ""));
+
   const PATENT_PAGE_SIZE = 25;
   const RESEARCH_PAGE_SIZE = 30;
+  const TRIAL_PAGE_SIZE = 25;
   const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
   const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
+  const [shownTrialCount, setShownTrialCount] = useState(TRIAL_PAGE_SIZE);
 
   useEffect(() => { setShownPatentCount(PATENT_PAGE_SIZE); }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
   useEffect(() => { setShownResearchCount(RESEARCH_PAGE_SIZE); }, [researchResults]);
+  useEffect(() => { setShownTrialCount(TRIAL_PAGE_SIZE); }, [trialResults, trialPhaseFilter, trialStatusFilter, trialSponsorSearch, trialSortMode]);
 
   useEffect(() => {
     const params = new URLSearchParams(searchStr);
@@ -313,12 +323,17 @@ export default function Scout() {
       setCurrentQuery(q);
       setResearchResults([]);
       setPatentResults([]);
+      setTrialResults([]);
       setPatentSortMode("newest");
       setPatentOwnerFilter("all");
       setPatentAssigneeSearch("");
+      setTrialPhaseFilter("all");
+      setTrialStatusFilter("all");
+      setTrialSponsorSearch("");
       setResultTab("assets");
       searchMutation.mutate({ query: q });
       patentMutation.mutate({ query: q });
+      trialMutation.mutate({ query: q });
       if (researchSources.length > 0) {
         researchMutation.mutate({ query: q, sources: researchSources });
       }
@@ -335,6 +350,7 @@ export default function Scout() {
       sessionStorage.setItem("scout-results", JSON.stringify(searchResults));
       sessionStorage.setItem("scout-research-results", JSON.stringify(researchResults));
       sessionStorage.setItem("scout-patent-results", JSON.stringify(patentResults));
+      sessionStorage.setItem("scout-trial-results", JSON.stringify(trialResults));
       sessionStorage.setItem("scout-has-searched", JSON.stringify(hasSearched));
       sessionStorage.setItem("scout-query", JSON.stringify(currentQuery));
       sessionStorage.setItem("scout-research-sources", JSON.stringify(researchSources));
@@ -343,8 +359,12 @@ export default function Scout() {
       sessionStorage.setItem("scout-patent-owner", JSON.stringify(patentOwnerFilter));
       sessionStorage.setItem("scout-patent-assignee", JSON.stringify(patentAssigneeSearch));
       sessionStorage.setItem("scout-patent-date", JSON.stringify(patentDateFilter));
+      sessionStorage.setItem("scout-trial-sort", JSON.stringify(trialSortMode));
+      sessionStorage.setItem("scout-trial-phase", JSON.stringify(trialPhaseFilter));
+      sessionStorage.setItem("scout-trial-status", JSON.stringify(trialStatusFilter));
+      sessionStorage.setItem("scout-trial-sponsor", JSON.stringify(trialSponsorSearch));
     } catch {}
-  }, [searchResults, researchResults, patentResults, hasSearched, currentQuery, researchSources, resultTab, patentSortMode, patentOwnerFilter, patentAssigneeSearch, patentDateFilter]);
+  }, [searchResults, researchResults, patentResults, trialResults, hasSearched, currentQuery, researchSources, resultTab, patentSortMode, patentOwnerFilter, patentAssigneeSearch, patentDateFilter, trialSortMode, trialPhaseFilter, trialStatusFilter, trialSponsorSearch]);
 
   useEffect(() => {
     if (skipNextPersist.current) {
@@ -489,6 +509,39 @@ export default function Scout() {
     },
   });
 
+  const trialMutation = useMutation({
+    mutationFn: async ({ query }: { query: string }) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query, sources: ["clinicaltrials"], maxPerSource: 50, buyerProfile }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error ?? "Clinical trials search failed");
+        }
+        return res.json() as Promise<SearchResponse>;
+      } catch (err: any) {
+        clearTimeout(timeoutId);
+        if (err.name === "AbortError") {
+          throw new Error("Clinical trials search timed out.");
+        }
+        throw err;
+      }
+    },
+    onSuccess: (data) => {
+      setTrialResults(data.assets ?? []);
+    },
+    onError: () => {
+      setTrialResults([]);
+    },
+  });
+
   const reportMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
       const controller = new AbortController();
@@ -550,13 +603,18 @@ export default function Scout() {
     setInputQuery(query);
     setResearchResults([]);
     setPatentResults([]);
+    setTrialResults([]);
     setPatentSortMode("newest");
     setPatentOwnerFilter("all");
     setPatentAssigneeSearch("");
     setPatentDateFilter("any");
+    setTrialPhaseFilter("all");
+    setTrialStatusFilter("all");
+    setTrialSponsorSearch("");
     setResultTab("assets");
     searchMutation.mutate({ query });
     patentMutation.mutate({ query });
+    trialMutation.mutate({ query });
     if (researchSources.length > 0) {
       researchMutation.mutate({ query, sources: researchSources });
     }
@@ -573,12 +631,16 @@ export default function Scout() {
     setSearchResults([]);
     setResearchResults([]);
     setPatentResults([]);
+    setTrialResults([]);
     setHasSearched(false);
     setStageFilter("all");
     setModalityFilter("all");
     setInstitutionFilter("all");
     setSortMode("score");
     setMinScore(0);
+    setTrialPhaseFilter("all");
+    setTrialStatusFilter("all");
+    setTrialSponsorSearch("");
     try { sessionStorage.removeItem("scout-include-research"); } catch {}
   };
 
@@ -680,6 +742,47 @@ export default function Scout() {
     return results;
   }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
 
+  const filteredTrialResults = useMemo(() => {
+    let results = trialResults;
+    if (trialPhaseFilter !== "all") {
+      results = results.filter((a) => {
+        const stage = (a.development_stage ?? "").toLowerCase().trim();
+        return stage === trialPhaseFilter;
+      });
+    }
+    if (trialStatusFilter !== "all") {
+      results = results.filter((a) => {
+        const st = ((a.signals?.[0]?.metadata?.status as string) ?? "").toLowerCase();
+        if (trialStatusFilter === "recruiting") return st === "recruiting";
+        if (trialStatusFilter === "active") return st === "active_not_recruiting";
+        if (trialStatusFilter === "completed") return st === "completed";
+        return true;
+      });
+    }
+    if (trialSponsorSearch.trim()) {
+      const q = trialSponsorSearch.trim().toLowerCase();
+      results = results.filter((a) => {
+        const sp = ((a.institution ?? a.owner_name ?? "")).toLowerCase();
+        return sp.includes(q);
+      });
+    }
+    if (trialSortMode === "by_phase") {
+      const phaseOrder: Record<string, number> = { "phase 3": 0, "phase 2": 1, "phase 1": 2, "approved": 3, "preclinical": 4 };
+      results = [...results].sort((a, b) => {
+        const ao = phaseOrder[(a.development_stage ?? "").toLowerCase()] ?? 5;
+        const bo = phaseOrder[(b.development_stage ?? "").toLowerCase()] ?? 5;
+        return ao - bo;
+      });
+    } else {
+      results = [...results].sort((a, b) => {
+        const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
+        const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
+        return db - da;
+      });
+    }
+    return results;
+  }, [trialResults, trialPhaseFilter, trialStatusFilter, trialSponsorSearch, trialSortMode]);
+
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
@@ -721,7 +824,7 @@ export default function Scout() {
                 <OrientationHint
                   hintId="scout-cross-source"
                   title="TTO asset discovery."
-                  body="Search across 300+ TTO disclosures, scored against your buyer thesis. Optionally enable external paper databases (PubMed, ClinicalTrials.gov, patents) using the Sources selector below."
+                  body="Search across 300+ TTO disclosures, scored against your buyer thesis. Results automatically include patents and clinical trials in their dedicated tabs. Optionally add PubMed or preprint sources via the Sources selector."
                   accent="emerald"
                 />
               </div>
@@ -842,7 +945,7 @@ export default function Scout() {
           {hasSearched && !searchMutation.isPending && (
             <div className="px-4 sm:px-6 pb-2">
               <div className="flex justify-center w-full">
-                <div className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
+                <div className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
                   <button
                     onClick={() => setResultTab("assets")}
                     className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
@@ -882,6 +985,31 @@ export default function Scout() {
                         resultTab === "patents" ? "bg-white/25 text-white" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                       }`}>
                         {patentResults.length}
+                      </span>
+                    )}
+                  </button>
+                  <div className="w-px bg-border shrink-0" />
+                  <button
+                    onClick={() => setResultTab("trials")}
+                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                      resultTab === "trials"
+                        ? "bg-teal-600 text-white"
+                        : "bg-background text-muted-foreground hover:text-foreground"
+                    }`}
+                    data-testid="result-tab-trials"
+                  >
+                    {trialMutation.isPending
+                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
+                      : <Activity className="w-4 h-4 shrink-0" />
+                    }
+                    Clinical Trials
+                    {trialMutation.isPending ? (
+                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Searching...</span>
+                    ) : (
+                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                        resultTab === "trials" ? "bg-white/25 text-white" : "bg-teal-500/10 text-teal-600 dark:text-teal-400"
+                      }`}>
+                        {trialResults.length}
                       </span>
                     )}
                   </button>
@@ -1207,12 +1335,186 @@ export default function Scout() {
               </>
             )}
 
+            {/* Clinical Trials tab — loading state */}
+            {hasSearched && resultTab === "trials" && !searchMutation.isPending && trialMutation.isPending && (
+              <div className="flex flex-col items-center justify-center py-16 gap-4 text-center" data-testid="trials-loading-state">
+                <Loader2 className="w-8 h-8 animate-spin text-teal-500 opacity-70" />
+                <div>
+                  <p className="text-sm font-medium text-foreground mb-1">Searching ClinicalTrials.gov...</p>
+                  <p className="text-xs text-muted-foreground">Querying active and completed trials for "{currentQuery}"</p>
+                </div>
+              </div>
+            )}
+
+            {/* Clinical Trials tab — results */}
+            {hasSearched && resultTab === "trials" && !searchMutation.isPending && !trialMutation.isPending && (
+              <>
+                {trialResults.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                    <Activity className="w-8 h-8 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">
+                      No trials found for <span className="font-medium text-foreground">"{currentQuery}"</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground">Try broader terms or a different indication.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Trial controls */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Sort toggle */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-sort-toggle">
+                          {(["newest", "by_phase"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setTrialSortMode(mode)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                trialSortMode === mode
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`trial-sort-${mode}`}
+                            >
+                              {mode === "newest" ? "Newest" : "By Phase"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Phase filter */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Phase</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-phase-filter">
+                          {(["all", "phase 1", "phase 2", "phase 3", "preclinical"] as const).map((p) => (
+                            <button
+                              key={p}
+                              onClick={() => setTrialPhaseFilter(p)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                trialPhaseFilter === p
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`trial-phase-filter-${p.replace(" ", "-")}`}
+                            >
+                              {p === "all" ? "All" : p === "phase 1" ? "Phase 1" : p === "phase 2" ? "Phase 2" : p === "phase 3" ? "Phase 3" : "Preclinical"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Status filter */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Status</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="trial-status-filter">
+                          {(["all", "recruiting", "active", "completed"] as const).map((s) => (
+                            <button
+                              key={s}
+                              onClick={() => setTrialStatusFilter(s)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors border-r border-border last:border-r-0 ${
+                                trialStatusFilter === s
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`trial-status-filter-${s}`}
+                            >
+                              {s === "all" ? "All" : s === "recruiting" ? "Recruiting" : s === "active" ? "Active" : "Completed"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Sponsor search */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sponsor</span>
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                          <Input
+                            value={trialSponsorSearch}
+                            onChange={(e) => setTrialSponsorSearch(e.target.value)}
+                            placeholder="Filter by sponsor…"
+                            className="h-7 pl-6 pr-2 text-[11px] w-[160px] border-border"
+                            data-testid="input-trial-sponsor-search"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Active filter chips */}
+                      {(trialPhaseFilter !== "all" || trialStatusFilter !== "all" || trialSponsorSearch.trim()) && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-4">
+                          {trialPhaseFilter !== "all" && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase">
+                              {trialPhaseFilter} ×
+                            </Badge>
+                          )}
+                          {trialStatusFilter !== "all" && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status">
+                              {trialStatusFilter} ×
+                            </Badge>
+                          )}
+                          {trialSponsorSearch.trim() && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
+                              "{trialSponsorSearch}" ×
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-sm text-muted-foreground" data-testid="trials-results-count">
+                      {filteredTrialResults.length > shownTrialCount ? (
+                        <>Showing <span className="text-foreground font-semibold">{shownTrialCount}</span> of <span className="text-foreground font-semibold">{filteredTrialResults.length}</span></>
+                      ) : (
+                        <span className="text-foreground font-semibold">{filteredTrialResults.length}</span>
+                      )}
+                      {filteredTrialResults.length !== trialResults.length && (
+                        <span> of <span className="text-foreground font-semibold">{trialResults.length}</span> total</span>
+                      )}{" "}
+                      trial{filteredTrialResults.length !== 1 ? "s" : ""} found
+                      {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
+                    </p>
+
+                    {filteredTrialResults.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                        <Search className="w-8 h-8 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">No trials match the current filters.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                          {filteredTrialResults.slice(0, shownTrialCount).map((asset) => (
+                            <ClinicalTrialCard
+                              key={asset.id + "-trial"}
+                              asset={asset}
+                            />
+                          ))}
+                        </div>
+                        {shownTrialCount < filteredTrialResults.length && (
+                          <div className="flex justify-center pt-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-[11px] h-7 border-teal-500/30 text-teal-700 dark:text-teal-400 hover:bg-teal-500/5"
+                              onClick={() => setShownTrialCount((c) => c + TRIAL_PAGE_SIZE)}
+                              data-testid="button-load-more-trials"
+                            >
+                              Show {Math.min(TRIAL_PAGE_SIZE, filteredTrialResults.length - shownTrialCount)} more trials
+                            </Button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
             {/* Research tab — no sources enabled nudge */}
             {hasSearched && resultTab === "research" && researchSources.length === 0 && !searchMutation.isPending && (
               <div className="flex flex-col items-center justify-center py-16 gap-3 text-center" data-testid="research-no-sources-state">
                 <FlaskConical className="w-8 h-8 text-muted-foreground/40" />
                 <p className="text-sm font-medium text-foreground">No academic sources selected</p>
-                <p className="text-xs text-muted-foreground max-w-xs">Enable PubMed, ClinicalTrials.gov, or other sources using the Sources dropdown above to see research papers alongside your TTO results.</p>
+                <p className="text-xs text-muted-foreground max-w-xs">Enable PubMed or other sources using the Sources dropdown above to see research papers alongside your TTO results.</p>
               </div>
             )}
 
@@ -1244,7 +1546,7 @@ export default function Scout() {
                         <span className="text-amber-500 mt-0.5 shrink-0 text-base leading-none">&#9888;</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] text-amber-800 dark:text-amber-300 leading-snug">
-                            No results from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add ClinicalTrials.gov or preprint sources for broader coverage.
+                            No results from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add bioRxiv, medRxiv, or other preprint sources for broader coverage.
                           </p>
                         </div>
                         <button
@@ -1302,7 +1604,7 @@ export default function Scout() {
                         <span className="text-amber-500 mt-0.5 shrink-0 text-base leading-none">&#9888;</span>
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] text-amber-800 dark:text-amber-300 leading-snug">
-                            Only {researchResults.length} result{researchResults.length !== 1 ? "s" : ""} from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add ClinicalTrials.gov or preprint sources for broader coverage.
+                            Only {researchResults.length} result{researchResults.length !== 1 ? "s" : ""} from {RESEARCH_SOURCE_OPTIONS.find(s => s.key === researchSources[0])?.label ?? researchSources[0]}. Add bioRxiv, medRxiv, or other preprint sources for broader coverage.
                           </p>
                         </div>
                         <button

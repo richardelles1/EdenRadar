@@ -16,6 +16,7 @@ import OpenAI from "openai";
 import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { searchPatents } from "./lib/sources/patents";
+import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
 import { scoreAssets, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
@@ -322,26 +323,28 @@ export async function registerRoutes(
         }
       }
 
-      // Always call searchPatents directly, bypassing collectAllSignals entirely.
-      // collectAllSignals wraps every source with a 3,500ms timeout — far too short
-      // for the USPTO API to return 100 results (typically 5–10s). searchPatents
-      // has its own 12,000ms budget and handles date filters natively.
+      // Always call searchPatents and searchClinicalTrials directly, bypassing
+      // collectAllSignals entirely. collectAllSignals wraps every source with a
+      // 3,500ms timeout — far too short for USPTO (5–10s) or ClinicalTrials.gov
+      // (up to 12s). Both have their own timeout budgets and are called in parallel.
       const patentInSources = effectiveSources.includes("patents" as SourceKey);
-      const nonPatentSources = patentInSources
-        ? effectiveSources.filter((s) => s !== ("patents" as SourceKey))
-        : effectiveSources;
+      const trialInSources = effectiveSources.includes("clinicaltrials" as SourceKey);
+      const nonDirectSources = effectiveSources.filter(
+        (s) => s !== ("patents" as SourceKey) && s !== ("clinicaltrials" as SourceKey)
+      );
 
-      let signals = await collectAllSignals(enrichedQuery, nonPatentSources, maxPerSource);
+      const [signals, patentSignals, trialSignals] = await Promise.all([
+        collectAllSignals(enrichedQuery, nonDirectSources, maxPerSource),
+        patentInSources ? searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate) : Promise.resolve([]),
+        trialInSources ? searchClinicalTrials(enrichedQuery, maxPerSource) : Promise.resolve([]),
+      ]);
+      let combinedSignals = applySignalFilters(
+        [...signals, ...patentSignals, ...trialSignals],
+        { sourceType, dateRange, trialPhase, field, technologyType }
+      );
+      combinedSignals = combinedSignals.slice(0, 150);
 
-      if (patentInSources) {
-        const patentSignals = await searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate);
-        signals = [...signals, ...patentSignals];
-      }
-
-      signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
-      signals = signals.slice(0, 150);
-
-      if (signals.length === 0) {
+      if (combinedSignals.length === 0) {
         await storage.createSearchHistory({ query, source: effectiveSources.join(","), resultCount: 0, userId: searchUserId ?? null });
         const emptySearchResponse = { assets: [], query, sources: effectiveSources, signalsFound: 0 };
         cacheSet(searchCacheKey, emptySearchResponse, 5 * 60 * 1000);
@@ -350,10 +353,10 @@ export async function registerRoutes(
 
       let normalized: Partial<import("./lib/types").ScoredAsset>[];
       try {
-        normalized = await normalizeSignals(signals);
+        normalized = await normalizeSignals(combinedSignals);
       } catch (normErr) {
         console.error("normalizeSignals failed, falling back to raw signals:", normErr);
-        normalized = signals.map((s) => ({
+        normalized = combinedSignals.map((s) => ({
           id: crypto.randomUUID().slice(0, 8),
           asset_name: s.title || "unknown",
           target: "unknown",

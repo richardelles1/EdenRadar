@@ -144,8 +144,11 @@ export async function normalizeSignals(signals: RawSignal[]): Promise<Partial<Sc
   const batchableIndices: number[] = [];
 
   signals.forEach((s, i) => {
-    if (s.source_type === "patent") {
-      // Patents skip LLM — all needed data is already in signal.metadata from USPTO.
+    if (s.source_type === "patent" || s.source_type === "clinical_trial") {
+      // Patents and clinical trials skip LLM — all needed data is in signal.metadata.
+      // applyStructuredOverrides (called inside buildFallback) handles clinical_trial
+      // metadata: conditions → indication, stage_hint → development_stage,
+      // intervention_other_name → asset_name, sponsor → institution/owner.
       output[i] = buildFallback(s);
     } else if (INDIVIDUAL_TYPES.has(s.source_type)) {
       individualIndices.push(i);
