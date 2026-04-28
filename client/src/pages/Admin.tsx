@@ -4383,7 +4383,8 @@ function AccountCenter({ pw }: { pw: string }) {
   function copyInviteLink(role: PortalRole) {
     const origin = window.location.origin;
     const cfg = PORTAL_CONFIG[role];
-    navigator.clipboard.writeText(`${origin}${cfg.registerPath}`);
+    const emailSuffix = inviteEmail.trim() ? `&email=${encodeURIComponent(inviteEmail.trim())}` : "";
+    navigator.clipboard.writeText(`${origin}${cfg.registerPath}${emailSuffix}`);
     setCopiedRole(role);
     setTimeout(() => setCopiedRole(null), 2000);
     toast({ title: "Link copied", description: `Registration link for ${cfg.label} copied to clipboard` });

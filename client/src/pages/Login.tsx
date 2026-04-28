@@ -56,7 +56,9 @@ export default function Login() {
   const [view, setView] = useState<View>(() => isPasswordRecovery ? "set-password" : "auth");
   const [inviteNoticeDismissed, setInviteNoticeDismissed] = useState(false);
 
-  const [email, setEmail] = useState("");
+  const _rawEmailParam = _searchParams.get("email") ?? "";
+  const _emailParam = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(_rawEmailParam) ? _rawEmailParam : "";
+  const [email, setEmail] = useState(_emailParam);
   const [password, setPassword] = useState("");
   const [selectedRole, setSelectedRole] = useState<"industry" | "researcher" | "concept">(portalRole ?? "industry");
   const [tosAccepted, setTosAccepted] = useState(false);
