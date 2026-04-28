@@ -164,7 +164,11 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
   const profile = getIndustryProfile();
 
   if (org) {
-    const initials = org.name.trim().slice(0, 2).toUpperCase();
+    const displayName =
+      org.planTier === "individual" && profile.companyName
+        ? profile.companyName
+        : org.name;
+    const initials = getInitials(displayName) || displayName.trim().slice(0, 2).toUpperCase();
     const accentColor = "var(--org-accent, hsl(142 52% 36%))";
     const tierLabel = planTierLabel(org.planTier);
 
@@ -180,7 +184,7 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
           style={{ borderColor: "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 40%, transparent)" }}
         >
           {org.logoUrl ? (
-            <img src={org.logoUrl} alt={org.name} className="w-full h-full object-cover rounded-md" />
+            <img src={org.logoUrl} alt={displayName} className="w-full h-full object-cover rounded-md" />
           ) : (
             <span
               className="text-[11px] font-bold"
@@ -202,7 +206,7 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
             className="text-xs font-semibold truncate leading-tight"
             style={{ color: accentColor }}
           >
-            {org.name}
+            {displayName}
           </span>
           <span className="text-[10px] text-muted-foreground leading-tight">{tierLabel}</span>
         </motion.div>

@@ -7938,8 +7938,10 @@ If multiple assets appear, return each as a separate array item.`;
 
     // 2. Auto-create a personal org, add membership, and link via industry_profile.org_id
     //    so the next call to getOrgForUser returns this org (preventing duplicate creation).
+    const existingProfile = await storage.getIndustryProfileByUserId(userId).catch(() => null);
+    const newOrgName = existingProfile?.companyName?.trim() || "Personal Workspace";
     const newOrg = await storage.createOrganization({
-      name: "My Organisation",
+      name: newOrgName,
       planTier: "none",
       seatLimit: PLAN_SEAT_MAP[planId],
       billingMethod: "stripe",
@@ -8088,8 +8090,10 @@ If multiple assets appear, return each as a separate array item.`;
 
       if (!org) {
         // Auto-create — fully owned by this caller
+        const callerProfile = await storage.getIndustryProfileByUserId(userId).catch(() => null);
+        const autoOrgName = callerProfile?.companyName?.trim() || "Personal Workspace";
         org = await storage.createOrganization({
-          name: "My Organisation",
+          name: autoOrgName,
           planTier: "none",
           seatLimit: PLAN_SEAT_MAP[planId],
           billingMethod: "stripe",

@@ -43,6 +43,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useOrg, planTierLabel, billingMethodLabel } from "@/hooks/use-org";
+import { getIndustryProfile } from "@/hooks/use-industry";
 
 type Frequency = "realtime" | "daily" | "weekly";
 
@@ -246,6 +247,7 @@ export default function IndustrySettings() {
   const { user, session, signOut, role } = useAuth();
   const { toast } = useToast();
   const { data: org } = useOrg();
+  const settingsProfile = getIndustryProfile();
   const queryClient = useQueryClient();
 
   const isIndustry = role === "industry";
@@ -626,7 +628,11 @@ export default function IndustrySettings() {
               </Badge>
             </div>
             {org && (
-              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-org-name">{org.name}</p>
+              <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-org-name">
+                {org.planTier === "individual" && settingsProfile.companyName
+                  ? settingsProfile.companyName
+                  : org.name}
+              </p>
             )}
             {org && org.planTier !== "individual" ? (
               <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-seat-count">
