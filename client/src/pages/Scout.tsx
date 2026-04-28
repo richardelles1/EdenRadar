@@ -407,14 +407,18 @@ export default function Scout() {
   });
 
   const patentMutation = useMutation({
-    mutationFn: async ({ query }: { query: string }) => {
+    mutationFn: async ({ query, patentSince }: { query: string; patentSince?: string }) => {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
+        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 10, buyerProfile };
+        if (patentSince && patentSince !== "any") {
+          body.patentSince = patentSince;
+        }
         const res = await fetch("/api/search", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ query, sources: ["patents"], maxPerSource: 10, buyerProfile }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         clearTimeout(timeoutId);
@@ -1042,7 +1046,12 @@ export default function Scout() {
                           {(["any", "6m", "2024", "2023", "2022"] as const).map((opt) => (
                             <button
                               key={opt}
-                              onClick={() => setPatentDateFilter(opt)}
+                              onClick={() => {
+                                setPatentDateFilter(opt);
+                                if (currentQuery) {
+                                  patentMutation.mutate({ query: currentQuery, patentSince: opt !== "any" ? opt : undefined });
+                                }
+                              }}
                               className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
                                 patentDateFilter === opt
                                   ? "bg-primary text-primary-foreground"
@@ -1080,7 +1089,12 @@ export default function Scout() {
                             </Badge>
                           )}
                           {patentDateFilter !== "any" && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentDateFilter("any")} data-testid="patent-active-filter-date">
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => {
+                              setPatentDateFilter("any");
+                              if (currentQuery) {
+                                patentMutation.mutate({ query: currentQuery });
+                              }
+                            }} data-testid="patent-active-filter-date">
                               {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
                             </Badge>
                           )}

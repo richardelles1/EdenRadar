@@ -15,6 +15,7 @@ import { classifyBatch } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
 import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
+import { searchPatents } from "./lib/sources/patents";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
 import { clusterAssets } from "./lib/pipeline/clusterAssets";
 import { scoreAssets, scoreNovelty, scoreReadiness, scoreLicensability, scoreCompetition, computeTotal } from "./lib/pipeline/scoreAssets";
@@ -219,6 +220,7 @@ const searchBodySchema = z.object({
     "antibody", "vaccine", "diagnostic", "medical_device",
   ]).optional(),
   trialPhase: z.enum(["preclinical", "phase_1", "phase_2", "phase_3", "phase_4", "approved"]).optional(),
+  patentSince: z.enum(["6m", "2024", "2023", "2022"]).optional(),
 });
 
 const reportBodySchema = z.object({
@@ -288,7 +290,7 @@ export async function registerRoutes(
 
   app.post("/api/search", aiRateLimit, async (req, res) => {
     try {
-      const { query, sources, maxPerSource, buyerProfile, field, sourceType, dateRange, technologyType, trialPhase } = searchBodySchema.parse(req.body);
+      const { query, sources, maxPerSource, buyerProfile, field, sourceType, dateRange, technologyType, trialPhase, patentSince } = searchBodySchema.parse(req.body);
       const validSources = sources.filter((s): s is SourceKey => s in dataSources) as SourceKey[];
       const effectiveSources = validSources.length > 0 ? validSources : ALL_SOURCES;
       const searchUserId = await tryGetUserId(req);
@@ -298,11 +300,43 @@ export async function registerRoutes(
       const profileFingerprint = buyerProfile
         ? crypto.createHash("sha256").update(JSON.stringify(buyerProfile)).digest("hex").slice(0, 16)
         : "default";
-      const searchCacheKey = `search:${enrichedQuery}:${[...effectiveSources].sort().join(",")}:${maxPerSource ?? ""}:${field ?? ""}:${sourceType ?? ""}:${dateRange ?? ""}:${technologyType ?? ""}:${trialPhase ?? ""}:${profileFingerprint}`;
+      const searchCacheKey = `search:${enrichedQuery}:${[...effectiveSources].sort().join(",")}:${maxPerSource ?? ""}:${field ?? ""}:${sourceType ?? ""}:${dateRange ?? ""}:${technologyType ?? ""}:${trialPhase ?? ""}:${patentSince ?? ""}:${profileFingerprint}`;
       const cachedSearch = cacheGet<object>(searchCacheKey);
       if (cachedSearch) return res.json(cachedSearch);
 
-      let signals = await collectAllSignals(enrichedQuery, effectiveSources, maxPerSource);
+      // Compute date bounds for server-side patent pre-filtering
+      let patentSinceDate: string | undefined;
+      let patentBeforeDate: string | undefined;
+      if (patentSince) {
+        const now = new Date();
+        if (patentSince === "6m") {
+          const d = new Date(now.getTime() - 183 * 24 * 60 * 60 * 1000);
+          patentSinceDate = d.toISOString().slice(0, 10);
+        } else if (patentSince === "2024") {
+          patentSinceDate = "2024-01-01";
+        } else if (patentSince === "2023") {
+          patentSinceDate = "2023-01-01";
+          patentBeforeDate = "2024-01-01";
+        } else if (patentSince === "2022") {
+          patentBeforeDate = "2023-01-01";
+        }
+      }
+
+      // When a patent date filter is set, call searchPatents directly so the date
+      // constraint is pushed into the USPTO PatentsView query rather than filtering
+      // client-side. Other sources are collected via the generic pipeline.
+      const hasPatentDateFilter = !!(patentSinceDate || patentBeforeDate);
+      const patentInSources = effectiveSources.includes("patents" as SourceKey);
+      const nonPatentSources = hasPatentDateFilter && patentInSources
+        ? effectiveSources.filter((s) => s !== ("patents" as SourceKey))
+        : effectiveSources;
+
+      let signals = await collectAllSignals(enrichedQuery, nonPatentSources, maxPerSource);
+
+      if (hasPatentDateFilter && patentInSources) {
+        const patentSignals = await searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate);
+        signals = [...signals, ...patentSignals];
+      }
 
       signals = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
       signals = signals.slice(0, 150);

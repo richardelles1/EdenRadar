@@ -13,7 +13,7 @@ function inferOwnerType(assignee: string): "university" | "company" | "unknown" 
   return "unknown";
 }
 
-export async function searchPatents(query: string, maxResults = 8): Promise<RawSignal[]> {
+export async function searchPatents(query: string, maxResults = 8, sinceDate?: string, beforeDate?: string): Promise<RawSignal[]> {
   try {
     const terms = query
       .split(/\s+/)
@@ -24,8 +24,20 @@ export async function searchPatents(query: string, maxResults = 8): Promise<RawS
       _text_phrase: { patent_abstract: t },
     }));
 
+    const dateFilters: object[] = [];
+    if (sinceDate) {
+      dateFilters.push({ _gte: { patent_date: sinceDate } });
+    }
+    if (beforeDate) {
+      dateFilters.push({ _lt: { patent_date: beforeDate } });
+    }
+
+    const q = dateFilters.length > 0
+      ? { _and: [{ _or: orClauses }, ...dateFilters] }
+      : { _or: orClauses };
+
     const requestBody = {
-      q: { _or: orClauses },
+      q,
       f: [
         "patent_id",
         "patent_title",
