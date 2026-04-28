@@ -257,8 +257,8 @@ export default function Scout() {
     } catch { return DEFAULT_RESEARCH_SOURCES; }
   });
 
-  const PATENT_PAGE_SIZE = 15;
-  const RESEARCH_PAGE_SIZE = 20;
+  const PATENT_PAGE_SIZE = 25;
+  const RESEARCH_PAGE_SIZE = 30;
   const [shownPatentCount, setShownPatentCount] = useState(PATENT_PAGE_SIZE);
   const [shownResearchCount, setShownResearchCount] = useState(RESEARCH_PAGE_SIZE);
 
