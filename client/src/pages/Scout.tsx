@@ -247,6 +247,7 @@ export default function Scout() {
   const [patentSortMode, setPatentSortMode] = useState<"newest" | "best_match">("newest");
   const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">("all");
   const [patentAssigneeSearch, setPatentAssigneeSearch] = useState("");
+  const [patentDateFilter, setPatentDateFilter] = useState<"any" | "6m" | "2024" | "2023" | "2022">("any");
   const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
@@ -498,6 +499,7 @@ export default function Scout() {
     setPatentSortMode("newest");
     setPatentOwnerFilter("all");
     setPatentAssigneeSearch("");
+    setPatentDateFilter("any");
     setResultTab("assets");
     searchMutation.mutate({ query });
     patentMutation.mutate({ query });
@@ -578,6 +580,15 @@ export default function Scout() {
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
 
   const filteredPatentResults = useMemo(() => {
+    const now = Date.now();
+    const patentDateSince: Date | null =
+      patentDateFilter === "6m" ? new Date(now - 183 * 24 * 60 * 60 * 1000) :
+      patentDateFilter === "2024" ? new Date("2024-01-01") :
+      patentDateFilter === "2023" ? new Date("2023-01-01") :
+      null;
+    const patentDateBefore: Date | null =
+      patentDateFilter === "2022" ? new Date("2023-01-01") : null;
+
     let results = patentResults.filter((asset) => {
       const ownerType = (asset.signals?.[0]?.metadata?.owner_type as string) ?? asset.owner_type ?? "unknown";
       const ownerOk = patentOwnerFilter === "all" || ownerType === patentOwnerFilter;
@@ -588,7 +599,18 @@ export default function Scout() {
         : "";
       const assigneeOk = !patentAssigneeSearch.trim() ||
         assignee.toLowerCase().includes(patentAssigneeSearch.trim().toLowerCase());
-      return ownerOk && assigneeOk;
+      let dateOk = true;
+      if (patentDateSince || patentDateBefore) {
+        const filingDate = asset.signals?.[0]?.metadata?.filing_date as string | undefined;
+        const d = parseDateLoose(asset.latest_signal_date) ?? parseDateLoose(filingDate);
+        if (!d) {
+          dateOk = false;
+        } else {
+          if (patentDateSince && d < patentDateSince) dateOk = false;
+          if (patentDateBefore && d >= patentDateBefore) dateOk = false;
+        }
+      }
+      return ownerOk && assigneeOk && dateOk;
     });
     if (patentSortMode === "best_match") {
       results = [...results].sort((a, b) => b.score - a.score);
@@ -600,7 +622,7 @@ export default function Scout() {
       });
     }
     return results;
-  }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode]);
+  }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode, patentDateFilter]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
@@ -1009,6 +1031,27 @@ export default function Scout() {
                         </div>
                       </div>
 
+                      {/* Date range filter */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Date</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-date-filter">
+                          {(["any", "6m", "2024", "2023", "2022"] as const).map((opt) => (
+                            <button
+                              key={opt}
+                              onClick={() => setPatentDateFilter(opt)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                patentDateFilter === opt
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`patent-date-filter-${opt}`}
+                            >
+                              {opt === "any" ? "Any time" : opt === "6m" ? "Last 6 months" : opt === "2022" ? "2022 and older" : opt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
                       {/* Assignee search */}
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assignee</span>
@@ -1025,11 +1068,16 @@ export default function Scout() {
                       </div>
 
                       {/* Active filter chips */}
-                      {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim()) && (
+                      {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim() || patentDateFilter !== "any") && (
                         <div className="flex items-center gap-1.5 flex-wrap mt-4">
                           {patentOwnerFilter !== "all" && (
                             <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner">
                               {patentOwnerFilter} ×
+                            </Badge>
+                          )}
+                          {patentDateFilter !== "any" && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentDateFilter("any")} data-testid="patent-active-filter-date">
+                              {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
                             </Badge>
                           )}
                           {patentAssigneeSearch.trim() && (
