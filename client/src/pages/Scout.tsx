@@ -821,6 +821,15 @@ export default function Scout() {
     return results;
   }, [trialResults, trialPhaseFilter, trialStatusFilter, trialSponsorSearch, trialSortMode]);
 
+  const trialSponsorFiltered = useMemo(() => {
+    if (!trialSponsorSearch.trim()) return trialResults;
+    const q = trialSponsorSearch.trim().toLowerCase();
+    return trialResults.filter((a) => {
+      const sp = ((a.institution ?? a.owner_name ?? "")).toLowerCase();
+      return sp.includes(q);
+    });
+  }, [trialResults, trialSponsorSearch]);
+
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
 
@@ -1408,7 +1417,7 @@ export default function Scout() {
                     {(() => {
                       const phaseCounts: Record<string, number> = {};
                       const statusCounts: Record<string, number> = {};
-                      for (const a of trialResults) {
+                      for (const a of trialSponsorFiltered) {
                         const stage = (a.development_stage ?? "").toLowerCase().trim();
                         if (stage) phaseCounts[stage] = (phaseCounts[stage] ?? 0) + 1;
                         const st = ((a.signals?.[0]?.metadata?.status as string) ?? "").toLowerCase();
