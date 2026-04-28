@@ -322,24 +322,27 @@ export function sendTrialEndingEmail(
   to: string,
   orgName: string,
   trialEndDate: string,
+  portalUrl?: string,
 ): Promise<void> {
   const greeting = orgName ? `Hi ${orgName},` : "Hi,";
+  const ctaUrl = portalUrl ?? `${APP_URL}/industry/settings`;
   const html = baseHtml(`
-    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout trial ends soon</h1>
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenScout trial expires tomorrow</h1>
     <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
-      ${greeting} your EdenScout free trial expires on <strong>${trialEndDate}</strong>. To keep uninterrupted
-      access to AI-powered biotech asset discovery, add a payment method before your trial ends.
+      ${greeting} your EdenScout free trial expires on <strong>${trialEndDate}</strong>. After that date
+      you will be charged automatically unless you cancel. To stay on the plan — or to cancel — manage
+      your subscription in Settings.
     </p>
-    <a href="${APP_URL}/industry/settings"
+    <a href="${ctaUrl}"
        style="display:inline-block;background:#059669;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
-      Add payment method
+      Manage subscription
     </a>
     <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Questions? Reply to this email or reach us at
       <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
     </p>
   `);
-  return sendEmail(to, "Your EdenScout trial ends in 3 days", html, "EdenScout <billing@edenradar.com>");
+  return sendEmail(to, "Your EdenScout trial expires tomorrow", html, "EdenScout <billing@edenradar.com>");
 }
 
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {

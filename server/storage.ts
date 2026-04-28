@@ -30,7 +30,7 @@ import {
   savedReports, type SavedReport, type InsertSavedReport,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, sql, gte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
+import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { alias } from "drizzle-orm/pg-core";
 
@@ -323,6 +323,7 @@ export interface IStorage {
   deleteOrganization(id: number): Promise<void>;
   getOrgByStripeCustomer(stripeCustomerId: string): Promise<Organization | undefined>;
   getOrgByStripeSubscriptionId(stripeSubscriptionId: string): Promise<Organization | undefined>;
+  getOrgsWithTrialEndingSoon(windowHours: number): Promise<Organization[]>;
   applyStripeSubscription(orgId: number, data: { stripeCustomerId: string; stripeSubscriptionId: string; stripeStatus: string; stripePriceId: string; planTier: string; seatLimit?: number; stripeCurrentPeriodEnd?: Date | null; stripeCancelAt?: Date | null }, eventType?: string): Promise<Organization | undefined>;
   logBillingEvent(data: InsertStripeBillingEvent): Promise<StripeBillingEvent>;
   getBillingHistory(orgId: number): Promise<StripeBillingEvent[]>;
@@ -2842,6 +2843,22 @@ export class DatabaseStorage implements IStorage {
       .where(eq(organizations.stripeSubscriptionId, stripeSubscriptionId))
       .limit(1);
     return row;
+  }
+
+  async getOrgsWithTrialEndingSoon(windowHours: number): Promise<Organization[]> {
+    const now = new Date();
+    const windowEnd = new Date(now.getTime() + windowHours * 60 * 60 * 1000);
+    return db
+      .select()
+      .from(organizations)
+      .where(
+        and(
+          eq(organizations.stripeStatus, "trialing"),
+          gt(organizations.stripeCurrentPeriodEnd, now),
+          lte(organizations.stripeCurrentPeriodEnd, windowEnd),
+          isNull(organizations.trialReminderSentAt),
+        ),
+      );
   }
 
   async applyStripeSubscription(

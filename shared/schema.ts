@@ -667,6 +667,8 @@ export const organizations = pgTable("organizations", {
   // Idempotency guard: set to the invoice ID after a payment failure email is sent.
   // Prevents duplicate failure emails when Stripe retries the webhook.
   paymentFailedEmailSentInvId: text("payment_failed_email_sent_inv_id"),
+  // Trial-ending reminder: set when we send the 24-hour-before reminder so it is never sent twice.
+  trialReminderSentAt: timestamp("trial_reminder_sent_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

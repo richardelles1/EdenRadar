@@ -996,51 +996,80 @@ async function createSharedLinksTable() {
   }
 }
 
-// ── Daily trial-ending reminder emails ────────────────────────────────────────
-async function sendTrialEndingReminders() {
+// ── Trial-ending reminder emails (runs every 6h, sends when trial ends within 25h) ──
+async function checkAndSendTrialReminders() {
   try {
-    const now = new Date();
-    const windowStart = new Date(now.getTime() + 2 * 24 * 60 * 60 * 1000);  // 2 days from now
-    const windowEnd   = new Date(now.getTime() + 4 * 24 * 60 * 60 * 1000);  // 4 days from now
-    // Find trialing orgs whose trial ends in the 2–4 day window
-    const rows = await db.execute(sql`
-      SELECT o.id, o.name, o.billing_email, o.stripe_current_period_end
-      FROM organizations o
-      WHERE o.stripe_status = 'trialing'
-        AND o.stripe_current_period_end >= ${windowStart}
-        AND o.stripe_current_period_end <  ${windowEnd}
-    `);
-    const orgs = (rows as any).rows ?? rows;
+    const orgs = await storage.getOrgsWithTrialEndingSoon(25);
+    if (orgs.length === 0) return;
+    const sbUrl = process.env.VITE_SUPABASE_URL ?? "";
+    const sbKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
+    let adminSupabase: ReturnType<typeof import("@supabase/supabase-js").createClient> | null = null;
+    if (sbUrl && sbKey) {
+      try {
+        const { createClient } = await import("@supabase/supabase-js");
+        adminSupabase = createClient(sbUrl, sbKey);
+      } catch { /* no-op */ }
+    }
     for (const org of orgs) {
-      const orgId: number = org.id;
-      const billingEmail: string | null = org.billing_email;
-      if (!billingEmail) continue;
-      // Dedup: skip if we already sent a trial_ending_reminder for this org
-      const existing = await db.execute(sql`
-        SELECT id FROM stripe_billing_events
-        WHERE org_id = ${orgId} AND event_type = 'trial_ending_reminder'
-        LIMIT 1
-      `);
-      const existingRows = (existing as any).rows ?? existing;
-      if (existingRows.length > 0) continue;
-      const trialEndDate = new Date(org.stripe_current_period_end).toLocaleDateString("en-US", {
-        year: "numeric", month: "long", day: "numeric",
-      });
-      await sendTrialEndingEmail(billingEmail, org.name ?? "", trialEndDate);
-      await db.execute(sql`
-        INSERT INTO stripe_billing_events (org_id, event_type, stripe_status)
-        VALUES (${orgId}, 'trial_ending_reminder', 'trialing')
-      `);
-      log(`[trial-reminder] Sent trial ending email to ${billingEmail} (org ${orgId})`, "startup");
+      try {
+        // Resolve recipient email: prefer the org owner's Supabase auth email, fall back to billingEmail
+        let recipientEmail: string | null = org.billingEmail ?? null;
+        if (adminSupabase) {
+          try {
+            const ownerRow = await db.execute(sql`
+              SELECT user_id FROM org_members
+              WHERE org_id = ${org.id} AND role = 'owner'
+              LIMIT 1
+            `);
+            const ownerRows = (ownerRow as any).rows ?? ownerRow;
+            const ownerId: string | undefined = ownerRows[0]?.user_id;
+            if (ownerId) {
+              const { data: userData } = await (adminSupabase as any).auth.admin.getUserById(ownerId);
+              const ownerEmail: string | undefined = userData?.user?.email;
+              if (ownerEmail) recipientEmail = ownerEmail;
+            }
+          } catch (lookupErr: any) {
+            log(`[trial-reminder] Could not resolve owner email for org ${org.id}: ${lookupErr?.message}`, "startup");
+          }
+        }
+        if (!recipientEmail) {
+          log(`[trial-reminder] No email for org ${org.id} — skipping`, "startup");
+          continue;
+        }
+        const trialEndDate = new Date(org.stripeCurrentPeriodEnd!).toLocaleDateString("en-US", {
+          year: "numeric", month: "long", day: "numeric",
+        });
+        const portalUrl = `${process.env.APP_URL ?? "https://edenradar.com"}/industry/settings`;
+        await sendTrialEndingEmail(recipientEmail, org.name ?? "", trialEndDate, portalUrl);
+        await storage.updateOrganization(org.id, { trialReminderSentAt: new Date() });
+        log(`[trial-reminder] Sent trial-ending email to ${recipientEmail} (org ${org.id}, ends ${trialEndDate})`, "startup");
+      } catch (orgErr: any) {
+        log(`[trial-reminder] Failed for org ${org.id}: ${orgErr?.message}`, "startup");
+      }
     }
   } catch (err: any) {
-    log(`[trial-reminder] Error sending trial ending reminders: ${err?.message}`, "startup");
+    log(`[trial-reminder] Error running trial reminder check: ${err?.message}`, "startup");
   }
 }
 
-function scheduleTrialEndingReminders() {
-  sendTrialEndingReminders();
-  setInterval(() => sendTrialEndingReminders(), 24 * 60 * 60 * 1000);
+function scheduleTrialReminderCheck() {
+  setTimeout(() => {
+    checkAndSendTrialReminders();
+    setInterval(() => checkAndSendTrialReminders(), 6 * 60 * 60 * 1000);
+  }, 10_000);
+}
+
+// ── Ensure organizations.trial_reminder_sent_at column exists ─────────────────
+async function addTrialReminderSentAtColumn() {
+  try {
+    await db.execute(sql`
+      ALTER TABLE organizations
+        ADD COLUMN IF NOT EXISTS trial_reminder_sent_at TIMESTAMP
+    `);
+    log("[startup] organizations.trial_reminder_sent_at column ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] trial_reminder_sent_at column check: ${err?.message}`, "startup");
+  }
 }
 
 // ── Ensure saved_reports table exists ─────────────────────────────────────────
@@ -1200,10 +1229,12 @@ async function migrateAssetStatusValues() {
       createStripeBillingEventsTable().catch(() => {});
       // ── Ensure user_alerts table exists (digest pipeline) ───────────────
       createUserAlertsTable().catch(() => {});
+      // ── Add trial_reminder_sent_at to organizations (idempotent) ────────
+      addTrialReminderSentAtColumn().catch(() => {});
       // ── Ensure saved_reports table exists (idempotent) ──────────────────
       createSavedReportsTable().catch(() => {});
-      // ── Trial-ending reminder emails (daily) ─────────────────────────────
-      scheduleTrialEndingReminders();
+      // ── Trial-ending reminder emails (every 6h, 25h window) ────────────
+      scheduleTrialReminderCheck();
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────

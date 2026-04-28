@@ -257,10 +257,12 @@ All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash
 - Reports page (`client/src/pages/Reports.tsx`) fetches from API with loading skeleton, empty state, and delete button
 
 ## Trial Ending Reminder Email (Task #555)
-- `sendTrialEndingEmail()` in `server/email.ts` — sent to `org.billingEmail` when trial expires within 3 days
-- `scheduleTrialEndingReminders()` cron in `server/index.ts` — runs at startup + every 24h
-- Queries orgs where `stripeStatus='trialing'` and `stripeCurrentPeriodEnd` is 2–4 days away
-- Deduplication via `stripe_billing_events` table: inserts `event_type='trial_ending_reminder'` after sending
+- `sendTrialEndingEmail(to, orgName, trialEndDate, portalUrl?)` in `server/email.ts` — subject: "Your EdenScout trial expires tomorrow"
+- `checkAndSendTrialReminders()` + `scheduleTrialReminderCheck()` in `server/index.ts` — runs 10s after startup then every 6h
+- Queries via `storage.getOrgsWithTrialEndingSoon(25)` — orgs with `stripeStatus='trialing'`, `stripeCurrentPeriodEnd` within 25 hours, `trialReminderSentAt IS NULL`
+- Email recipient: org owner's Supabase auth email (resolved via Admin API) → falls back to `org.billingEmail`
+- Idempotency via `trialReminderSentAt` timestamp column on `organizations` (set via `updateOrganization` after send)
+- Column added via startup migration: `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_reminder_sent_at TIMESTAMP`
 
 ## Sentry Error Monitoring (Task #556)
 - Packages: `@sentry/node` (server), `@sentry/react` (frontend), `@sentry/vite-plugin` (installed, not yet configured for source maps)
