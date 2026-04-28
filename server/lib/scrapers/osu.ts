@@ -5,9 +5,9 @@ import { fetchHtml, cleanText } from "./utils";
 const INST = "Ohio State University";
 const BASE = "https://innovate.osu.edu";
 const LISTING_BASE = `${BASE}/available_technologies/`;
-const PAGE_SIZE = 20;
-const MAX_PAGES = 50;
 const DETAIL_CONCURRENCY = 4;
+const LARGE_LIMIT = 500;
+const FALLBACK_LIMIT = 1000;
 
 const CATEGORIES: { id: number; name: string }[] = [
   { id: 61665, name: "Clinical Area" },
@@ -30,17 +30,13 @@ function extractTechUrls($: CheerioAPI): { id: string; url: string }[] {
 async function fetchCategoryListings(cat: { id: number; name: string }): Promise<string[]> {
   const seen = new Set<string>();
   const urls: string[] = [];
-  let offset = 0;
-  let pageNum = 0;
 
-  while (pageNum < MAX_PAGES) {
-    const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}&limit=${PAGE_SIZE}&offset=${offset}`;
-    const $ = await fetchHtml(pageUrl, 15_000);
+  for (const limit of [LARGE_LIMIT, FALLBACK_LIMIT]) {
+    const pageUrl = `${LISTING_BASE}?categoryId=${cat.id}&categoryName=${encodeURIComponent(cat.name)}&limit=${limit}`;
+    const $ = await fetchHtml(pageUrl, 20_000);
     if (!$) break;
 
     const found = extractTechUrls($);
-    if (found.length === 0) break;
-
     let newCount = 0;
     for (const item of found) {
       if (!seen.has(item.id)) {
@@ -50,16 +46,13 @@ async function fetchCategoryListings(cat: { id: number; name: string }): Promise
       }
     }
 
-    if (newCount === 0) {
-      console.log(`[scraper] ${INST}: ${cat.name} page ${pageNum + 1} (offset=${offset}) yielded no new IDs, stopping`);
-      break;
-    }
+    console.log(`[scraper] ${INST}: ${cat.name} limit=${limit} → ${found.length} found, ${newCount} new`);
 
-    pageNum++;
-    offset += PAGE_SIZE;
+    // If fewer items than the limit came back, we have everything
+    if (found.length < limit) break;
   }
 
-  console.log(`[scraper] ${INST}: ${cat.name} crawled ${pageNum} page(s), ${urls.length} unique listings`);
+  console.log(`[scraper] ${INST}: ${cat.name} → ${urls.length} total unique listings`);
   return urls;
 }
 
