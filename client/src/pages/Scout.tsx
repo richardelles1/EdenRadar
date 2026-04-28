@@ -419,7 +419,7 @@ export default function Scout() {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
-        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 50, buyerProfile };
+        const body: Record<string, unknown> = { query, sources: ["patents"], maxPerSource: 100, buyerProfile };
         if (patentSince && patentSince !== "any") {
           body.patentSince = patentSince;
         }
@@ -797,11 +797,11 @@ export default function Scout() {
           {/* Tab toggle — shown as soon as TTO is done; always shows TTO + Patents, Research shown when sources are active */}
           {hasSearched && !searchMutation.isPending && (
             <div className="px-4 sm:px-6 pb-2">
-              <div className="flex justify-center">
-                <div className="inline-flex items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
+              <div className="flex justify-center w-full">
+                <div className="flex w-full max-w-2xl items-stretch rounded-lg border border-border overflow-hidden shadow-sm" data-testid="result-tab-toggle">
                   <button
                     onClick={() => setResultTab("assets")}
-                    className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
                       resultTab === "assets"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -819,7 +819,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("patents")}
-                    className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
                       resultTab === "patents"
                         ? "bg-amber-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -844,7 +844,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("research")}
-                    className={`flex items-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
+                    className={`flex flex-1 items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors ${
                       resultTab === "research"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"

@@ -36,6 +36,12 @@ function buildSearchQuery(rawQuery: string): string {
     return `"${upper}" OR "${spaced}"`;
   }
 
+  // Single words don't need quotes — unquoted gives full-text match across all fields
+  if (tokens.length === 1) {
+    return trimmed;
+  }
+
+  // Multi-word short phrases: keep as quoted phrase match
   if (tokens.length <= 3) {
     return `"${trimmed}"`;
   }
@@ -135,7 +141,7 @@ export async function searchPatents(
     const data = await res.json();
     const results: any[] = data?.patentFileWrapperDataBag ?? [];
 
-    const signals: RawSignal[] = results.slice(0, maxResults).map((r): RawSignal => {
+    const signals: RawSignal[] = results.slice(0, Math.min(maxResults, 100)).map((r): RawSignal => {
       const meta = r.applicationMetaData ?? {};
       const appNum: string = r.applicationNumberText ?? "";
       const title: string = meta.inventionTitle ?? "Untitled Patent";
