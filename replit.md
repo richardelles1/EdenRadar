@@ -265,10 +265,13 @@ All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash
 - Column added via startup migration: `ALTER TABLE organizations ADD COLUMN IF NOT EXISTS trial_reminder_sent_at TIMESTAMP`
 
 ## Sentry Error Monitoring (Task #556)
-- Packages: `@sentry/node` (server), `@sentry/react` (frontend), `@sentry/vite-plugin` (installed, not yet configured for source maps)
-- Server init in `server/index.ts` (top of file) — gated on `SENTRY_DSN` env var, calls `Sentry.setupExpressErrorHandler(app)` after routes
-- Frontend init in `client/src/main.tsx` — gated on `VITE_SENTRY_DSN` env var
-- Both gracefully no-op if DSN is not set (safe for development)
+- Packages: `@sentry/node` (server), `@sentry/react` (frontend)
+- Server init: `server/lib/sentry.ts` exports `initSentry()` (called at top of `server/index.ts` before any other code) + re-exports `captureException`; no-op + console.warn if `SENTRY_DSN` absent
+- Sentry Express error handler: `Sentry.setupExpressErrorHandler(app)` registered after routes; global error middleware calls `Sentry.captureException` for 5xx errors
+- Caught errors instrumented with `sentryCaptureException` in key routes: `POST /api/report`, `POST /api/org/members`, `POST /api/stripe/checkout`, `GET /api/stripe/verify-session`, `POST /api/stripe/webhook`
+- Frontend: `client/src/main.tsx` — `Sentry.init` gated on `VITE_SENTRY_DSN`; `<App />` wrapped in `<Sentry.ErrorBoundary>` with a branded "Something went wrong" fallback UI
+- Release tagging via `npm_package_version` (server) / `VITE_npm_package_version` (frontend) for per-deploy error grouping
+- Both sides gracefully no-op if DSN is not set (safe for development)
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)

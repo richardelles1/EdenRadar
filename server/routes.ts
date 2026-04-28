@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { captureException as sentryCaptureException } from "./lib/sentry";
 import rateLimit from "express-rate-limit";
 import { cacheGet, cacheSet } from "./lib/responseCache";
 import type { Express } from "express";
@@ -768,6 +769,7 @@ export async function registerRoutes(
       return res.json(report);
     } catch (err: any) {
       console.error("Report error:", err);
+      sentryCaptureException(err);
       return res.status(500).json({ error: friendlyOpenAIError(err) });
     }
   });
@@ -5939,6 +5941,8 @@ If a field cannot be determined, use "N/A".`
       res.json({ member: newMember, user: { id: newUserId, email: userData.user.email, fullName } });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: err.errors?.map((e: any) => e.message).join(", ") });
+      console.error("[org/members]", err?.message);
+      sentryCaptureException(err);
       res.status(500).json({ error: err.message });
     }
   });
@@ -8075,6 +8079,7 @@ If multiple assets appear, return each as a separate array item.`;
       res.json({ url: session.url });
     } catch (err: any) {
       console.error("[stripe/checkout]", err?.message);
+      sentryCaptureException(err);
       res.status(500).json({ error: err.message ?? "Failed to create checkout session" });
     }
   });
@@ -8205,6 +8210,7 @@ If multiple assets appear, return each as a separate array item.`;
       });
     } catch (err: any) {
       console.error("[stripe/verify-session]", err?.message);
+      sentryCaptureException(err);
       res.status(500).json({ error: err.message ?? "Failed to verify session" });
     }
   });
@@ -8605,6 +8611,7 @@ If multiple assets appear, return each as a separate array item.`;
       }
     } catch (err: any) {
       console.error(`[stripe/webhook] Error handling event ${eventType}:`, err?.message);
+      sentryCaptureException(err);
       return res.status(500).json({ error: "Internal error processing webhook — Stripe will retry" });
     }
 
