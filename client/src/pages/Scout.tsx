@@ -20,6 +20,7 @@ import {
 import {
   Popover, PopoverContent, PopoverTrigger,
 } from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import { FileBarChart2, Loader2, Globe, SlidersHorizontal, X, Database, Search, Building2, FlaskConical, Radio, ChevronDown, Settings, ScrollText } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
@@ -243,6 +244,9 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [patentSortMode, setPatentSortMode] = useState<"newest" | "best_match">("newest");
+  const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">("all");
+  const [patentAssigneeSearch, setPatentAssigneeSearch] = useState("");
   const [resultTab, setResultTab] = useState<"assets" | "patents" | "research">(() => ssGet("scout-result-tab", "assets"));
   const DEFAULT_RESEARCH_SOURCES: string[] = ["pubmed", "clinicaltrials", "biorxiv", "medrxiv"];
   const [researchSources, setResearchSources] = useState<string[]>(() => {
@@ -566,6 +570,31 @@ export default function Scout() {
     }
     return results;
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
+
+  const filteredPatentResults = useMemo(() => {
+    let results = patentResults.filter((asset) => {
+      const ownerType = (asset.signals?.[0]?.metadata?.owner_type as string) ?? asset.owner_type ?? "unknown";
+      const ownerOk = patentOwnerFilter === "all" || ownerType === patentOwnerFilter;
+      const assignee = asset.institution && asset.institution !== "unknown"
+        ? asset.institution
+        : asset.owner_name && asset.owner_name !== "unknown"
+        ? asset.owner_name
+        : "";
+      const assigneeOk = !patentAssigneeSearch.trim() ||
+        assignee.toLowerCase().includes(patentAssigneeSearch.trim().toLowerCase());
+      return ownerOk && assigneeOk;
+    });
+    if (patentSortMode === "best_match") {
+      results = [...results].sort((a, b) => b.score - a.score);
+    } else {
+      results = [...results].sort((a, b) => {
+        const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
+        const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
+        return db - da;
+      });
+    }
+    return results;
+  }, [patentResults, patentOwnerFilter, patentAssigneeSearch, patentSortMode]);
 
   const showControls = !searchMutation.isPending && hasSearched && searchResults.length > 0;
   const isAnyPending = searchMutation.isPending || reportMutation.isPending;
@@ -930,18 +959,106 @@ export default function Scout() {
                   </div>
                 ) : (
                   <div className="space-y-4">
+                    {/* Patent controls */}
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* Sort toggle */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-sort-toggle">
+                          {(["newest", "best_match"] as const).map((mode) => (
+                            <button
+                              key={mode}
+                              onClick={() => setPatentSortMode(mode)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                patentSortMode === mode
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`patent-sort-${mode}`}
+                            >
+                              {mode === "newest" ? "Newest" : "Best Match"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Owner type filter */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assignee Type</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="patent-owner-filter">
+                          {(["all", "university", "company"] as const).map((type) => (
+                            <button
+                              key={type}
+                              onClick={() => setPatentOwnerFilter(type)}
+                              className={`px-2.5 py-1 text-[10px] font-semibold capitalize transition-colors border-r border-border last:border-r-0 ${
+                                patentOwnerFilter === type
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`patent-owner-filter-${type}`}
+                            >
+                              {type === "all" ? "All" : type === "university" ? "University" : "Company"}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Assignee search */}
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Assignee</span>
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                          <Input
+                            value={patentAssigneeSearch}
+                            onChange={(e) => setPatentAssigneeSearch(e.target.value)}
+                            placeholder="Filter by assignee…"
+                            className="h-7 pl-6 pr-2 text-[11px] w-[160px] border-border"
+                            data-testid="input-patent-assignee-search"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Active filter chips */}
+                      {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim()) && (
+                        <div className="flex items-center gap-1.5 flex-wrap mt-4">
+                          {patentOwnerFilter !== "all" && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner">
+                              {patentOwnerFilter} ×
+                            </Badge>
+                          )}
+                          {patentAssigneeSearch.trim() && (
+                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
+                              "{patentAssigneeSearch}" ×
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                     <p className="text-sm text-muted-foreground" data-testid="patents-results-count">
-                      <span className="text-foreground font-semibold">{patentResults.length}</span> patent{patentResults.length !== 1 ? "s" : ""} found
+                      <span className="text-foreground font-semibold">{filteredPatentResults.length}</span>
+                      {filteredPatentResults.length !== patentResults.length && (
+                        <span> of <span className="text-foreground font-semibold">{patentResults.length}</span></span>
+                      )}{" "}
+                      patent{filteredPatentResults.length !== 1 ? "s" : ""} found
                       {currentQuery ? <> for "<span className="text-foreground">{currentQuery}</span>"</> : ""}
                     </p>
-                    <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                      {patentResults.map((asset) => (
-                        <PatentCard
-                          key={asset.id + "-patent"}
-                          asset={asset}
-                        />
-                      ))}
-                    </div>
+
+                    {filteredPatentResults.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                        <Search className="w-8 h-8 text-muted-foreground/40" />
+                        <p className="text-sm text-muted-foreground">No patents match the current filters.</p>
+                      </div>
+                    ) : (
+                      <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
+                        {filteredPatentResults.map((asset) => (
+                          <PatentCard
+                            key={asset.id + "-patent"}
+                            asset={asset}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </>
