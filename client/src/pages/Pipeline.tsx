@@ -209,7 +209,8 @@ function PipelineCard({ asset, onDelete }: { asset: PipelineAsset; onDelete: (id
   const noteCount = asset.noteCount ?? notes.length;
   const lastNoteAt = asset.lastNoteAt ?? (notes.length > 0 ? notes[notes.length - 1]?.createdAt : null);
 
-  const sourceType = asset.sourceName === "patent" ? "patent" : asset.sourceName === "clinical_trial" ? "trial" : "tto";
+  const sn = asset.sourceName ?? "";
+  const sourceType = sn === "patent" ? "patent" : sn === "clinical_trial" ? "trial" : "tto";
   const bloomColor = sourceType === "patent" ? "rgba(217,119,6,0.55)" : sourceType === "trial" ? "rgba(13,148,136,0.55)" : "rgba(38,122,70,0.55)";
   const accentColor = sourceType === "patent" ? "#d97706" : sourceType === "trial" ? "#0d9488" : "#22c55e";
   const accentBorderClass = sourceType === "patent" ? "border-amber-500/40" : sourceType === "trial" ? "border-teal-500/40" : "border-emerald-500/40";
@@ -560,13 +561,16 @@ export default function Pipeline() {
 
   const savedAssets = data?.assets ?? [];
 
+  function isPatentSource(sn: string) { return sn === "patent"; }
+  function isTrialSource(sn: string) { return sn === "clinical_trial"; }
+
   const filteredSavedAssets = sourceTypeFilter === "all"
     ? savedAssets
     : savedAssets.filter((a) => {
         const sn = a.sourceName ?? "";
-        if (sourceTypeFilter === "patent") return sn === "patent";
-        if (sourceTypeFilter === "trial") return sn === "clinical_trial";
-        return sn !== "patent" && sn !== "clinical_trial";
+        if (sourceTypeFilter === "patent") return isPatentSource(sn);
+        if (sourceTypeFilter === "trial") return isTrialSource(sn);
+        return !isPatentSource(sn) && !isTrialSource(sn);
       });
 
   const handleExportJson = () => {
@@ -686,7 +690,7 @@ export default function Pipeline() {
                     { key: "all",     label: "All" },
                     { key: "tto",     label: "TTO Assets" },
                     { key: "patent",  label: "Patents" },
-                    { key: "trial",   label: "Trials" },
+                    { key: "trial",   label: "Clinical Trials" },
                   ] as const).map(({ key, label }) => (
                     <button
                       key={key}

@@ -599,6 +599,13 @@ export default function Scout() {
   const saveMutation = useMutation({
     mutationFn: async (asset: ScoredAsset) => {
       const signal = asset.signals?.[0];
+      const rawSourceTypes = asset.source_types ?? [];
+      const isPatent = rawSourceTypes.some((s) => s === "patent");
+      const isTrial = rawSourceTypes.some((s) => s === "clinical_trial");
+      const canonicalSource = isPatent ? "patent" : isTrial ? "clinical_trial" : rawSourceTypes[0] ?? "unknown";
+      const patentId = (signal?.metadata?.patent_id as string) ?? null;
+      const nctId = (signal?.metadata?.nct_id as string) ?? null;
+      const dedupeKey = (isPatent && patentId) ? patentId : (isTrial && nctId) ? nctId : asset.id;
       const res = await apiRequest("POST", "/api/saved-assets", {
         asset_name: asset.asset_name,
         target: asset.target,
@@ -609,9 +616,9 @@ export default function Scout() {
         source_title: signal?.title ?? asset.asset_name,
         source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
         publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
-        source_name: asset.source_types?.[0] ?? "unknown",
+        source_name: canonicalSource,
         source_url: asset.source_urls?.[0] ?? undefined,
-        pmid: asset.id,
+        pmid: dedupeKey,
       });
       return res.json();
     },
@@ -1339,15 +1346,19 @@ export default function Scout() {
                     ) : (
                       <>
                         <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                          {filteredPatentResults.slice(0, shownPatentCount).map((asset) => (
+                          {filteredPatentResults.slice(0, shownPatentCount).map((asset) => {
+                            const patentId = (asset.signals?.[0]?.metadata?.patent_id as string) ?? null;
+                            const patentKey = patentId ?? asset.id;
+                            return (
                             <PatentCard
                               key={asset.id + "-patent"}
                               asset={asset}
-                              isSaved={savedAssetIds.has(asset.id)}
+                              isSaved={savedAssetIds.has(patentKey)}
                               onSave={() => saveMutation.mutate(asset)}
-                              onUnsave={() => handleUnsave(asset.id)}
+                              onUnsave={() => handleUnsave(patentKey)}
                             />
-                          ))}
+                            );
+                          })}
                         </div>
                         {shownPatentCount < filteredPatentResults.length && (
                           <div className="flex justify-center pt-2">
@@ -1516,15 +1527,19 @@ export default function Scout() {
                     ) : (
                       <>
                         <div className="grid gap-3 grid-cols-[repeat(auto-fill,minmax(200px,1fr))]">
-                          {filteredTrialResults.slice(0, shownTrialCount).map((asset) => (
+                          {filteredTrialResults.slice(0, shownTrialCount).map((asset) => {
+                            const nctId = (asset.signals?.[0]?.metadata?.nct_id as string) ?? null;
+                            const trialKey = nctId ?? asset.id;
+                            return (
                             <ClinicalTrialCard
                               key={asset.id + "-trial"}
                               asset={asset}
-                              isSaved={savedAssetIds.has(asset.id)}
+                              isSaved={savedAssetIds.has(trialKey)}
                               onSave={() => saveMutation.mutate(asset)}
-                              onUnsave={() => handleUnsave(asset.id)}
+                              onUnsave={() => handleUnsave(trialKey)}
                             />
-                          ))}
+                            );
+                          })}
                         </div>
                         {shownTrialCount < filteredTrialResults.length && (
                           <div className="flex justify-center pt-2">
