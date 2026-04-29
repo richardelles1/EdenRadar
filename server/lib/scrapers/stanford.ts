@@ -23,7 +23,7 @@ export const stanfordScraper: InstitutionScraper = {
       const results: ScrapedListing[] = [];
       const seen = new Set<string>();
 
-      // Step 1: fetch page 0 with retries=2 (default) and 20s timeout.
+      // Step 1: fetch page 0 with retries=2 (default) and 30s timeout.
       // Page 0 is required — if it fails the run produces 0 listings.
       const page0$ = await fetchHtml(`${BASE}/`, PAGE_TIMEOUT_MS, signal, 2, true);
       if (!page0$) {
@@ -66,7 +66,7 @@ export const stanfordScraper: InstitutionScraper = {
       // ALL fail to load (true CDN block). Sporadic individual page failures
       // (1 to PAGE_WINDOW-1 per batch) are tolerated — just skipped and logged.
       // EMERGENCY_CEIL is a runaway-loop guard only.
-      // Stanford has ~100-150 list pages × 20s worst-case = well within the 20-min limit.
+      // Stanford has ~100-150 list pages × 30s worst-case = well within the 20-min limit.
       const EMERGENCY_CEIL = 500;
       // Stop only after this many consecutive batches where EVERY page failed.
       const CDN_BLOCK_CEIL = 2;
