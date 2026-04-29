@@ -4,11 +4,16 @@ import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
-// Parallel batch size for list-page fetching. Kept at 5 to avoid triggering
-// Stanford's CDN connection throttling (10 caused scattered 20s timeouts).
-const PAGE_WINDOW = 5;
-// Per-page timeout raised to 20s (CDN cold-start can reach ~15s).
-const PAGE_TIMEOUT_MS = 20_000;
+// Parallel batch size for list-page fetching. Reduced to 2: CDN cache sharding
+// causes specific page numbers to consistently take 10-12s even sequentially
+// (confirmed: page 7=10.4s, page 9=10.1s). Smaller batches reduce the chance
+// of two cold-cache pages colliding in the same parallel slot.
+const PAGE_WINDOW = 2;
+// Per-page timeout raised to 30s: cold-cache pages hit 10-12s sequentially;
+// with PAGE_WINDOW=2 and mild parallel load they may reach ~15-20s.
+// 30s gives comfortable headroom. 75 batches × avg 5s = ~375s total — well
+// within the 20-min scraperTimeoutMs.
+const PAGE_TIMEOUT_MS = 30_000;
 
 export const stanfordScraper: InstitutionScraper = {
   institution: INST,

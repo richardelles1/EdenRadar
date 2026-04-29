@@ -23,6 +23,7 @@ const PAGE_TIMEOUT_MS = 15_000;
 
 export const mitScraper: InstitutionScraper = {
   institution: INST,
+  scraperTimeoutMs: 20 * 60 * 1000, // 20 min — enrichWithDetailPages on 800+ listings takes 8-13 min
   async scrape(signal?: AbortSignal): Promise<ScrapedListing[]> {
     try {
       const results: ScrapedListing[] = [];
