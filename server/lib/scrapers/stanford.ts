@@ -4,15 +4,15 @@ import { enrichWithDetailPages } from "./detailFetcher";
 
 const BASE = "https://techfinder.stanford.edu";
 const INST = "Stanford University";
-// Parallel batch size for list-page fetching. Reduced to 2: CDN cache sharding
-// causes specific page numbers to consistently take 10-12s even sequentially
-// (confirmed: page 7=10.4s, page 9=10.1s). Smaller batches reduce the chance
-// of two cold-cache pages colliding in the same parallel slot.
-const PAGE_WINDOW = 2;
-// Per-page timeout raised to 30s: cold-cache pages hit 10-12s sequentially;
-// with PAGE_WINDOW=2 and mild parallel load they may reach ~15-20s.
-// 30s gives comfortable headroom. 75 batches × avg 5s = ~375s total — well
-// within the 20-min scraperTimeoutMs.
+// Parallel batch size for list-page fetching.
+// CDN cache sharding causes specific page numbers to take 10-12s (confirmed).
+// PAGE_WINDOW=5 is correct: slow pages run alongside fast ones in parallel —
+// each batch finishes in max(page times) ≈ 12s. 150 pages ÷ 5 = 30 batches
+// × 12s = 360s ≈ 6 min, well within the 20-min scraperTimeoutMs.
+// PAGE_WINDOW=2 caused 75 batches × 30s worst-case = 37 min — too slow.
+const PAGE_WINDOW = 5;
+// Per-page timeout: 30s. Cold-cache pages hit 10-12s; 30s gives headroom.
+// 30 batches × avg 5-12s = 150-360s — well within the 20-min scraperTimeoutMs.
 const PAGE_TIMEOUT_MS = 30_000;
 
 export const stanfordScraper: InstitutionScraper = {
@@ -66,7 +66,7 @@ export const stanfordScraper: InstitutionScraper = {
       // ALL fail to load (true CDN block). Sporadic individual page failures
       // (1 to PAGE_WINDOW-1 per batch) are tolerated — just skipped and logged.
       // EMERGENCY_CEIL is a runaway-loop guard only.
-      // Stanford has ~100-150 list pages × 30s worst-case = well within the 20-min limit.
+      // Stanford ~150 pages ÷ PAGE_WINDOW=5 = 30 batches × ≤12s each ≈ 6 min.
       const EMERGENCY_CEIL = 500;
       // Stop only after this many consecutive batches where EVERY page failed.
       const CDN_BLOCK_CEIL = 2;

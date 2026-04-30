@@ -126,8 +126,10 @@ export const mitScraper: InstitutionScraper = {
       console.log(`[scraper] ${INST}: ${results.length} listings total, enriching details...`);
 
       // Step 3: enrich detail pages for listings that lack a good description.
-      // MIT TLO catalog verified 2026-04-21: ~800+ listings across 40+ pages
-      // (20 items/page, no filter). Cap at 1000 to stay within scrape budget.
+      // Cap at 150: at DETAIL_CONCURRENCY=5 and 12s timeout, 150 pages ≈ 6 min.
+      // Capping at 1000 caused 420+ detail fetches ≈ 17 min — exceeding 20-min limit.
+      // MIT list pages include a short description snippet, so most listings won't
+      // reach this cap; it only fires when many listings have no/short description.
       await enrichWithDetailPages(results, {
         description: [
           ".tech-brief-body__inner",
@@ -148,7 +150,7 @@ export const mitScraper: InstitutionScraper = {
           ".tech-brief-details__ip .accordion__content",
           ".field--name-field-patent-status",
         ],
-      }, 1000, signal);
+      }, 150, signal);
 
       console.log(`[scraper] ${INST}: complete — ${results.length} listings`);
       return results;
