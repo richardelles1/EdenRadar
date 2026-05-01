@@ -408,6 +408,12 @@ import {
   upvScraper,
   brockScraper,
   novaLisbonScraper,
+  // Task #617 — Stub overhaul + new institutions
+  wpiScraper,
+  galwayScraper,
+  researchLuxembourgScraper,
+  auaScraper,
+  cuhkOrktsScraper,
 } from "./new-institutions";
 
 // ── Task #444 — OSTI.gov + NASA Technology Transfer (public API, no proxy) ───
@@ -616,7 +622,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   harvardScraper,
   ucsfScraper,
   jhuScraper,
-  dukeScraper,
+  dukeScraper,                   // confirmed-active — WP REST API
   columbiaScraper,
   upennScraper,
   northwesternScraper,
@@ -746,7 +752,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   auburnScraper,
   ugaScraper,
   uconnScraper,
-  dartmouthScraper,
+  dartmouthScraper,              // confirmed-active — PDF parsing via pdftotext
   ubcScraper,
   uvicScraper,
   monashScraper,
@@ -857,6 +863,12 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   upvScraper,
   brockScraper,
   novaLisbonScraper,
+  // ── Task #617 — Stub overhaul + 5 new institutions ────────────────────────
+  wpiScraper,                    // Worcester Polytechnic Institute — in-part "wpi" ~45
+  galwayScraper,                 // University of Galway — in-part "universityofgalway" ~37
+  researchLuxembourgScraper,    // Research Luxembourg — in-part "researchluxembourg" ~77
+  auaScraper,                    // American University of Armenia — in-part "aua" ~4
+  cuhkOrktsScraper,              // Chinese University of Hong Kong (ORKTS) — TechPublisher "cuhk-orkts"
   // ── Bespoke scrapers batch 2A (Task #104) + 2B (Task #105, March 2026) ────
   csusScraper,
   loyolaChicagoScraper,
@@ -872,7 +884,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   jacksonStateScraper,
   ferrisStateScraper,
   brookhavenScraper,
-  launchTNScraper,
+  launchTNScraper,               // confirmed-active — HTML scraper for LaunchTN portfolio
   ritScraper,
   nmTechScraper,
   sandiaScraper,

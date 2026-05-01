@@ -1,7 +1,7 @@
 import { createTechPublisherScraper } from "./techpublisher";
 import { createFlintboxScraper } from "./flintbox";
 import { createUCTechTransferScraper } from "./uctechtransfer";
-import { fetchHtml, fetchHtmlViaProxy, fetchJson, cleanText, SiteHttpError } from "./utils";
+import { fetchHtml, fetchJson, cleanText, SiteHttpError } from "./utils";
 import { enrichWithDetailPages } from "./detailFetcher";
 import type { InstitutionScraper, ScrapedListing } from "./types";
 
@@ -5612,202 +5612,29 @@ export const calgaryScraper = createFlintboxScraper({ slug: "calgary", orgId: 0,
 //
 // Total with DOE: 278 → 281 scrapers
 
-// ── Oak Ridge National Laboratory (ORNL) ─────────────────────────────────────
-export const ornlScraper: InstitutionScraper = {
-  institution: "Oak Ridge National Laboratory",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "Oak Ridge National Laboratory";
-    const BASE = "https://technology.ornl.gov";
-    const LISTING = `${BASE}/license-search/`;
+// ── Oak Ridge National Laboratory (ORNL) — stub (proxy-blocked) ───────────────
+// technology.ornl.gov returns HTTP 000 from Replit cloud IPs (proxy-blocked).
+// DOE technologies from ORNL, ANL, and PNNL are covered in aggregate by ostiScraper
+// (DOE patents via OSTI.gov). Re-enable with a Cloudflare proxy worker if direct access
+// is available.
+export const ornlScraper = createStubScraper(
+  "Oak Ridge National Laboratory",
+  "proxy-blocked — technology.ornl.gov returns HTTP 000 from cloud IPs"
+);
 
-    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
-    if (!$) {
-      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
-      return [];
-    }
+// ── Argonne National Laboratory (ANL) — stub (proxy-blocked) ─────────────────
+// www.anl.gov/partnerships returns HTTP 000 from Replit cloud IPs.
+export const argonneScraper = createStubScraper(
+  "Argonne National Laboratory",
+  "proxy-blocked — anl.gov returns HTTP 000 from cloud IPs"
+);
 
-    const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-
-    // ORNL license-search renders tech cards; try known selectors first
-    const candidateSelectors = [
-      'a[href*="/license/"]',
-      'a[href*="/technology/"]',
-      ".technology-card a",
-      ".result-item a",
-      "article h2 a",
-      "article h3 a",
-      ".tech-title a",
-    ];
-
-    for (const sel of candidateSelectors) {
-      $(sel).each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const text = cleanText($(el).text());
-        if (!text || text.length < 5) return;
-        const url = href.startsWith("http") ? href : `${BASE}${href.startsWith("/") ? "" : "/"}${href}`;
-        if (seen.has(url)) return;
-        seen.add(url);
-        results.push({ title: text, description: "", url, institution: INST });
-      });
-      if (results.length > 0) break;
-    }
-
-    // Generic fallback
-    if (results.length === 0) {
-      $("a[href]").each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const text = cleanText($(el).text());
-        if (
-          text.length >= 10 &&
-          (href.includes("/license/") || href.includes("/technology/") || href.includes("/tech/")) &&
-          !href.includes("category") && !href.includes("search")
-        ) {
-          const url = href.startsWith("http") ? href : `${BASE}${href}`;
-          if (seen.has(url)) return;
-          seen.add(url);
-          results.push({ title: text, description: "", url, institution: INST });
-        }
-      });
-    }
-
-    console.log(`[scraper] ${INST}: ${results.length} listings`);
-    return results;
-  },
-};
-
-// ── Argonne National Laboratory (ANL) ────────────────────────────────────────
-export const argonneScraper: InstitutionScraper = {
-  institution: "Argonne National Laboratory",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "Argonne National Laboratory";
-    const BASE = "https://www.anl.gov";
-    const LISTING = `${BASE}/partnerships/argonne-technologies-available-for-licensing`;
-
-    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
-    if (!$) {
-      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
-      return [];
-    }
-
-    const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-
-    // ANL technologies page: Drupal-based, typically uses views with card rows
-    const candidateSelectors = [
-      'a[href*="/technology/"]',
-      'a[href*="/ip/"]',
-      ".views-row a",
-      ".field--name-title a",
-      "article h2 a",
-      "article h3 a",
-      ".card__title a",
-    ];
-
-    for (const sel of candidateSelectors) {
-      $(sel).each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const text = cleanText($(el).text());
-        if (!text || text.length < 5) return;
-        const url = href.startsWith("http") ? href : `${BASE}${href}`;
-        if (seen.has(url)) return;
-        seen.add(url);
-        results.push({ title: text, description: "", url, institution: INST });
-      });
-      if (results.length > 0) break;
-    }
-
-    // Generic fallback
-    if (results.length === 0) {
-      $("a[href]").each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const text = cleanText($(el).text());
-        if (
-          text.length >= 10 &&
-          (href.includes("/technology/") || href.match(/\/anl-\d+/i) || href.includes("anl.gov/tech"))
-        ) {
-          const url = href.startsWith("http") ? href : `${BASE}${href}`;
-          if (seen.has(url)) return;
-          seen.add(url);
-          results.push({ title: text, description: "", url, institution: INST });
-        }
-      });
-    }
-
-    console.log(`[scraper] ${INST}: ${results.length} listings`);
-    return results;
-  },
-};
-
-// ── Pacific Northwest National Laboratory (PNNL) ─────────────────────────────
-export const pnnlScraper: InstitutionScraper = {
-  institution: "Pacific Northwest National Laboratory",
-  async scrape(): Promise<ScrapedListing[]> {
-    const INST = "Pacific Northwest National Laboratory";
-    const BASE = "https://availabletechnologies.pnl.gov";
-    const LISTING = `${BASE}/`;
-
-    const $ = await fetchHtmlViaProxy(LISTING, 20_000);
-    if (!$) {
-      console.warn(`[scraper] ${INST}: no content — set SCRAPER_PROXY_URL to unblock`);
-      return [];
-    }
-
-    const results: ScrapedListing[] = [];
-    const seen = new Set<string>();
-
-    // PNNL uses a category-based structure — collect category pages then recurse
-    const categoryLinks: string[] = [];
-    $("a[href]").each((_, el) => {
-      const href = $(el).attr("href") ?? "";
-      const text = cleanText($(el).text());
-      if (
-        text.length > 3 &&
-        (href.includes("/category/") || href.includes("/area/") || href.match(/^\/[a-z-]+\/?$/)) &&
-        href !== "/" && !href.includes("search") && !href.includes("contact")
-      ) {
-        const url = href.startsWith("http") ? href : `${BASE}${href}`;
-        if (!categoryLinks.includes(url)) categoryLinks.push(url);
-      }
-    });
-
-    for (const catUrl of categoryLinks.slice(0, 15)) {
-      const cat$ = await fetchHtmlViaProxy(catUrl, 15_000);
-      if (!cat$) continue;
-      cat$("a[href]").each((_, el) => {
-        const href = cat$(el).attr("href") ?? "";
-        const text = cleanText(cat$(el).text());
-        if (
-          text.length >= 10 &&
-          (href.includes("/technology/") || href.includes("/tech/") || href.match(/\/\d{3,}/)) &&
-          !href.includes("category") && !href.includes("area")
-        ) {
-          const url = href.startsWith("http") ? href : `${BASE}${href}`;
-          if (seen.has(url)) return;
-          seen.add(url);
-          results.push({ title: text, description: "", url, institution: INST });
-        }
-      });
-    }
-
-    // Fallback: direct tech links from listing page
-    if (results.length === 0) {
-      $("a[href]").each((_, el) => {
-        const href = $(el).attr("href") ?? "";
-        const text = cleanText($(el).text());
-        if (text.length >= 10 && (href.includes("/technology/") || href.includes("/tech/"))) {
-          const url = href.startsWith("http") ? href : `${BASE}${href}`;
-          if (seen.has(url)) return;
-          seen.add(url);
-          results.push({ title: text, description: "", url, institution: INST });
-        }
-      });
-    }
-
-    console.log(`[scraper] ${INST}: ${results.length} listings`);
-    return results;
-  },
-};
+// ── Pacific Northwest National Laboratory (PNNL) — stub (proxy-blocked) ───────
+// availabletechnologies.pnl.gov returns HTTP 000 from Replit cloud IPs.
+export const pnnlScraper = createStubScraper(
+  "Pacific Northwest National Laboratory",
+  "proxy-blocked — availabletechnologies.pnl.gov returns HTTP 000 from cloud IPs"
+);
 
 // ── Task #273 — Wistar, VCU, WEHI ────────────────────────────────────────────
 
@@ -7455,3 +7282,27 @@ export const brockScraper = createInPartScraper("brock", "Brock University");
 // app.in-part.com portalSubdomain=nova confirmed 2026-04-21: 18 tech listings.
 // Distinct from Nova Southeastern University (novaSoutheasternScraper uses research.nova.edu).
 export const novaLisbonScraper = createInPartScraper("nova", "NOVA University Lisbon");
+
+// ── in-part: Worcester Polytechnic Institute ──────────────────────────────────
+// app.in-part.com portalSubdomain=wpi confirmed 2026-05-01: 45 tech listings.
+export const wpiScraper = createInPartScraper("wpi", "Worcester Polytechnic Institute");
+
+// ── in-part: University of Galway ────────────────────────────────────────────
+// app.in-part.com portalSubdomain=universityofgalway confirmed 2026-05-01: 37 tech listings.
+export const galwayScraper = createInPartScraper("universityofgalway", "University of Galway");
+
+// ── in-part: Research Luxembourg ─────────────────────────────────────────────
+// app.in-part.com portalSubdomain=researchluxembourg confirmed 2026-05-01: 77 tech listings.
+export const researchLuxembourgScraper = createInPartScraper("researchluxembourg", "Research Luxembourg");
+
+// ── in-part: American University of Armenia ───────────────────────────────────
+// app.in-part.com portalSubdomain=aua confirmed 2026-05-01: 4 tech listings.
+export const auaScraper = createInPartScraper("aua", "American University of Armenia");
+
+// ── TechPublisher: Chinese University of Hong Kong (ORKTS) ───────────────────
+// cuhk-orkts.technologypublisher.com confirmed 2026-05-01: sitemap has 102 URLs.
+export const cuhkOrktsScraper = createTechPublisherScraper(
+  "cuhk-orkts",
+  "Chinese University of Hong Kong (ORKTS)",
+  { maxPg: 30 }
+);
