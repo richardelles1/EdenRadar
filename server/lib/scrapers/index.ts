@@ -409,6 +409,7 @@ import {
   brockScraper,
   novaLisbonScraper,
   // Task #617 — Stub overhaul + new institutions
+  novaSeScraper,
   wpiScraper,
   galwayScraper,
   researchLuxembourgScraper,
@@ -862,8 +863,10 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   umassmedScraper,
   upvScraper,
   brockScraper,
-  novaLisbonScraper,
-  // ── Task #617 — Stub overhaul + 5 new institutions ────────────────────────
+  // novaLisbonScraper removed — was mis-attributed; "nova" In-Part portal is Nova Southeastern University.
+  // The novaSeScraper below (Task #617) replaces it under the correct institution name.
+  // ── Task #617 — Stub overhaul + 6 new institutions ────────────────────────
+  novaSeScraper,                 // Nova Southeastern University — in-part "nova" ~18
   wpiScraper,                    // Worcester Polytechnic Institute — in-part "wpi" ~45
   galwayScraper,                 // University of Galway — in-part "universityofgalway" ~37
   researchLuxembourgScraper,    // Research Luxembourg — in-part "researchluxembourg" ~77

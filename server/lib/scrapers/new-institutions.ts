@@ -6705,14 +6705,8 @@ export const bgnScraper = createStubScraper(
   "bgn.bgu.ac.il/technologies — CloudFront WAF blocks both curl (HTTP 403) and Playwright headless browser; cannot be scraped without a residential proxy"
 );
 
-// Nova Southeastern University — research.nova.edu/ottc/available-technologies/
-// The available-technologies index page contains only college/department navigation links
-// and three non-listing sub-pages (Agreements, Criteria, Industry-Academic).
-// No enumerable technology catalog is accessible from the public web.
-export const novaSeScraper = createStubScraper(
-  "Nova Southeastern University",
-  "research.nova.edu/ottc/available-technologies — no enumerable tech catalog found"
-);
+// Nova Southeastern University — see Task #617 Playwright scraper further below
+// (novaSeScraper is defined at the end of the file with a Playwright implementation)
 
 // ── Task #360 — Scraper Expansion: ~30 New Institutions ─────────────────────
 
@@ -7278,10 +7272,15 @@ export const upvScraper = createInPartScraper("upv", "Polytechnic University of 
 // app.in-part.com portalSubdomain=brock confirmed 2026-04-21: 12 tech listings.
 export const brockScraper = createInPartScraper("brock", "Brock University");
 
-// ── in-part: NOVA University Lisbon ──────────────────────────────────────────
-// app.in-part.com portalSubdomain=nova confirmed 2026-04-21: 18 tech listings.
-// Distinct from Nova Southeastern University (novaSoutheasternScraper uses research.nova.edu).
-export const novaLisbonScraper = createInPartScraper("nova", "NOVA University Lisbon");
+// ── in-part: Nova Southeastern University ────────────────────────────────────
+// app.in-part.com portalSubdomain=nova confirmed 2026-05-01: 18 tech listings.
+// nova.portals.in-part.com is explicitly linked from research.nova.edu/ottc/available-technologies/
+// confirming "nova" In-Part subdomain belongs to Nova Southeastern University (NSU),
+// not NOVA University Lisbon (which has a separate In-Part presence under a different subdomain).
+export const novaSeScraper = createInPartScraper("nova", "Nova Southeastern University");
+// Backward-compat alias kept so other code referencing novaLisbonScraper still compiles;
+// the institution was previously mis-attributed — correct name is Nova Southeastern University.
+export const novaLisbonScraper = novaSeScraper;
 
 // ── in-part: Worcester Polytechnic Institute ──────────────────────────────────
 // app.in-part.com portalSubdomain=wpi confirmed 2026-05-01: 45 tech listings.
