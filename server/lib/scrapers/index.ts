@@ -407,7 +407,6 @@ import {
   umassmedScraper,
   upvScraper,
   brockScraper,
-  novaLisbonScraper,
   // Task #617 — Stub overhaul + new institutions
   novaSeScraper,
   wpiScraper,

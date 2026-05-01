@@ -6705,8 +6705,7 @@ export const bgnScraper = createStubScraper(
   "bgn.bgu.ac.il/technologies — CloudFront WAF blocks both curl (HTTP 403) and Playwright headless browser; cannot be scraped without a residential proxy"
 );
 
-// Nova Southeastern University — see Task #617 Playwright scraper further below
-// (novaSeScraper is defined at the end of the file with a Playwright implementation)
+// Nova Southeastern University — see novaSeScraper defined further below (Task #617)
 
 // ── Task #360 — Scraper Expansion: ~30 New Institutions ─────────────────────
 
