@@ -44,10 +44,16 @@ const admin = createClient(SUPABASE_URL, SERVICE_KEY, {
 });
 
 async function findUserByEmail(email) {
-  // listUsers paginates; small allowlist => first page is enough for our use.
-  const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 });
-  if (error) throw error;
-  return data.users.find((u) => (u.email ?? "").toLowerCase() === email) ?? null;
+  // Paginate through every page so the script stays idempotent regardless of
+  // how many users the Supabase project has.
+  const perPage = 200;
+  for (let page = 1; ; page++) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) throw error;
+    const match = data.users.find((u) => (u.email ?? "").toLowerCase() === email);
+    if (match) return match;
+    if (data.users.length < perPage) return null;
+  }
 }
 
 async function ensureAdmin(email) {
