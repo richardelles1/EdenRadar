@@ -2394,19 +2394,23 @@ export async function registerRoutes(
             licensingReadiness: classification.licensingReadiness,
             deviceAttributes: classification.deviceAttributes,
           });
+          // Always persist the type-aware classification (assetClass, deviceAttributes,
+          // completenessScore, enrichmentSources, and any vocab-normalized fields).
+          // The storage layer enforces human-verified locking, so locked fields are safe.
+          // We still track "improved" for the job counter — counts only when pharma-style
+          // unknown→known transitions occur.
+          await storage.updateIngestedAssetEnrichment(asset.id, {
+            ...classification,
+            completenessScore: score,
+          });
+
           const improved =
             ((!asset.target || asset.target === "unknown") && classification.target !== null) ||
             ((!asset.modality || asset.modality === "unknown") && classification.modality !== null) ||
             ((!asset.indication || asset.indication === "unknown") && classification.indication !== null) ||
             (asset.developmentStage === "unknown" && classification.developmentStage !== "unknown");
 
-          if (improved) {
-            await storage.updateIngestedAssetEnrichment(asset.id, {
-              ...classification,
-              completenessScore: score,
-            });
-            liveEnrichment!.improved++;
-          }
+          if (improved) liveEnrichment!.improved++;
         } catch (e) {
           console.error(`[enrichment] failed for asset ${asset.id}:`, e);
         }
@@ -2572,7 +2576,7 @@ export async function registerRoutes(
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '7 days' THEN 1 END)::int AS added_7d,
           COUNT(CASE WHEN first_seen_at >= NOW() - INTERVAL '30 days' THEN 1 END)::int AS added_30d
         FROM ingested_assets
-        WHERE relevant = true
+        WHERE relevant = true AND (data_sparse IS NULL OR data_sparse = false)
       `);
 
       const institutionResult = await db.execute(sql`
@@ -2583,7 +2587,7 @@ export async function registerRoutes(
           ROUND(100.0 * COUNT(CASE WHEN target IS NOT NULL AND target NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_target,
           ROUND(100.0 * COUNT(CASE WHEN indication IS NOT NULL AND indication NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_indication
         FROM ingested_assets
-        WHERE relevant = true
+        WHERE relevant = true AND (data_sparse IS NULL OR data_sparse = false)
         GROUP BY institution
         ORDER BY COUNT(*) DESC
         LIMIT 500
@@ -2616,7 +2620,7 @@ export async function registerRoutes(
           ROUND(100.0 * COUNT(CASE WHEN development_stage IS NOT NULL AND development_stage NOT IN ('unknown','') THEN 1 END) / NULLIF(COUNT(*),0), 1) AS fill_stage,
           COUNT(CASE WHEN data_sparse = true THEN 1 END)::int AS sparse_count
         FROM ingested_assets
-        WHERE relevant = true
+        WHERE relevant = true AND (data_sparse IS NULL OR data_sparse = false)
         GROUP BY asset_class
         ORDER BY COUNT(*) DESC
       `);

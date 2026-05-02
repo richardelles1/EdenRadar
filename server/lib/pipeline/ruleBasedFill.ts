@@ -180,10 +180,10 @@ export async function runRuleBasedFill(
     FROM ingested_assets
     WHERE relevant = true
       AND (
-        development_stage = 'unknown'
+        development_stage IS NULL OR development_stage = 'unknown'
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
-        OR indication = 'unknown'
+        OR indication IS NULL OR indication = 'unknown'
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
@@ -286,10 +286,10 @@ export async function estimateRuleBasedFill(): Promise<{
     FROM ingested_assets
     WHERE relevant = true
       AND (
-        development_stage = 'unknown'
+        development_stage IS NULL OR development_stage = 'unknown'
         OR ip_type IS NULL OR ip_type = 'unknown'
         OR licensing_readiness IS NULL OR licensing_readiness = 'unknown'
-        OR indication = 'unknown'
+        OR indication IS NULL OR indication = 'unknown'
         OR data_sparse IS NULL
       )
     ORDER BY id ASC
