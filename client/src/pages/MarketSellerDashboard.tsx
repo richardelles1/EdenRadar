@@ -182,6 +182,15 @@ export default function MarketSellerDashboard() {
                 >
                   <Eye className="w-3 h-3" /> View
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => navigate(`/market/edit-listing/${l.id}`)}
+                  data-testid={`seller-listing-edit-${l.id}`}
+                >
+                  <Edit className="w-3 h-3" /> Edit
+                </Button>
                 {l.status === "active" && (
                   <Button
                     variant="outline"

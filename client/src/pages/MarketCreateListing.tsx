@@ -115,11 +115,12 @@ export default function MarketCreateListing() {
   });
 
   const { mutate, isPending } = useMutation({
-    mutationFn: async (data: ListingFormData) => {
+    mutationFn: async ({ data, asDraft }: { data: ListingFormData; asDraft?: boolean }) => {
       const payload = {
         ...data,
         priceRangeMin: data.priceRangeMin ? parseInt(data.priceRangeMin, 10) : undefined,
         priceRangeMax: data.priceRangeMax ? parseInt(data.priceRangeMax, 10) : undefined,
+        ...(asDraft ? { status: "draft" } : {}),
       };
       const res = await fetch("/api/market/listings", {
         method: "POST",
@@ -131,11 +132,15 @@ export default function MarketCreateListing() {
         body: JSON.stringify(payload),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-      return res.json();
+      return { result: await res.json(), asDraft };
     },
-    onSuccess: () => {
+    onSuccess: ({ asDraft }) => {
       qc.invalidateQueries({ queryKey: ["/api/market/my-listings"] });
-      toast({ title: "Listing submitted for review", description: "Our team will review your listing and publish it shortly." });
+      if (asDraft) {
+        toast({ title: "Draft saved", description: "Your listing has been saved as a draft. Submit it for review when ready." });
+      } else {
+        toast({ title: "Listing submitted for review", description: "Our team will review your listing and publish it shortly." });
+      }
       navigate("/market/seller");
     },
     onError: (err: Error) => {
@@ -174,7 +179,7 @@ export default function MarketCreateListing() {
       <StepIndicator current={step} total={STEPS.length} />
 
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(d => mutate(d))} className="space-y-4">
+        <form onSubmit={form.handleSubmit(d => mutate({ data: d }))} className="space-y-4">
           {step === 0 && (
             <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
               <h2 className="text-sm font-bold text-foreground">{STEPS[0].title}</h2>
@@ -361,15 +366,28 @@ export default function MarketCreateListing() {
                 Next <ChevronRight className="w-4 h-4" />
               </Button>
             ) : (
-              <Button
-                type="submit"
-                disabled={isPending}
-                className="flex-1 text-white"
-                style={{ background: ACCENT }}
-                data-testid="create-listing-submit"
-              >
-                {isPending ? "Submitting…" : "Submit for Review"}
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-2 flex-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={isPending}
+                  className="flex-1"
+                  onClick={() => form.handleSubmit(d => mutate({ data: d, asDraft: true }))()}
+                  data-testid="create-listing-save-draft"
+                >
+                  Save as Draft
+                </Button>
+                <Button
+                  type="button"
+                  disabled={isPending}
+                  className="flex-1 text-white"
+                  style={{ background: ACCENT }}
+                  onClick={() => form.handleSubmit(d => mutate({ data: d, asDraft: false }))()}
+                  data-testid="create-listing-submit"
+                >
+                  {isPending ? "Submitting…" : "Submit for Review"}
+                </Button>
+              </div>
             )}
           </div>
         </form>

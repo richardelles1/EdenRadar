@@ -8,6 +8,7 @@ import { MarketGate } from "@/components/MarketGate";
 import MarketBrowse from "@/pages/MarketBrowse";
 import MarketListingDetail from "@/pages/MarketListingDetail";
 import MarketCreateListing from "@/pages/MarketCreateListing";
+import MarketEditListing from "@/pages/MarketEditListing";
 import MarketSellerDashboard from "@/pages/MarketSellerDashboard";
 import MarketMyEOIs from "@/pages/MarketMyEOIs";
 import NotFound from "@/pages/not-found";
@@ -313,6 +314,13 @@ function Router() {
         <MarketLayout>
           <MarketGate>
             <MarketCreateListing />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market/edit-listing/:id">
+        <MarketLayout>
+          <MarketGate>
+            <MarketEditListing />
           </MarketGate>
         </MarketLayout>
       </Route>

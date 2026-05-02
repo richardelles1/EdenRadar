@@ -8600,9 +8600,24 @@ If multiple assets appear, return each as a separate array item.`;
         case "checkout.session.completed": {
           // Safety sync fallback — verify-session handles the primary write after the browser redirect.
           const sess = event.data.object as Record<string, unknown>;
-          const orgId = parseInt(String(sess["metadata"] && (sess["metadata"] as Record<string, string>)["orgId"] || "0"), 10);
+          const sessMeta = sess["metadata"] as Record<string, string> | undefined;
+          const orgId = parseInt(String(sessMeta?.["orgId"] || "0"), 10);
           if (!orgId) break;
-          const rawPlanIdC = String(sess["metadata"] && (sess["metadata"] as Record<string, string>)["planId"] || "");
+
+          // EdenMarket subscriptions are separate from the main plan tier system
+          if (sessMeta?.["product"] === "edenmarket") {
+            const customerEM = stripeId(sess["customer"] as string | { id: string } | null);
+            const subEM = stripeId(sess["subscription"] as string | { id: string } | null);
+            await storage.updateOrganization(orgId, {
+              edenMarketAccess: true,
+              edenMarketStripeSubId: subEM || undefined,
+              ...(customerEM ? { stripeCustomerId: customerEM } : {}),
+            });
+            console.log(`[stripe/webhook] checkout.session.completed (edenmarket): org ${orgId} access activated, sub=${subEM}`);
+            break;
+          }
+
+          const rawPlanIdC = String(sessMeta?.["planId"] || "");
           const planIdC: StripePlanId = isStripePlanId(rawPlanIdC) ? rawPlanIdC : "individual";
           const planTierC = PLAN_TIER_MAP[planIdC];
           const customerC = stripeId(sess["customer"] as string | { id: string } | null);
@@ -8743,6 +8758,22 @@ If multiple assets appear, return each as a separate array item.`;
           const sub = event.data.object as Record<string, unknown>;
           const stripeCustomerId = String(sub["customer"] ?? "");
           const stripeSubscriptionId = String(sub["id"] ?? "");
+
+          // Check if this is an EdenMarket subscription before falling through to main plan revocation
+          const subMetaDel = sub["metadata"] as Record<string, string> | undefined;
+          const subProductDel = subMetaDel?.["product"] ?? "";
+          if (subProductDel === "edenmarket") {
+            // Resolve org by stripeCustomerId or by edenMarketStripeSubId
+            const orgEMDel = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+            if (orgEMDel) {
+              await storage.updateOrganization(orgEMDel.id, { edenMarketAccess: false, edenMarketStripeSubId: null });
+              console.log(`[stripe/webhook] EdenMarket subscription canceled — org ${orgEMDel.id} access revoked`);
+            } else {
+              console.warn(`[stripe/webhook] subscription.deleted (edenmarket): no org for customer ${stripeCustomerId}`);
+            }
+            break;
+          }
+
           // Resolve org by customer ID first, fall back to subscription ID (mirrors subscription.updated)
           let orgDel = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
           if (!orgDel && stripeSubscriptionId) {
@@ -9334,6 +9365,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/my-listings", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
@@ -9381,6 +9414,23 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         );
       } catch {}
 
+      // Notify seller via their org billing email
+      try {
+        const sellerOrg = await storage.getOrgForUser(listing.sellerId);
+        const sellerEmail = sellerOrg?.billingEmail;
+        if (sellerEmail) {
+          const assetLabel = listing.blind ? `a blind ${listing.therapeuticArea} ${listing.modality} listing` : (listing.assetName || `Listing #${listing.id}`);
+          await sendEmail(
+            sellerEmail,
+            `New Expression of Interest received — ${assetLabel}`,
+            `<p>A qualified buyer has submitted an Expression of Interest for <strong>${assetLabel}</strong>.</p>
+             <p>Company: ${data.company}<br>Role: ${data.role}</p>
+             <p>Log in to your <a href="${APP_URL}/market/seller">Seller Dashboard</a> to view and respond.</p>
+             <p style="font-size:12px;color:#888">This notification was sent by EdenMarket. To manage your listings, visit ${APP_URL}/market/seller.</p>`
+          );
+        }
+      } catch {}
+
       res.json(eoi);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -9391,6 +9441,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/my-eois", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
       const eois = await storage.getMarketEoisByBuyer(userId);
       res.json(eois);
     } catch (err: any) {
@@ -9416,8 +9468,19 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // ── Admin: EdenMarket ─────────────────────────────────────────────────────────
+  // All admin/market routes require the shared admin password via x-admin-password header.
+
+  function requireAdminPw(req: import("express").Request, res: import("express").Response): boolean {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== "eden") {
+      res.status(401).json({ error: "Unauthorized" });
+      return false;
+    }
+    return true;
+  }
 
   app.get("/api/admin/market/stats", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
     try {
       const stats = await storage.getMarketAdminStats();
       res.json(stats);
@@ -9427,6 +9490,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/api/admin/market/listings", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
     try {
       const { status } = req.query as { status?: string };
       const listings = await storage.getMarketListings(status ? { status } : undefined);
@@ -9438,8 +9502,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.patch("/api/admin/market/listings/:id", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
     try {
-      const id = parseInt(req.params.id, 10);
+      const id = parseInt(String(req.params.id), 10);
       const schema = z.object({
         status: z.enum(["active", "pending", "paused", "closed", "draft"]),
         adminNote: z.string().optional(),
@@ -9453,6 +9518,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/api/admin/market/eois", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
     try {
       const listings = await storage.getMarketListings();
       const result = await Promise.all(
