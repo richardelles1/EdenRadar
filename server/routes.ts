@@ -8297,7 +8297,7 @@ If multiple assets appear, return each as a separate array item.`;
   // Helper: initialise stripe SDK (returns null if key absent)
   function getStripe() {
     if (!STRIPE_SECRET_KEY) return null;
-    return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-01-27.acacia" as any });
+    return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2026-03-25.dahlia" });
   }
 
   // Helper: extract the string ID from a Stripe expandable field (string | { id: string } | null)
