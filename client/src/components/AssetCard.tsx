@@ -250,20 +250,20 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
 
         {/* Bookmark — top-right */}
         <div
-          className="absolute top-2.5 right-2.5 z-[5]"
+          className="absolute top-1.5 right-1.5 z-[5]"
           onClick={(e) => e.stopPropagation()}
         >
           {isSaved ? (
             <button
               onClick={() => onUnsave?.(asset.id, asset.asset_name)}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-red-500/10 hover:text-red-500 transition-all duration-150"
+              className="w-9 h-9 md:w-7 md:h-7 rounded-lg flex items-center justify-center text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 hover:bg-red-500/10 hover:text-red-500 transition-all duration-150"
               data-testid={`button-unsave-${asset.id}`}
               title="Remove from saved"
             >
-              <BookmarkCheck className="w-3.5 h-3.5" />
+              <BookmarkCheck className="w-4 h-4 md:w-3.5 md:h-3.5" />
             </button>
           ) : (
-            <PipelinePicker asset={asset} variant="icon" iconClassName="w-7 h-7 rounded-lg" />
+            <PipelinePicker asset={asset} variant="icon" iconClassName="w-9 h-9 md:w-7 md:h-7 rounded-lg" />
           )}
         </div>
 

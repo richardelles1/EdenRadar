@@ -269,6 +269,7 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       <PopoverContent
         className="w-60 p-2 shadow-lg"
         align="end"
+        collisionPadding={12}
         data-testid="pipeline-picker-popover"
       >
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">

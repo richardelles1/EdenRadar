@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OrientationHint } from "@/components/OrientationHint";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
 import { INSTITUTIONS } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
@@ -255,6 +256,7 @@ export default function Scout() {
   const qc = useQueryClient();
   const [, setLocation] = useLocation();
   const searchStr = useSearch();
+  const isMobile = useIsMobile();
 
   function ssGet<T>(key: string, fallback: T): T {
     try {
@@ -1007,16 +1009,17 @@ export default function Scout() {
                 <div className="grid w-full items-stretch rounded-lg border border-border overflow-hidden shadow-sm" style={{ gridTemplateColumns: '1fr 1px 1fr 1px 1fr 1px 1fr' }} data-testid="result-tab-toggle">
                   <button
                     onClick={() => setResultTab("assets")}
-                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "assets"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
                     }`}
                     data-testid="result-tab-assets"
                   >
-                    <Building2 className="w-4 h-4 shrink-0" />
-                    Tech Transfer Assets
-                    <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                    <Building2 className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
+                    <span className="hidden md:inline whitespace-nowrap">Tech Transfer Assets</span>
+                    <span className="md:hidden">TTO</span>
+                    <span className={`inline-flex items-center justify-center min-w-[18px] h-4 md:h-5 rounded px-1 md:px-1.5 text-[9px] md:text-[10px] font-bold ${
                       resultTab === "assets" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
                     }`}>
                       {filteredResults.length}
@@ -1025,7 +1028,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("patents")}
-                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "patents"
                         ? "bg-amber-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -1033,14 +1036,14 @@ export default function Scout() {
                     data-testid="result-tab-patents"
                   >
                     {patentMutation.isPending
-                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                      : <ScrollText className="w-4 h-4 shrink-0" />
+                      ? <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 animate-spin" />
+                      : <ScrollText className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
                     }
-                    Patents
+                    <span className="whitespace-nowrap">Patents</span>
                     {patentMutation.isPending ? (
-                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Searching...</span>
+                      <span className="hidden md:inline text-[10px] italic font-normal opacity-70">Searching...</span>
                     ) : (
-                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-4 md:h-5 rounded px-1 md:px-1.5 text-[9px] md:text-[10px] font-bold ${
                         resultTab === "patents" ? "bg-white/25 text-white" : "bg-amber-500/10 text-amber-600 dark:text-amber-400"
                       }`}>
                         {patentResults.length}
@@ -1050,7 +1053,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("trials")}
-                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "trials"
                         ? "bg-teal-600 text-white"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -1058,14 +1061,15 @@ export default function Scout() {
                     data-testid="result-tab-trials"
                   >
                     {trialMutation.isPending
-                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                      : <Activity className="w-4 h-4 shrink-0" />
+                      ? <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 animate-spin" />
+                      : <Activity className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
                     }
-                    Clinical Trials
+                    <span className="hidden md:inline whitespace-nowrap">Clinical Trials</span>
+                    <span className="md:hidden">Trials</span>
                     {trialMutation.isPending ? (
-                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Searching...</span>
+                      <span className="hidden md:inline text-[10px] italic font-normal opacity-70">Searching...</span>
                     ) : (
-                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-4 md:h-5 rounded px-1 md:px-1.5 text-[9px] md:text-[10px] font-bold ${
                         resultTab === "trials" ? "bg-white/25 text-white" : "bg-teal-500/10 text-teal-600 dark:text-teal-400"
                       }`}>
                         {trialResults.length}
@@ -1075,7 +1079,7 @@ export default function Scout() {
                   <div className="w-px bg-border shrink-0" />
                   <button
                     onClick={() => setResultTab("research")}
-                    className={`flex items-center justify-center gap-2 px-5 py-2.5 text-sm font-semibold transition-colors whitespace-nowrap ${
+                    className={`flex items-center justify-center gap-1.5 md:gap-2 px-2 md:px-5 py-2.5 text-xs md:text-sm font-semibold transition-colors ${
                       resultTab === "research"
                         ? "bg-primary text-primary-foreground"
                         : "bg-background text-muted-foreground hover:text-foreground"
@@ -1083,14 +1087,15 @@ export default function Scout() {
                     data-testid="result-tab-research"
                   >
                     {researchMutation.isPending
-                      ? <Loader2 className="w-4 h-4 shrink-0 animate-spin" />
-                      : <FlaskConical className="w-4 h-4 shrink-0" />
+                      ? <Loader2 className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0 animate-spin" />
+                      : <FlaskConical className="w-3.5 h-3.5 md:w-4 md:h-4 shrink-0" />
                     }
-                    External Research Papers
+                    <span className="hidden md:inline whitespace-nowrap">External Research Papers</span>
+                    <span className="md:hidden">Research</span>
                     {researchMutation.isPending ? (
-                      <span className="ml-1 text-[10px] italic font-normal opacity-70">Compiling...</span>
+                      <span className="hidden md:inline text-[10px] italic font-normal opacity-70">Compiling...</span>
                     ) : (
-                      <span className={`ml-1 inline-flex items-center justify-center min-w-[20px] h-5 rounded px-1.5 text-[10px] font-bold ${
+                      <span className={`inline-flex items-center justify-center min-w-[18px] h-4 md:h-5 rounded px-1 md:px-1.5 text-[9px] md:text-[10px] font-bold ${
                         resultTab === "research" ? "bg-white/25 text-white" : "bg-primary/10 text-primary"
                       }`}>
                         {researchResults.length}
@@ -1131,62 +1136,117 @@ export default function Scout() {
               <>
                 {/* Threshold + action controls — always visible after a search so users can escape a restrictive threshold */}
                 {hasSearched && (
-                  <div className="flex items-end justify-start gap-4">
-                    <div className="flex flex-col gap-1">
-                      <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
-                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
+                  <>
+                    {/* Mobile compact controls row */}
+                    <div className="flex md:hidden items-center gap-2">
+                      <button
+                        onClick={() => setFiltersOpen(true)}
+                        className={`flex items-center gap-1.5 h-9 px-3 rounded-md border text-xs font-semibold transition-colors ${
+                          activeFilterCount > 0
+                            ? "border-primary/40 bg-primary/5 text-primary"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="button-mobile-filters"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                      </button>
+                      <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden h-9" data-testid="score-threshold-toggle-mobile">
                         {([0, 60, 70, 80] as const).map((threshold) => (
                           <button
                             key={threshold}
                             onClick={() => setMinScore(threshold)}
-                            className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                            className={`px-2.5 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
                               minScore === threshold
                                 ? "bg-primary text-primary-foreground"
-                                : "bg-background text-muted-foreground hover:text-foreground"
+                                : "bg-background text-muted-foreground"
                             }`}
-                            data-testid={`score-threshold-${threshold}`}
+                            data-testid={`score-threshold-mobile-${threshold}`}
                           >
                             {threshold === 0 ? "Any" : `${threshold}+`}
                           </button>
                         ))}
                       </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-[11px] h-9 ml-auto border-primary/30 text-primary hover:bg-primary/5 hover:text-primary shrink-0"
+                        onClick={handleGenerateReport}
+                        disabled={isAnyPending}
+                        data-testid="button-generate-report-mobile"
+                      >
+                        {reportMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <FileBarChart2 className="w-3 h-3" />
+                        )}
+                        <span>{reportMutation.isPending ? "..." : "Report"}</span>
+                      </Button>
                     </div>
-                    <Select value={sinceFilter} onValueChange={setSinceFilter} data-testid="filter-since-inline">
-                      <SelectTrigger className="h-7 text-[11px] w-[110px] border-border">
-                        <SelectValue placeholder="Any time" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="any">Any time</SelectItem>
-                        <SelectItem value="6m">Last 6 months</SelectItem>
-                        <SelectItem value="2024">2024</SelectItem>
-                        <SelectItem value="2023">2023</SelectItem>
-                        <SelectItem value="2022">2022 and older</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <button
-                      onClick={() => setFiltersOpen(true)}
-                      className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
-                      data-testid="button-filters-hint"
-                    >
-                      <SlidersHorizontal className="w-3 h-3" />
-                      {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
-                    </button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
-                      onClick={handleGenerateReport}
-                      disabled={isAnyPending}
-                      data-testid="button-generate-report"
-                    >
-                      {reportMutation.isPending ? (
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <FileBarChart2 className="w-3 h-3" />
-                      )}
-                      {reportMutation.isPending ? "Generating..." : "Match Report"}
-                    </Button>
-                  </div>
+
+                    {/* Desktop full controls row */}
+                    <div className="hidden md:flex items-end justify-start gap-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Score Filter</span>
+                        <div className="inline-flex items-stretch rounded-md border border-border overflow-hidden" data-testid="score-threshold-toggle">
+                          {([0, 60, 70, 80] as const).map((threshold) => (
+                            <button
+                              key={threshold}
+                              onClick={() => setMinScore(threshold)}
+                              className={`px-2 py-1 text-[10px] font-semibold transition-colors border-r border-border last:border-r-0 ${
+                                minScore === threshold
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-background text-muted-foreground hover:text-foreground"
+                              }`}
+                              data-testid={`score-threshold-${threshold}`}
+                            >
+                              {threshold === 0 ? "Any" : `${threshold}+`}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <Select value={sinceFilter} onValueChange={setSinceFilter} data-testid="filter-since-inline">
+                        <SelectTrigger className="h-7 text-[11px] w-[110px] border-border">
+                          <SelectValue placeholder="Any time" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="any">Any time</SelectItem>
+                          <SelectItem value="6m">Last 6 months</SelectItem>
+                          <SelectItem value="2024">2024</SelectItem>
+                          <SelectItem value="2023">2023</SelectItem>
+                          <SelectItem value="2022">2022 and older</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <button
+                        onClick={() => setFiltersOpen(true)}
+                        className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
+                        data-testid="button-filters-hint"
+                      >
+                        <SlidersHorizontal className="w-3 h-3" />
+                        {activeFilterCount > 0 ? `${activeFilterCount} active` : "Refine"}
+                      </button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5 text-[11px] h-7 border-primary/30 text-primary hover:bg-primary/5 hover:text-primary"
+                        onClick={handleGenerateReport}
+                        disabled={isAnyPending}
+                        data-testid="button-generate-report"
+                      >
+                        {reportMutation.isPending ? (
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                          <FileBarChart2 className="w-3 h-3" />
+                        )}
+                        {reportMutation.isPending ? "Generating..." : "Match Report"}
+                      </Button>
+                    </div>
+                  </>
                 )}
 
                 {hasSearched && filteredResults.length === 0 ? (
@@ -1830,7 +1890,7 @@ export default function Scout() {
       </div>
 
       <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-sm overflow-y-auto">
+        <SheetContent side={isMobile ? "bottom" : "right"} className={isMobile ? "h-[85dvh] rounded-t-2xl overflow-y-auto" : "w-full sm:max-w-sm overflow-y-auto"}>
           <SheetHeader>
             <SheetTitle>Filters</SheetTitle>
           </SheetHeader>
