@@ -31,7 +31,7 @@ function AdminAuthGate({ children }: { children: ReactNode }) {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!authLoading && !session) navigate("/login?next=/admin", { replace: true });
+    if (!authLoading && !session) navigate("/login?redirect=/admin", { replace: true });
   }, [authLoading, session, navigate]);
 
   if (authLoading || (session && adminLoading)) {

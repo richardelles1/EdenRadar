@@ -96,7 +96,9 @@ export async function getAdminUser(req: Request): Promise<{ id: string; email: s
     const { data, error } = await supabase.auth.getUser(token);
     if (error || !data.user?.email) return null;
     const email = data.user.email.toLowerCase();
+    // Defense in depth: require BOTH email allowlist AND user_metadata.is_admin === true.
     if (!ADMIN_EMAILS.includes(email)) return null;
+    if (data.user.user_metadata?.is_admin !== true) return null;
     return { id: data.user.id, email };
   } catch {
     return null;

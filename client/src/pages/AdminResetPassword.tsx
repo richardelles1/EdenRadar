@@ -1,0 +1,105 @@
+import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
+
+export default function AdminResetPassword() {
+  const { session, loading, updatePassword } = useAuth();
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!loading && !session) {
+      toast({
+        title: "Reset link expired",
+        description: "Open the password-reset email again to start over.",
+        variant: "destructive",
+      });
+    }
+  }, [loading, session, toast]);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (password.length < 8) {
+      toast({ title: "Password too short", description: "Use at least 8 characters.", variant: "destructive" });
+      return;
+    }
+    if (password !== confirm) {
+      toast({ title: "Passwords do not match", variant: "destructive" });
+      return;
+    }
+    setSubmitting(true);
+    const { error } = await updatePassword(password);
+    setSubmitting(false);
+    if (error) {
+      toast({ title: "Could not update password", description: error, variant: "destructive" });
+      return;
+    }
+    toast({ title: "Password updated", description: "You can now sign in with your new password." });
+    navigate("/admin", { replace: true });
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+      <Card className="w-full max-w-md" data-testid="card-admin-reset-password">
+        <CardHeader>
+          <CardTitle>Set a new admin password</CardTitle>
+          <CardDescription>
+            Enter a new password for your EdenRadar admin account.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {!session && !loading ? (
+            <p className="text-sm text-muted-foreground" data-testid="text-reset-expired">
+              This reset link is no longer valid. Request a new one from the login page.
+            </p>
+          ) : (
+            <form onSubmit={onSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  data-testid="input-new-password"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm new password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  autoComplete="new-password"
+                  minLength={8}
+                  required
+                  data-testid="input-confirm-password"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={submitting || loading}
+                data-testid="button-submit-new-password"
+              >
+                {submitting ? "Updating…" : "Update password"}
+              </Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

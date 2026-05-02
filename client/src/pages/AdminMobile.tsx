@@ -232,7 +232,7 @@ function AdminAuthGate({ children }: { children: React.ReactNode }) {
   const [, navigate] = useLocation();
 
   useEffect(() => {
-    if (!authLoading && !session) navigate("/login?next=/admin/mobile", { replace: true });
+    if (!authLoading && !session) navigate("/login?redirect=/admin/mobile", { replace: true });
   }, [authLoading, session, navigate]);
 
   if (authLoading || (session && adminLoading)) {

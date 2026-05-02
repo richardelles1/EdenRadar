@@ -112,8 +112,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function sendPasswordReset(email: string) {
+    // Admins click the email link and land on /admin/reset-password where they
+    // set a new password via supabase.auth.updateUser. Non-admin users still
+    // complete the flow there (the page just calls updateUser).
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/login`,
+      redirectTo: `${window.location.origin}/admin/reset-password`,
     });
     return { error: error?.message ?? null };
   }

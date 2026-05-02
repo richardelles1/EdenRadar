@@ -53,20 +53,33 @@ async function findUserByEmail(email) {
 async function ensureAdmin(email) {
   const existing = await findUserByEmail(email);
   if (existing) {
-    console.log(`[bootstrap-admins] ${email} already exists (id=${existing.id}) — leaving password untouched.`);
+    // Idempotently ensure user_metadata.is_admin === true (defense-in-depth flag),
+    // but never touch the password — admins may have rotated it already.
+    if (existing.user_metadata?.is_admin !== true) {
+      const { error: upErr } = await admin.auth.admin.updateUserById(existing.id, {
+        user_metadata: { ...(existing.user_metadata ?? {}), is_admin: true },
+      });
+      if (upErr) {
+        console.error(`[bootstrap-admins] ${email} exists but failed to set is_admin:`, upErr.message);
+        return { email, status: "error", error: upErr.message };
+      }
+      console.log(`[bootstrap-admins] ${email} already exists — set user_metadata.is_admin=true.`);
+    } else {
+      console.log(`[bootstrap-admins] ${email} already exists (id=${existing.id}) — already an admin, no change.`);
+    }
     return { email, status: "exists", id: existing.id };
   }
   const { data, error } = await admin.auth.admin.createUser({
     email,
     password: DEFAULT_PASSWORD,
     email_confirm: true,
-    user_metadata: { role: "admin" },
+    user_metadata: { is_admin: true },
   });
   if (error) {
     console.error(`[bootstrap-admins] Failed to create ${email}:`, error.message);
     return { email, status: "error", error: error.message };
   }
-  console.log(`[bootstrap-admins] Created ${email} (id=${data.user?.id}) with default password.`);
+  console.log(`[bootstrap-admins] Created ${email} (id=${data.user?.id}) with default password and is_admin=true.`);
   return { email, status: "created", id: data.user?.id };
 }
 
