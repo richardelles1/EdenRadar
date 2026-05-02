@@ -13,10 +13,10 @@ type ListingWithEoi = MarketListing & { eoiCount: number };
 
 type EoiEntry = {
   id: number;
-  buyerId: string;
-  company: string;
-  role: string;
-  rationale: string;
+  buyerId: string | null;
+  company: string | null;
+  role: string | null;
+  rationale: string | null;
   budgetRange: string | null;
   timeline: string | null;
   status: string;
@@ -298,14 +298,24 @@ export default function MarketSellerDashboard() {
                         {eois.map(eoi => (
                           <div key={eoi.id} className="px-5 py-3 text-xs space-y-1 bg-muted/10" data-testid={`seller-eoi-row-${eoi.id}`}>
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-foreground">{eoi.company}</span>
-                              <span className="text-muted-foreground">·</span>
-                              <span className="text-muted-foreground">{eoi.role}</span>
+                              {eoi.company ? (
+                                <>
+                                  <span className="font-semibold text-foreground">{eoi.company}</span>
+                                  <span className="text-muted-foreground">·</span>
+                                  <span className="text-muted-foreground">{eoi.role}</span>
+                                </>
+                              ) : (
+                                <span className="text-muted-foreground italic">Confidential buyer — identity revealed on acceptance</span>
+                              )}
                               <Badge variant="outline" className={cn("text-[10px] ml-auto", EOI_STATUS_COLORS[eoi.status] ?? "border-border text-muted-foreground")}>
                                 {eoi.status.charAt(0).toUpperCase() + eoi.status.slice(1)}
                               </Badge>
                             </div>
-                            <p className="text-muted-foreground line-clamp-2">{eoi.rationale}</p>
+                            {eoi.rationale ? (
+                              <p className="text-muted-foreground line-clamp-2">{eoi.rationale}</p>
+                            ) : (
+                              <p className="text-muted-foreground/50 italic text-[10px]">Rationale hidden until accepted</p>
+                            )}
                             <div className="flex gap-4 text-muted-foreground/70">
                               {eoi.budgetRange && <span>Budget: <span className="text-foreground">{eoi.budgetRange}</span></span>}
                               {eoi.timeline && <span>Timeline: <span className="text-foreground">{eoi.timeline}</span></span>}

@@ -9497,7 +9497,27 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!listingIds.length) return res.json([]);
 
       const eoisByListing = await Promise.all(
-        listingIds.map(async id => ({ listingId: id, eois: await storage.getMarketEoisForListing(id) }))
+        listingIds.map(async id => {
+          const eois = await storage.getMarketEoisForListing(id);
+          // Redact buyer-identifying fields until mutual acceptance to preserve
+          // buyer confidentiality (matching Task 2 NDA/reveal requirement).
+          const redacted = eois.map(eoi => {
+            if (eoi.status === "accepted") return eoi;
+            return {
+              id: eoi.id,
+              listingId: eoi.listingId,
+              buyerId: null,
+              company: null,
+              role: null,
+              rationale: null,
+              budgetRange: eoi.budgetRange,
+              timeline: eoi.timeline,
+              status: eoi.status,
+              createdAt: eoi.createdAt,
+            };
+          });
+          return { listingId: id, eois: redacted };
+        })
       );
       res.json(eoisByListing);
     } catch (err: any) {
