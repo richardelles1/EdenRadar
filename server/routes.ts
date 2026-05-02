@@ -6855,8 +6855,20 @@ If a field cannot be determined, use "N/A".`
         });
       }
 
+      // Collect distinct asset IDs across all alert buckets so the top-level
+      // count matches the sidebar badge (which also deduplicates).
+      const distinctIds = new Set<number>();
+      for (const alert of alerts) {
+        const sinceCondition = gt(ingestedAssets.firstSeenAt, since);
+        const ids = await db
+          .select({ id: ingestedAssets.id })
+          .from(ingestedAssets)
+          .where(buildAlertWhere(alert, [sinceCondition]));
+        for (const row of ids) distinctIds.add(row.id);
+      }
+      const distinctTotal = distinctIds.size;
       const total = byAlert.reduce((s, b) => s + b.matchCount, 0);
-      return res.json({ byAlert, total, since: since.toISOString() });
+      return res.json({ byAlert, total, distinctTotal, since: since.toISOString() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

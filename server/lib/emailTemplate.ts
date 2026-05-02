@@ -154,8 +154,10 @@ export function renderDispatchEmail(opts: {
   colorMode?: "light" | "dark";
   totalCount?: number;
   settingsUrl?: string;
+  appBaseUrl?: string;
 }): string {
-  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount, settingsUrl = "https://edenradar.com/industry/settings" } = opts;
+  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount, settingsUrl, appBaseUrl = "https://edenradar.com" } = opts;
+  const resolvedSettingsUrl = settingsUrl ?? `${appBaseUrl}/industry/settings`;
   const isLight = colorMode === "light";
 
   const byInstitution = new Map<string, DispatchAsset[]>();
@@ -189,7 +191,7 @@ export function renderDispatchEmail(opts: {
 
       const badgesHtml = [stageBadge, modalityBadge, indicationBadge].filter(Boolean).join(`<span style="display:inline-block;width:6px;"></span>`);
 
-      const dossierUrl = `https://edenradar.com/asset/${a.id}`;
+      const dossierUrl = `${appBaseUrl}/asset/${a.id}`;
       const ctaButton = `<a href="${dossierUrl}" style="display:inline-block;background:${G_MAIN};color:#ffffff;font-size:12px;font-weight:700;padding:7px 18px;border-radius:6px;text-decoration:none;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.01em;">View in EdenRadar &rarr;</a>`;
 
       return `
@@ -366,7 +368,7 @@ export function renderDispatchEmail(opts: {
                 <td style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:8px;padding:14px 20px;text-align:center;">
                   <p style="margin:0;font-size:13px;color:#166534;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
                     <strong style="color:#0a1a0f;">+${totalCount - assets.length} more match${totalCount - assets.length !== 1 ? "es" : ""}</strong> found for this alert.
-                    &nbsp;<a href="https://edenradar.com/alerts" style="color:${G_MAIN};font-weight:700;text-decoration:none;">View all ${totalCount} in EdenRadar &rarr;</a>
+                    &nbsp;<a href="${appBaseUrl}/alerts" style="color:${G_MAIN};font-weight:700;text-decoration:none;">View all ${totalCount} in EdenRadar &rarr;</a>
                   </p>
                 </td>
               </tr>
@@ -384,7 +386,7 @@ export function renderDispatchEmail(opts: {
                   <p style="margin:0 0 12px 0;font-size:11px;color:${footerSubtitle};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
                   <p style="margin:0;font-size:11px;color:${footerBody};line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
                     You received this digest because you are subscribed to EdenRadar TTO intelligence alerts.<br />
-                    To manage your alert preferences or unsubscribe, <a href="${settingsUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">visit your notification settings</a>.<br />
+                    To manage your alert preferences or unsubscribe, <a href="${resolvedSettingsUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">visit your notification settings</a>.<br />
                     &copy; ${year} EdenRadar. All rights reserved.
                   </p>
                 </td>

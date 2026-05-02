@@ -101,6 +101,7 @@ interface AlertDeltaBucket {
 interface AlertsDeltaResponse {
   byAlert: AlertDeltaBucket[];
   total: number;
+  distinctTotal: number;
   since: string;
 }
 
@@ -1167,17 +1168,19 @@ export default function Alerts() {
     queryFn: async () => {
       const authHeaders = await getAuthHeaders();
       const r = await fetch(alertsDeltaUrl, { credentials: "include", headers: authHeaders });
-      if (!r.ok) return { byAlert: [], total: 0, since: "" } as AlertsDeltaResponse;
+      if (!r.ok) return { byAlert: [], total: 0, distinctTotal: 0, since: "" } as AlertsDeltaResponse;
       const json = await r.json();
       // Guard: ensure shape is correct even if server returns unexpected payload
-      if (!Array.isArray(json?.byAlert)) return { byAlert: [], total: 0, since: "" } as AlertsDeltaResponse;
+      if (!Array.isArray(json?.byAlert)) return { byAlert: [], total: 0, distinctTotal: 0, since: "" } as AlertsDeltaResponse;
       return json as AlertsDeltaResponse;
     },
     staleTime: 5 * 60 * 1000,
   });
 
   const hasAlerts = alerts.length > 0;
-  const matchedTtoCount = alertsDelta?.total ?? 0;
+  // Use distinctTotal (deduped across overlapping alerts) so this count matches
+  // the sidebar badge which also deduplicates.
+  const matchedTtoCount = alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0;
   const alertMatchCounts: Record<number, number> = Object.fromEntries(
     (alertsDelta?.byAlert ?? []).map((b) => [b.alertId, b.matchCount])
   );
