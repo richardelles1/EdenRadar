@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, timestamp, jsonb, boolean, uuid, date, real, customType, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -967,5 +967,7 @@ export const marketAvailabilityNotifications = pgTable("market_availability_noti
   message: text("message").notNull(),
   readAt: timestamp("read_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
-});
+}, t => ({
+  userListingUnique: uniqueIndex("man_user_listing_unique").on(t.userId, t.listingId),
+}));
 export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;

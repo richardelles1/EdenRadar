@@ -1167,6 +1167,7 @@ async function createMarketDealsTables() {
       )
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS man_user_unread ON market_availability_notifications(user_id) WHERE read_at IS NULL`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS man_user_listing_unique ON market_availability_notifications(user_id, listing_id)`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_deal_documents (
         id           SERIAL PRIMARY KEY,

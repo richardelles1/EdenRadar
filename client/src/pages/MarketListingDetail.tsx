@@ -298,6 +298,12 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
                         <p className="text-xs text-foreground">{intel.edenEnrichment.institution}</p>
                       </div>
                     )}
+                    {intel.edenEnrichment.target && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Target</p>
+                        <p className="text-xs text-foreground font-mono">{intel.edenEnrichment.target}</p>
+                      </div>
+                    )}
                     {intel.edenEnrichment.mechanismOfAction && (
                       <div>
                         <p className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Mechanism</p>

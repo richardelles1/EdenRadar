@@ -9252,19 +9252,42 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
-  // Eden Signal Score — server-side computation from listing field completeness + EdenScout link
-  function edenSignalScore(l: { ingestedAssetId?: number | null; mechanism?: string | null; ipStatus?: string | null; milestoneHistory?: string | null; priceRangeMin?: number | null; aiSummary?: string | null; therapeuticArea?: string | null; modality?: string | null; stage?: string | null; engagementStatus?: string | null }): number {
+  // Eden Signal Score — intelligence-derived: uses linked EdenScout asset enrichment quality,
+  // patent/IP signals, and clinical-stage trials inference. Falls back to listing-field score
+  // when no ingestedAsset link exists.
+  type IngestedAssetSignals = {
+    completenessScore: number | null;
+    patentStatus: string | null;
+    ipType: string | null;
+    developmentStage: string | null;
+    mechanismOfAction: string | null;
+    target: string | null;
+  };
+  function edenSignalScore(
+    l: { ingestedAssetId?: number | null; mechanism?: string | null; priceRangeMin?: number | null; aiSummary?: string | null; therapeuticArea?: string | null; modality?: string | null; stage?: string | null; engagementStatus?: string | null },
+    linked?: IngestedAssetSignals | null
+  ): number {
     let s = 0;
-    if (l.ingestedAssetId) s += 40;   // EdenScout linkage (primary signal)
-    if (l.mechanism) s += 10;          // Mechanism of action disclosed
-    if (l.ipStatus) s += 5;            // IP status specified
-    if (l.milestoneHistory) s += 5;    // Milestone history provided
-    if (l.priceRangeMin) s += 10;      // Price range disclosed
-    if (l.aiSummary) s += 10;          // AI deal summary generated
-    if (l.therapeuticArea) s += 5;     // TA specified
-    if (l.modality) s += 5;            // Modality specified
-    if (l.stage) s += 5;               // Stage specified
-    if (l.engagementStatus && l.engagementStatus !== "closed") s += 5; // Actively engaging
+    if (l.ingestedAssetId && linked) {
+      s += 30;  // EdenScout linkage base
+      // EDEN enrichment completeness (proportional, up to 20 pts)
+      if (linked.completenessScore != null) s += Math.round((linked.completenessScore / 100) * 20);
+      // Patents signal: asset has known IP status
+      if (linked.patentStatus || linked.ipType) s += 10;
+      // Trials signal: clinical stage implies registered trials
+      const clinicalStages = ["phase 1", "phase 2", "phase 3", "approved", "phase i", "phase ii", "phase iii"];
+      if (linked.developmentStage && clinicalStages.includes(linked.developmentStage.toLowerCase())) s += 10;
+      // Scientific specificity from EdenScout intelligence
+      if (linked.mechanismOfAction || linked.target) s += 10;
+    } else {
+      if (l.ingestedAssetId) s += 30; // linked but asset not resolved yet
+    }
+    // Listing-level market signals (seller-provided)
+    if (l.priceRangeMin) s += 10;
+    if (l.aiSummary) s += 5;
+    if (l.mechanism) s += 5;
+    if (l.therapeuticArea && l.modality && l.stage) s += 10; // full classification
+    if (l.engagementStatus && l.engagementStatus !== "closed") s += 5;
     return Math.min(100, s);
   }
 
@@ -9278,6 +9301,21 @@ If multiple assets appear, return each as a separate array item.`;
       const { therapeuticArea, modality, stage, engagementStatus } = req.query as Record<string, string | undefined>;
       const listings = await storage.getMarketListings({ status: "active", therapeuticArea, modality, stage, engagementStatus });
 
+      // Batch-fetch linked EdenScout assets for signal score computation
+      const linkedIds = [...new Set(listings.map(l => l.ingestedAssetId).filter((id): id is number => id != null))];
+      const linkedAssets = linkedIds.length > 0
+        ? await db.select({
+            id: ingestedAssets.id,
+            completenessScore: ingestedAssets.completenessScore,
+            patentStatus: ingestedAssets.patentStatus,
+            ipType: ingestedAssets.ipType,
+            developmentStage: ingestedAssets.developmentStage,
+            mechanismOfAction: ingestedAssets.mechanismOfAction,
+            target: ingestedAssets.target,
+          }).from(ingestedAssets).where(inArray(ingestedAssets.id, linkedIds))
+        : [];
+      const linkedMap = new Map(linkedAssets.map(a => [a.id, a]));
+
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       const myEois = await storage.getMarketEoisByBuyer(userId);
       const myEoiMap = new Map(myEois.map(e => [e.listingId, e.status]));
@@ -9287,7 +9325,7 @@ If multiple assets appear, return each as a separate array item.`;
         assetName: l.blind ? null : l.assetName,
         eoiCount: eoiCounts[i],
         myEoiStatus: myEoiMap.get(l.id) ?? null,
-        edenSignalScore: edenSignalScore(l),
+        edenSignalScore: edenSignalScore(l, l.ingestedAssetId ? linkedMap.get(l.ingestedAssetId) ?? null : null),
       }));
 
       res.json(result);
@@ -9482,13 +9520,27 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         ? patentsRaw.value.slice(0, 5).map(s => ({ title: s.title, url: s.url, date: s.date, owner: s.institution_or_sponsor || s.authors_or_owner }))
         : [];
 
+      // Comparable deals: filter by TA + modality + stage to surface truly comparable transactions
+      const LICENSED_STATUSES = ["exclusively licensed", "non-exclusively licensed", "startup formed", "optioned"];
+      const normStage = (s: string | null | undefined) => (s ?? "").toLowerCase().replace(/\s+/g, "");
+      const normModality = (m: string | null | undefined) => (m ?? "").toLowerCase();
+      const listingStage = normStage(listing.stage);
+      const listingModality = normModality(listing.modality);
       const comparableDeals = compsRaw.status === "fulfilled"
         ? compsRaw.value
-            .filter(a =>
-              a.id !== listing.ingestedAssetId &&
-              a.licensingReadiness &&
-              ["exclusively licensed", "non-exclusively licensed", "startup formed", "optioned"].includes(a.licensingReadiness)
-            )
+            .filter(a => {
+              if (a.id === listing.ingestedAssetId) return false;
+              if (!a.licensingReadiness || !LICENSED_STATUSES.includes(a.licensingReadiness)) return false;
+              // Require modality match if listing specifies one
+              if (listingModality && normModality(a.modality) !== listingModality) return false;
+              // Stage match: same bucket (preclinical vs clinical) if listing has a stage
+              if (listingStage) {
+                const aStage = normStage(a.developmentStage);
+                const isClinical = (s: string) => ["phase1","phase2","phase3","phasei","phaseii","phaseiii","approved"].includes(s);
+                if (isClinical(listingStage) !== isClinical(aStage)) return false;
+              }
+              return true;
+            })
             .slice(0, 5)
             .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, licensingReadiness: a.licensingReadiness }))
         : [];

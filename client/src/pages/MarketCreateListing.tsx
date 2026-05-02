@@ -229,6 +229,7 @@ export default function MarketCreateListing() {
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
   const [linkedAsset, setLinkedAsset] = useState<SuggestedAsset | null>(null);
+  const [prefilledFields, setPrefilledFields] = useState<string[]>([]);
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -298,28 +299,31 @@ export default function MarketCreateListing() {
     else setStep(s => s - 1);
   }
 
-  // Auto-fill form fields from linked EdenScout asset
+  // Auto-fill form fields from linked EdenScout asset, tracking which were prefilled
   function handleLinkAsset(a: SuggestedAsset) {
     setLinkedAsset(a);
+    const filled: string[] = [];
     // Mechanism: combine target + mechanismOfAction
     if (!form.getValues("mechanism")) {
       const parts: string[] = [];
       if (a.target) parts.push(`Target: ${a.target}`);
       if (a.mechanismOfAction) parts.push(a.mechanismOfAction);
-      if (parts.length) form.setValue("mechanism", parts.join("\n"));
+      if (parts.length) { form.setValue("mechanism", parts.join("\n")); filled.push("Mechanism"); }
     }
     // IP status from ipType
     if (a.ipType && !form.getValues("ipStatus")) {
       form.setValue("ipStatus", a.ipType);
+      filled.push("IP Status");
     }
     // IP summary from innovationClaim
     if (a.innovationClaim && !form.getValues("ipSummary")) {
       form.setValue("ipSummary", a.innovationClaim);
+      filled.push("IP Summary");
     }
     // Modality
     if (a.modality && !form.getValues("modality")) {
       const match = MODALITIES.find(m => m.toLowerCase() === a.modality!.toLowerCase());
-      if (match) form.setValue("modality", match);
+      if (match) { form.setValue("modality", match); filled.push("Modality"); }
     }
     // Stage
     if (a.developmentStage && !form.getValues("stage")) {
@@ -329,8 +333,9 @@ export default function MarketCreateListing() {
         approved: "Approved",
       };
       const mapped = stageMap[a.developmentStage.toLowerCase()];
-      if (mapped) form.setValue("stage", mapped);
+      if (mapped) { form.setValue("stage", mapped); filled.push("Stage"); }
     }
+    setPrefilledFields(filled);
   }
 
   const blind = form.watch("blind");
@@ -411,9 +416,16 @@ export default function MarketCreateListing() {
             <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
               <h2 className="text-sm font-bold text-foreground">{STEPS[1].title}</h2>
               {linkedAsset && (
-                <div className="flex items-center gap-1.5 rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-1.5">
-                  <Link2 className="w-3 h-3 text-violet-500" />
-                  <span className="text-[10px] text-muted-foreground">Fields pre-filled from EdenScout: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
+                <div className="rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-2 space-y-1">
+                  <div className="flex items-center gap-1.5">
+                    <Link2 className="w-3 h-3 text-violet-500 shrink-0" />
+                    <span className="text-[10px] text-muted-foreground">Linked to EdenScout: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
+                  </div>
+                  {prefilledFields.length > 0 && (
+                    <p className="text-[10px] text-violet-600 dark:text-violet-400 pl-4.5">
+                      Pre-filled: {prefilledFields.join(", ")} — edit any field to override.
+                    </p>
+                  )}
                 </div>
               )}
               <FormField control={form.control} name="mechanism" render={({ field }) => (
