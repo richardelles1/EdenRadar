@@ -1436,8 +1436,8 @@ export default function Scout() {
                           </Badge>
                         )}
                         {patentAssigneeSearch.trim() && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
-                            "{patentAssigneeSearch}" ×
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer max-w-[180px] sm:max-w-none" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
+                            <span className="truncate">"{patentAssigneeSearch}"</span> ×
                           </Badge>
                         )}
                         <button
@@ -1743,8 +1743,8 @@ export default function Scout() {
                           </Badge>
                         )}
                         {trialSponsorSearch.trim() && (
-                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
-                            "{trialSponsorSearch}" ×
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer max-w-[180px] sm:max-w-none" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
+                            <span className="truncate">"{trialSponsorSearch}"</span> ×
                           </Badge>
                         )}
                         <button
@@ -2063,8 +2063,8 @@ export default function Scout() {
           <div className="mt-6 space-y-6">
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
-              <Select value={patentSortMode} onValueChange={(v) => setPatentSortMode(v as "newest" | "best_match")} data-testid="filter-patent-sort-select">
-                <SelectTrigger className="h-9 text-xs w-full">
+              <Select value={patentSortMode} onValueChange={(v) => setPatentSortMode(v as "newest" | "best_match")}>
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-patent-sort-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2076,8 +2076,8 @@ export default function Scout() {
 
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assignee Type</p>
-              <Select value={patentOwnerFilter} onValueChange={(v) => setPatentOwnerFilter(v as "all" | "university" | "company")} data-testid="filter-patent-owner-select">
-                <SelectTrigger className="h-9 text-xs w-full">
+              <Select value={patentOwnerFilter} onValueChange={(v) => setPatentOwnerFilter(v as "all" | "university" | "company")}>
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-patent-owner-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2099,9 +2099,8 @@ export default function Scout() {
                     patentMutation.mutate({ query: currentQuery, patentSince: next !== "any" ? next : undefined });
                   }
                 }}
-                data-testid="filter-patent-date-select"
               >
-                <SelectTrigger className="h-9 text-xs w-full">
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-patent-date-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2159,8 +2158,8 @@ export default function Scout() {
           <div className="mt-6 space-y-6">
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
-              <Select value={trialSortMode} onValueChange={(v) => setTrialSortMode(v as "newest" | "by_phase")} data-testid="filter-trial-sort-select">
-                <SelectTrigger className="h-9 text-xs w-full">
+              <Select value={trialSortMode} onValueChange={(v) => setTrialSortMode(v as "newest" | "by_phase")}>
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-trial-sort-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2172,8 +2171,8 @@ export default function Scout() {
 
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phase</p>
-              <Select value={trialPhaseFilter} onValueChange={(v) => setTrialPhaseFilter(v as "all" | "phase 1" | "phase 2" | "phase 3" | "preclinical")} data-testid="filter-trial-phase-select">
-                <SelectTrigger className="h-9 text-xs w-full">
+              <Select value={trialPhaseFilter} onValueChange={(v) => setTrialPhaseFilter(v as "all" | "phase 1" | "phase 2" | "phase 3" | "preclinical")}>
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-trial-phase-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2188,8 +2187,8 @@ export default function Scout() {
 
             <div className="space-y-3">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
-              <Select value={trialStatusFilter} onValueChange={(v) => setTrialStatusFilter(v as "all" | "recruiting" | "active" | "completed")} data-testid="filter-trial-status-select">
-                <SelectTrigger className="h-9 text-xs w-full">
+              <Select value={trialStatusFilter} onValueChange={(v) => setTrialStatusFilter(v as "all" | "recruiting" | "active" | "completed")}>
+                <SelectTrigger className="h-9 text-xs w-full" data-testid="filter-trial-status-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
