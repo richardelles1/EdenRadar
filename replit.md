@@ -355,7 +355,7 @@ EdenMarket is surfaced across the platform so subscribers can discover it withou
 - **Landing.tsx**: dedicated EdenMarket section between PortalToggle and BottomCTA; footer link → `/market/preview`.
 - **Pricing.tsx**: `EdenMarketTier` card with $1k/mo subscribe CTA + success-fee table ($10k/$30k/$50k); subscribe button uses `useMarketSubscribe()`.
 - **OnePager.tsx**: print-safe Buyers/Sellers EdenMarket block.
-- **IndustryDashboard.tsx**: `EdenMarketTeaser` widget (live listings / subscribers / closed deals) backed by public `GET /api/market/activity-summary`.
+- **IndustryDashboard.tsx**: `EdenMarketTeaser` widget backed by `GET /api/market/activity-summary`. Non-subscribers see a single "Unlock EdenMarket — $1,000/mo" CTA; subscribers see two stats: `newListings7d` (active listings created in the last 7 days) and `matchingFilters` (active listings whose therapeutic area / modality / stage match the user's industry profile).
 - **Sidebars**: Discovery + Research sidebars both have a "List your assets" → `/market/list` nav item; Industry sidebar already has "Deal Marketplace".
 - **Subscribe hook**: `client/src/hooks/use-market-subscribe.ts` is the single source of truth — calls `POST /api/market/checkout`, surfaces toast errors, exposes `isLoading`. Used by `MarketGate`, `Pricing.EdenMarketTier`, `MarketPreview`, `MarketList`.
 

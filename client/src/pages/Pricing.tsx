@@ -307,7 +307,7 @@ function EdenMarketTier({ session }: { session: Session | null }) {
 
   function handleClick() {
     if (!session?.access_token) {
-      navigate("/login?mode=signup&redirect=/market/preview");
+      navigate("/login?mode=signup&redirect=/market");
       return;
     }
     void subscribe();
