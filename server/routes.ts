@@ -9732,8 +9732,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           createdAt: listing.createdAt,
           updatedAt: listing.updatedAt,
           sellerId: listing.sellerId,
-          // Identity reveal: asset name is shared post-accept
-          assetName: listing.blind ? null : listing.assetName,
+          // Identity reveal: asset name is always shared post-accept (blind only hides in marketplace)
+          assetName: listing.assetName,
           // Gate deep technical/financial data behind NDA
           mechanism: null,
           ipStatus: null,

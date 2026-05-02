@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import {
   ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff,
-  MessageSquare, Building2, Shield, DollarSign, AlertTriangle,
+  MessageSquare, Building2, Shield, DollarSign, AlertTriangle, ChevronDown, ChevronUp, Paperclip,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -76,6 +76,109 @@ type AdminDeal = {
   therapeuticArea: string;
   eoiCreatedAt: string | null;
 };
+
+type AdminDealMessage = {
+  id: number;
+  dealId: number;
+  senderId: string;
+  senderRole: string;
+  body: string;
+  createdAt: string;
+};
+
+type AdminDealDocument = {
+  id: number;
+  dealId: number;
+  uploaderId: string;
+  uploaderRole: string;
+  fileName: string;
+  fileSize: number;
+  mimeType: string;
+  signedUrl: string;
+  createdAt: string;
+};
+
+function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
+  const { data: messages = [], isLoading: msgsLoading } = useQuery<AdminDealMessage[]>({
+    queryKey: ["/api/admin/market/deals", deal.id, "messages"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/messages`, { headers: adminHeaders() });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const { data: docs = [], isLoading: docsLoading } = useQuery<AdminDealDocument[]>({
+    queryKey: ["/api/admin/market/deals", deal.id, "documents"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/documents`, { headers: adminHeaders() });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+
+  const loading = msgsLoading || docsLoading;
+
+  return (
+    <tr>
+      <td colSpan={7} className="px-0 pb-0">
+        <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Messages */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+              <MessageSquare className="w-3 h-3" /> Thread ({messages.length})
+            </p>
+            {loading ? (
+              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                <div className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin" /> Loading…
+              </div>
+            ) : messages.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60 italic">No messages yet</p>
+            ) : (
+              <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                {messages.map(m => (
+                  <div key={m.id} className="rounded-lg bg-card border border-border p-2.5 space-y-0.5" data-testid={`admin-deal-msg-${m.id}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-semibold text-foreground capitalize">{m.senderRole}</span>
+                      <span className="text-[10px] text-muted-foreground/60">{new Date(m.createdAt).toLocaleString()}</span>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">{m.body}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Documents */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+              <Paperclip className="w-3 h-3" /> Documents ({docs.length})
+            </p>
+            {loading ? null : docs.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60 italic">No documents uploaded</p>
+            ) : (
+              <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                {docs.map(d => (
+                  <a
+                    key={d.id}
+                    href={d.signedUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 rounded-lg border border-border bg-card hover:bg-muted/40 px-2.5 py-2 transition-colors"
+                    data-testid={`admin-deal-doc-${d.id}`}
+                  >
+                    <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate flex-1">{d.fileName}</span>
+                    <span className="text-[10px] text-muted-foreground/60 capitalize shrink-0">{d.uploaderRole}</span>
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </td>
+    </tr>
+  );
+}
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
@@ -205,6 +308,7 @@ export function EdenMarketTab() {
   const [activeSection, setActiveSection] = useState<"listings" | "eois" | "subscribers" | "deals">("listings");
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
   const [invoiceDeal, setInvoiceDeal] = useState<AdminDeal | null>(null);
+  const [expandedDealId, setExpandedDealId] = useState<number | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/market/stats"],
@@ -555,60 +659,76 @@ export function EdenMarketTab() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {deals.map(deal => (
-                    <tr key={deal.id} className="hover:bg-muted/20 transition-colors" data-testid={`admin-deal-row-${deal.id}`}>
-                      <td className="px-4 py-2.5 font-mono text-muted-foreground">#{deal.id}</td>
-                      <td className="px-4 py-2.5">
-                        <span className="font-medium text-foreground truncate max-w-32 block">{deal.assetLabel}</span>
-                        <span className="text-muted-foreground/60 text-[10px]">{deal.therapeuticArea}</span>
-                      </td>
-                      <td className="px-4 py-2.5">
-                        <Badge variant="outline" className={cn("text-[10px]", DEAL_STATUS_COLORS[deal.status] ?? "border-border text-muted-foreground")}>
-                          {DEAL_STATUS_LABELS[deal.status] ?? deal.status}
-                        </Badge>
-                        {(deal.status === "loi" || deal.status === "closed") && (
-                          <AlertTriangle className="w-3 h-3 text-amber-500 inline ml-1" />
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">
-                        {deal.eoiCreatedAt ? new Date(deal.eoiCreatedAt).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {deal.ndaSignedAt ? (
-                          <span className="text-emerald-600 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> {new Date(deal.ndaSignedAt).toLocaleDateString()}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground flex items-center gap-1">
-                            <Clock className="w-3 h-3" /> Pending
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5">
-                        {deal.successFeeAmount ? (
-                          <span className="text-emerald-600">${(deal.successFeeAmount / 1000).toFixed(0)}k</span>
-                        ) : (
-                          <span className="text-muted-foreground/60">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2.5 text-right">
-                        {!deal.successFeeInvoiceId && deal.status === "closed" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-6 text-[10px] gap-1 text-violet-600 border-violet-500/30 px-2"
-                            onClick={() => setInvoiceDeal(deal)}
-                            data-testid={`admin-deal-invoice-${deal.id}`}
-                          >
-                            <DollarSign className="w-3 h-3" /> Invoice
-                          </Button>
-                        )}
-                        {deal.successFeeInvoiceId && (
-                          <span className="text-[10px] text-muted-foreground font-mono">{deal.successFeeInvoiceId.slice(0, 12)}…</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                  {deals.map(deal => {
+                    const isExpanded = expandedDealId === deal.id;
+                    return (
+                      <>
+                        <tr
+                          key={deal.id}
+                          className="hover:bg-muted/20 transition-colors cursor-pointer"
+                          data-testid={`admin-deal-row-${deal.id}`}
+                          onClick={() => setExpandedDealId(isExpanded ? null : deal.id)}
+                        >
+                          <td className="px-4 py-2.5 font-mono text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              {isExpanded ? <ChevronUp className="w-3 h-3 text-violet-500" /> : <ChevronDown className="w-3 h-3 text-muted-foreground/40" />}
+                              #{deal.id}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <span className="font-medium text-foreground truncate max-w-32 block">{deal.assetLabel}</span>
+                            <span className="text-muted-foreground/60 text-[10px]">{deal.therapeuticArea}</span>
+                          </td>
+                          <td className="px-4 py-2.5">
+                            <Badge variant="outline" className={cn("text-[10px]", DEAL_STATUS_COLORS[deal.status] ?? "border-border text-muted-foreground")}>
+                              {DEAL_STATUS_LABELS[deal.status] ?? deal.status}
+                            </Badge>
+                            {(deal.status === "loi" || deal.status === "closed") && (
+                              <AlertTriangle className="w-3 h-3 text-amber-500 inline ml-1" />
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground">
+                            {deal.eoiCreatedAt ? new Date(deal.eoiCreatedAt).toLocaleDateString() : "—"}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {deal.ndaSignedAt ? (
+                              <span className="text-emerald-600 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" /> {new Date(deal.ndaSignedAt).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground flex items-center gap-1">
+                                <Clock className="w-3 h-3" /> Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5">
+                            {deal.successFeeAmount ? (
+                              <span className="text-emerald-600">${(deal.successFeeAmount / 1000).toFixed(0)}k</span>
+                            ) : (
+                              <span className="text-muted-foreground/60">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-2.5 text-right" onClick={e => e.stopPropagation()}>
+                            {!deal.successFeeInvoiceId && deal.status === "closed" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 text-[10px] gap-1 text-violet-600 border-violet-500/30 px-2"
+                                onClick={() => setInvoiceDeal(deal)}
+                                data-testid={`admin-deal-invoice-${deal.id}`}
+                              >
+                                <DollarSign className="w-3 h-3" /> Invoice
+                              </Button>
+                            )}
+                            {deal.successFeeInvoiceId && (
+                              <span className="text-[10px] text-muted-foreground font-mono">{deal.successFeeInvoiceId.slice(0, 12)}…</span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && <DealInspectionPanel key={`inspect-${deal.id}`} deal={deal} />}
+                      </>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

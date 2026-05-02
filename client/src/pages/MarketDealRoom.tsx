@@ -265,9 +265,8 @@ export default function MarketDealRoom() {
   const ndaUnlocked = !!deal.ndaSignedAt;
   const hasSigned = isSeller ? !!deal.sellerSignedAt : !!deal.buyerSignedAt;
   const otherSigned = isSeller ? !!deal.buyerSignedAt : !!deal.sellerSignedAt;
-  const assetLabel = listing?.blind
-    ? `${listing.therapeuticArea} · ${listing.modality} (Blind)`
-    : (listing?.assetName || `Listing #${deal.listingId}`);
+  // In the deal room, identity is always revealed (blind only applies to marketplace browsing)
+  const assetLabel = listing?.assetName || `${listing?.therapeuticArea ?? ""} · ${listing?.modality ?? ""} (Listing #${deal.listingId})`;
 
   return (
     <div className="min-h-screen bg-background">
@@ -320,7 +319,7 @@ export default function MarketDealRoom() {
           </div>
           {listing ? (
             <div className="space-y-2 text-xs text-muted-foreground">
-              {listing.assetName && !listing.blind && (
+              {listing.assetName && (
                 <p><span className="font-medium text-foreground">Asset:</span> {listing.assetName}</p>
               )}
               <div className="flex flex-wrap gap-1.5">
