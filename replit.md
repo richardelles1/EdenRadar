@@ -402,3 +402,14 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
   uses authenticated JSON API requests (Bearer token + X-API-Key header) enabling full
   date-range access and higher rate limits. Obtain from https://iedison.nih.gov/iEdison/api/v1/publicInventions.
   When absent the scraper falls back to the HTML search interface automatically.
+
+## Admin access (Supabase Auth, no shared password)
+
+Admin gating uses email-allowlisted Supabase Auth sessions plus a defense-in-depth `user_metadata.is_admin === true` flag — the legacy `ADMIN_PANEL_PASSWORD` / `x-admin-password` / `eden-admin-pw` scheme is gone.
+
+- **Allowlist**: `ADMIN_EMAILS` env var (defaults to `relles@edennx.com,wmohamed@edennx.com`). Both checks (allowlist + `is_admin` metadata) must pass. See `server/lib/supabaseAuth.ts` (`requireAdmin`, `getAdminUser`).
+- **Server gating**: `app.use("/api/admin", requireAdmin)` protects every admin route at the router level. `/api/ingest/*` admin routes use `requireAdmin` inline. `/api/eden/{chat,feedback*,sessions*,query/*}` use `verifyAnyAuth` (Bearer required, no admin needed).
+- **Client gating**: `useIsAdmin()` (`client/src/hooks/useIsAdmin.ts`) hits `GET /api/admin/whoami`. Admin pages wrap content in `AdminAuthGate`; signed-out users get redirected to `/login?redirect=/admin`, non-admins see a forbidden card.
+- **Bootstrap**: `node scripts/bootstrap-admins.mjs` (requires `VITE_SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`) is idempotent. It creates each allowlisted user with default password `edenadmin1` and `user_metadata.is_admin = true`. On re-run it sets `is_admin = true` on existing users without touching their passwords. Optional env: `ADMIN_EMAILS`, `ADMIN_DEFAULT_PASSWORD`.
+- **Password reset**: `/login` "Forgot password" and the in-panel `Change password` button (admin header) both call `supabase.auth.resetPasswordForEmail` with `redirectTo = ${origin}/admin/reset-password`. The `/admin/reset-password` page (`client/src/pages/AdminResetPassword.tsx`) calls `supabase.auth.updateUser({ password })`. Password policy: ≥10 chars, with upper, lower, and a digit.
+- **First-login operational note**: rotate the default password (`edenadmin1`) immediately after bootstrapping in production.

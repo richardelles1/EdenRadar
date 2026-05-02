@@ -27,8 +27,17 @@ export default function AdminResetPassword() {
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < 8) {
-      toast({ title: "Password too short", description: "Use at least 8 characters.", variant: "destructive" });
+    if (
+      password.length < 10 ||
+      !/[a-z]/.test(password) ||
+      !/[A-Z]/.test(password) ||
+      !/[0-9]/.test(password)
+    ) {
+      toast({
+        title: "Password too weak",
+        description: "Use at least 10 characters with upper-case, lower-case, and a digit.",
+        variant: "destructive",
+      });
       return;
     }
     if (password !== confirm) {
@@ -70,10 +79,13 @@ export default function AdminResetPassword() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={10}
                   required
                   data-testid="input-new-password"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Minimum 10 characters with upper-case, lower-case, and a digit.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="confirm-password">Confirm new password</Label>
@@ -83,7 +95,7 @@ export default function AdminResetPassword() {
                   value={confirm}
                   onChange={(e) => setConfirm(e.target.value)}
                   autoComplete="new-password"
-                  minLength={8}
+                  minLength={10}
                   required
                   data-testid="input-confirm-password"
                 />

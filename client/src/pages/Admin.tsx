@@ -6351,8 +6351,29 @@ function EdenTab({ pw }: { pw: string }) {
 function AdminInner() {
   const [activeTab, setActiveTab] = useState("data-pipeline");
   const { theme, setTheme } = useTheme();
-  const { session, signOut } = useAuth();
+  const { session, signOut, sendPasswordReset } = useAuth();
+  const { toast } = useToast();
   const pw = session?.access_token ?? "";
+
+  // Account: in-panel "Change password" affordance — sends a Supabase reset
+  // email to the signed-in admin's address; the link lands on
+  // /admin/reset-password where the new password is set.
+  async function onChangePassword() {
+    const email = session?.user?.email;
+    if (!email) {
+      toast({ title: "Not signed in", variant: "destructive" });
+      return;
+    }
+    const { error } = await sendPasswordReset(email);
+    if (error) {
+      toast({ title: "Could not send reset email", description: error, variant: "destructive" });
+    } else {
+      toast({
+        title: "Password reset email sent",
+        description: `Check ${email} for a link to set a new password.`,
+      });
+    }
+  }
 
   return (
     <AdminPanel
@@ -6362,6 +6383,8 @@ function AdminInner() {
       setTheme={setTheme}
       activeTab={activeTab}
       setActiveTab={setActiveTab}
+      onChangePassword={onChangePassword}
+      adminEmail={session?.user?.email ?? ""}
     />
   );
 }
@@ -9711,13 +9734,15 @@ function ExportLogTable({ pw }: { pw: string }) {
   );
 }
 
-function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
+function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, onChangePassword, adminEmail }: {
   pw: string;
   setAuthed: (v: boolean) => void;
   theme: string;
   setTheme: (v: "light" | "dark") => void;
   activeTab: string;
   setActiveTab: (v: string) => void;
+  onChangePassword?: () => void | Promise<void>;
+  adminEmail?: string;
 }) {
   const { data: queueData } = useQuery<{ cards: any[] }>({
     queryKey: ["/api/admin/research-queue"],
@@ -9755,6 +9780,22 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             >
               {theme === "dark" ? "Light" : "Dark"}
             </Button>
+            {adminEmail ? (
+              <span className="hidden md:inline text-xs text-muted-foreground" data-testid="text-admin-email">
+                {adminEmail}
+              </span>
+            ) : null}
+            {onChangePassword ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { void onChangePassword(); }}
+                data-testid="button-change-password"
+                title="Send a password-reset email to your admin address"
+              >
+                Change password
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="sm"
