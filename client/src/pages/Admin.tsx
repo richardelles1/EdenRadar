@@ -9376,8 +9376,11 @@ const TEMPLATE_DEFS = [
   },
 ];
 
+type FileStatus = "idle" | "queued" | "uploading" | "done" | "failed";
+
 function DocumentsTab({ pw }: { pw: string }) {
   const [results, setResults] = React.useState<TemplateResult[]>([]);
+  const [fileStatuses, setFileStatuses] = React.useState<Record<string, FileStatus>>({});
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [googleDriveConnected, setGoogleDriveConnected] = React.useState<boolean | null>(null);
@@ -9394,6 +9397,13 @@ function DocumentsTab({ pw }: { pw: string }) {
     setUploading(true);
     setUploadError(null);
     setResults([]);
+    // Mark all files as queued immediately to give per-file visual feedback
+    const initialStatuses: Record<string, FileStatus> = {};
+    TEMPLATE_DEFS.forEach((t, i) => {
+      initialStatuses[t.filename] = i === 0 ? "uploading" : "queued";
+    });
+    setFileStatuses(initialStatuses);
+
     try {
       const res = await fetch("/api/admin/documents/generate-templates", {
         method: "POST",
@@ -9401,11 +9411,21 @@ function DocumentsTab({ pw }: { pw: string }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
-      setResults(data.results ?? []);
+
+      const finalStatuses: Record<string, FileStatus> = {};
+      const allResults: TemplateResult[] = data.results ?? [];
+      allResults.forEach(r => {
+        finalStatuses[r.filename] = r.oneDrive.status === "done" ? "done" : "failed";
+      });
+      setFileStatuses(finalStatuses);
+      setResults(allResults);
       if (typeof data.googleDriveConnected === "boolean") {
         setGoogleDriveConnected(data.googleDriveConnected);
       }
     } catch (err: any) {
+      const failedStatuses: Record<string, FileStatus> = {};
+      TEMPLATE_DEFS.forEach(t => { failedStatuses[t.filename] = "failed"; });
+      setFileStatuses(failedStatuses);
       setUploadError(err.message);
     } finally {
       setUploading(false);
@@ -9422,62 +9442,71 @@ function DocumentsTab({ pw }: { pw: string }) {
           Outbound Documents
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Generate polished .docx email templates and upload them to OneDrive (Word Online){googleDriveConnected ? " and Google Drive" : ""}. Amber-highlighted fields are placeholders — replace before sending.
+          Generate polished .docx email templates and upload them to OneDrive (Word Online){googleDriveConnected ? " and Google Drive" : ""}. Each template includes two opening hook variants (A/B) — amber-highlighted fields are placeholders to replace before sending.
         </p>
       </div>
 
-      {/* Template cards */}
+      {/* Template cards with per-file status */}
       <div className="space-y-3">
         {TEMPLATE_DEFS.map((t) => {
           const result = resultMap[t.filename];
           const od = result?.oneDrive;
           const gd = result?.googleDrive;
+          const fileStatus = fileStatuses[t.filename] ?? "idle";
           return (
             <div
               key={t.id}
-              className="border border-border rounded-xl bg-card p-4 flex items-start gap-4"
+              className={`border rounded-xl bg-card p-4 flex items-start gap-4 transition-colors ${
+                fileStatus === "done" ? "border-emerald-300 dark:border-emerald-700" :
+                fileStatus === "failed" ? "border-destructive/40" :
+                fileStatus === "uploading" ? "border-primary/40" :
+                fileStatus === "queued" ? "border-border/60" :
+                "border-border"
+              }`}
               data-testid={`card-template-${t.id}`}
             >
-              <div className="mt-0.5 p-2 rounded-lg bg-primary/10 shrink-0">
-                <FileText className="h-4 w-4 text-primary" />
+              <div className={`mt-0.5 p-2 rounded-lg shrink-0 ${
+                fileStatus === "done" ? "bg-emerald-500/10" :
+                fileStatus === "failed" ? "bg-destructive/10" :
+                "bg-primary/10"
+              }`}>
+                <FileText className={`h-4 w-4 ${
+                  fileStatus === "done" ? "text-emerald-500" :
+                  fileStatus === "failed" ? "text-destructive" :
+                  "text-primary"
+                }`} />
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-semibold text-foreground" data-testid={`text-template-title-${t.id}`}>{t.title}</p>
                   <span className="text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">{t.audience}</span>
+                  {fileStatus === "queued" && (
+                    <span className="text-[10px] bg-muted/80 text-muted-foreground rounded px-1.5 py-0.5 italic" data-testid={`status-label-queued-${t.id}`}>queued</span>
+                  )}
+                  {fileStatus === "uploading" && (
+                    <span className="text-[10px] bg-primary/10 text-primary rounded px-1.5 py-0.5" data-testid={`status-label-uploading-${t.id}`}>uploading…</span>
+                  )}
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
                 <p className="text-[10px] text-muted-foreground/60 font-mono mt-1">{t.filename}</p>
                 {result && (
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
-                    {/* OneDrive link */}
                     {od?.status === "done" && od.webUrl ? (
-                      <a
-                        href={od.webUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <a href={od.webUrl} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
-                        data-testid={`link-onedrive-${t.id}`}
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Word Online
+                        data-testid={`link-onedrive-${t.id}`}>
+                        <ExternalLink className="h-3 w-3" /> Word Online
                       </a>
                     ) : od?.status === "failed" ? (
                       <p className="text-xs text-destructive" data-testid={`text-onedrive-error-${t.id}`}>
                         <AlertTriangle className="h-3 w-3 inline mr-1" />OneDrive: {od.error ?? "failed"}
                       </p>
                     ) : null}
-                    {/* Google Drive link */}
                     {gd?.status === "done" && gd.editUrl ? (
-                      <a
-                        href={gd.editUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <a href={gd.editUrl} target="_blank" rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:underline font-medium"
-                        data-testid={`link-gdrive-${t.id}`}
-                      >
-                        <ExternalLink className="h-3 w-3" />
-                        Google Docs
+                        data-testid={`link-gdrive-${t.id}`}>
+                        <ExternalLink className="h-3 w-3" /> Google Docs
                       </a>
                     ) : gd?.status === "failed" ? (
                       <p className="text-xs text-destructive" data-testid={`text-gdrive-error-${t.id}`}>
@@ -9488,12 +9517,12 @@ function DocumentsTab({ pw }: { pw: string }) {
                 )}
               </div>
               <div className="shrink-0 mt-1">
-                {uploading ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid={`status-uploading-${t.id}`} />
-                ) : od?.status === "done" ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid={`status-done-${t.id}`} />
-                ) : od?.status === "failed" ? (
-                  <XCircle className="h-4 w-4 text-destructive" data-testid={`status-failed-${t.id}`} />
+                {fileStatus === "uploading" || (uploading && fileStatus === "queued") ? (
+                  <Loader2 className={`h-4 w-4 animate-spin ${fileStatus === "uploading" ? "text-primary" : "text-muted-foreground/40"}`} data-testid={`status-icon-${t.id}`} />
+                ) : fileStatus === "done" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid={`status-icon-${t.id}`} />
+                ) : fileStatus === "failed" ? (
+                  <XCircle className="h-4 w-4 text-destructive" data-testid={`status-icon-${t.id}`} />
                 ) : null}
               </div>
             </div>
@@ -9501,22 +9530,30 @@ function DocumentsTab({ pw }: { pw: string }) {
         })}
       </div>
 
-      {/* Google Drive status banner */}
+      {/* Google Drive banner — dynamic based on connection state */}
       {googleDriveConnected === false && (
-        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 flex items-start gap-3" data-testid="banner-gdrive-not-connected">
-          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-          <div>
-            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
-            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-              To also upload to Google Drive, authorize the Google Drive integration in your Replit account settings. Once connected, uploads to "EdenRadar Templates" in Drive will be included automatically alongside OneDrive.
-            </p>
+        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4" data-testid="banner-gdrive-not-connected">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5 mb-2">
+                Connect Google Drive to also upload templates there. Once authorized, generation will upload to an "EdenRadar Templates" folder in both OneDrive and Drive automatically.
+              </p>
+              <div className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5">
+                <p className="font-medium">To connect:</p>
+                <p>1. Open your Replit workspace tools → Integrations</p>
+                <p>2. Search for "Google Drive" and complete the OAuth flow</p>
+                <p>3. Return here and click Generate — Drive upload will be included</p>
+              </div>
+            </div>
           </div>
         </div>
       )}
       {googleDriveConnected === true && (
         <div className="border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 flex items-center gap-3" data-testid="banner-gdrive-connected">
           <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
-          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Google Drive connected — templates will also be uploaded to Google Docs.</p>
+          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Google Drive connected — templates will also be uploaded to an "EdenRadar Templates" folder in Google Drive.</p>
         </div>
       )}
 

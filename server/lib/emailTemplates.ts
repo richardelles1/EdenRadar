@@ -1,7 +1,9 @@
 export interface TemplateSection {
-  tag: "subject" | "heading" | "subheading" | "body" | "cta" | "signature" | "ps";
+  tag: "subject" | "heading" | "subheading" | "body" | "cta" | "signature" | "ps" | "ab-variants";
   text: string;
   placeholder?: boolean;
+  variantA?: string;
+  variantB?: string;
 }
 
 export interface EmailTemplate {
@@ -33,13 +35,15 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         placeholder: true,
       },
       {
-        tag: "body",
-        text: "Most early-stage [THERAPEUTIC FOCUS] assets never reach a BD team's desk — they're buried in TTO databases, grant registries, and preprint servers, discoverable only if you know exactly where to look.",
+        tag: "ab-variants",
+        text: "Opening Hook",
+        variantA: "Most early-stage [THERAPEUTIC FOCUS] assets never reach a BD team's desk — they're buried in TTO databases, grant registries, and preprint servers, discoverable only if you know exactly where to look. EdenScout fixes that.",
+        variantB: "I noticed [COMPANY] has been active in [THERAPEUTIC FOCUS] BD. I wanted to reach out because we've indexed 500+ pre-commercial assets in that space that aren't on most radar screens yet — and EdenScout is how top BD teams are finding them first.",
         placeholder: true,
       },
       {
         tag: "body",
-        text: "EdenScout changes that. We index 20,000+ university technology transfer assets across North America and Europe, score each one for novelty, clinical readiness, and licensability using our proprietary EDEN AI analyst, and surface the ones most relevant to [COMPANY]'s therapeutic focus — updated in real time.",
+        text: "EdenScout indexes 20,000+ university technology transfer assets across North America and Europe, scores each one for novelty, clinical readiness, and licensability using our proprietary EDEN AI analyst, and surfaces the ones most relevant to [COMPANY]'s therapeutic focus — updated in real time.",
         placeholder: true,
       },
       {
@@ -67,7 +71,7 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
       },
       {
         tag: "ps",
-        text: "P.S. — We currently have [NUMBER] pre-commercial [THERAPEUTIC FOCUS] assets indexed that match [COMPANY]'s stated therapeutic focus areas. Happy to send a sample report if that's useful before we connect.",
+        text: "P.S. — We currently have [NUMBER] pre-commercial [THERAPEUTIC FOCUS] assets indexed that match [COMPANY]'s stated focus areas. Happy to send a sample report if that's useful before we connect.",
         placeholder: true,
       },
     ],
@@ -92,8 +96,10 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         placeholder: true,
       },
       {
-        tag: "body",
-        text: "Technology transfer offices do extraordinary work bringing university research to market — but discovery still relies heavily on personal networks and conference serendipity. We built EdenRadar to change that for [INSTITUTION]'s portfolio.",
+        tag: "ab-variants",
+        text: "Opening Hook",
+        variantA: "Technology transfer offices do extraordinary work bringing university research to market — but discovery still relies heavily on personal networks and conference serendipity. We built EdenRadar to change that for [INSTITUTION]'s portfolio.",
+        variantB: "I've been following [INSTITUTION]'s TTO activity and noticed you have some strong [THERAPEUTIC FOCUS] assets that aren't getting the industry visibility they deserve. EdenRadar was built specifically to close that gap — at no cost to the TTO.",
         placeholder: true,
       },
       {
@@ -149,13 +155,11 @@ export const EMAIL_TEMPLATES: EmailTemplate[] = [
         placeholder: true,
       },
       {
-        tag: "body",
-        text: "I came across [COMPANY]'s work on [ASSET NAME] and wanted to reach out about EdenMarket — our curated marketplace for pre-commercial biopharma assets.",
+        tag: "ab-variants",
+        text: "Opening Hook",
+        variantA: "I came across [COMPANY]'s work on [ASSET NAME] and wanted to reach out about EdenMarket — our curated marketplace for pre-commercial biopharma assets. Unlike generalist platforms, every buyer in our network has been verified as an active acquirer or licensor in your asset's therapeutic area.",
+        variantB: "Finding the right licensing partner for [ASSET NAME] usually means 12–18 months of conference networking and cold emails to BD teams who aren't actively looking. EdenMarket short-circuits that — your asset reaches verified, actively-searching buyers who match your TA and stage.",
         placeholder: true,
-      },
-      {
-        tag: "body",
-        text: "Unlike generalist deal platforms, EdenMarket is built specifically for biopharma licensing and acquisition. Every buyer in our network has been verified as an active acquirer or licensor in your asset's therapeutic area. Your listing reaches the right desks — not a noise-filled inbox.",
       },
       {
         tag: "subheading",

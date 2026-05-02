@@ -123,6 +123,47 @@ function sectionToParagraphs(section: TemplateSection): Paragraph[] {
     ];
   }
 
+  if (tag === "ab-variants") {
+    const { variantA, variantB } = section;
+    const paras: Paragraph[] = [
+      new Paragraph({
+        spacing: { after: 40, before: 200 },
+        children: [
+          new TextRun({ text: "── Opening Hook Variants (choose one) ──", size: 18, italics: true, color: "888888" }),
+        ],
+      }),
+    ];
+    if (variantA) {
+      paras.push(
+        new Paragraph({
+          spacing: { after: 40, before: 40 },
+          shading: { type: ShadingType.CLEAR, fill: "F0F4FF", color: "F0F4FF" },
+          border: { left: { style: BorderStyle.THICK, size: 12, color: "1E6FBB" } },
+          indent: { left: convertInchesToTwip(0.2) },
+          children: [
+            new TextRun({ text: "A: ", bold: true, size: 20, color: "1E6FBB" }),
+            ...buildRuns(variantA, !!placeholder),
+          ],
+        })
+      );
+    }
+    if (variantB) {
+      paras.push(
+        new Paragraph({
+          spacing: { after: 80, before: 40 },
+          shading: { type: ShadingType.CLEAR, fill: "F5F0FF", color: "F5F0FF" },
+          border: { left: { style: BorderStyle.THICK, size: 12, color: "7C3AED" } },
+          indent: { left: convertInchesToTwip(0.2) },
+          children: [
+            new TextRun({ text: "B: ", bold: true, size: 20, color: "7C3AED" }),
+            ...buildRuns(variantB, !!placeholder),
+          ],
+        })
+      );
+    }
+    return paras;
+  }
+
   if (tag === "ps") {
     return [
       new Paragraph({
