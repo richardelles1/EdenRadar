@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "ArDED0GTo_r5hUwP2eMLd"
+uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"
+type = "pdf"
+title = "EdenRadar One-Pager (PDF)"
