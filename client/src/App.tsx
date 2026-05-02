@@ -47,6 +47,7 @@ import ShareView from "@/pages/ShareView";
 import ReportPrint from "@/pages/ReportPrint";
 import PipelineBriefPrint from "@/pages/PipelineBriefPrint";
 import PitchDeck from "@/pages/PitchDeck";
+import OnePager from "@/pages/OnePager";
 import About from "@/pages/About";
 import WhatWeDo from "@/pages/WhatWeDo";
 import HowItWorks from "@/pages/HowItWorks";
@@ -368,6 +369,7 @@ function Router() {
       <Route path="/pipeline/brief/print" component={PipelineBriefPrint} />
 
       <Route path="/pitch" component={PitchDeck} />
+      <Route path="/one-pager" component={OnePager} />
       <Route path="/about" component={About} />
       <Route path="/what-we-do" component={WhatWeDo} />
       <Route path="/how-it-works" component={HowItWorks} />

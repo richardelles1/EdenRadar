@@ -613,6 +613,13 @@ export default function Landing() {
             >
               Terms of Service
             </Link>
+            <Link
+              href="/one-pager"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-one-pager"
+            >
+              EdenScout One-Pager
+            </Link>
             <EdenNXBadge />
             <button
               onClick={handleLogin}

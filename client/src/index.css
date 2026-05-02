@@ -525,6 +525,42 @@
 }
 
 /* ============================================================
+   ONE-PAGER PRINT STYLES
+   ============================================================ */
+@media print {
+  body:has([data-testid="one-pager-document"]) {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  body:has([data-testid="one-pager-document"]) > div {
+    min-height: unset !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    display: block !important;
+    box-shadow: none !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  [data-testid="one-pager-document"] {
+    width: 100% !important;
+    max-width: 100% !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  @page {
+    margin: 10mm 8mm;
+  }
+}
+
+/* ============================================================
    GLASS PILL BUTTONS — hero CTAs with emerald outline on hover
    ============================================================ */
 
