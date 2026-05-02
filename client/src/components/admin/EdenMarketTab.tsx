@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -675,9 +675,8 @@ export function EdenMarketTab() {
                   {deals.map(deal => {
                     const isExpanded = expandedDealId === deal.id;
                     return (
-                      <>
+                      <Fragment key={deal.id}>
                         <tr
-                          key={deal.id}
                           className="hover:bg-muted/20 transition-colors cursor-pointer"
                           data-testid={`admin-deal-row-${deal.id}`}
                           onClick={() => setExpandedDealId(isExpanded ? null : deal.id)}
@@ -741,7 +740,7 @@ export function EdenMarketTab() {
                           </td>
                         </tr>
                         {isExpanded && <DealInspectionPanel key={`inspect-${deal.id}`} deal={deal} />}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>
