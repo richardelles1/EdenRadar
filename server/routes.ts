@@ -9910,6 +9910,17 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         status: z.enum(["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"]),
       }).parse(req.body);
 
+      // Enforce NDA must be signed before progressing past nda_pending
+      const ndaRequiredStatuses = ["nda_signed", "due_diligence", "term_sheet", "loi", "closed"];
+      if (ndaRequiredStatuses.includes(status) && !deal.ndaSignedAt) {
+        return res.status(400).json({ error: "NDA must be executed by both parties before advancing deal status" });
+      }
+
+      // Guard against regressing back to nda_pending once NDA is signed
+      if (status === "nda_pending" && deal.ndaSignedAt) {
+        return res.status(400).json({ error: "Cannot revert to NDA pending after NDA has been executed" });
+      }
+
       // Append to status history
       const historyEntry: import("@shared/schema").DealStatusHistoryEntry = { status, changedAt: new Date().toISOString(), changedBy: userId };
       const currentHistory = Array.isArray(deal.statusHistory) ? deal.statusHistory : [];
@@ -10190,11 +10201,17 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const enriched = await Promise.all(deals.map(async d => {
         const listing = await storage.getMarketListing(d.listingId);
         const [eoiRow] = await db.select().from(marketEois).where(eq(marketEois.id, d.eoiId)).limit(1);
+        const [sellerOrg, buyerOrg] = await Promise.all([
+          storage.getOrgForUser(d.sellerId),
+          storage.getOrgForUser(d.buyerId),
+        ]);
         return {
           ...d,
           assetLabel: listing?.blind ? `Blind ${listing.therapeuticArea}` : (listing?.assetName ?? `Listing #${d.listingId}`),
           therapeuticArea: listing?.therapeuticArea ?? "",
           eoiCreatedAt: eoiRow?.createdAt ?? null,
+          sellerLabel: sellerOrg?.name ?? d.sellerId.slice(0, 8),
+          buyerLabel: buyerOrg?.name ?? d.buyerId.slice(0, 8),
         };
       }));
       res.json(enriched);
@@ -10213,6 +10230,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       if (deal.status !== "closed") {
         return res.status(400).json({ error: "Invoice can only be generated when the deal is marked Closed" });
+      }
+
+      // Idempotency guard — prevent duplicate invoicing
+      if (deal.successFeeInvoiceId) {
+        return res.status(409).json({ error: "Invoice already generated for this deal", invoiceId: deal.successFeeInvoiceId });
       }
 
       const { dealSizeM } = z.object({ dealSizeM: z.number().int().positive() }).parse(req.body);

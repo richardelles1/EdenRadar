@@ -64,6 +64,8 @@ type AdminDeal = {
   eoiId: number;
   sellerId: string;
   buyerId: string;
+  sellerLabel: string;
+  buyerLabel: string;
   status: string;
   sellerSignedAt: string | null;
   buyerSignedAt: string | null;
@@ -129,7 +131,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
 
   return (
     <tr>
-      <td colSpan={7} className="px-0 pb-0">
+      <td colSpan={9} className="px-0 pb-0">
         <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Messages */}
           <div className="space-y-2">
@@ -660,6 +662,8 @@ export function EdenMarketTab() {
                   <tr className="border-b border-border bg-muted/30">
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Deal</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Asset</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Seller</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Buyer</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">EOI Date</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">NDA Signed</th>
@@ -688,6 +692,8 @@ export function EdenMarketTab() {
                             <span className="font-medium text-foreground truncate max-w-32 block">{deal.assetLabel}</span>
                             <span className="text-muted-foreground/60 text-[10px]">{deal.therapeuticArea}</span>
                           </td>
+                          <td className="px-4 py-2.5 text-muted-foreground truncate max-w-28">{deal.sellerLabel}</td>
+                          <td className="px-4 py-2.5 text-muted-foreground truncate max-w-28">{deal.buyerLabel}</td>
                           <td className="px-4 py-2.5">
                             <Badge variant="outline" className={cn("text-[10px]", DEAL_STATUS_COLORS[deal.status] ?? "border-border text-muted-foreground")}>
                               {DEAL_STATUS_LABELS[deal.status] ?? deal.status}
