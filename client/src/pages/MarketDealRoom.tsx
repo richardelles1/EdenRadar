@@ -47,7 +47,7 @@ type PartialEoi = {
 };
 
 type StatusHistoryEntry = DealStatusHistoryEntry;
-type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null };
+type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null; sellerOrgName?: string | null; buyerOrgName?: string | null };
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -259,7 +259,7 @@ export default function MarketDealRoom() {
     );
   }
 
-  const { deal, listing, eoi, ndaDocumentUrl } = roomData;
+  const { deal, listing, eoi, ndaDocumentUrl, sellerOrgName, buyerOrgName } = roomData;
   const isSeller = deal.sellerId === userId;
   const isBuyer = deal.buyerId === userId;
   const ndaUnlocked = !!deal.ndaSignedAt;
@@ -353,14 +353,21 @@ export default function MarketDealRoom() {
             <p className="text-xs text-muted-foreground">Listing details not available.</p>
           )}
           {/* Identity is revealed to both parties as soon as the deal is created (EOI accepted) */}
-          {eoi && (eoi.company || eoi.role) && (
+          {eoi && (
             <div className="pt-2 border-t border-border text-xs space-y-1">
               <div className="flex items-center gap-1.5 mb-1">
                 <Building2 className="w-3 h-3 text-muted-foreground" />
                 <span className="font-medium text-foreground">Counterparty Identity</span>
                 <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-700 dark:text-violet-400">Revealed</Badge>
               </div>
-              {eoi.company && <p><span className="text-muted-foreground">Company:</span> {eoi.company}</p>}
+              {/* Buyer sees seller org; seller sees buyer org */}
+              {isBuyer && sellerOrgName && (
+                <p><span className="text-muted-foreground">Seller Organisation:</span> <span className="font-medium text-foreground">{sellerOrgName}</span></p>
+              )}
+              {isSeller && buyerOrgName && (
+                <p><span className="text-muted-foreground">Buyer Organisation:</span> <span className="font-medium text-foreground">{buyerOrgName}</span></p>
+              )}
+              {eoi.company && <p><span className="text-muted-foreground">Company (EOI):</span> {eoi.company}</p>}
               {eoi.role && <p><span className="text-muted-foreground">Role:</span> {eoi.role}</p>}
               {ndaUnlocked && (
                 <>

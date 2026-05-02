@@ -9705,6 +9705,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const listing = await storage.getMarketListing(deal.listingId);
       const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, deal.eoiId)).limit(1);
 
+      // Resolve org names for explicit legal-counterparty identity display
+      const [sellerOrg, buyerOrg] = await Promise.all([
+        storage.getOrgForUser(deal.sellerId),
+        storage.getOrgForUser(deal.buyerId),
+      ]);
+      const sellerOrgName: string | null = sellerOrg?.name ?? null;
+      const buyerOrgName: string | null = buyerOrg?.name ?? null;
+
       // After EOI acceptance (deal created), identities are mutually revealed.
       // Deep IP/financial data and EOI rationale/budget are gated behind NDA execution.
       if (!deal.ndaSignedAt) {
@@ -9746,7 +9754,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           budgetRange: null,
           timeline: null,
         } : null;
-        return res.json({ deal, listing: redactedListing, eoi: redactedEoi });
+        return res.json({ deal, listing: redactedListing, eoi: redactedEoi, sellerOrgName, buyerOrgName });
       }
 
       // NDA signed — return NDA download URL if document exists
@@ -9771,7 +9779,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         return rest;
       })() : null;
 
-      res.json({ deal, listing: sanitizedListing, eoi, ndaDocumentUrl });
+      res.json({ deal, listing: sanitizedListing, eoi, ndaDocumentUrl, sellerOrgName, buyerOrgName });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
