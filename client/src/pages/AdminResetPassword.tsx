@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function AdminResetPassword() {
   const { session, loading, updatePassword } = useAuth();
+  const { isAdmin } = useIsAdmin();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [password, setPassword] = useState("");
@@ -52,7 +54,9 @@ export default function AdminResetPassword() {
       return;
     }
     toast({ title: "Password updated", description: "You can now sign in with your new password." });
-    navigate("/admin", { replace: true });
+    // Admins land in the admin panel; everyone else returns to the login page
+    // so they don't hit the admin Forbidden screen unnecessarily.
+    navigate(isAdmin ? "/admin" : "/login", { replace: true });
   }
 
   return (
