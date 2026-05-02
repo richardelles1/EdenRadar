@@ -69,7 +69,7 @@ AI-powered biotech asset matchmaking platform for internal use. Ingests signals 
 **Landing Page** (`/`): Three portal CTAs; auto-redirects to portal if already authenticated. Portal toggle shows Industry / Research / Discovery tabs.
 **Pitch Deck** (`/pitch`): 10-slide branded presentation (no auth, bypasses SiteGate). Dark background, scroll-snap, floating dot nav, Export PDF button. Print CSS produces one slide per page with forced dark colors. `?print` param hides nav for clean layout. File: `client/src/pages/PitchDeck.tsx`.
 **Sign Out**: All sidebars have "Sign Out" button → clears Supabase session → redirects to /login.
-**Admin**: `eden-admin-pw` localStorage gate (password: "eden"). Tabs: Data Health, Enrichment, Pipeline Review, Research Queue, Concept Queue, Account Center.
+**Admin**: Supabase Auth-gated (email allowlist + `user_metadata.is_admin = true`); see "Admin access" section below. Tabs: Data Health, Enrichment, Pipeline Review, Research Queue, Concept Queue, Account Center.
 - **Account Center** (Task #72): User management via Supabase Admin API (`SUPABASE_SERVICE_ROLE_KEY`). List all users, assign portal roles via inline dropdown, invite new users (email + password + role). Portal Directory cards with user counts and copy-to-clipboard invite links (`/register?portal=<role>` — placeholder, not yet built). Uses shared `PORTAL_CONFIG` from `shared/portals.ts` for scalable role→portal mapping.
 - **Portal Config**: `shared/portals.ts` — single source of truth mapping `PortalRole` ("industry"|"researcher"|"concept") to label, tier, color, badgeClass, description, registerPath. Adding a new portal only requires one new entry here.
 
