@@ -16,8 +16,11 @@ export interface AdminWhoAmI {
 export function useIsAdmin() {
   const { user, loading: authLoading } = useAuth();
 
+  // Cache key is scoped to the current Supabase user id so admin status
+  // cannot bleed across accounts (e.g. admin signs out, non-admin signs in
+  // on the same browser). When user is null we still emit a stable key.
   const query = useQuery<AdminWhoAmI | null>({
-    queryKey: ["/api/admin/whoami"],
+    queryKey: ["/api/admin/whoami", user?.id ?? "anon"],
     enabled: !!user && !authLoading,
     staleTime: 5 * 60 * 1000,
     retry: false,
