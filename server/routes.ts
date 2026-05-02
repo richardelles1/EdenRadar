@@ -9633,16 +9633,16 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         if (sellerOrg?.billingEmail) {
           await sendMarketMutualInterestEmail(sellerOrg.billingEmail, sellerOrg.name ?? "", dealUrl, assetLabel);
         }
-      } catch {}
+      } catch (e) { console.warn("[market] seller mutual-interest email failed", e); }
       try {
         const buyerOrg = await storage.getOrgForUser(eoiRow.buyerId);
         if (buyerOrg?.billingEmail) {
           await sendMarketMutualInterestEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", dealUrl, assetLabel);
         }
-      } catch {}
+      } catch (e) { console.warn("[market] buyer mutual-interest email failed", e); }
       try {
         await sendEmail("admin@edenradar.com", `Deal created — #${deal.id} — ${assetLabel}`, `<p>Seller accepted EOI #${eoiId}. Deal #${deal.id} created. <a href="${APP_URL}/admin">View admin</a></p>`);
-      } catch {}
+      } catch (e) { console.warn("[market] admin deal-created email failed", e); }
 
       res.json({ deal, created: true });
     } catch (err: any) {
@@ -9687,19 +9687,28 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // GET /api/market/deals/:id — get single deal room data
-  app.get("/api/market/deals/:id", verifyAnyAuth, async (req, res) => {
+  // GET /api/market/deals/:id — get single deal room data (parties + admin read-only)
+  app.get("/api/market/deals/:id", async (req, res) => {
     try {
-      const userId = req.headers["x-user-id"] as string;
-      const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
-
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
-      if (deal.sellerId !== userId && deal.buyerId !== userId) {
-        return res.status(403).json({ error: "Access denied" });
+
+      // Allow admin access via x-admin-password header
+      const adminPw = req.headers["x-admin-password"];
+      const isAdmin = adminPw === (process.env.ADMIN_PANEL_PASSWORD ?? "eden");
+
+      if (!isAdmin) {
+        // Require party auth for non-admin access
+        const authHeader = req.headers["authorization"];
+        const userId = req.headers["x-user-id"] as string;
+        if (!authHeader && !userId) return res.status(401).json({ error: "Unauthorized" });
+        const org = await storage.getOrgForUser(userId);
+        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+        if (deal.sellerId !== userId && deal.buyerId !== userId) {
+          return res.status(403).json({ error: "Access denied" });
+        }
       }
 
       const listing = await storage.getMarketListing(deal.listingId);
@@ -9881,11 +9890,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         try {
           const sellerOrg = await storage.getOrgForUser(deal.sellerId);
           if (sellerOrg?.billingEmail) await sendMarketNdaSignedEmail(sellerOrg.billingEmail, sellerOrg.name ?? "", dealUrl, assetLabel);
-        } catch {}
+        } catch (e) { console.warn("[market] seller NDA-signed email failed", e); }
         try {
           const buyerOrg = await storage.getOrgForUser(deal.buyerId);
           if (buyerOrg?.billingEmail) await sendMarketNdaSignedEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", dealUrl, assetLabel);
-        } catch {}
+        } catch (e) { console.warn("[market] buyer NDA-signed email failed", e); }
       }
 
       res.json({ deal: updatedDeal, alreadySigned: false });

@@ -72,13 +72,14 @@ export default function MarketMyEOIs() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1">
                     {l ? (
-                      l.blind ? (
-                        <span className="flex items-center gap-1 text-xs text-muted-foreground italic">
-                          <EyeOff className="w-3 h-3" /> Confidential Listing
-                        </span>
-                      ) : (
+                      // After acceptance identity is revealed; blind only suppresses marketplace browsing
+                      (eoi.status === "accepted" || !l.blind) ? (
                         <span className="text-sm font-semibold text-foreground truncate">
                           {l.assetName ?? `Listing #${l.id}`}
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground italic">
+                          <EyeOff className="w-3 h-3" /> Confidential Listing
                         </span>
                       )
                     ) : (
