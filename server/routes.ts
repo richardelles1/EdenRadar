@@ -7073,7 +7073,7 @@ If a field cannot be determined, use "N/A".`
           .where(
             and(
               eq(ingestedAssets.relevant, true),
-              sql`${ingestedAssets.firstSeenAt} >= ${since}`,
+              gt(ingestedAssets.firstSeenAt, since),
             )
           )
           .orderBy(desc(ingestedAssets.firstSeenAt)),

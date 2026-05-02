@@ -53,9 +53,7 @@ import type { UserAlert } from "@shared/schema";
 const STORAGE_KEY = "edenLastSeenAlerts";
 
 function defaultSince(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 7);
-  return d.toISOString();
+  return new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
 }
 
 function formatSinceLabel(dateStr: string | null | undefined): string {
@@ -1177,14 +1175,21 @@ export default function Alerts() {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Fetch unread count from the same backend endpoint as the sidebar badge.
+  // This guarantees the Alerts-tab TTO count is always identical to the badge count.
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/alerts/unread-count"],
+    staleTime: 5 * 60 * 1000,
+  });
+
   const hasAlerts = alerts.length > 0;
-  // Use distinctTotal (deduped across overlapping alerts) so this count matches
-  // the sidebar badge which also deduplicates.
-  const matchedTtoCount = alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0;
   const alertMatchCounts: Record<number, number> = Object.fromEntries(
     (alertsDelta?.byAlert ?? []).map((b) => [b.alertId, b.matchCount])
   );
-  const sidebarTtoCount = hasAlerts ? matchedTtoCount : (data?.newAssets.total ?? 0);
+  // Use the same unread-count endpoint as the sidebar badge — single source of truth.
+  const sidebarTtoCount = hasAlerts
+    ? (unreadData?.count ?? alertsDelta?.distinctTotal ?? alertsDelta?.total ?? 0)
+    : (data?.newAssets.total ?? 0);
   const totalNew = sidebarTtoCount + (data?.newConcepts.total ?? 0) + (data?.newProjects.total ?? 0);
 
   const sinceLabel = formatSinceLabel(sinceParam);

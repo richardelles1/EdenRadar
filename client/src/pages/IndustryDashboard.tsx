@@ -440,7 +440,12 @@ export default function IndustryDashboard() {
 
   const firstName = profile.userName?.trim().split(/\s+/)[0] ?? "";
 
-  const deltaTotal = deltaData?.newAssets.matchedTotal ?? 0;
+  // Use same unread-count endpoint as sidebar badge for consistent count.
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/alerts/unread-count"],
+    staleTime: 60 * 1000,
+  });
+  const deltaTotal = unreadData?.count ?? deltaData?.newAssets.matchedTotal ?? 0;
 
   const rawSubtitle = deltaTotal > 0
     ? `${deltaTotal.toLocaleString()} new asset${deltaTotal !== 1 ? "s" : ""} since your last visit`
