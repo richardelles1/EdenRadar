@@ -9419,7 +9419,19 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const ta = String(req.query.ta ?? "").trim();
       const query = [q, ta].filter(Boolean).join(" ");
       if (query.length < 2) return res.json([]);
-      const results = await storage.keywordSearchIngestedAssets(query, 5);
+
+      // Fetch a wider pool, then re-rank: institution-aware matches rise to top
+      const pool = await storage.keywordSearchIngestedAssets(query, 12);
+      // Institution signal: if query contains a word that appears in institution name, boost it
+      const qLower = q.toLowerCase();
+      const scored = pool.map(r => {
+        let rank = 0;
+        if (r.institution && qLower && r.institution.toLowerCase().includes(qLower)) rank += 10;
+        if (r.completenessScore) rank += r.completenessScore / 100; // tiebreak by data quality
+        return { r, rank };
+      });
+      scored.sort((a, b) => b.rank - a.rank);
+      const results = scored.slice(0, 3).map(x => x.r); // hard cap at 3 suggestions
       res.json(results.map(r => ({
         id: r.id,
         assetName: r.assetName,

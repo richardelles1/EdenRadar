@@ -34,20 +34,22 @@ function priceLabel(l: ListingWithMeta) {
   return "Price on request";
 }
 
+// NOTE: server-side formula is authoritative and uses intelligence-derived signals from the
+// linked EdenScout asset (enrichment completeness, patents, clinical-stage trials inference,
+// scientific specificity). Client fallback is a structural approximation only — it activates
+// only when the listing was fetched without server score (e.g. cached response).
 function getEdenSignalScore(l: ListingWithMeta): number {
-  // Prefer server-computed score; fall back to client-side formula
-  if (l.edenSignalScore != null) return l.edenSignalScore;
+  if (l.edenSignalScore != null) return l.edenSignalScore; // always prefer server value
+  // Client-side structural fallback (no intelligence signals available):
+  // EdenScout link: +30 base; market completeness: price+10, aiSummary+5, mechanism+5,
+  // full TA/modality/stage classification: +10, active engagement: +5 → max 65 unlinked, 95 linked
   let s = 0;
-  if (l.ingestedAssetId) s += 40;
-  if (l.mechanism) s += 10;
-  if (l.ipStatus) s += 5;
-  if (l.milestoneHistory) s += 5;
-  if (l.priceRangeMin) s += 10;
-  if (l.aiSummary) s += 10;
-  if (l.therapeuticArea) s += 5;
-  if (l.modality) s += 5;
-  if (l.stage) s += 5;
-  if (l.engagementStatus && l.engagementStatus !== "closed") s += 5;
+  if (l.ingestedAssetId) s += 30;    // EdenScout link (no enrichment bonus without server data)
+  if (l.priceRangeMin) s += 10;       // price signal
+  if (l.aiSummary) s += 5;            // AI summary
+  if (l.mechanism) s += 5;            // mechanism disclosed
+  if (l.therapeuticArea && l.modality && l.stage) s += 10; // full classification
+  if (l.engagementStatus && l.engagementStatus !== "closed") s += 5; // active
   return Math.min(100, s);
 }
 

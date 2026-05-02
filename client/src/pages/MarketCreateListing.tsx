@@ -230,6 +230,8 @@ export default function MarketCreateListing() {
   const [step, setStep] = useState(0);
   const [linkedAsset, setLinkedAsset] = useState<SuggestedAsset | null>(null);
   const [prefilledFields, setPrefilledFields] = useState<string[]>([]);
+  // Tracks fields that were auto-filled but subsequently edited by the seller
+  const [overriddenFields, setOverriddenFields] = useState<Set<string>>(new Set());
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -299,31 +301,43 @@ export default function MarketCreateListing() {
     else setStep(s => s - 1);
   }
 
+  // Snapshot of values at the moment of linking — used to detect seller overrides
+  const [prefilledSnapshot, setPrefilledSnapshot] = useState<Partial<ListingFormData>>({});
+
   // Auto-fill form fields from linked EdenScout asset, tracking which were prefilled
   function handleLinkAsset(a: SuggestedAsset) {
     setLinkedAsset(a);
+    setOverriddenFields(new Set());
     const filled: string[] = [];
+    const snapshot: Partial<ListingFormData> = {};
     // Mechanism: combine target + mechanismOfAction
     if (!form.getValues("mechanism")) {
       const parts: string[] = [];
       if (a.target) parts.push(`Target: ${a.target}`);
       if (a.mechanismOfAction) parts.push(a.mechanismOfAction);
-      if (parts.length) { form.setValue("mechanism", parts.join("\n")); filled.push("Mechanism"); }
+      if (parts.length) {
+        const val = parts.join("\n");
+        form.setValue("mechanism", val);
+        filled.push("Mechanism");
+        snapshot.mechanism = val;
+      }
     }
     // IP status from ipType
     if (a.ipType && !form.getValues("ipStatus")) {
       form.setValue("ipStatus", a.ipType);
       filled.push("IP Status");
+      snapshot.ipStatus = a.ipType;
     }
     // IP summary from innovationClaim
     if (a.innovationClaim && !form.getValues("ipSummary")) {
       form.setValue("ipSummary", a.innovationClaim);
       filled.push("IP Summary");
+      snapshot.ipSummary = a.innovationClaim;
     }
     // Modality
     if (a.modality && !form.getValues("modality")) {
       const match = MODALITIES.find(m => m.toLowerCase() === a.modality!.toLowerCase());
-      if (match) { form.setValue("modality", match); filled.push("Modality"); }
+      if (match) { form.setValue("modality", match); filled.push("Modality"); snapshot.modality = match; }
     }
     // Stage
     if (a.developmentStage && !form.getValues("stage")) {
@@ -333,10 +347,30 @@ export default function MarketCreateListing() {
         approved: "Approved",
       };
       const mapped = stageMap[a.developmentStage.toLowerCase()];
-      if (mapped) { form.setValue("stage", mapped); filled.push("Stage"); }
+      if (mapped) { form.setValue("stage", mapped); filled.push("Stage"); snapshot.stage = mapped; }
     }
     setPrefilledFields(filled);
+    setPrefilledSnapshot(snapshot);
   }
+
+  // Detect when seller edits a previously prefilled field
+  const watchedValues = form.watch(["mechanism", "ipStatus", "ipSummary", "modality", "stage"] as const);
+  const fieldLabelMap: Record<string, keyof typeof prefilledSnapshot> = {
+    "Mechanism": "mechanism", "IP Status": "ipStatus", "IP Summary": "ipSummary",
+    "Modality": "modality", "Stage": "stage",
+  };
+  const currentOverrides = new Set<string>();
+  for (const label of prefilledFields) {
+    const key = fieldLabelMap[label];
+    if (key && prefilledSnapshot[key] !== undefined) {
+      const current = form.getValues(key as keyof ListingFormData);
+      if (current !== prefilledSnapshot[key]) currentOverrides.add(label);
+    }
+  }
+  const stillPrefilled = prefilledFields.filter(f => !currentOverrides.has(f));
+  const editedFields = prefilledFields.filter(f => currentOverrides.has(f));
+  // suppress lint warning — watchedValues is used implicitly via form.getValues above
+  void watchedValues;
 
   const blind = form.watch("blind");
   const ta = form.watch("therapeuticArea");
@@ -423,7 +457,8 @@ export default function MarketCreateListing() {
                   </div>
                   {prefilledFields.length > 0 && (
                     <p className="text-[10px] text-violet-600 dark:text-violet-400 pl-4.5">
-                      Pre-filled: {prefilledFields.join(", ")} — edit any field to override.
+                      {stillPrefilled.length > 0 && <>Pre-filled: {stillPrefilled.join(", ")}</>}
+                      {editedFields.length > 0 && <span className="text-amber-600 dark:text-amber-400"> · Edited: {editedFields.join(", ")}</span>}
                     </p>
                   )}
                 </div>
