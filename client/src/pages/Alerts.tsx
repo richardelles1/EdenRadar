@@ -42,6 +42,9 @@ import {
   Loader2,
   ExternalLink,
   ArrowRight,
+  ToggleLeft,
+  ToggleRight,
+  Zap,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
@@ -146,24 +149,35 @@ function AssetRow({ id, name, institution, modality, stage, index }: {
   );
 }
 
-function AlertCard({ alert, onDelete, onEdit, isPending, matchCount = 0 }: {
-  alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; isPending: boolean; matchCount?: number;
+function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchCount = 0 }: {
+  alert: UserAlert; onDelete: (id: number) => void; onEdit: (a: UserAlert) => void; onToggleEnabled: (id: number, enabled: boolean) => void; isPending: boolean; matchCount?: number;
 }) {
-  const parts = [alert.query, ...(alert.modalities ?? []).map(toDisplayModality), ...(alert.stages ?? []).map(toDisplayStage)].filter(Boolean);
-  const draft = parts.join(" ");
+  const isAllNew = alert.criteriaType === "all_new";
+  const isEnabled = alert.enabled !== false;
+  const criteriaChips: { label: string; colorClass: string }[] = [];
+  if (alert.query) criteriaChips.push({ label: `"${alert.query}"`, colorClass: "bg-primary/10 text-primary border-primary/20" });
+  for (const m of (alert.modalities ?? [])) criteriaChips.push({ label: toDisplayModality(m), colorClass: "bg-primary/10 text-primary border-primary/20" });
+  for (const s of (alert.stages ?? [])) criteriaChips.push({ label: toDisplayStage(s), colorClass: "bg-violet-500/10 text-violet-500 border-violet-500/20" });
+  for (const inst of (alert.institutions ?? [])) criteriaChips.push({ label: inst, colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" });
+
+  const draftParts = [alert.query, ...(alert.modalities ?? []).map(toDisplayModality), ...(alert.stages ?? []).map(toDisplayStage)].filter(Boolean);
+  const draft = draftParts.join(" ");
 
   return (
     <div
-      className="flex items-start gap-3 rounded-md border border-border bg-card px-3 py-2.5 hover:border-primary/30 transition-colors"
+      className={`flex items-start gap-3 rounded-md border bg-card px-3 py-2.5 transition-colors ${isEnabled ? "border-border hover:border-primary/30" : "border-border/40 opacity-60"}`}
       data-testid={`alert-card-${alert.id}`}
     >
-      <Bell className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+      <Bell className={`w-3.5 h-3.5 shrink-0 mt-0.5 ${isEnabled ? "text-emerald-500" : "text-muted-foreground"}`} />
       <div className="flex-1 min-w-0 space-y-1">
         <div className="flex items-center gap-1.5 min-w-0">
           <p className="text-xs font-semibold text-foreground truncate" data-testid={`alert-title-${alert.id}`}>
-            {alert.query || "All new assets"}
+            {alert.name || (isAllNew ? "All New Assets" : alert.query || "Untitled alert")}
           </p>
-          {matchCount > 0 && (
+          {!isEnabled && (
+            <span className="text-[10px] px-1.5 py-0 rounded-full bg-muted text-muted-foreground border border-border shrink-0">paused</span>
+          )}
+          {isEnabled && matchCount > 0 && (
             <Badge
               variant="secondary"
               className="shrink-0 text-[10px] tabular-nums px-1.5 py-0 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
@@ -173,18 +187,19 @@ function AlertCard({ alert, onDelete, onEdit, isPending, matchCount = 0 }: {
             </Badge>
           )}
         </div>
-        <div className="flex flex-wrap gap-1">
-          {(alert.modalities ?? []).map((m) => (
-            <span key={m} className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 capitalize">{toDisplayModality(m)}</span>
-          ))}
-          {(alert.stages ?? []).map((s) => (
-            <span key={s} className="text-[10px] px-1.5 py-0.5 rounded-full bg-violet-500/10 text-violet-500 border border-violet-500/20 capitalize">{toDisplayStage(s)}</span>
-          ))}
-          {(alert.institutions ?? []).map((inst) => (
-            <span key={inst} className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 truncate max-w-[120px]">{inst}</span>
-          ))}
-        </div>
-        {draft && (
+        {isAllNew ? (
+          <p className="text-[10px] text-muted-foreground">Matches all new TTO assets</p>
+        ) : criteriaChips.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {criteriaChips.slice(0, 6).map((chip, i) => (
+              <span key={i} className={`text-[10px] px-1.5 py-0.5 rounded-full border truncate max-w-[130px] ${chip.colorClass}`}>{chip.label}</span>
+            ))}
+            {criteriaChips.length > 6 && (
+              <span className="text-[10px] text-muted-foreground">+{criteriaChips.length - 6} more</span>
+            )}
+          </div>
+        ) : null}
+        {!isAllNew && draft && (
           <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
               Explore matches →
@@ -192,7 +207,16 @@ function AlertCard({ alert, onDelete, onEdit, isPending, matchCount = 0 }: {
           </Link>
         )}
       </div>
-      <div className="flex items-center gap-1 shrink-0">
+      <div className="flex items-center gap-0.5 shrink-0">
+        <button
+          onClick={() => onToggleEnabled(alert.id, !isEnabled)}
+          className={`transition-colors w-6 h-6 flex items-center justify-center rounded ${isEnabled ? "text-emerald-500 hover:text-muted-foreground hover:bg-muted/60" : "text-muted-foreground hover:text-emerald-500 hover:bg-emerald-500/10"}`}
+          data-testid={`button-toggle-alert-${alert.id}`}
+          disabled={isPending}
+          title={isEnabled ? "Pause alert" : "Resume alert"}
+        >
+          {isEnabled ? <ToggleRight className="w-4 h-4" /> : <ToggleLeft className="w-4 h-4" />}
+        </button>
         <button
           onClick={() => onEdit(alert)}
           className="text-muted-foreground hover:text-primary transition-colors w-6 h-6 flex items-center justify-center rounded hover:bg-primary/10"
@@ -223,8 +247,22 @@ function MyAlertsSection({ onCreateAlert, matchCounts = {} }: { onCreateAlert: (
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
     },
   });
+
+  const toggleMutation = useMutation({
+    mutationFn: ({ id, enabled }: { id: number; enabled: boolean }) =>
+      apiRequest("PATCH", `/api/alerts/${id}/enabled`, { enabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
+    },
+  });
+
+  const activeAlerts = alerts.filter((a) => a.enabled !== false);
+  const pausedAlerts = alerts.filter((a) => a.enabled === false);
 
   return (
     <>
@@ -263,16 +301,35 @@ function MyAlertsSection({ onCreateAlert, matchCounts = {} }: { onCreateAlert: (
           </div>
         ) : (
           <div className="space-y-2">
-            {alerts.map((alert) => (
+            {activeAlerts.map((alert) => (
               <AlertCard
                 key={alert.id}
                 alert={alert}
                 onDelete={(id) => deleteMutation.mutate(id)}
                 onEdit={(a) => setEditingAlert(a)}
-                isPending={deleteMutation.isPending}
+                onToggleEnabled={(id, enabled) => toggleMutation.mutate({ id, enabled })}
+                isPending={deleteMutation.isPending || toggleMutation.isPending}
                 matchCount={matchCounts[alert.id] ?? 0}
               />
             ))}
+            {pausedAlerts.length > 0 && (
+              <div className="pt-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium px-0.5 pb-1.5">Paused</p>
+                <div className="space-y-2">
+                  {pausedAlerts.map((alert) => (
+                    <AlertCard
+                      key={alert.id}
+                      alert={alert}
+                      onDelete={(id) => deleteMutation.mutate(id)}
+                      onEdit={(a) => setEditingAlert(a)}
+                      onToggleEnabled={(id, enabled) => toggleMutation.mutate({ id, enabled })}
+                      isPending={deleteMutation.isPending || toggleMutation.isPending}
+                      matchCount={0}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -795,10 +852,12 @@ function AlertFormFields({
 
 function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => void }) {
   const { toast } = useToast();
+  const [name, setName] = useState(alert.name ?? "");
   const [query, setQuery] = useState(alert.query ?? "");
   const [modalities, setModalities] = useState<string[]>((alert.modalities ?? []).map(toDisplayModality));
   const [stages, setStages] = useState<string[]>((alert.stages ?? []).map(toDisplayStage));
   const [institutions, setInstitutions] = useState<string[]>(alert.institutions ?? []);
+  const isAllNew = alert.criteriaType === "all_new";
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
     setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
@@ -807,10 +866,12 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
   const editMutation = useMutation({
     mutationFn: () =>
       apiRequest("PUT", `/api/alerts/${alert.id}`, {
-        query: query.trim() || null,
-        modalities: modalities.map(normalizeModality),
-        stages: stages.map(normalizeStage),
-        institutions,
+        name: name.trim(),
+        query: isAllNew ? null : (query.trim() || null),
+        modalities: isAllNew ? null : modalities.map(normalizeModality),
+        stages: isAllNew ? null : stages.map(normalizeStage),
+        institutions: isAllNew ? null : institutions,
+        criteriaType: alert.criteriaType ?? null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
@@ -824,7 +885,11 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
   });
 
   function handleSave() {
-    if (!query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (!name.trim()) {
+      toast({ title: "Alert name is required", variant: "destructive" });
+      return;
+    }
+    if (!isAllNew && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -839,14 +904,34 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
           <SheetDescription>Update your saved alert criteria.</SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-5">
-          <AlertFormFields
-            query={query} setQuery={setQuery}
-            modalities={modalities} stages={stages} institutions={institutions}
-            toggleModality={(v) => toggle(modalities, setModalities, v)}
-            toggleStage={(v) => toggle(stages, setStages, v)}
-            toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
-            idPrefix="edit-alert"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="edit-alert-name">Alert Name <span className="text-destructive">*</span></Label>
+            <Input
+              id="edit-alert-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. CAR-T Watch, Phase 2+ Oncology"
+              data-testid="input-edit-alert-name"
+            />
+          </div>
+          {!isAllNew && (
+            <AlertFormFields
+              query={query} setQuery={setQuery}
+              modalities={modalities} stages={stages} institutions={institutions}
+              toggleModality={(v) => toggle(modalities, setModalities, v)}
+              toggleStage={(v) => toggle(stages, setStages, v)}
+              toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+              idPrefix="edit-alert"
+            />
+          )}
+          {isAllNew && (
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2.5">
+              <p className="text-xs text-primary font-medium flex items-center gap-1.5">
+                <Zap className="w-3 h-3" /> All New Assets
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-1">This alert matches every new relevant TTO asset — no filters applied.</p>
+            </div>
+          )}
           <div className="pt-2 flex gap-3">
             <Button className="flex-1" onClick={handleSave} disabled={editMutation.isPending} data-testid="button-update-alert">
               {editMutation.isPending ? "Saving..." : "Save Changes"}
@@ -859,30 +944,75 @@ function EditAlertSheet({ alert, onClose }: { alert: UserAlert; onClose: () => v
   );
 }
 
+const QUICK_TEMPLATES = [
+  {
+    id: "all_new",
+    label: "All New Assets",
+    description: "Every new TTO asset added to the database",
+    criteriaType: "all_new" as const,
+    query: "", modalities: [] as string[], stages: [] as string[], institutions: [] as string[],
+  },
+  {
+    id: "phase2plus",
+    label: "New Phase 2+ Assets",
+    description: "Clinical-stage assets ready for partnership",
+    criteriaType: null,
+    query: "", modalities: [] as string[], stages: ["Phase 2", "Phase 3"] as string[], institutions: [] as string[],
+  },
+  {
+    id: "antibody",
+    label: "New Antibody Assets",
+    description: "Monoclonal and bispecific antibody programs",
+    criteriaType: null,
+    query: "", modalities: ["Antibody", "Bispecific Antibody"] as string[], stages: [] as string[], institutions: [] as string[],
+  },
+  {
+    id: "gene_therapy",
+    label: "Gene & Cell Therapy",
+    description: "Gene therapy, CAR-T, and cell-based programs",
+    criteriaType: null,
+    query: "", modalities: ["Gene Therapy", "CAR-T"] as string[], stages: [] as string[], institutions: [] as string[],
+  },
+] as const;
+
 function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
+  const [name, setName] = useState("");
   const [query, setQuery] = useState("");
   const [modalities, setModalities] = useState<string[]>([]);
   const [stages, setStages] = useState<string[]>([]);
   const [institutions, setInstitutions] = useState<string[]>([]);
+  const [criteriaType, setCriteriaType] = useState<string | null>(null);
 
   function toggle<T>(arr: T[], setArr: (v: T[]) => void, val: T) {
     setArr(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   }
 
+  function applyTemplate(tmpl: typeof QUICK_TEMPLATES[number]) {
+    setCriteriaType(tmpl.criteriaType);
+    setName(tmpl.label);
+    setQuery(tmpl.query);
+    setModalities([...tmpl.modalities]);
+    setStages([...tmpl.stages]);
+    setInstitutions([...tmpl.institutions]);
+  }
+
   const saveMutation = useMutation({
     mutationFn: () =>
       apiRequest("POST", "/api/alerts", {
-        query: query.trim() || null,
-        modalities: modalities.map(normalizeModality),
-        stages: stages.map(normalizeStage),
-        institutions,
+        name: name.trim(),
+        query: criteriaType === "all_new" ? null : (query.trim() || null),
+        modalities: criteriaType === "all_new" ? null : modalities.map(normalizeModality),
+        stages: criteriaType === "all_new" ? null : stages.map(normalizeStage),
+        institutions: criteriaType === "all_new" ? null : institutions,
+        criteriaType: criteriaType ?? null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/alerts"] });
       queryClient.invalidateQueries({ queryKey: ["/api/alerts/delta"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
       toast({ title: "Alert saved", description: "You'll see it in My Saved Alerts." });
-      setQuery(""); setModalities([]); setStages([]); setInstitutions([]);
+      setName(""); setQuery(""); setModalities([]); setStages([]); setInstitutions([]); setCriteriaType(null);
       onClose();
     },
     onError: (err: any) => {
@@ -891,7 +1021,11 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
   });
 
   function handleSave() {
-    if (!query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
+    if (!name.trim()) {
+      toast({ title: "Alert name is required", variant: "destructive" });
+      return;
+    }
+    if (criteriaType !== "all_new" && !query.trim() && modalities.length === 0 && stages.length === 0 && institutions.length === 0) {
       toast({ title: "Set at least one filter", variant: "destructive" });
       return;
     }
@@ -906,14 +1040,62 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
           <SheetDescription>Set up a saved search that notifies you when new matching assets are found.</SheetDescription>
         </SheetHeader>
         <div className="mt-6 space-y-5">
-          <AlertFormFields
-            query={query} setQuery={setQuery}
-            modalities={modalities} stages={stages} institutions={institutions}
-            toggleModality={(v) => toggle(modalities, setModalities, v)}
-            toggleStage={(v) => toggle(stages, setStages, v)}
-            toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
-            idPrefix="alert"
-          />
+          {/* Quick start templates */}
+          <div className="space-y-2">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Quick Start</p>
+            <div className="grid grid-cols-2 gap-2">
+              {QUICK_TEMPLATES.map((tmpl) => (
+                <button
+                  key={tmpl.id}
+                  onClick={() => applyTemplate(tmpl)}
+                  className={`text-left rounded-md border px-2.5 py-2 transition-colors hover:border-primary/40 hover:bg-primary/5 ${name === tmpl.label && criteriaType === tmpl.criteriaType ? "border-primary/50 bg-primary/10" : "border-border bg-muted/20"}`}
+                  data-testid={`template-${tmpl.id}`}
+                >
+                  <p className="text-[11px] font-semibold text-foreground">{tmpl.label}</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2">{tmpl.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-border/40 pt-4 space-y-5">
+            {/* Name field — always visible */}
+            <div className="space-y-2">
+              <Label htmlFor="alert-name">Alert Name <span className="text-destructive">*</span></Label>
+              <Input
+                id="alert-name"
+                value={name}
+                onChange={(e) => { setName(e.target.value); }}
+                placeholder="e.g. CAR-T Watch, Phase 2+ Oncology"
+                data-testid="input-alert-name"
+              />
+            </div>
+
+            {criteriaType === "all_new" ? (
+              <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2.5">
+                <p className="text-xs text-primary font-medium flex items-center gap-1.5">
+                  <Zap className="w-3 h-3" /> All New Assets
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">This alert matches every new relevant TTO asset — no filters applied.</p>
+                <button
+                  className="text-[11px] text-muted-foreground hover:text-foreground underline mt-2"
+                  onClick={() => { setCriteriaType(null); setModalities([]); setStages([]); setQuery(""); }}
+                >
+                  Switch to filtered criteria
+                </button>
+              </div>
+            ) : (
+              <AlertFormFields
+                query={query} setQuery={setQuery}
+                modalities={modalities} stages={stages} institutions={institutions}
+                toggleModality={(v) => toggle(modalities, setModalities, v)}
+                toggleStage={(v) => toggle(stages, setStages, v)}
+                toggleInstitution={(v) => toggle(institutions, setInstitutions, v)}
+                idPrefix="alert"
+              />
+            )}
+          </div>
+
           <div className="pt-2 flex gap-3">
             <Button className="flex-1" onClick={handleSave} disabled={saveMutation.isPending} data-testid="button-save-alert">
               {saveMutation.isPending ? "Saving..." : "Save Alert"}
@@ -928,6 +1110,8 @@ function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => voi
 
 export default function Alerts() {
   const [sheetOpen, setSheetOpen] = useState(false);
+  // sinceParam: initialised from DB lastViewedAlertsAt so badge and page counts agree.
+  // Falls back to localStorage, then to 7-days-ago default.
   const [sinceParam, setSinceParam] = useState<string>(() => {
     if (typeof window !== "undefined") {
       return localStorage.getItem(STORAGE_KEY) ?? defaultSince();
@@ -937,10 +1121,26 @@ export default function Alerts() {
 
   const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
+  // On mount: fetch the DB-side last-viewed timestamp and use it as sinceParam.
+  // Then call mark-read to clear the sidebar badge. The page keeps showing
+  // activity since the pre-mark-read timestamp for the current session.
   useEffect(() => {
-    apiRequest("POST", "/api/alerts/mark-read").then(() => {
-      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
-    }).catch(() => {});
+    getAuthHeaders().then(async (authHeaders) => {
+      try {
+        const r = await fetch("/api/alerts/viewed-since", { credentials: "include", headers: authHeaders });
+        if (r.ok) {
+          const { since } = await r.json();
+          if (since) {
+            setSinceParam(since);
+            localStorage.setItem(STORAGE_KEY, since);
+          }
+        }
+      } catch { /* ignore */ }
+      // Clear sidebar badge after loading the timestamp we'll use to display alerts
+      apiRequest("POST", "/api/alerts/mark-read").then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
+      }).catch(() => {});
+    });
   }, []);
 
   const deltaUrl = `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`;
@@ -978,8 +1178,12 @@ export default function Alerts() {
   function handleMarkAllSeen() {
     const now = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, now);
-    window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
     setSinceParam(now);
+    window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
+    // Sync DB lastViewedAlertsAt so badge stays consistent
+    apiRequest("POST", "/api/alerts/mark-read").then(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
+    }).catch(() => {});
   }
 
   return (

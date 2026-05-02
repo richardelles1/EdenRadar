@@ -31,6 +31,26 @@ async function matchAssetsForAlert(
   alert: typeof userAlerts.$inferSelect,
   since: Date,
 ): Promise<DispatchAsset[]> {
+  // "All New Assets" template: match everything relevant, no filter conditions
+  if (alert.criteriaType === "all_new") {
+    const rows = await db
+      .select()
+      .from(ingestedAssets)
+      .where(and(gt(ingestedAssets.firstSeenAt, since), eq(ingestedAssets.relevant, true)))
+      .orderBy(desc(ingestedAssets.firstSeenAt));
+    return rows.map((a) => ({
+      id: a.id,
+      assetName: a.assetName,
+      institution: a.institution,
+      indication: a.indication,
+      modality: a.modality,
+      developmentStage: a.developmentStage,
+      summary: a.summary,
+      sourceUrl: a.sourceUrl,
+      firstSeenAt: a.firstSeenAt,
+    }));
+  }
+
   const trimmedQuery = alert.query?.trim();
 
   const rows = await db
@@ -114,7 +134,7 @@ async function evaluateAlerts(): Promise<void> {
     alerts = await db
       .select()
       .from(userAlerts)
-      .where(isNotNull(userAlerts.userId));
+      .where(and(isNotNull(userAlerts.userId), eq(userAlerts.enabled, true)));
   } catch (err: any) {
     console.error("[alertMailer] Failed to query user_alerts table:", err?.message,
       "— table may not exist yet; will retry next cycle");
@@ -176,6 +196,13 @@ async function evaluateAlerts(): Promise<void> {
   for (const alert of alerts) {
     if (!alert.userId) continue;
 
+    // Skip paused/disabled alerts
+    if (alert.enabled === false) {
+      console.log(`[alertMailer] Alert ${alert.id} — skip: disabled`);
+      skippedCount++;
+      continue;
+    }
+
     // Only send to users who have opted in to email digest
     const profile = profileMap.get(alert.userId);
     if (!profile) {
@@ -230,7 +257,8 @@ async function evaluateAlerts(): Promise<void> {
       continue;
     }
 
-    const alertName = alert.name ?? "Unnamed Alert";
+    const alertName = alert.name?.trim() ||
+      `My Alert — ${new Date(alert.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`;
     const totalCount = matched.length;
     // Show up to 3 sample assets in the digest; remaining count shown in a footer CTA
     const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);

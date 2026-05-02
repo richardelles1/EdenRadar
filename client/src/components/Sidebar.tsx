@@ -18,17 +18,9 @@ import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { SavedAsset } from "@shared/schema";
-import { useState, useEffect } from "react";
-
-const STORAGE_KEY = "edenLastSeenAlerts";
+import { useState } from "react";
 
 type SavedAssetsResponse = { assets: SavedAsset[] };
-
-interface AlertDeltaResponse {
-  newAssets: { total: number };
-  newConcepts: { total: number };
-  newProjects: { total: number };
-}
 
 const NAV_ITEMS = [
   { href: "/scout", label: "Scout", icon: Search },
@@ -44,36 +36,18 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { signOut } = useAuth();
   const [location] = useLocation();
 
-  const [sinceParam, setSinceParam] = useState(() =>
-    typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : ""
-  );
-
-  useEffect(() => {
-    const handler = () => {
-      setSinceParam(localStorage.getItem(STORAGE_KEY) ?? "");
-    };
-    window.addEventListener("eden-alerts-seen", handler);
-    return () => window.removeEventListener("eden-alerts-seen", handler);
-  }, []);
-
-  const deltaSidebarUrl = sinceParam
-    ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
-    : "/api/industry/alerts/delta";
-
   const { data: savedData } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
   });
 
-  const { data: alertData } = useQuery<AlertDeltaResponse>({
-    queryKey: [deltaSidebarUrl],
+  const { data: unreadData } = useQuery<{ count: number }>({
+    queryKey: ["/api/alerts/unread-count"],
     staleTime: 5 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
   });
 
   const savedCount = savedData?.assets?.length ?? 0;
-  const alertCount =
-    (alertData?.newAssets.total ?? 0) +
-    (alertData?.newConcepts.total ?? 0) +
-    (alertData?.newProjects.total ?? 0);
+  const alertCount = unreadData?.count ?? 0;
 
   async function handleSignOut() {
     await signOut();

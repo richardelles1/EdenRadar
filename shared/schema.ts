@@ -608,6 +608,8 @@ export const userAlerts = pgTable("user_alerts", {
   modalities: text("modalities").array(),
   stages: text("stages").array(),
   institutions: text("institutions").array(),
+  criteriaType: text("criteria_type").notNull().default("custom"),
+  enabled: boolean("enabled").notNull().default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   lastAlertSentAt: timestamp("last_alert_sent_at"),
 });

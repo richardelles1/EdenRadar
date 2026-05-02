@@ -6685,17 +6685,24 @@ If a field cannot be determined, use "N/A".`
 
   app.post("/api/alerts", async (req, res) => {
     try {
-      const { query, modalities, stages, institutions, name } = req.body ?? {};
-      if (!query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
+      const { query, modalities, stages, institutions, name, criteriaType, enabled } = req.body ?? {};
+      const trimmedName = (name as string | undefined)?.trim();
+      if (!trimmedName) {
+        return res.status(400).json({ error: "Alert name is required" });
+      }
+      const isAllNew = criteriaType === "all_new";
+      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
       const userId = await tryGetUserId(req);
       const alert = await storage.createUserAlert({
-        name: name ?? null,
-        query: query ?? null,
-        modalities: modalities ?? null,
-        stages: stages ?? null,
-        institutions: institutions ?? null,
+        name: trimmedName,
+        query: isAllNew ? null : (query ?? null),
+        modalities: isAllNew ? null : (modalities ?? null),
+        stages: isAllNew ? null : (stages ?? null),
+        institutions: isAllNew ? null : (institutions ?? null),
+        criteriaType: criteriaType ?? null,
+        enabled: enabled !== false,
       }, userId);
       res.status(201).json(alert);
     } catch (err: any) {
@@ -6716,22 +6723,45 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  app.patch("/api/alerts/:id/enabled", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.status(401).json({ error: "Unauthorized" });
+      const { enabled } = req.body ?? {};
+      if (typeof enabled !== "boolean") return res.status(400).json({ error: "enabled must be a boolean" });
+      const updated = await storage.updateUserAlert(id, userId, { enabled });
+      if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.put("/api/alerts/:id", async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      const { query, modalities, stages, institutions, name } = req.body ?? {};
-      if (!query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
+      const { query, modalities, stages, institutions, name, criteriaType, enabled } = req.body ?? {};
+      const trimmedName = (name as string | undefined)?.trim();
+      if (!trimmedName) {
+        return res.status(400).json({ error: "Alert name is required" });
+      }
+      const isAllNew = criteriaType === "all_new";
+      if (!isAllNew && !query && (!modalities?.length) && (!stages?.length) && (!institutions?.length)) {
         return res.status(400).json({ error: "At least one filter must be set" });
       }
       const updated = await storage.updateUserAlert(id, userId, {
-        name: name ?? null,
-        query: query ?? null,
-        modalities: modalities ?? null,
-        stages: stages ?? null,
-        institutions: institutions ?? null,
+        name: trimmedName,
+        query: isAllNew ? null : (query ?? null),
+        modalities: isAllNew ? null : (modalities ?? null),
+        stages: isAllNew ? null : (stages ?? null),
+        institutions: isAllNew ? null : (institutions ?? null),
+        criteriaType: criteriaType ?? null,
+        ...(enabled !== undefined ? { enabled: enabled !== false } : {}),
       });
       if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });
       res.json(updated);
@@ -6743,10 +6773,15 @@ If a field cannot be determined, use "N/A".`
   // ── Shared SQL alert predicate builder ───────────────────────────────────
   // Mirrors the logic in server/lib/alertMailer.ts matchAssetsForAlert so that
   // in-app display and email delivery use identical matching semantics.
+  // When criteriaType === "all_new", all filter conditions are skipped so every
+  // relevant asset matches (the "All New Assets" catch-all alert type).
   function buildAlertWhere(
-    alert: { query?: string | null; modalities?: string[] | null; stages?: string[] | null; institutions?: string[] | null },
+    alert: { query?: string | null; modalities?: string[] | null; stages?: string[] | null; institutions?: string[] | null; criteriaType?: string | null },
     extraConditions?: ReturnType<typeof and>[],
   ) {
+    if (alert.criteriaType === "all_new") {
+      return and(eq(ingestedAssets.relevant, true), ...(extraConditions ?? []));
+    }
     const trimmedQuery = alert.query?.trim();
     return and(
       eq(ingestedAssets.relevant, true),
@@ -6767,11 +6802,13 @@ If a field cannot be determined, use "N/A".`
 
   // ── GET /api/alerts/delta — user-scoped, grouped by alert ────────────────
   // Uses identical SQL predicates to alertMailer.ts so in-app and email counts agree.
+  // Only counts enabled alerts (enabled = true).
   app.get("/api/alerts/delta", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
       if (!userId) return res.status(401).json({ error: "Unauthorized" });
-      const alerts = await storage.listUserAlerts(userId);
+      const allAlerts = await storage.listUserAlerts(userId);
+      const alerts = allAlerts.filter((a) => a.enabled !== false);
       const sinceParam = req.query.since as string | undefined;
       const since = sinceParam && !isNaN(Date.parse(sinceParam))
         ? new Date(sinceParam)
@@ -6878,8 +6915,8 @@ If a field cannot be determined, use "N/A".`
 
   // ── GET /api/alerts/unread-count — backend-driven badge count ────────────
   // Returns the number of distinct ingested assets matching any of the user's
-  // saved alerts that have arrived since last_viewed_alerts_at. Uses the same
-  // buildAlertWhere SQL predicate as alertMailer for accuracy.
+  // enabled saved alerts that have arrived since last_viewed_alerts_at. Uses the
+  // same buildAlertWhere SQL predicate as alertMailer for accuracy.
   app.get("/api/alerts/unread-count", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
@@ -6898,7 +6935,7 @@ If a field cannot be determined, use "N/A".`
       const userAlertsList = await db
         .select()
         .from(userAlerts)
-        .where(eq(userAlerts.userId, userId))
+        .where(and(eq(userAlerts.userId, userId), eq(userAlerts.enabled, true)))
         .orderBy(desc(userAlerts.createdAt));
 
       if (userAlertsList.length === 0) return res.json({ count: 0 });
@@ -6919,20 +6956,41 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // ── GET /api/alerts/viewed-since — return the DB-side last-viewed timestamp ─
+  // Frontend uses this as the authoritative sinceParam so badge and page counts agree.
+  app.get("/api/alerts/viewed-since", async (req, res) => {
+    try {
+      const userId = await tryGetUserId(req);
+      if (!userId) return res.json({ since: null });
+
+      const [profileRow] = await db
+        .select({ lastViewedAlertsAt: industryProfiles.lastViewedAlertsAt })
+        .from(industryProfiles)
+        .where(eq(industryProfiles.userId, userId))
+        .limit(1);
+
+      res.json({ since: profileRow?.lastViewedAlertsAt?.toISOString() ?? null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── POST /api/alerts/mark-read — clear the unread badge ──────────────────
   // Updates last_viewed_alerts_at on industry_profiles so subsequent calls to
   // /api/alerts/unread-count return 0 until new assets arrive.
+  // Returns the timestamp used so the client can sync its local sinceParam.
   app.post("/api/alerts/mark-read", async (req, res) => {
     try {
       const userId = await tryGetUserId(req);
-      if (!userId) return res.json({ ok: true });
+      if (!userId) return res.json({ ok: true, lastViewedAt: null });
 
+      const now = new Date();
       await db
         .update(industryProfiles)
-        .set({ lastViewedAlertsAt: new Date() })
+        .set({ lastViewedAlertsAt: now })
         .where(eq(industryProfiles.userId, userId));
 
-      res.json({ ok: true });
+      res.json({ ok: true, lastViewedAt: now.toISOString() });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -6959,6 +7017,7 @@ If a field cannot be determined, use "N/A".`
     alert: UserAlert,
     asset: { assetName: string; institution: string | null; modality: string | null; developmentStage: string | null; summary?: string | null; indication?: string | null; target?: string | null }
   ): boolean {
+    if (alert.criteriaType === "all_new") return true;
     const hasInst = (alert.institutions?.length ?? 0) > 0;
     const hasMod  = (alert.modalities?.length ?? 0) > 0;
     const hasSt   = (alert.stages?.length ?? 0) > 0;
