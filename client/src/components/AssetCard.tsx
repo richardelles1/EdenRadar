@@ -288,6 +288,16 @@ export function AssetCard({ asset, isSaved, onSave, onUnsave }: AssetCardProps) 
             {asset.asset_name !== "unknown" ? asset.asset_name : "Unnamed Asset"}
           </h3>
 
+          {/* Sparse data warning */}
+          {asset.dataSparse && (
+            <p
+              className="text-[10px] text-amber-600 dark:text-amber-400 flex items-center gap-1 mt-1"
+              data-testid={`text-sparse-${asset.id}`}
+            >
+              <span aria-hidden="true">⚠</span> Insufficient source data
+            </p>
+          )}
+
           {/* Metadata pill row — stage + modality */}
           {hasPills && (
             <div className="flex flex-wrap gap-1 mt-2">

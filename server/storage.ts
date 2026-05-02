@@ -57,6 +57,7 @@ export type RetrievedAsset = {
   similarity: number;
   stageChangedAt?: Date | null;
   previousStage?: string | null;
+  dataSparse?: boolean;
 };
 
 export interface IStorage {
@@ -2404,6 +2405,7 @@ export class DatabaseStorage implements IStorage {
         mechanism_of_action, innovation_claim, unmet_need, comparable_drugs,
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
+        data_sparse,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
@@ -2433,6 +2435,7 @@ export class DatabaseStorage implements IStorage {
       technologyId: typeof r.technology_id === "string" && r.technology_id ? r.technology_id : null,
       stageChangedAt: r.stage_changed_at instanceof Date ? r.stage_changed_at : r.stage_changed_at ? new Date(String(r.stage_changed_at)) : null,
       previousStage: typeof r.previous_stage === "string" && r.previous_stage ? r.previous_stage : null,
+      dataSparse: r.data_sparse === true,
       similarity: 0,
     }));
   }

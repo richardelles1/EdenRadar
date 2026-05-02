@@ -58,6 +58,7 @@ export interface ScoredAsset {
   stage_changed_at?: string | null;
   previous_stage?: string | null;
   signals: RawSignal[];
+  dataSparse?: boolean;
 }
 
 export interface BuyerProfile {

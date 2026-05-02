@@ -131,7 +131,7 @@ export function applyRulesToAsset(asset: {
   developmentStage: string;
   ipType: string | null;
   licensingReadiness: string | null;
-  indication: string;
+  indication: string | null;
   humanVerified: Record<string, boolean> | null;
 }): { fields: Record<string, string>; dataSparse: boolean } {
   const text = [(asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
@@ -153,7 +153,8 @@ export function applyRulesToAsset(asset: {
       const val = applyRules(LICENSING_RULES, text);
       if (val) fields.licensingReadiness = val;
     }
-    if (isDrug && !humanV.indication && asset.indication === "unknown") {
+    // Handle both null and "unknown" — null arises from schema default after migration
+    if (isDrug && !humanV.indication && (!asset.indication || asset.indication === "unknown")) {
       const val = applyRules(INDICATION_RULES, text);
       if (val) fields.indication = val;
     }

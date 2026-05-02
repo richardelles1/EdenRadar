@@ -481,13 +481,19 @@ export const arizonaScraper: InstitutionScraper = {
       page++;
     } while (page < nbPages);
 
-    // Depth-fetch: for listings where Algolia returned a short description (<150 chars),
-    // attempt to fetch the individual listing page and extract a fuller meta description.
-    const SHORT_DESC = 150;
+    // Depth-fetch: for listings without full descriptions, fetch individual listing pages
+    // and parse labeled content sections (Invention, Background, Applications, Advantages,
+    // Classifications) that Inteum TechnologyPublisher renders in the HTML.
+    const DEPTH_THRESHOLD = 300;
     const DEPTH_CONCURRENCY = 5;
+    // Section labels to extract, in priority order (Inteum TP standard headings)
+    const SECTION_LABELS = [
+      "Invention", "Background", "Application", "Advantage",
+      "Classification", "Description", "Overview", "Abstract",
+    ];
     const needsDepth = results
       .map((r, i) => ({ r, i }))
-      .filter(({ r }) => (r.description ?? "").length < SHORT_DESC);
+      .filter(({ r }) => (r.description ?? "").length < DEPTH_THRESHOLD);
     if (needsDepth.length > 0) {
       let di = 0;
       const depthWorker = async () => {
@@ -496,16 +502,41 @@ export const arizonaScraper: InstitutionScraper = {
           if (!item) continue;
           try {
             const pr = await fetch(item.r.url, {
-              signal: AbortSignal.timeout(5000),
+              signal: AbortSignal.timeout(6000),
               headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
             });
             if (!pr.ok) continue;
             const html = await pr.text();
-            const m =
+
+            // Try extracting labeled content sections first (primary approach)
+            const sectionParts: string[] = [];
+            for (const label of SECTION_LABELS) {
+              // Match heading with label, then capture text content of the next block
+              const re = new RegExp(
+                `<(?:h[2-6]|strong|b|dt)[^>]*>[^<]*${label}[^<]*<\\/(?:h[2-6]|strong|b|dt)>\\s*(?:<[^>]*>\\s*)*([^<]{30,})`,
+                "i"
+              );
+              const m = html.match(re);
+              if (m?.[1]) {
+                const text = m[1].replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim().slice(0, 600);
+                if (text.length >= 30) sectionParts.push(`${label}: ${text}`);
+              }
+            }
+
+            if (sectionParts.length > 0) {
+              const combined = sectionParts.join(" | ");
+              if (combined.length > (item.r.description ?? "").length) {
+                results[item.i] = { ...results[item.i], description: combined };
+                continue;
+              }
+            }
+
+            // Fallback: meta description tag
+            const metaMatch =
               html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{50,})["']/i) ??
               html.match(/<meta[^>]+content=["']([^"']{50,})["'][^>]+name=["']description["']/i);
-            if (m?.[1] && m[1].length > (item.r.description ?? "").length) {
-              results[item.i] = { ...results[item.i], description: m[1].trim() };
+            if (metaMatch?.[1] && metaMatch[1].length > (item.r.description ?? "").length) {
+              results[item.i] = { ...results[item.i], description: metaMatch[1].trim() };
             }
           } catch { /* depth fetch failed — keep existing description */ }
         }
