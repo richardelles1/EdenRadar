@@ -81,21 +81,18 @@ type AdminDealMessage = {
   id: number;
   dealId: number;
   senderId: string;
-  senderRole: string;
   body: string;
-  createdAt: string;
+  sentAt: string;
 };
 
 type AdminDealDocument = {
   id: number;
   dealId: number;
   uploaderId: string;
-  uploaderRole: string;
   fileName: string;
-  fileSize: number;
-  mimeType: string;
-  signedUrl: string;
-  createdAt: string;
+  fileSize: number | null;
+  fileUrl: string;
+  uploadedAt: string;
 };
 
 function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
@@ -118,6 +115,18 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
 
   const loading = msgsLoading || docsLoading;
 
+  function senderLabel(senderId: string) {
+    if (senderId === deal.sellerId) return "Seller";
+    if (senderId === deal.buyerId) return "Buyer";
+    return "Party";
+  }
+
+  function uploaderLabel(uploaderId: string) {
+    if (uploaderId === deal.sellerId) return "Seller";
+    if (uploaderId === deal.buyerId) return "Buyer";
+    return "Party";
+  }
+
   return (
     <tr>
       <td colSpan={7} className="px-0 pb-0">
@@ -138,8 +147,8 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
                 {messages.map(m => (
                   <div key={m.id} className="rounded-lg bg-card border border-border p-2.5 space-y-0.5" data-testid={`admin-deal-msg-${m.id}`}>
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-semibold text-foreground capitalize">{m.senderRole}</span>
-                      <span className="text-[10px] text-muted-foreground/60">{new Date(m.createdAt).toLocaleString()}</span>
+                      <span className="text-[10px] font-semibold text-foreground">{senderLabel(m.senderId)}</span>
+                      <span className="text-[10px] text-muted-foreground/60">{new Date(m.sentAt).toLocaleString()}</span>
                     </div>
                     <p className="text-xs text-muted-foreground leading-relaxed">{m.body}</p>
                   </div>
@@ -160,7 +169,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
                 {docs.map(d => (
                   <a
                     key={d.id}
-                    href={d.signedUrl}
+                    href={d.fileUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="flex items-center gap-2 rounded-lg border border-border bg-card hover:bg-muted/40 px-2.5 py-2 transition-colors"
@@ -168,7 +177,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
                   >
                     <FileText className="w-3 h-3 text-muted-foreground shrink-0" />
                     <span className="text-xs text-foreground truncate flex-1">{d.fileName}</span>
-                    <span className="text-[10px] text-muted-foreground/60 capitalize shrink-0">{d.uploaderRole}</span>
+                    <span className="text-[10px] text-muted-foreground/60 shrink-0">{uploaderLabel(d.uploaderId)}</span>
                   </a>
                 ))}
               </div>
