@@ -5888,6 +5888,7 @@ If a field cannot be determined, use "N/A".`
         const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
           type: "recovery",
           email,
+          options: { redirectTo: APP_URL },
         });
         if (linkError) {
           console.warn("[email] Could not generate password-set link:", linkError.message);
@@ -5952,6 +5953,7 @@ If a field cannot be determined, use "N/A".`
       const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
         type: "recovery",
         email: member.email,
+        options: { redirectTo: APP_URL },
       });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
@@ -6139,7 +6141,7 @@ If a field cannot be determined, use "N/A".`
 
       let setPasswordLink: string | undefined;
       try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email });
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: APP_URL } });
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
@@ -6199,7 +6201,7 @@ If a field cannot be determined, use "N/A".`
 
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email });
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: APP_URL } });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
 

@@ -9,7 +9,7 @@ export interface OrgContext extends Organization {
 export function useOrg() {
   return useQuery<OrgContext | null>({
     queryKey: ["/api/industry/org"],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     select: (data) => {
       if (!data) return null;
       return { ...data, seatCount: data.members?.length ?? 0 };

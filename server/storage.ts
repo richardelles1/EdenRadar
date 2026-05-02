@@ -3122,6 +3122,23 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteUserAccount(userId: string): Promise<void> {
+    // Find all orgs this user belongs to, then check which ones they are the sole member of.
+    // Those sole-member orgs should be deleted (otherwise they become orphaned with no members).
+    const userMemberships = await db
+      .select({ orgId: orgMembers.orgId })
+      .from(orgMembers)
+      .where(eq(orgMembers.userId, userId));
+
+    for (const { orgId } of userMemberships) {
+      const allMembers = await db
+        .select({ userId: orgMembers.userId })
+        .from(orgMembers)
+        .where(eq(orgMembers.orgId, orgId));
+      if (allMembers.length === 1 && allMembers[0].userId === userId) {
+        await db.delete(organizations).where(eq(organizations.id, orgId));
+      }
+    }
+
     await db.delete(orgMembers).where(eq(orgMembers.userId, userId));
     await db.delete(industryProfiles).where(eq(industryProfiles.userId, userId));
   }
