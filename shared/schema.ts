@@ -896,3 +896,57 @@ export const savedReports = pgTable("saved_reports", {
 export const insertSavedReportSchema = createInsertSchema(savedReports).omit({ id: true, createdAt: true });
 export type InsertSavedReport = z.infer<typeof insertSavedReportSchema>;
 export type SavedReport = typeof savedReports.$inferSelect;
+
+// ── EdenMarket — Deal Rooms ───────────────────────────────────────────────────
+
+export const MARKET_DEAL_STATUSES = ["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"] as const;
+export type MarketDealStatus = (typeof MARKET_DEAL_STATUSES)[number];
+
+export const marketDeals = pgTable("market_deals", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull().references(() => marketListings.id, { onDelete: "cascade" }),
+  eoiId: integer("eoi_id").notNull().references(() => marketEois.id, { onDelete: "cascade" }),
+  sellerId: text("seller_id").notNull(),
+  buyerId: text("buyer_id").notNull(),
+  status: text("status").notNull().default("nda_pending"),
+  sellerSignedAt: timestamp("seller_signed_at"),
+  sellerSignedName: text("seller_signed_name"),
+  buyerSignedAt: timestamp("buyer_signed_at"),
+  buyerSignedName: text("buyer_signed_name"),
+  ndaSignedAt: timestamp("nda_signed_at"),
+  successFeeInvoiceId: text("success_fee_invoice_id"),
+  successFeeDealSizeM: integer("success_fee_deal_size_m"),
+  successFeeAmount: integer("success_fee_amount"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketDealSchema = createInsertSchema(marketDeals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertMarketDeal = z.infer<typeof insertMarketDealSchema>;
+export type MarketDeal = typeof marketDeals.$inferSelect;
+
+export const marketDealDocuments = pgTable("market_deal_documents", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }),
+  uploaderId: text("uploader_id").notNull(),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url").notNull(),
+  fileSize: integer("file_size"),
+  uploadedAt: timestamp("uploaded_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketDealDocumentSchema = createInsertSchema(marketDealDocuments).omit({ id: true, uploadedAt: true });
+export type InsertMarketDealDocument = z.infer<typeof insertMarketDealDocumentSchema>;
+export type MarketDealDocument = typeof marketDealDocuments.$inferSelect;
+
+export const marketDealMessages = pgTable("market_deal_messages", {
+  id: serial("id").primaryKey(),
+  dealId: integer("deal_id").notNull().references(() => marketDeals.id, { onDelete: "cascade" }),
+  senderId: text("sender_id").notNull(),
+  body: text("body").notNull(),
+  sentAt: timestamp("sent_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketDealMessageSchema = createInsertSchema(marketDealMessages).omit({ id: true, sentAt: true });
+export type InsertMarketDealMessage = z.infer<typeof insertMarketDealMessageSchema>;
+export type MarketDealMessage = typeof marketDealMessages.$inferSelect;

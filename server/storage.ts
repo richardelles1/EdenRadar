@@ -31,6 +31,9 @@ import {
   marketListings, type MarketListing, type InsertMarketListing, type InsertMarketListingFull,
   marketEois, type MarketEoi, type InsertMarketEoi,
   marketSubscriptions, type MarketSubscription, type InsertMarketSubscription,
+  marketDeals, type MarketDeal, type InsertMarketDeal,
+  marketDealDocuments, type MarketDealDocument, type InsertMarketDealDocument,
+  marketDealMessages, type MarketDealMessage, type InsertMarketDealMessage,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -387,6 +390,23 @@ export interface IStorage {
 
   // EdenMarket — Admin stats
   getMarketAdminStats(): Promise<{ totalListings: number; pendingListings: number; activeListings: number; totalEois: number; marketSubscribers: number }>;
+
+  // EdenMarket — Deals
+  createMarketDeal(data: InsertMarketDeal): Promise<MarketDeal>;
+  getMarketDeal(id: number): Promise<MarketDeal | undefined>;
+  getMarketDealsForUser(userId: string): Promise<MarketDeal[]>;
+  getAllMarketDeals(): Promise<MarketDeal[]>;
+  updateMarketDeal(id: number, data: Partial<Omit<InsertMarketDeal, "listingId" | "eoiId" | "sellerId" | "buyerId">>): Promise<MarketDeal | undefined>;
+  getDealForEoi(eoiId: number): Promise<MarketDeal | undefined>;
+
+  // EdenMarket — Deal Documents
+  createMarketDealDocument(data: InsertMarketDealDocument): Promise<MarketDealDocument>;
+  getMarketDealDocuments(dealId: number): Promise<MarketDealDocument[]>;
+  deleteMarketDealDocument(id: number, uploaderId: string): Promise<void>;
+
+  // EdenMarket — Deal Messages
+  createMarketDealMessage(data: InsertMarketDealMessage): Promise<MarketDealMessage>;
+  getMarketDealMessages(dealId: number): Promise<MarketDealMessage[]>;
 }
 
 export type SubscriberMatchEntry = {
@@ -3393,6 +3413,72 @@ export class DatabaseStorage implements IStorage {
       totalEois: Number(eois?.count ?? 0),
       marketSubscribers: Number(subs?.count ?? 0),
     };
+  }
+
+  // ── EdenMarket — Deals ────────────────────────────────────────────────────
+
+  async createMarketDeal(data: InsertMarketDeal): Promise<MarketDeal> {
+    const [row] = await db.insert(marketDeals).values(data).returning();
+    return row;
+  }
+
+  async getMarketDeal(id: number): Promise<MarketDeal | undefined> {
+    const [row] = await db.select().from(marketDeals).where(eq(marketDeals.id, id)).limit(1);
+    return row;
+  }
+
+  async getMarketDealsForUser(userId: string): Promise<MarketDeal[]> {
+    return db.select().from(marketDeals)
+      .where(or(eq(marketDeals.sellerId, userId), eq(marketDeals.buyerId, userId)))
+      .orderBy(desc(marketDeals.createdAt));
+  }
+
+  async getAllMarketDeals(): Promise<MarketDeal[]> {
+    return db.select().from(marketDeals).orderBy(desc(marketDeals.createdAt));
+  }
+
+  async updateMarketDeal(id: number, data: Partial<Omit<InsertMarketDeal, "listingId" | "eoiId" | "sellerId" | "buyerId">>): Promise<MarketDeal | undefined> {
+    const [row] = await db.update(marketDeals)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(marketDeals.id, id))
+      .returning();
+    return row;
+  }
+
+  async getDealForEoi(eoiId: number): Promise<MarketDeal | undefined> {
+    const [row] = await db.select().from(marketDeals).where(eq(marketDeals.eoiId, eoiId)).limit(1);
+    return row;
+  }
+
+  // ── EdenMarket — Deal Documents ───────────────────────────────────────────
+
+  async createMarketDealDocument(data: InsertMarketDealDocument): Promise<MarketDealDocument> {
+    const [row] = await db.insert(marketDealDocuments).values(data).returning();
+    return row;
+  }
+
+  async getMarketDealDocuments(dealId: number): Promise<MarketDealDocument[]> {
+    return db.select().from(marketDealDocuments)
+      .where(eq(marketDealDocuments.dealId, dealId))
+      .orderBy(desc(marketDealDocuments.uploadedAt));
+  }
+
+  async deleteMarketDealDocument(id: number, uploaderId: string): Promise<void> {
+    await db.delete(marketDealDocuments)
+      .where(and(eq(marketDealDocuments.id, id), eq(marketDealDocuments.uploaderId, uploaderId)));
+  }
+
+  // ── EdenMarket — Deal Messages ────────────────────────────────────────────
+
+  async createMarketDealMessage(data: InsertMarketDealMessage): Promise<MarketDealMessage> {
+    const [row] = await db.insert(marketDealMessages).values(data).returning();
+    return row;
+  }
+
+  async getMarketDealMessages(dealId: number): Promise<MarketDealMessage[]> {
+    return db.select().from(marketDealMessages)
+      .where(eq(marketDealMessages.dealId, dealId))
+      .orderBy(marketDealMessages.sentAt);
   }
 }
 

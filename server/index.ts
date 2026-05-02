@@ -1114,6 +1114,55 @@ async function createSavedReportsTable() {
   }
 }
 
+// ── Ensure market_deals tables exist ──────────────────────────────────────────
+async function createMarketDealsTables() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_deals (
+        id                      SERIAL PRIMARY KEY,
+        listing_id              INTEGER NOT NULL REFERENCES market_listings(id) ON DELETE CASCADE,
+        eoi_id                  INTEGER NOT NULL REFERENCES market_eois(id) ON DELETE CASCADE,
+        seller_id               TEXT NOT NULL,
+        buyer_id                TEXT NOT NULL,
+        status                  TEXT NOT NULL DEFAULT 'nda_pending',
+        seller_signed_at        TIMESTAMP,
+        seller_signed_name      TEXT,
+        buyer_signed_at         TIMESTAMP,
+        buyer_signed_name       TEXT,
+        nda_signed_at           TIMESTAMP,
+        success_fee_invoice_id  TEXT,
+        success_fee_deal_size_m INTEGER,
+        success_fee_amount      INTEGER,
+        created_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_deal_documents (
+        id           SERIAL PRIMARY KEY,
+        deal_id      INTEGER NOT NULL REFERENCES market_deals(id) ON DELETE CASCADE,
+        uploader_id  TEXT NOT NULL,
+        file_name    TEXT NOT NULL,
+        file_url     TEXT NOT NULL,
+        file_size    INTEGER,
+        uploaded_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_deal_messages (
+        id          SERIAL PRIMARY KEY,
+        deal_id     INTEGER NOT NULL REFERENCES market_deals(id) ON DELETE CASCADE,
+        sender_id   TEXT NOT NULL,
+        body        TEXT NOT NULL,
+        sent_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    log("[startup] market_deals tables ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] market_deals tables check: ${err?.message}`, "startup");
+  }
+}
+
 // ── One-time migration: relabel old saved_asset status values ─────────────────
 // Old constraint: ('viewing', 'evaluating', 'contacted')
 // New values:     ('watching', 'evaluating', 'in_discussion', 'on_hold', 'passed')
@@ -1281,6 +1330,8 @@ async function migrateAssetStatusValues() {
       addTrialReminderSentAtColumn().catch(() => {});
       // ── Ensure saved_reports table exists (idempotent) ──────────────────
       createSavedReportsTable().catch(() => {});
+      // ── Ensure market_deals tables exist (idempotent) ────────────────────
+      createMarketDealsTables().catch(() => {});
       // ── Trial-ending reminder emails (every 6h, 25h window) ────────────
       scheduleTrialReminderCheck();
       // ── Backfill industry_profiles for Supabase digest subscribers ───────

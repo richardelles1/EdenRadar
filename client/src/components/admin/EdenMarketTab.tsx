@@ -5,7 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff, MessageSquare, Building2 } from "lucide-react";
+import {
+  ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff,
+  MessageSquare, Building2, Shield, DollarSign, AlertTriangle,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AdminStats = {
@@ -55,12 +58,50 @@ type SubscriberOrg = {
   createdAt: string;
 };
 
+type AdminDeal = {
+  id: number;
+  listingId: number;
+  eoiId: number;
+  sellerId: string;
+  buyerId: string;
+  status: string;
+  sellerSignedAt: string | null;
+  buyerSignedAt: string | null;
+  ndaSignedAt: string | null;
+  successFeeInvoiceId: string | null;
+  successFeeDealSizeM: number | null;
+  successFeeAmount: number | null;
+  createdAt: string;
+  assetLabel: string;
+  therapeuticArea: string;
+};
+
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
   pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
   active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   paused: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
   closed: "bg-muted text-muted-foreground border-border",
+};
+
+const DEAL_STATUS_LABELS: Record<string, string> = {
+  nda_pending: "NDA Pending",
+  nda_signed: "NDA Signed",
+  due_diligence: "Due Diligence",
+  term_sheet: "Term Sheet",
+  loi: "LOI",
+  closed: "Closed",
+  paused: "Paused",
+};
+
+const DEAL_STATUS_COLORS: Record<string, string> = {
+  nda_pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+  nda_signed: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+  due_diligence: "bg-violet-500/10 text-violet-700 dark:text-violet-400 border-violet-500/20",
+  term_sheet: "bg-orange-500/10 text-orange-700 dark:text-orange-400 border-orange-500/20",
+  loi: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+  closed: "bg-emerald-600/10 text-emerald-800 dark:text-emerald-300 border-emerald-600/20",
+  paused: "bg-muted text-muted-foreground border-border",
 };
 
 function StatCard({ icon: Icon, label, value, color }: {
@@ -83,12 +124,86 @@ function StatCard({ icon: Icon, label, value, color }: {
 const ADMIN_KEY = "eden-admin-pw";
 const adminHeaders = () => ({ "x-admin-password": localStorage.getItem(ADMIN_KEY) ?? "" });
 
+function SuccessFeeModal({ deal, onClose }: { deal: AdminDeal; onClose: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [dealSize, setDealSize] = useState("");
+
+  const sizeM = parseInt(dealSize, 10);
+  let feeAmount = 0;
+  if (!isNaN(sizeM)) {
+    if (sizeM <= 5) feeAmount = 10000;
+    else if (sizeM <= 50) feeAmount = 30000;
+    else feeAmount = 50000;
+  }
+
+  const { mutate: generateInvoice, isPending } = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/invoice`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...adminHeaders() },
+        body: JSON.stringify({ dealSizeM: sizeM }),
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/admin/market/deals"] });
+      toast({ title: "Invoice generated", description: data.invoiceId ? `Stripe invoice: ${data.invoiceId}` : "Recorded locally (Stripe not configured)." });
+      onClose();
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-card border border-border rounded-xl p-6 w-full max-w-sm shadow-xl space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="text-base font-semibold text-foreground">Generate Success Fee Invoice</h3>
+        <p className="text-xs text-muted-foreground">Deal: <strong>{deal.assetLabel}</strong> #{deal.id}</p>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-foreground">Deal size (USD millions)</label>
+          <Input
+            type="number"
+            placeholder="e.g. 25"
+            value={dealSize}
+            onChange={e => setDealSize(e.target.value)}
+            className="h-8 text-xs"
+            data-testid="invoice-deal-size"
+          />
+        </div>
+        {!isNaN(sizeM) && sizeM > 0 && (
+          <div className="rounded-lg bg-violet-500/5 border border-violet-500/20 p-3 text-xs space-y-1">
+            <p className="font-semibold text-foreground">Fee tier: <span className="text-violet-600">${(feeAmount / 1000).toFixed(0)}k</span></p>
+            <p className="text-muted-foreground">
+              {sizeM <= 5 ? "≤ $5M deal → $10k fee" : sizeM <= 50 ? "$5M–$50M deal → $30k fee" : "> $50M deal → $50k fee"}
+            </p>
+          </div>
+        )}
+        <div className="flex gap-2 pt-2">
+          <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={onClose}>Cancel</Button>
+          <Button
+            size="sm"
+            className="flex-1 text-xs text-white"
+            style={{ background: "hsl(271 81% 55%)" }}
+            disabled={isPending || isNaN(sizeM) || sizeM <= 0}
+            onClick={() => generateInvoice()}
+            data-testid="invoice-generate-button"
+          >
+            {isPending ? "Generating…" : "Generate Invoice"}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function EdenMarketTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeSection, setActiveSection] = useState<"listings" | "eois" | "subscribers">("listings");
+  const [activeSection, setActiveSection] = useState<"listings" | "eois" | "subscribers" | "deals">("listings");
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
+  const [invoiceDeal, setInvoiceDeal] = useState<AdminDeal | null>(null);
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/market/stats"],
@@ -132,6 +247,16 @@ export function EdenMarketTab() {
     enabled: activeSection === "subscribers",
   });
 
+  const { data: deals = [], isLoading: dealsLoading } = useQuery<AdminDeal[]>({
+    queryKey: ["/api/admin/market/deals"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/market/deals", { headers: adminHeaders() });
+      if (!res.ok) throw new Error("Failed to load deals");
+      return res.json();
+    },
+    enabled: activeSection === "deals",
+  });
+
   const { mutate: updateListing, isPending: updating } = useMutation({
     mutationFn: async ({ id, status, adminNote }: { id: number; status: string; adminNote?: string }) => {
       const res = await fetch(`/api/admin/market/listings/${id}`, {
@@ -162,8 +287,13 @@ export function EdenMarketTab() {
     updateListing({ id, status: "paused", adminNote: noteInputs[id] ?? undefined });
   }
 
+  const closedDeals = deals.filter(d => d.status === "closed");
+  const loiDeals = deals.filter(d => d.status === "loi");
+
   return (
     <div className="space-y-6">
+      {invoiceDeal && <SuccessFeeModal deal={invoiceDeal} onClose={() => setInvoiceDeal(null)} />}
+
       {/* Stats */}
       {statsLoading ? (
         <div className="flex items-center justify-center py-8">
@@ -180,40 +310,32 @@ export function EdenMarketTab() {
       )}
 
       {/* Section toggle */}
-      <div className="flex gap-2 border-b border-border">
-        <button
-          onClick={() => setActiveSection("listings")}
-          className={cn(
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-            activeSection === "listings" ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          data-testid="admin-market-listings-tab"
-        >
-          <ShoppingBag className="w-3.5 h-3.5 inline mr-1.5" />
-          Listings
-        </button>
-        <button
-          onClick={() => setActiveSection("eois")}
-          className={cn(
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-            activeSection === "eois" ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          data-testid="admin-market-eois-tab"
-        >
-          <FileText className="w-3.5 h-3.5 inline mr-1.5" />
-          EOIs
-        </button>
-        <button
-          onClick={() => setActiveSection("subscribers")}
-          className={cn(
-            "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
-            activeSection === "subscribers" ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
-          )}
-          data-testid="admin-market-subscribers-tab"
-        >
-          <Building2 className="w-3.5 h-3.5 inline mr-1.5" />
-          Subscribers
-        </button>
+      <div className="flex gap-2 border-b border-border overflow-x-auto">
+        {(["listings", "eois", "deals", "subscribers"] as const).map(section => {
+          const icons = {
+            listings: <ShoppingBag className="w-3.5 h-3.5 inline mr-1.5" />,
+            eois: <FileText className="w-3.5 h-3.5 inline mr-1.5" />,
+            deals: <Shield className="w-3.5 h-3.5 inline mr-1.5" />,
+            subscribers: <Building2 className="w-3.5 h-3.5 inline mr-1.5" />,
+          };
+          const labels = { listings: "Listings", eois: "EOIs", deals: "Deals", subscribers: "Subscribers" };
+          return (
+            <button
+              key={section}
+              onClick={() => setActiveSection(section)}
+              className={cn(
+                "px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap shrink-0",
+                activeSection === section ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              data-testid={`admin-market-${section}-tab`}
+            >
+              {icons[section]}{labels[section]}
+              {section === "deals" && (closedDeals.length + loiDeals.length > 0) && (
+                <span className="ml-1.5 text-[10px] bg-amber-500 text-white rounded-full px-1.5 py-0.5">{closedDeals.length + loiDeals.length}</span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {activeSection === "listings" && (
@@ -392,6 +514,101 @@ export function EdenMarketTab() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {activeSection === "deals" && (
+        <div className="space-y-4">
+          {(closedDeals.length > 0 || loiDeals.length > 0) && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3 flex items-center gap-2 text-xs text-amber-700 dark:text-amber-400">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              <span>
+                {closedDeals.length} closed deal{closedDeals.length !== 1 ? "s" : ""}
+                {loiDeals.length > 0 ? ` and ${loiDeals.length} LOI deal${loiDeals.length !== 1 ? "s" : ""}` : ""} may require success fee invoicing.
+              </span>
+            </div>
+          )}
+
+          {dealsLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : deals.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Shield className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No deals yet</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Deal</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Asset</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">NDA</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Created</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Fee</th>
+                    <th className="text-right px-4 py-2.5 text-muted-foreground font-medium">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {deals.map(deal => (
+                    <tr key={deal.id} className="hover:bg-muted/20 transition-colors" data-testid={`admin-deal-row-${deal.id}`}>
+                      <td className="px-4 py-2.5 font-mono text-muted-foreground">#{deal.id}</td>
+                      <td className="px-4 py-2.5">
+                        <span className="font-medium text-foreground truncate max-w-32 block">{deal.assetLabel}</span>
+                        <span className="text-muted-foreground/60 text-[10px]">{deal.therapeuticArea}</span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge variant="outline" className={cn("text-[10px]", DEAL_STATUS_COLORS[deal.status] ?? "border-border text-muted-foreground")}>
+                          {DEAL_STATUS_LABELS[deal.status] ?? deal.status}
+                        </Badge>
+                        {(deal.status === "loi" || deal.status === "closed") && (
+                          <AlertTriangle className="w-3 h-3 text-amber-500 inline ml-1" />
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5">
+                        {deal.ndaSignedAt ? (
+                          <span className="text-emerald-600 flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> Signed
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Clock className="w-3 h-3" /> Pending
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{new Date(deal.createdAt).toLocaleDateString()}</td>
+                      <td className="px-4 py-2.5">
+                        {deal.successFeeAmount ? (
+                          <span className="text-emerald-600">${(deal.successFeeAmount / 1000).toFixed(0)}k</span>
+                        ) : (
+                          <span className="text-muted-foreground/60">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">
+                        {!deal.successFeeInvoiceId && (deal.status === "closed" || deal.status === "loi") && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 text-[10px] gap-1 text-violet-600 border-violet-500/30 px-2"
+                            onClick={() => setInvoiceDeal(deal)}
+                            data-testid={`admin-deal-invoice-${deal.id}`}
+                          >
+                            <DollarSign className="w-3 h-3" /> Invoice
+                          </Button>
+                        )}
+                        {deal.successFeeInvoiceId && (
+                          <span className="text-[10px] text-muted-foreground font-mono">{deal.successFeeInvoiceId.slice(0, 12)}…</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

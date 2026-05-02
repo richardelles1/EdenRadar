@@ -5,7 +5,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag, ChevronDown, ChevronRight, CheckCircle2, XCircle, Shield } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
@@ -57,6 +57,7 @@ export default function MarketSellerDashboard() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [expandedEois, setExpandedEois] = useState<Record<number, boolean>>({});
+  const [acceptingId, setAcceptingId] = useState<number | null>(null);
 
   const authHeaders = {
     Authorization: `Bearer ${session!.access_token}`,
@@ -110,6 +111,43 @@ export default function MarketSellerDashboard() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/market/my-listings"] });
       toast({ title: "Listing deleted" });
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+  });
+
+  const { mutate: acceptEoi } = useMutation({
+    mutationFn: async (eoiId: number) => {
+      const res = await fetch(`/api/market/eois/${eoiId}/accept`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/market/seller/eois"] });
+      qc.invalidateQueries({ queryKey: ["/api/market/deals"] });
+      toast({ title: "EOI accepted", description: "Deal room created. Both parties have been notified." });
+      if (data?.deal?.id) {
+        navigate(`/market/deals/${data.deal.id}`);
+      }
+    },
+    onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
+    onSettled: () => setAcceptingId(null),
+  });
+
+  const { mutate: declineEoi } = useMutation({
+    mutationFn: async (eoiId: number) => {
+      const res = await fetch(`/api/market/eois/${eoiId}/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...authHeaders },
+      });
+      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/market/seller/eois"] });
+      toast({ title: "EOI declined" });
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
@@ -316,11 +354,52 @@ export default function MarketSellerDashboard() {
                             ) : (
                               <p className="text-muted-foreground/50 italic text-[10px]">Rationale hidden until accepted</p>
                             )}
-                            <div className="flex gap-4 text-muted-foreground/70">
+                            <div className="flex gap-4 text-muted-foreground/70 flex-wrap">
                               {eoi.budgetRange && <span>Budget: <span className="text-foreground">{eoi.budgetRange}</span></span>}
                               {eoi.timeline && <span>Timeline: <span className="text-foreground">{eoi.timeline}</span></span>}
                               <span className="ml-auto">{new Date(eoi.createdAt).toLocaleDateString()}</span>
                             </div>
+                            {/* Accept / Decline — only for submitted/viewed EOIs */}
+                            {(eoi.status === "submitted" || eoi.status === "viewed") && (
+                              <div className="flex gap-2 pt-1">
+                                <Button
+                                  size="sm"
+                                  className="h-6 text-[10px] gap-1 text-white px-2"
+                                  style={{ background: "hsl(142 71% 45%)" }}
+                                  onClick={() => {
+                                    setAcceptingId(eoi.id);
+                                    acceptEoi(eoi.id);
+                                  }}
+                                  disabled={acceptingId === eoi.id}
+                                  data-testid={`seller-eoi-accept-${eoi.id}`}
+                                >
+                                  <CheckCircle2 className="w-3 h-3" />
+                                  {acceptingId === eoi.id ? "Accepting…" : "Accept & Create Deal Room"}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-6 text-[10px] gap-1 text-destructive hover:text-destructive px-2"
+                                  onClick={() => {
+                                    if (confirm("Decline this EOI?")) declineEoi(eoi.id);
+                                  }}
+                                  data-testid={`seller-eoi-decline-${eoi.id}`}
+                                >
+                                  <XCircle className="w-3 h-3" /> Decline
+                                </Button>
+                              </div>
+                            )}
+                            {eoi.status === "accepted" && (
+                              <div className="pt-1">
+                                <button
+                                  className="flex items-center gap-1 text-[10px] text-violet-600 hover:underline"
+                                  onClick={() => navigate("/market/deals")}
+                                  data-testid={`seller-eoi-view-deal-${eoi.id}`}
+                                >
+                                  <Shield className="w-3 h-3" /> View deal room →
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>

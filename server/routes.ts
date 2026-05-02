@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -36,7 +36,7 @@ import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } 
 import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, APP_URL, sendEmail } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, APP_URL, sendEmail } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -9596,6 +9596,462 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       res.json(orgs);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── EdenMarket — Deal Room ────────────────────────────────────────────────────
+
+  // POST /api/market/eois/:id/accept — seller accepts an EOI, creating a deal
+  app.post("/api/market/eois/:id/accept", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const eoiId = parseInt(String(req.params.id), 10);
+      const listings = await storage.getMarketListingsBySeller(userId);
+      const listingIds = listings.map(l => l.id);
+
+      const [eoiRow] = await db.select().from(marketEois).where(eq(marketEois.id, eoiId)).limit(1);
+      if (!eoiRow) return res.status(404).json({ error: "EOI not found" });
+      if (!listingIds.includes(eoiRow.listingId)) return res.status(403).json({ error: "Not your listing" });
+      if (eoiRow.status === "declined") return res.status(400).json({ error: "EOI already declined" });
+      if (eoiRow.status === "accepted") {
+        const existing = await storage.getDealForEoi(eoiId);
+        if (existing) return res.json({ deal: existing, created: false });
+      }
+
+      // Update EOI status to accepted
+      await db.update(marketEois).set({ status: "accepted" }).where(eq(marketEois.id, eoiId));
+
+      // Create deal record
+      const deal = await storage.createMarketDeal({
+        listingId: eoiRow.listingId,
+        eoiId: eoiRow.id,
+        sellerId: userId,
+        buyerId: eoiRow.buyerId,
+        status: "nda_pending",
+      });
+
+      // Send notification emails to both parties
+      const listing = await storage.getMarketListing(eoiRow.listingId);
+      const assetLabel = listing?.blind
+        ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
+        : (listing?.assetName || `Listing #${eoiRow.listingId}`);
+      const dealUrl = `${APP_URL}/market/deals/${deal.id}`;
+
+      try {
+        const sellerOrg = await storage.getOrgForUser(userId);
+        if (sellerOrg?.billingEmail) {
+          await sendMarketMutualInterestEmail(sellerOrg.billingEmail, sellerOrg.name ?? "", dealUrl, assetLabel);
+        }
+      } catch {}
+      try {
+        const buyerOrg = await storage.getOrgForUser(eoiRow.buyerId);
+        if (buyerOrg?.billingEmail) {
+          await sendMarketMutualInterestEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", dealUrl, assetLabel);
+        }
+      } catch {}
+      try {
+        await sendEmail("admin@edenradar.com", `Deal created — #${deal.id} — ${assetLabel}`, `<p>Seller accepted EOI #${eoiId}. Deal #${deal.id} created. <a href="${APP_URL}/admin">View admin</a></p>`);
+      } catch {}
+
+      res.json({ deal, created: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/eois/:id/decline — seller declines an EOI
+  app.post("/api/market/eois/:id/decline", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const eoiId = parseInt(String(req.params.id), 10);
+      const listings = await storage.getMarketListingsBySeller(userId);
+      const listingIds = listings.map(l => l.id);
+
+      const [eoiRow] = await db.select().from(marketEois).where(eq(marketEois.id, eoiId)).limit(1);
+      if (!eoiRow) return res.status(404).json({ error: "EOI not found" });
+      if (!listingIds.includes(eoiRow.listingId)) return res.status(403).json({ error: "Not your listing" });
+
+      await db.update(marketEois).set({ status: "declined" }).where(eq(marketEois.id, eoiId));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/deals — list deals for current user
+  app.get("/api/market/deals", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const deals = await storage.getMarketDealsForUser(userId);
+      res.json(deals);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/deals/:id — get single deal room data
+  app.get("/api/market/deals/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const listing = await storage.getMarketListing(deal.listingId);
+      const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, deal.eoiId)).limit(1);
+
+      res.json({ deal, listing, eoi });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/sign-nda — sign NDA
+  app.post("/api/market/deals/:id/sign-nda", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { signedName } = z.object({ signedName: z.string().min(2) }).parse(req.body);
+      const isSeller = deal.sellerId === userId;
+      const now = new Date();
+
+      const updateData: Record<string, unknown> = {};
+      if (isSeller && !deal.sellerSignedAt) {
+        updateData.sellerSignedAt = now;
+        updateData.sellerSignedName = signedName;
+      } else if (!isSeller && !deal.buyerSignedAt) {
+        updateData.buyerSignedAt = now;
+        updateData.buyerSignedName = signedName;
+      } else {
+        return res.json({ deal, alreadySigned: true });
+      }
+
+      let updatedDeal = await storage.updateMarketDeal(dealId, updateData);
+      if (!updatedDeal) return res.status(500).json({ error: "Update failed" });
+
+      // If both have signed, unlock the deal room
+      if (updatedDeal.sellerSignedAt && updatedDeal.buyerSignedAt && !updatedDeal.ndaSignedAt) {
+        updatedDeal = await storage.updateMarketDeal(dealId, {
+          ndaSignedAt: now,
+          status: "nda_signed",
+        }) ?? updatedDeal;
+
+        // Send NDA signed emails
+        const listing = await storage.getMarketListing(deal.listingId);
+        const assetLabel = listing?.blind
+          ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
+          : (listing?.assetName || `Listing #${deal.listingId}`);
+        const dealUrl = `${APP_URL}/market/deals/${dealId}`;
+        try {
+          const sellerOrg = await storage.getOrgForUser(deal.sellerId);
+          if (sellerOrg?.billingEmail) await sendMarketNdaSignedEmail(sellerOrg.billingEmail, sellerOrg.name ?? "", dealUrl, assetLabel);
+        } catch {}
+        try {
+          const buyerOrg = await storage.getOrgForUser(deal.buyerId);
+          if (buyerOrg?.billingEmail) await sendMarketNdaSignedEmail(buyerOrg.billingEmail, buyerOrg.name ?? "", dealUrl, assetLabel);
+        } catch {}
+      }
+
+      res.json({ deal: updatedDeal, alreadySigned: false });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/market/deals/:id/status — seller updates deal status
+  app.patch("/api/market/deals/:id/status", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId) return res.status(403).json({ error: "Only seller can update status" });
+
+      const { status } = z.object({
+        status: z.enum(["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"]),
+      }).parse(req.body);
+
+      const updated = await storage.updateMarketDeal(dealId, { status });
+
+      // Alert admin on LOI or Closed
+      if (status === "loi" || status === "closed") {
+        const listing = await storage.getMarketListing(deal.listingId);
+        const label = listing?.assetName || `Listing #${deal.listingId}`;
+        try {
+          await sendEmail(
+            "admin@edenradar.com",
+            `Deal #${dealId} moved to ${status.toUpperCase()} — ${label}`,
+            `<p>Deal #${dealId} (${label}) has been moved to <strong>${status}</strong>.</p><p><a href="${APP_URL}/admin">View in admin panel</a></p>`
+          );
+        } catch {}
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/deals/:id/documents — list documents
+  app.get("/api/market/deals/:id/documents", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      const docs = await storage.getMarketDealDocuments(dealId);
+      res.json(docs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/documents — upload document
+  app.post("/api/market/deals/:id/documents", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before uploading documents" });
+
+      const multerMod = (await import("multer")).default;
+      const upload = multerMod({
+        storage: multerMod.memoryStorage(),
+        limits: { fileSize: 50 * 1024 * 1024 },
+        fileFilter: (_req, file, cb) => {
+          const allowed = ["application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/msword", "application/vnd.ms-excel"];
+          if (allowed.includes(file.mimetype) || file.originalname.match(/\.(pdf|docx|xlsx|doc|xls)$/i)) {
+            cb(null, true);
+          } else {
+            cb(new Error("Only PDF, DOCX, and XLSX files are allowed"));
+          }
+        },
+      });
+
+      await new Promise<void>((resolve, reject) => {
+        upload.single("file")(req as any, res as any, (err) => { if (err) reject(err); else resolve(); });
+      });
+
+      const file = (req as any).file;
+      if (!file) return res.status(400).json({ error: "No file uploaded" });
+
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (!sbUrl || !sbServiceKey) return res.status(503).json({ error: "Storage not configured" });
+
+      const { createClient } = await import("@supabase/supabase-js");
+      const adminClient = createClient(sbUrl, sbServiceKey);
+      const ext = file.originalname.split(".").pop() ?? "bin";
+      const path = `deal-${dealId}/${Date.now()}-${userId.slice(0, 8)}.${ext}`;
+
+      const { error: uploadError } = await adminClient.storage
+        .from("market-deal-docs")
+        .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
+
+      if (uploadError) {
+        // If bucket doesn't exist, create it and retry
+        if (uploadError.message?.includes("not found") || uploadError.message?.includes("Bucket")) {
+          await adminClient.storage.createBucket("market-deal-docs", { public: false });
+          const { error: retryErr } = await adminClient.storage
+            .from("market-deal-docs")
+            .upload(path, file.buffer, { contentType: file.mimetype, upsert: false });
+          if (retryErr) return res.status(500).json({ error: retryErr.message });
+        } else {
+          return res.status(500).json({ error: uploadError.message });
+        }
+      }
+
+      const { data: { publicUrl } } = adminClient.storage.from("market-deal-docs").getPublicUrl(path);
+
+      const doc = await storage.createMarketDealDocument({
+        dealId,
+        uploaderId: userId,
+        fileName: file.originalname,
+        fileUrl: publicUrl,
+        fileSize: file.size,
+      });
+
+      res.json(doc);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/market/deals/:dealId/documents/:docId — delete document
+  app.delete("/api/market/deals/:dealId/documents/:docId", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.dealId), 10);
+      const docId = parseInt(String(req.params.docId), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      await storage.deleteMarketDealDocument(docId, userId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/deals/:id/messages — get messages
+  app.get("/api/market/deals/:id/messages", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      const messages = await storage.getMarketDealMessages(dealId);
+      res.json(messages);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/deals/:id/messages — send message
+  app.post("/api/market/deals/:id/messages", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before messaging" });
+
+      const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
+      const msg = await storage.createMarketDealMessage({ dealId, senderId: userId, body });
+      res.json(msg);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Admin: Deal Pipeline ──────────────────────────────────────────────────────
+
+  // GET /api/admin/market/deals — all deals pipeline view
+  app.get("/api/admin/market/deals", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const deals = await storage.getAllMarketDeals();
+      const enriched = await Promise.all(deals.map(async d => {
+        const listing = await storage.getMarketListing(d.listingId);
+        return {
+          ...d,
+          assetLabel: listing?.blind ? `Blind ${listing.therapeuticArea}` : (listing?.assetName ?? `Listing #${d.listingId}`),
+          therapeuticArea: listing?.therapeuticArea ?? "",
+        };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/admin/market/deals/:id/invoice — generate success fee invoice
+  app.post("/api/admin/market/deals/:id/invoice", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+      const { dealSizeM } = z.object({ dealSizeM: z.number().int().positive() }).parse(req.body);
+
+      // Success fee tiers
+      let feeAmount: number;
+      if (dealSizeM <= 5) feeAmount = 10000;
+      else if (dealSizeM <= 50) feeAmount = 30000;
+      else feeAmount = 50000;
+
+      const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+      if (!STRIPE_SECRET_KEY) {
+        // Record locally even without Stripe
+        const updated = await storage.updateMarketDeal(dealId, {
+          successFeeDealSizeM: dealSizeM,
+          successFeeAmount: feeAmount,
+        });
+        return res.json({ deal: updated, feeAmount, invoiceId: null, note: "Stripe not configured — recorded locally" });
+      }
+
+      const Stripe = (await import("stripe")).default;
+      const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2026-03-25.dahlia" });
+
+      // Get seller's org/Stripe customer
+      const sellerOrg = await storage.getOrgForUser(deal.sellerId);
+      let customerId = sellerOrg?.stripeCustomerId;
+
+      if (!customerId && sellerOrg?.billingEmail) {
+        const customer = await stripe.customers.create({
+          email: sellerOrg.billingEmail,
+          name: sellerOrg.name ?? undefined,
+          metadata: { orgId: String(sellerOrg.id), dealId: String(dealId) },
+        });
+        customerId = customer.id;
+      }
+
+      if (!customerId) {
+        return res.status(400).json({ error: "Seller has no Stripe customer — add billing email first" });
+      }
+
+      const listing = await storage.getMarketListing(deal.listingId);
+      const assetLabel = listing?.blind ? `Blind ${listing.therapeuticArea} opportunity` : (listing?.assetName || `Listing #${deal.listingId}`);
+
+      const invoice = await stripe.invoices.create({
+        customer: customerId,
+        auto_advance: false,
+        description: `EdenMarket success fee — ${assetLabel} — Deal #${dealId}`,
+        metadata: { dealId: String(dealId), dealSizeM: String(dealSizeM) },
+      });
+
+      await stripe.invoiceItems.create({
+        customer: customerId,
+        invoice: invoice.id,
+        amount: feeAmount * 100,
+        currency: "usd",
+        description: `EdenMarket success fee ($${dealSizeM}M deal → $${(feeAmount / 1000).toFixed(0)}k tier)`,
+      });
+
+      const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+
+      const updated = await storage.updateMarketDeal(dealId, {
+        successFeeDealSizeM: dealSizeM,
+        successFeeAmount: feeAmount,
+        successFeeInvoiceId: finalizedInvoice.id,
+      });
+
+      res.json({ deal: updated, feeAmount, invoiceId: finalizedInvoice.id, invoiceUrl: finalizedInvoice.hosted_invoice_url });
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
     }
   });
 

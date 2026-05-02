@@ -289,9 +289,23 @@ Confidential biopharma deal marketplace portal at `/market`. Subscription-gated 
 |---|---|
 | `/market` | Buyer feed with filters + side-by-side comparison (up to 3) |
 | `/market/listing/:id` | Full listing detail + EOI submission sheet |
-| `/market/seller` | Seller dashboard — manage listings, view EOIs |
+| `/market/seller` | Seller dashboard — manage listings, view EOIs with Accept/Decline |
 | `/market/create-listing` | Multi-step listing form (4 steps + AI summary generation) |
 | `/market/my-eois` | Buyer's submitted EOIs with status tracking |
+| `/market/deals` | Active deal rooms listing (buyer & seller) |
+| `/market/deals/:dealId` | Deal room — NDA signing, document vault, messaging, status tracker |
+
+### Deal Room Flow (Task #628)
+1. Seller clicks **Accept** on an EOI → deal record created (`market_deals`), both parties emailed
+2. Both parties visit `/market/deals/:id` and **e-sign the mutual NDA** (inline HTML template, name + timestamp stored)
+3. Once both sign, deal room fully unlocks: listing details revealed, document upload, threaded messages
+4. Seller updates deal status (NDA Signed → Due Diligence → Term Sheet → LOI → Closed)
+5. Admin generates success fee invoice from the Deals tab (≤$5M → $10k, $5-50M → $30k, >$50M → $50k)
+
+### DB Tables (Task #628 additions)
+- `market_deals` — deal record, NDA signatures, status, success fee fields
+- `market_deal_documents` — uploaded files (Supabase Storage bucket `market-deal-docs`)
+- `market_deal_messages` — threaded messaging (30s polling)
 
 ### API Endpoints
 - `GET /api/market/access` — access check
@@ -304,10 +318,21 @@ Confidential biopharma deal marketplace portal at `/market`. Subscription-gated 
 - `POST /api/market/eois` — submit EOI
 - `GET /api/market/my-eois` — buyer's EOIs
 - `GET /api/market/seller/eois` — EOIs on seller's listings
+- `POST /api/market/eois/:id/accept` — accept EOI, create deal room
+- `POST /api/market/eois/:id/decline` — decline EOI
+- `GET /api/market/deals` — list deals for current user
+- `GET /api/market/deals/:id` — deal room data (deal + listing + eoi)
+- `POST /api/market/deals/:id/sign-nda` — e-sign NDA
+- `PATCH /api/market/deals/:id/status` — update deal status (seller only)
+- `GET/POST /api/market/deals/:id/documents` — document list/upload
+- `DELETE /api/market/deals/:id/documents/:docId` — delete document
+- `GET/POST /api/market/deals/:id/messages` — message thread
+- `GET /api/admin/market/deals` — admin deal pipeline
+- `POST /api/admin/market/deals/:id/invoice` — generate success fee invoice (Stripe)
 - `GET/PATCH /api/admin/market/*` — admin review, stats, approval
 
 ### Admin Tab
-Admin panel has a new "EdenMarket" section with stats dashboard, listing review/approval workflow, and EOI audit view.
+Admin panel "EdenMarket" section has 4 tabs: Listings (review/approve), EOIs (audit), **Deals (pipeline + success fee invoicing)**, Subscribers.
 
 ### Env Vars Required
 - `STRIPE_PRICE_EDENMARKET` — Stripe price ID for the $1,000/month EdenMarket subscription

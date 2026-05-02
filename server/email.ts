@@ -350,6 +350,60 @@ export function sendTrialEndingEmail(
   return sendEmail(to, "Your EdenScout trial expires tomorrow", html, "EdenScout <billing@edenradar.com>");
 }
 
+export function sendMarketMutualInterestEmail(
+  to: string,
+  recipientName: string,
+  dealUrl: string,
+  assetLabel: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Mutual interest confirmed — EdenMarket</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} both parties have confirmed mutual interest in <strong>${assetLabel}</strong>.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      Your next step is to execute a mutual NDA to unlock the full deal room. Click below to review and sign the NDA.
+    </p>
+    <a href="${dealUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open Deal Room
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Both parties must sign the NDA before deal room documents and communication become accessible.
+      Questions? Contact <a href="mailto:market@edenradar.com" style="color:#7c3aed;text-decoration:none;">market@edenradar.com</a>.
+    </p>
+  `);
+  return sendEmail(to, `Mutual interest confirmed — ${assetLabel} — EdenMarket`, html, "EdenMarket <market@edenradar.com>");
+}
+
+export function sendMarketNdaSignedEmail(
+  to: string,
+  recipientName: string,
+  dealUrl: string,
+  assetLabel: string,
+): Promise<void> {
+  const greeting = recipientName?.trim() ? `Hi ${recipientName},` : "Hi,";
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">NDA fully executed — deal room is open</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} both parties have signed the mutual NDA for <strong>${assetLabel}</strong>.
+      The deal room is now fully unlocked.
+    </p>
+    <p style="margin:0 0 28px;font-size:15px;color:#374151;line-height:1.6;">
+      You can now access the full listing details, share documents, and communicate securely with the other party.
+    </p>
+    <a href="${dealUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Open Deal Room
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      A copy of the signed NDA is available in your deal room for your records.
+    </p>
+  `);
+  return sendEmail(to, `Deal room open — ${assetLabel} — EdenMarket`, html, "EdenMarket <market@edenradar.com>");
+}
+
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {
   const displayName = name?.trim() || "your account";
   const html = baseHtml(`

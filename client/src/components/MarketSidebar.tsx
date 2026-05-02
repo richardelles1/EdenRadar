@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/aceternity-sidebar";
 import {
   ShoppingBag, Briefcase, FileText, LayoutDashboard,
-  Moon, Sun, LogOut, Menu, X, Settings, Shield,
+  Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -28,6 +28,7 @@ const NAV_GROUPS = [
     items: [
       { href: "/market", label: "Browse Listings", icon: ShoppingBag, exact: true },
       { href: "/market/my-eois", label: "My EOIs", icon: FileText, exact: true },
+      { href: "/market/deals", label: "My Deals", icon: Lock, exact: false },
     ],
   },
   {
