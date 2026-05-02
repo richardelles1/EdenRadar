@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { useEffect } from "react";
-import { ShoppingBag, CheckCircle2, Lock, ArrowRight, AlertCircle, RefreshCw } from "lucide-react";
+import { ShoppingBag, CheckCircle2, Lock, ArrowRight, AlertCircle, RefreshCw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiRequest } from "@/lib/queryClient";
+import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 
 const MARKET_FEATURES = [
   "Curated feed of biopharma assets available for licensing and acquisition",
@@ -87,26 +87,7 @@ export function MarketGate({ children }: { children: React.ReactNode }) {
 }
 
 function MarketPaywall() {
-  const { session } = useAuth();
-
-  async function handleSubscribe() {
-    if (!session?.access_token) {
-      window.location.href = "/login?redirectTo=/market";
-      return;
-    }
-    try {
-      const res = await fetch("/api/market/checkout", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`,
-          "x-user-id": session.user.id,
-        },
-      });
-      const data = await res.json();
-      if (data.url) window.location.href = data.url;
-    } catch {}
-  }
+  const { subscribe, isLoading } = useMarketSubscribe();
 
   return (
     <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/20">
@@ -167,11 +148,21 @@ function MarketPaywall() {
               <Button
                 className="w-full gap-2 text-white"
                 style={{ background: "hsl(271 81% 55%)" }}
-                onClick={handleSubscribe}
+                onClick={() => subscribe()}
+                disabled={isLoading}
                 data-testid="market-gate-subscribe"
               >
-                Subscribe to EdenMarket
-                <ArrowRight className="w-4 h-4" />
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Redirecting to checkout…
+                  </>
+                ) : (
+                  <>
+                    Subscribe to EdenMarket
+                    <ArrowRight className="w-4 h-4" />
+                  </>
+                )}
               </Button>
               <p className="text-[10px] text-muted-foreground text-center">
                 + Success fee on closed deals: $10k ({"<"}$10M), $30k ($10–50M), $50k ({">"}$50M)

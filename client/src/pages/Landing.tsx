@@ -21,6 +21,9 @@ import {
   Sparkles,
   Target,
   Rocket,
+  ShoppingBag,
+  Lock,
+  Handshake,
 } from "lucide-react";
 
 /* ─────────────────────────── helpers ─────────────────────────── */
@@ -578,6 +581,105 @@ export default function Landing() {
         {/* ── Toggle value section ── */}
         <PortalToggle onLogin={handleLogin} />
 
+        {/* ── EdenMarket section ── */}
+        <section className="border-t border-border bg-background">
+          <div className="max-w-screen-xl mx-auto px-4 sm:px-6 py-16 sm:py-20">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 items-center">
+              <div className="space-y-5">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full" style={{ background: "hsl(271 81% 55% / 0.10)", border: "1px solid hsl(271 81% 55% / 0.25)" }}>
+                  <ShoppingBag className="w-3.5 h-3.5" style={{ color: "hsl(271 81% 55%)" }} />
+                  <span className="text-[11px] font-bold uppercase tracking-widest" style={{ color: "hsl(271 81% 55%)" }}>EdenMarket</span>
+                </div>
+                <h2 className="text-3xl sm:text-4xl font-bold text-foreground leading-tight">
+                  The blind marketplace for{" "}
+                  <span style={{ color: "hsl(271 81% 55%)" }}>licensable biotech assets</span>
+                </h2>
+                <p className="text-base text-muted-foreground leading-relaxed">
+                  Buyers see structured listings — therapeutic area, modality, stage, IP profile — without seller identities. Engage anonymously, sign an NDA inside the deal room, and unlock the full asset only when both sides agree.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="flex items-start gap-2.5">
+                    <Lock className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Blind by default</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug">Identity hidden until NDA signed.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <Handshake className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">NDA-gated deal room</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug">Documents, messages, audit trail.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 shrink-0 mt-0.5" style={{ color: "hsl(271 81% 55%)" }} />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground">Success-fee aligned</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug">$1k/mo + only if you close.</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-col sm:flex-row gap-3 pt-3">
+                  <Link href="/market/preview">
+                    <Button
+                      className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
+                      style={{ background: "hsl(271 81% 55%)", color: "white", border: "none" }}
+                      data-testid="button-landing-edenmarket-buyer"
+                    >
+                      <ShoppingBag className="w-4 h-4" />
+                      Browse EdenMarket
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                  <Link href="/market/list">
+                    <Button
+                      variant="outline"
+                      className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
+                      style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: "hsl(271 81% 55%)" }}
+                      data-testid="button-landing-edenmarket-seller"
+                    >
+                      List your assets
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+
+              <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(271 81% 55% / 0.08), hsl(271 81% 55% / 0.02))", border: "1px solid hsl(271 81% 55% / 0.20)" }}>
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sample listing</p>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "hsl(271 81% 55% / 0.15)", color: "hsl(271 81% 55%)" }}>BLIND</span>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Pre-clinical oncology asset · ADC platform</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Solid-tumor indication · IND-enabling studies underway</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3 pt-2 border-t border-border/50">
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Modality</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5">ADC</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">Stage</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5">Pre-clinical</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground/70">IP</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5">PCT filed</p>
+                    </div>
+                  </div>
+                  <div className="pt-3 border-t border-border/50 flex items-center justify-between">
+                    <span className="text-[11px] text-muted-foreground">Seller identity revealed after NDA</span>
+                    <Lock className="w-3.5 h-3.5" style={{ color: "hsl(271 81% 55%)" }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ── Bottom CTA ── */}
         <BottomCTA onLogin={handleLogin} />
       </main>
@@ -619,6 +721,13 @@ export default function Landing() {
               data-testid="footer-link-one-pager"
             >
               EdenScout One-Pager
+            </Link>
+            <Link
+              href="/market/preview"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              data-testid="footer-link-edenmarket"
+            >
+              EdenMarket
             </Link>
             <EdenNXBadge />
             <button

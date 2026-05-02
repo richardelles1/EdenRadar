@@ -16,6 +16,7 @@ import {
   Users,
   Database,
   FileCheck,
+  ShoppingBag,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { href: "/discovery/submit", label: "Submit Concept", icon: PlusCircle },
   { href: "/discovery/my-concepts", label: "My Concepts", icon: FolderOpen },
   { href: "/discovery/profile", label: "Profile", icon: UserCircle },
+  { href: "/market/list", label: "List your assets", icon: ShoppingBag },
 ];
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {

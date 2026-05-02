@@ -1,7 +1,8 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings } from "lucide-react";
+import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
+import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrg } from "@/hooks/use-org";
@@ -291,6 +292,131 @@ function PlanCTA({
   );
 }
 
+function EdenMarketTier({ session }: { session: Session | null }) {
+  const [, navigate] = useLocation();
+  const { subscribe, isLoading } = useMarketSubscribe();
+  const VIOLET = "hsl(271 81% 55%)";
+
+  function handleClick() {
+    if (!session?.access_token) {
+      navigate("/login?mode=signup&redirect=/market/preview");
+      return;
+    }
+    void subscribe();
+  }
+
+  return (
+    <div className="space-y-4" data-testid="pricing-edenmarket">
+      <div className="flex items-center gap-2">
+        <h2 className="text-lg font-semibold text-foreground">EdenMarket</h2>
+        <span
+          className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded-full"
+          style={{ background: "hsl(271 81% 55% / 0.12)", color: VIOLET }}
+        >
+          Marketplace
+        </span>
+      </div>
+      <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
+        The blind marketplace for licensable biotech assets. Buyers see structured listings; identities reveal only after both sides sign an NDA inside the deal room.
+      </p>
+
+      <div
+        className="rounded-xl overflow-hidden grid grid-cols-1 md:grid-cols-3"
+        style={{ border: "1px solid hsl(271 81% 55% / 0.25)", background: "linear-gradient(135deg, hsl(271 81% 55% / 0.05), hsl(271 81% 55% / 0.01))" }}
+      >
+        {/* Left: subscription */}
+        <div className="p-6 md:col-span-1 flex flex-col gap-4 md:border-r" style={{ borderColor: "hsl(271 81% 55% / 0.18)" }}>
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+              <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+            </div>
+            <span className="text-xs font-semibold uppercase tracking-widest" style={{ color: VIOLET }}>Access</span>
+          </div>
+          <div>
+            <div className="flex items-baseline gap-1">
+              <span className="text-3xl font-black text-foreground">$1,000</span>
+              <span className="text-sm text-muted-foreground">/mo</span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Org-wide marketplace access</p>
+          </div>
+          <ul className="space-y-2 text-xs text-foreground/90">
+            <li className="flex items-start gap-2">
+              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <span>Browse all live blind listings</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Check className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <span>Submit unlimited Expressions of Interest</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <span>NDA-gated deal rooms with audit trail</span>
+            </li>
+            <li className="flex items-start gap-2">
+              <Handshake className="w-3.5 h-3.5 mt-0.5 shrink-0" style={{ color: VIOLET }} />
+              <span>Document exchange + secure messaging</span>
+            </li>
+          </ul>
+          <Button
+            className="w-full font-semibold h-9 text-sm gap-1.5"
+            style={{ background: VIOLET, color: "white", border: "none" }}
+            onClick={handleClick}
+            disabled={isLoading}
+            data-testid="button-pricing-edenmarket-subscribe"
+          >
+            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
+            {isLoading ? "Redirecting…" : "Subscribe to EdenMarket"}
+          </Button>
+          <p className="text-center text-[10px] text-muted-foreground">Free to list · success fees only on close</p>
+        </div>
+
+        {/* Right: success fee table */}
+        <div className="p-6 md:col-span-2 space-y-4 bg-card/30">
+          <div className="flex items-center gap-2">
+            <Handshake className="w-4 h-4" style={{ color: VIOLET }} />
+            <p className="text-xs font-semibold uppercase tracking-widest text-foreground">Success fees — paid only when a deal closes</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              { label: "Pre-clinical", fee: "$10,000", desc: "On a closed pre-clinical license or option" },
+              { label: "Clinical", fee: "$30,000", desc: "On a closed Phase I–II asset transaction" },
+              { label: "Late-stage", fee: "$50,000", desc: "On a closed Phase III or commercial-stage deal" },
+            ].map((t) => (
+              <div
+                key={t.label}
+                className="rounded-lg p-4"
+                style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }}
+                data-testid={`edenmarket-fee-${t.label.toLowerCase().replace(/\s+/g, "-")}`}
+              >
+                <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: VIOLET }}>{t.label}</p>
+                <p className="text-xl font-black text-foreground tabular-nums">{t.fee}</p>
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-snug">{t.desc}</p>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-3 border-t" style={{ borderColor: "hsl(271 81% 55% / 0.15)" }}>
+            <p className="text-xs text-muted-foreground flex-1">
+              Listing assets is free for sellers. EdenMarket only earns when you close — incentives stay aligned with you.
+            </p>
+            <Link href="/market/list">
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 px-3 text-xs gap-1.5 whitespace-nowrap"
+                style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: VIOLET }}
+                data-testid="button-pricing-edenmarket-list"
+              >
+                List your assets
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Pricing() {
   const { session } = useAuth();
   const { data: org } = useOrg();
@@ -509,6 +635,9 @@ export default function Pricing() {
             })}
           </div>
         </div>
+
+        {/* EdenMarket */}
+        <EdenMarketTier session={session} />
 
         {/* Enterprise */}
         <div

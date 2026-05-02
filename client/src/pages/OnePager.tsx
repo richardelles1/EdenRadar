@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Printer, Search, BarChart3, GitBranch, Shield, Bell, FileText, CheckCircle2, Globe } from "lucide-react";
+import { Printer, Search, BarChart3, GitBranch, Shield, Bell, FileText, CheckCircle2, Globe, ShoppingBag, Lock, Handshake } from "lucide-react";
 import QRCode from "qrcode";
 
 const NAVY = "#0f1e35";
@@ -540,6 +540,56 @@ export default function OnePager() {
                   </p>
                 </div>
               ))}
+            </div>
+          </div>
+
+          {/* ── EDENMARKET ── */}
+          <div className="op-pricing-section" style={{ marginTop: "0", paddingTop: "0" }}>
+            <div className="op-section-label" style={{ color: "#7c3aed" }}>EdenMarket — The Blind Marketplace</div>
+            <div style={{
+              padding: "16px 18px",
+              borderRadius: "8px",
+              background: "linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.02))",
+              border: "1px solid rgba(124,58,237,0.25)",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr",
+              gap: "16px",
+              alignItems: "start",
+            }}>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                  <ShoppingBag size={13} color="#7c3aed" />
+                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#7c3aed", letterSpacing: "0.08em", textTransform: "uppercase" }}>Buyers</span>
+                </div>
+                <p style={{ fontSize: "11.5px", color: SLATE, lineHeight: 1.55, margin: "0 0 8px 0" }}>
+                  Browse blind biotech listings — TA, modality, stage, IP — without seller identities. Engage anonymously and unlock the full asset only after NDA.
+                </p>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "3px", marginTop: "8px" }}>
+                  <span style={{ fontSize: "18px", fontWeight: 800, color: NAVY, letterSpacing: "-0.5px" }}>$1,000</span>
+                  <span style={{ fontSize: "11px", color: SLATE_LIGHT }}>/mo · org-wide access</span>
+                </div>
+              </div>
+              <div>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+                  <Handshake size={13} color="#7c3aed" />
+                  <span style={{ fontSize: "10.5px", fontWeight: 800, color: "#7c3aed", letterSpacing: "0.08em", textTransform: "uppercase" }}>Sellers</span>
+                </div>
+                <p style={{ fontSize: "11.5px", color: SLATE, lineHeight: 1.55, margin: "0 0 8px 0" }}>
+                  Free to list. Success fees only when a deal closes — incentives stay aligned with you from first listing to signed term sheet.
+                </p>
+                <div style={{ display: "flex", gap: "10px", marginTop: "8px", flexWrap: "wrap" }}>
+                  {[
+                    { label: "Pre-clin", fee: "$10k" },
+                    { label: "Clinical", fee: "$30k" },
+                    { label: "Late-stage", fee: "$50k" },
+                  ].map((t) => (
+                    <div key={t.label} style={{ flex: "1 1 0", minWidth: "60px" }}>
+                      <div style={{ fontSize: "9px", fontWeight: 700, color: "#7c3aed", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "2px" }}>{t.label}</div>
+                      <div style={{ fontSize: "13px", fontWeight: 800, color: NAVY }}>{t.fee}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 

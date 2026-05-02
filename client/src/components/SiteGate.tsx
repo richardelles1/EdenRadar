@@ -6,7 +6,7 @@ import { Lock } from "lucide-react";
 const SITE_KEY = "eden-access";
 
 export function SiteGate({ children }: { children: React.ReactNode }) {
-  const PUBLIC_PATHS = ["/pitch", "/tos", "/privacy", "/pricing", "/one-pager"];
+  const PUBLIC_PATHS = ["/pitch", "/tos", "/privacy", "/pricing", "/one-pager", "/market/preview", "/market/list"];
   // /admin/mobile has its own separate password gate ("eden") and does not
   // need the site-wide beta code — it should be bookmarkable on mobile.
   // The desktop /admin keeps both layers (site gate + admin password gate).

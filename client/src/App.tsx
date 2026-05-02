@@ -13,6 +13,8 @@ import MarketSellerDashboard from "@/pages/MarketSellerDashboard";
 import MarketMyEOIs from "@/pages/MarketMyEOIs";
 import MarketDeals from "@/pages/MarketDeals";
 import MarketDealRoom from "@/pages/MarketDealRoom";
+import MarketPreview from "@/pages/MarketPreview";
+import MarketList from "@/pages/MarketList";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Scout from "@/pages/Scout";
@@ -304,6 +306,10 @@ function Router() {
           <ResearchGrants />
         </ResearchLayout>
       </Route>
+
+      {/* EdenMarket public marketing pages (no auth, no MarketGate) */}
+      <Route path="/market/preview" component={MarketPreview} />
+      <Route path="/market/list" component={MarketList} />
 
       {/* EdenMarket */}
       <Route path="/market/listing/:id">

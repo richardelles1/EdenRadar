@@ -10,7 +10,7 @@ type NavProps = {
   onOpenSaved?: () => void;
 };
 
-const PUBLIC_PATHS = ["/", "/about", "/what-we-do", "/how-it-works", "/pricing"];
+const PUBLIC_PATHS = ["/", "/about", "/what-we-do", "/how-it-works", "/pricing", "/market/preview", "/market/list"];
 
 function normalizePath(path: string) {
   const stripped = path.split("?")[0].split("#")[0];
@@ -41,6 +41,7 @@ export function Nav({ onOpenSaved }: NavProps) {
     { href: "/about", label: "About" },
     { href: "/what-we-do", label: "What We Do" },
     { href: "/how-it-works", label: "How It Works" },
+    { href: "/market/preview", label: "EdenMarket" },
     { href: "/pricing", label: "Pricing" },
   ];
 

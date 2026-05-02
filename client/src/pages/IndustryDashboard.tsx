@@ -21,6 +21,8 @@ import {
   StickyNote,
   MoveRight,
   Trash2,
+  ShoppingBag,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -157,6 +159,108 @@ function getDominantLabel(assets: BrowseAsset[]): string | null {
   if (!entries.length) return null;
   entries.sort((a, b) => b[1] - a[1]);
   return entries[0][0];
+}
+
+function EdenMarketTeaser() {
+  const { data, isLoading, isError } = useQuery<{
+    activeListings: number;
+    marketSubscribers: number;
+    closedDeals: number;
+    hasAccess: boolean;
+  }>({
+    queryKey: ["/api/market/activity-summary"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const VIOLET = "hsl(271 81% 55%)";
+  const activeListings = data?.activeListings ?? 0;
+  const marketSubscribers = data?.marketSubscribers ?? 0;
+  const closedDeals = data?.closedDeals ?? 0;
+  const hasAccess = data?.hasAccess ?? false;
+
+  return (
+    <div
+      className="rounded-xl p-5 transition-all duration-200 hover:-translate-y-0.5"
+      style={{
+        background: "linear-gradient(135deg, hsl(271 81% 55% / 0.06), hsl(271 81% 55% / 0.01))",
+        border: "1px solid hsl(271 81% 55% / 0.20)",
+        animation: "dash-fade-up 400ms ease 70ms both",
+      }}
+      data-testid="dashboard-edenmarket-teaser"
+    >
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+        <div className="flex-1 space-y-2">
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+              <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+            </div>
+            <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
+            <span
+              className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+              style={{ background: "hsl(271 81% 55% / 0.15)", color: VIOLET }}
+            >
+              Marketplace
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Blind biotech listings, NDA-gated deal rooms, success-fee aligned. {hasAccess ? "Your org has access." : "Subscribe to engage anonymously."}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 lg:w-auto lg:min-w-[320px]">
+          {isLoading ? (
+            [1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)
+          ) : isError ? (
+            <div className="col-span-3 rounded-lg p-3 text-center" style={{ background: "hsl(var(--background))", border: "1px dashed hsl(271 81% 55% / 0.25)" }} data-testid="market-stat-error">
+              <p className="text-[10px] text-muted-foreground">Marketplace stats unavailable right now.</p>
+            </div>
+          ) : (
+            <>
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-listings">
+                <p className="text-lg font-black tabular-nums text-foreground">{activeListings.toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Live listings</p>
+              </div>
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-subscribers">
+                <p className="text-lg font-black tabular-nums text-foreground">{marketSubscribers.toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Subscribers</p>
+              </div>
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-deals">
+                <p className="text-lg font-black tabular-nums text-foreground">{closedDeals.toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Closed deals</p>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
+          <Link href={hasAccess ? "/market" : "/market/preview"}>
+            <Button
+              size="sm"
+              className="w-full font-semibold h-8 text-xs gap-1.5"
+              style={{ background: VIOLET, color: "white", border: "none" }}
+              data-testid="button-dashboard-edenmarket-browse"
+            >
+              <ShoppingBag className="w-3 h-3" />
+              {hasAccess ? "Open EdenMarket" : "Browse marketplace"}
+              <ArrowRight className="w-3 h-3" />
+            </Button>
+          </Link>
+          <Link href="/market/list">
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full h-8 text-xs gap-1.5"
+              style={{ borderColor: "hsl(271 81% 55% / 0.4)", color: VIOLET }}
+              data-testid="button-dashboard-edenmarket-list"
+            >
+              <Lock className="w-3 h-3" />
+              List your assets
+            </Button>
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function KpiCard({
@@ -573,6 +677,9 @@ export default function IndustryDashboard() {
             </div>
           )}
         </div>
+
+        {/* ── EDENMARKET TEASER ── */}
+        <EdenMarketTeaser />
 
         {/* ── SECTION 2: SIGNAL ROW ── */}
         <div

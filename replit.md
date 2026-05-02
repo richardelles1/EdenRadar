@@ -347,7 +347,24 @@ Confidential biopharma deal marketplace portal at `/market`. Subscription-gated 
 Admin panel "EdenMarket" section has 4 tabs: Listings (review/approve), EOIs (audit), **Deals (pipeline + success fee invoicing)**, Subscribers.
 
 ### Env Vars Required
-- `STRIPE_PRICE_EDENMARKET` — Stripe price ID for the $1,000/month EdenMarket subscription
+- `STRIPE_PRICE_EDENMARKET` — Stripe price ID for the $1,000/month EdenMarket subscription. Must be the **recurring** price ID (not a one-off) so `customer.subscription.created` fires. Set on the Stripe product with `metadata.product = "edenmarket"` (or rely on the Checkout Session metadata `product=edenmarket` set by `/api/market/checkout`).
+
+### Visibility Surfaces (Task #664)
+EdenMarket is surfaced across the platform so subscribers can discover it without an admin link:
+- **Public marketing**: `/market/preview` (buyer landing) and `/market/list` (seller landing) — both in `SiteGate.PUBLIC_PATHS` and `Nav.publicNavLinks`. SEO meta + og tags set in `useEffect`.
+- **Landing.tsx**: dedicated EdenMarket section between PortalToggle and BottomCTA; footer link → `/market/preview`.
+- **Pricing.tsx**: `EdenMarketTier` card with $1k/mo subscribe CTA + success-fee table ($10k/$30k/$50k); subscribe button uses `useMarketSubscribe()`.
+- **OnePager.tsx**: print-safe Buyers/Sellers EdenMarket block.
+- **IndustryDashboard.tsx**: `EdenMarketTeaser` widget (live listings / subscribers / closed deals) backed by public `GET /api/market/activity-summary`.
+- **Sidebars**: Discovery + Research sidebars both have a "List your assets" → `/market/list` nav item; Industry sidebar already has "Deal Marketplace".
+- **Subscribe hook**: `client/src/hooks/use-market-subscribe.ts` is the single source of truth — calls `POST /api/market/checkout`, surfaces toast errors, exposes `isLoading`. Used by `MarketGate`, `Pricing.EdenMarketTier`, `MarketPreview`, `MarketList`.
+
+### Stripe Subscribe — End-to-End Test Plan
+1. **Setup** — set `STRIPE_PRICE_EDENMARKET` to a recurring Stripe price; restart `Start application` workflow.
+2. **Initiate checkout** — log in as an industry user → `/pricing` → "Subscribe to EdenMarket" → completes Stripe Checkout. Server creates a Checkout Session with `metadata.product=edenmarket` and `subscription_data.metadata.product=edenmarket`.
+3. **Webhook activation** — Stripe fires `customer.subscription.created` (and/or `invoice.payment_succeeded`). Webhook at `/api/stripe/webhook` (`server/routes.ts` ~line 8764) detects `sub.metadata.product === "edenmarket"` and calls `storage.updateOrgEdenMarketAccess(orgId, true)` (idempotent). Safety net in `invoice.payment_succeeded` (~line 8957) re-checks subscription metadata and ensures access is on.
+4. **Visibility check** — after webhook, `GET /api/market/access` returns `{ access: true }`; `GET /api/market/activity-summary` returns `hasAccess: true`; `MarketGate` lets the user into `/market/*`; dashboard widget shows "Open EdenMarket".
+5. **Cancellation/revoke** — `customer.subscription.deleted` or `customer.subscription.updated` with `status="canceled"|"unpaid"` revokes access.
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)

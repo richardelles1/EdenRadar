@@ -8758,10 +8758,31 @@ If multiple assets appear, return each as a separate array item.`;
           break;
         }
 
+        case "customer.subscription.created":
         case "customer.subscription.updated": {
           const sub = event.data.object as Record<string, unknown>;
           const stripeCustomerId = String(sub["customer"] ?? "");
           const stripeSubscriptionId = String(sub["id"] ?? "");
+
+          // EdenMarket subscriptions are tracked separately from main plan tier.
+          // Activate access idempotently when status is active or trialing; revoke otherwise.
+          const subMetaCU = sub["metadata"] as Record<string, string> | undefined;
+          if (subMetaCU?.["product"] === "edenmarket") {
+            const orgEMCU = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
+            if (!orgEMCU) {
+              console.warn(`[stripe/webhook] ${eventType} (edenmarket): no org for customer ${stripeCustomerId}`);
+              break;
+            }
+            const subStatusCU = String(sub["status"] ?? "");
+            const isActive = subStatusCU === "active" || subStatusCU === "trialing";
+            await storage.updateOrganization(orgEMCU.id, {
+              edenMarketAccess: isActive,
+              edenMarketStripeSubId: isActive ? stripeSubscriptionId : null,
+            });
+            console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} access=${isActive}, status=${subStatusCU}, sub=${stripeSubscriptionId}`);
+            break;
+          }
+
           // Resolve org by customer ID first, fall back to subscription ID
           let orgU = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
           if (!orgU && stripeSubscriptionId) {
@@ -8929,6 +8950,35 @@ If multiple assets appear, return each as a separate array item.`;
             console.log(`[stripe/webhook] invoice.payment_succeeded: skipping zero-amount invoice (trial) for customer ${invOkCustomerId}`);
             break;
           }
+
+          // EdenMarket safety net: if this invoice belongs to an EdenMarket subscription,
+          // ensure access remains on (covers past_due → active recovery) and skip plan billing log.
+          if (invOkSubId) {
+            try {
+              const stripeInst = getStripe();
+              if (stripeInst) {
+                const fetchedSub = await stripeInst.subscriptions.retrieve(invOkSubId);
+                if (fetchedSub.metadata?.product === "edenmarket") {
+                  const orgEMInv = invOkCustomerId ? await storage.getOrgByStripeCustomer(invOkCustomerId) : null;
+                  if (orgEMInv) {
+                    if (!orgEMInv.edenMarketAccess || orgEMInv.edenMarketStripeSubId !== invOkSubId) {
+                      await storage.updateOrganization(orgEMInv.id, {
+                        edenMarketAccess: true,
+                        edenMarketStripeSubId: invOkSubId,
+                      });
+                      console.log(`[stripe/webhook] invoice.payment_succeeded (edenmarket): org ${orgEMInv.id} access ensured, sub=${invOkSubId}`);
+                    }
+                  } else {
+                    console.warn(`[stripe/webhook] invoice.payment_succeeded (edenmarket): no org for customer ${invOkCustomerId}`);
+                  }
+                  break;
+                }
+              }
+            } catch (subFetchErr: unknown) {
+              console.warn("[stripe/webhook] invoice.payment_succeeded: could not retrieve subscription for product check:", (subFetchErr as Error)?.message);
+            }
+          }
+
           let orgOk = invOkCustomerId ? await storage.getOrgByStripeCustomer(invOkCustomerId) : null;
           if (!orgOk && invOkSubId) {
             orgOk = await storage.getOrgByStripeSubscriptionId(invOkSubId) ?? null;
@@ -9121,6 +9171,42 @@ If multiple assets appear, return each as a separate array item.`;
   });
 
   // ── EdenMarket routes ─────────────────────────────────────────────────────────
+
+  // GET /api/market/activity-summary — public, lightweight stats for landing/dashboard teasers
+  // Optionally reads bearer token to populate hasAccess for logged-in users.
+  app.get("/api/market/activity-summary", async (req, res) => {
+    let activeListings = 0;
+    let marketSubscribers = 0;
+    let closedDeals = 0;
+    let hasAccess = false;
+
+    try {
+      const stats = await storage.getMarketAdminStats();
+      activeListings = stats.activeListings;
+      marketSubscribers = stats.marketSubscribers;
+    } catch {
+      // surface zeros rather than fail the public teaser
+    }
+
+    try {
+      const allDeals = await storage.getAllMarketDeals();
+      closedDeals = allDeals.filter(d => d.status === "closed" || d.status === "signed").length;
+    } catch {
+      // ignore
+    }
+
+    try {
+      const userId = await tryGetUserId(req);
+      if (userId) {
+        const org = await storage.getOrgForUser(userId);
+        hasAccess = Boolean(org?.edenMarketAccess);
+      }
+    } catch {
+      // ignore — public endpoint, hasAccess defaults to false
+    }
+
+    res.json({ activeListings, marketSubscribers, closedDeals, hasAccess });
+  });
 
   // GET /api/market/access — check if current user's org has EdenMarket access
   app.get("/api/market/access", verifyAnyAuth, async (req, res) => {

@@ -15,6 +15,7 @@ import {
   X,
   Microscope,
   BadgeDollarSign,
+  ShoppingBag,
 } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: "/research/alerts", label: "Alerts", icon: Bell },
   { href: "/research/library", label: "Saved Literature", icon: Library },
   { href: "/research/profile", label: "Profile", icon: User },
+  { href: "/market/list", label: "List your assets", icon: ShoppingBag },
 ];
 
 function getInitials(name: string): string {
