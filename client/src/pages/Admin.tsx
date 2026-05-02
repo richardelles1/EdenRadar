@@ -1998,10 +1998,18 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
     return sortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />;
   };
 
-  const exportCsv = () => {
+  const exportCsv = async () => {
+    const res = await fetch(`/api/admin/dataset-quality/dimensions/export?dim=${activeTab}`, {
+      headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = `/api/admin/dataset-quality/dimensions/export?dim=${activeTab}&pw=${encodeURIComponent(pw)}`;
+    a.href = url;
+    a.download = `dataset-quality-${activeTab}.csv`;
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   const tabs = [
@@ -2285,9 +2293,9 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
 
   const patchAsset = useMutation({
     mutationFn: async ({ id, fields }: { id: number; fields: Record<string, string> }) => {
-      const res = await fetch(`/api/admin/assets/${id}?pw=${encodeURIComponent(pw)}`, {
+      const res = await fetch(`/api/admin/assets/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify(fields),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Patch failed"); }
@@ -2841,12 +2849,20 @@ function Enrichment({ pw }: { pw: string }) {
     return institutionSortDir === "desc" ? <ArrowDown className="h-3 w-3" /> : <ArrowUp className="h-3 w-3" />;
   };
 
-  const downloadCsv = (path: string) => {
+  const downloadCsv = async (path: string) => {
+    const res = await fetch(path, {
+      headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+    });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    a.href = `${path}?pw=${encodeURIComponent(pw)}`;
+    a.href = url;
+    a.download = path.split("/").pop()?.split("?")[0] ?? "export.csv";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (statsLoading || qualityLoading) {
@@ -3131,7 +3147,9 @@ function Enrichment({ pw }: { pw: string }) {
           <ExportMenu
             label="CSV → Cloud"
             getContent={async () => {
-              const res = await fetch(`/api/admin/export/full-relevant-csv?pw=${encodeURIComponent(pw)}`);
+              const res = await fetch(`/api/admin/export/full-relevant-csv`, {
+                headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+              });
               if (!res.ok) throw new Error("Could not fetch CSV from server.");
               const blob = await res.blob();
               const buf = new Uint8Array(await blob.arrayBuffer());
@@ -3738,9 +3756,9 @@ function BulkCsvImport({ pw }: { pw: string }) {
     setResult(null);
     try {
       const rows = buildRows(parsedRows);
-      const res = await fetch(`/api/admin/assets/bulk-update?pw=${pw}`, {
+      const res = await fetch(`/api/admin/assets/bulk-update`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify(rows),
       });
       const data = await res.json();
@@ -3782,15 +3800,32 @@ function BulkCsvImport({ pw }: { pw: string }) {
       </p>
 
       <div className="flex flex-wrap items-center gap-3 mb-3">
-        <a
-          href={`/api/admin/assets/export-csv?pw=${pw}`}
-          download
+        <button
+          type="button"
+          onClick={async () => {
+            const res = await fetch(`/api/admin/assets/export-csv`, {
+              headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+            });
+            if (!res.ok) {
+              toast({ title: "Export failed", variant: "destructive" });
+              return;
+            }
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `EdenRadar_Enrichment_${new Date().toISOString().slice(0, 10)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          }}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-muted hover:bg-muted/80 border border-border text-foreground transition-colors"
           data-testid="link-export-enrichment-csv"
         >
           <Download className="h-3.5 w-3.5" />
           Export Enrichment CSV
-        </a>
+        </button>
       </div>
 
       {/* Drag-and-drop dropzone */}
@@ -3914,12 +3949,18 @@ function PotentialDuplicates({ pw }: { pw: string }) {
 
   const { data, isLoading } = useQuery<{ candidates: any[]; total: number }>({
     queryKey: ["/api/admin/duplicate-candidates", pw],
-    queryFn: () => fetch(`/api/admin/duplicate-candidates?pw=${pw}`).then((r) => r.json()),
+    queryFn: () =>
+      fetch(`/api/admin/duplicate-candidates`, {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      }).then((r) => r.json()),
   });
 
   const runDetectionMutation = useMutation({
     mutationFn: () =>
-      fetch(`/api/admin/duplicate-detection/run?pw=${pw}`, { method: "POST" }).then((r) => r.json()),
+      fetch(`/api/admin/duplicate-detection/run`, {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      }).then((r) => r.json()),
     onSuccess: (result) => {
       toast({
         title: "Dedup scan complete",
@@ -3932,7 +3973,10 @@ function PotentialDuplicates({ pw }: { pw: string }) {
 
   const dismissMutation = useMutation({
     mutationFn: (id: number) =>
-      fetch(`/api/admin/duplicate-candidates/${id}/dismiss?pw=${pw}`, { method: "POST" }).then((r) => r.json()),
+      fetch(`/api/admin/duplicate-candidates/${id}/dismiss`, {
+        method: "POST",
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      }).then((r) => r.json()),
     onSuccess: () => {
       toast({ title: "Dismissed" });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/duplicate-candidates", pw] });
@@ -9641,7 +9685,9 @@ function ExportLogTable({ pw }: { pw: string }) {
   const { data, isLoading, refetch, isFetching } = useQuery<{ exports: ExportLogRow[] }>({
     queryKey: ["/api/admin/export-log", pw],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/export-log?pw=${encodeURIComponent(pw)}&limit=20`);
+      const res = await fetch(`/api/admin/export-log?limit=20`, {
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+      });
       if (!res.ok) throw new Error("Failed to load export log");
       return res.json();
     },
