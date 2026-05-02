@@ -1,5 +1,28 @@
 uploads = []
-generated = []
+
+[[generated]]
+id = "Nni31uhvVtOea2MUU-RNW"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-ad-1-lab.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "m_FksTJII6VV6X9HB_67B"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-ad-2-signal.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "52cno_zqQjWAmDlThAZbU"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-ad-3-architecture.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "zy8E4GqbcVeaxKENF-Xmw"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-ad-4-instrument.png"
+type = "image"
+title = "generated_image"
 
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"

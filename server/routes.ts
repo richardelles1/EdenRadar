@@ -10580,10 +10580,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     filename: z.string().min(1).max(200),
     fileType: z.string().min(1).max(50).default("document"),
     content: z.string().min(1),                 // base64-encoded file content
+    // Only used when fileType === "ad-campaign". Whitelisted to filesystem-safe
+    // characters; the resulting folder is always EdenRadar/Ads/<campaignSlug>.
+    campaignSlug: z.string().min(1).max(120).regex(/^[a-z0-9][a-z0-9._-]*$/i).optional(),
   });
 
-  function folderForFileType(fileType: string): string {
+  function folderForFileType(fileType: string, campaignSlug?: string): string {
     const t = fileType.toLowerCase();
+    if (t === "ad-campaign" && campaignSlug) return `EdenRadar/Ads/${campaignSlug}`;
     if (t === "csv" || t === "xlsx" || t === "export") return "EdenRadar/Exports";
     if (t === "template" || t === "email") return "EdenRadar/Templates";
     return "EdenRadar/Documents";
@@ -10626,7 +10630,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     if (Math.floor(parsed.content.length * 0.75) > MAX_EXPORT_BYTES) {
       return res.status(413).json({ error: `Payload too large. Max ${Math.floor(MAX_EXPORT_BYTES / 1024 / 1024)}MB.` });
     }
-    const folder = folderForFileType(parsed.fileType);
+    const folder = folderForFileType(parsed.fileType, parsed.campaignSlug);
     try {
       const { uploadToOneDrive } = await import("./lib/oneDriveClient");
       const buffer = Buffer.from(parsed.content, "base64");
@@ -10673,7 +10677,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     if (Math.floor(parsed.content.length * 0.75) > MAX_EXPORT_BYTES) {
       return res.status(413).json({ error: `Payload too large. Max ${Math.floor(MAX_EXPORT_BYTES / 1024 / 1024)}MB.` });
     }
-    const folder = folderForFileType(parsed.fileType);
+    const folder = folderForFileType(parsed.fileType, parsed.campaignSlug);
     try {
       const { uploadToGoogleDrive, isGoogleDriveConnected } = await import("./lib/googleDriveClient");
       if (!(await isGoogleDriveConnected())) {
