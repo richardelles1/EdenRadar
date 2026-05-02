@@ -3,6 +3,13 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { MarketLayout } from "@/layouts/MarketLayout";
+import { MarketGate } from "@/components/MarketGate";
+import MarketBrowse from "@/pages/MarketBrowse";
+import MarketListingDetail from "@/pages/MarketListingDetail";
+import MarketCreateListing from "@/pages/MarketCreateListing";
+import MarketSellerDashboard from "@/pages/MarketSellerDashboard";
+import MarketMyEOIs from "@/pages/MarketMyEOIs";
 import NotFound from "@/pages/not-found";
 import Landing from "@/pages/Landing";
 import Scout from "@/pages/Scout";
@@ -292,6 +299,43 @@ function Router() {
         <ResearchLayout>
           <ResearchGrants />
         </ResearchLayout>
+      </Route>
+
+      {/* EdenMarket */}
+      <Route path="/market/listing/:id">
+        <MarketLayout>
+          <MarketGate>
+            <MarketListingDetail />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market/create-listing">
+        <MarketLayout>
+          <MarketGate>
+            <MarketCreateListing />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market/seller">
+        <MarketLayout>
+          <MarketGate>
+            <MarketSellerDashboard />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market/my-eois">
+        <MarketLayout>
+          <MarketGate>
+            <MarketMyEOIs />
+          </MarketGate>
+        </MarketLayout>
+      </Route>
+      <Route path="/market">
+        <MarketLayout>
+          <MarketGate>
+            <MarketBrowse />
+          </MarketGate>
+        </MarketLayout>
       </Route>
 
       <Route path="/share/:token" component={ShareView} />

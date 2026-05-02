@@ -681,6 +681,9 @@ export const organizations = pgTable("organizations", {
   paymentFailedEmailSentInvId: text("payment_failed_email_sent_inv_id"),
   // Trial-ending reminder: set when we send the 24-hour-before reminder so it is never sent twice.
   trialReminderSentAt: timestamp("trial_reminder_sent_at"),
+  // EdenMarket access — granted when org completes EdenMarket Stripe checkout
+  edenMarketAccess: boolean("eden_market_access").notNull().default(false),
+  edenMarketStripeSubId: text("eden_market_stripe_sub_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -786,6 +789,80 @@ export const APP_EVENT_TYPES = [
   "concept_submitted",
 ] as const;
 export type AppEventType = typeof APP_EVENT_TYPES[number];
+
+// ── EdenMarket ─────────────────────────────────────────────────────────────────
+
+export const MARKET_ENGAGEMENT_STATUSES = [
+  "actively_seeking",
+  "quietly_inbound",
+  "under_loi",
+  "closed",
+] as const;
+export type MarketEngagementStatus = typeof MARKET_ENGAGEMENT_STATUSES[number];
+
+export const MARKET_LISTING_STATUSES = ["draft", "pending", "active", "paused", "closed"] as const;
+export type MarketListingStatus = typeof MARKET_LISTING_STATUSES[number];
+
+export const marketListings = pgTable("market_listings", {
+  id: serial("id").primaryKey(),
+  sellerId: text("seller_id").notNull(),
+  orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  assetName: text("asset_name"),
+  blind: boolean("blind").notNull().default(false),
+  therapeuticArea: text("therapeutic_area").notNull(),
+  modality: text("modality").notNull(),
+  stage: text("stage").notNull(),
+  milestoneHistory: text("milestone_history"),
+  mechanism: text("mechanism"),
+  ipStatus: text("ip_status"),
+  ipSummary: text("ip_summary"),
+  askingPrice: text("asking_price"),
+  priceRangeMin: integer("price_range_min"),
+  priceRangeMax: integer("price_range_max"),
+  engagementStatus: text("engagement_status").notNull().default("actively_seeking"),
+  aiSummary: text("ai_summary"),
+  status: text("status").notNull().default("draft"),
+  adminNote: text("admin_note"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+  updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketListingSchema = createInsertSchema(marketListings).omit({ id: true, createdAt: true, updatedAt: true, aiSummary: true, adminNote: true, status: true });
+export type InsertMarketListing = z.infer<typeof insertMarketListingSchema>;
+export type MarketListing = typeof marketListings.$inferSelect;
+
+export const MARKET_EOI_STATUSES = ["submitted", "viewed", "accepted", "declined"] as const;
+export type MarketEoiStatus = typeof MARKET_EOI_STATUSES[number];
+
+export const marketEois = pgTable("market_eois", {
+  id: serial("id").primaryKey(),
+  listingId: integer("listing_id").notNull().references(() => marketListings.id, { onDelete: "cascade" }),
+  buyerId: text("buyer_id").notNull(),
+  company: text("company").notNull(),
+  role: text("role").notNull(),
+  rationale: text("rationale").notNull(),
+  budgetRange: text("budget_range"),
+  timeline: text("timeline"),
+  status: text("status").notNull().default("submitted"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketEoiSchema = createInsertSchema(marketEois).omit({ id: true, createdAt: true, status: true });
+export type InsertMarketEoi = z.infer<typeof insertMarketEoiSchema>;
+export type MarketEoi = typeof marketEois.$inferSelect;
+
+export const marketSubscriptions = pgTable("market_subscriptions", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  status: text("status").notNull().default("active"),
+  currentPeriodEnd: timestamp("current_period_end"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertMarketSubscriptionSchema = createInsertSchema(marketSubscriptions).omit({ id: true, createdAt: true });
+export type InsertMarketSubscription = z.infer<typeof insertMarketSubscriptionSchema>;
+export type MarketSubscription = typeof marketSubscriptions.$inferSelect;
 
 export const appEvents = pgTable("app_events", {
   id: serial("id").primaryKey(),

@@ -273,6 +273,45 @@ All Stripe routes return **503** when `STRIPE_SECRET_KEY` is absent — no crash
 - Release tagging via `npm_package_version` (server) / `VITE_npm_package_version` (frontend) for per-deploy error grouping
 - Both sides gracefully no-op if DSN is not set (safe for development)
 
+## EdenMarket (Task #627)
+
+Confidential biopharma deal marketplace portal at `/market`. Subscription-gated ($1k/month via Stripe), fully integrated with the industry portal.
+
+### Architecture
+- **Access gate**: `MarketGate` component checks `/api/market/access` — shows paywall if `org.edenMarketAccess === false`
+- **Stripe checkout**: `POST /api/market/checkout` creates a Stripe subscription session; `GET /api/market/verify-session?market_session_id=` activates org access after payment
+- **Layout**: `MarketLayout` + `MarketSidebar` (violet accent `hsl(271 81% 55%)`) — separate from DashboardLayout
+- **DB tables**: `market_listings`, `market_eois`, `market_subscriptions` + `eden_market_access`/`eden_market_stripe_sub_id` on organizations
+- **Migration**: `migrations/0009_edenmarket.sql`
+
+### Routes
+| Route | Description |
+|---|---|
+| `/market` | Buyer feed with filters + side-by-side comparison (up to 3) |
+| `/market/listing/:id` | Full listing detail + EOI submission sheet |
+| `/market/seller` | Seller dashboard — manage listings, view EOIs |
+| `/market/create-listing` | Multi-step listing form (4 steps + AI summary generation) |
+| `/market/my-eois` | Buyer's submitted EOIs with status tracking |
+
+### API Endpoints
+- `GET /api/market/access` — access check
+- `POST /api/market/checkout` — Stripe checkout
+- `GET /api/market/verify-session` — activate after payment
+- `GET /api/market/listings` — active listings (buyer feed, filtered)
+- `POST /api/market/listings` — create listing (AI summary via gpt-4o-mini)
+- `GET/PATCH/DELETE /api/market/listings/:id` — listing CRUD
+- `GET /api/market/my-listings` — seller's own listings
+- `POST /api/market/eois` — submit EOI
+- `GET /api/market/my-eois` — buyer's EOIs
+- `GET /api/market/seller/eois` — EOIs on seller's listings
+- `GET/PATCH /api/admin/market/*` — admin review, stats, approval
+
+### Admin Tab
+Admin panel has a new "EdenMarket" section with stats dashboard, listing review/approval workflow, and EOI audit view.
+
+### Env Vars Required
+- `STRIPE_PRICE_EDENMARKET` — Stripe price ID for the $1,000/month EdenMarket subscription
+
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
 - `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)

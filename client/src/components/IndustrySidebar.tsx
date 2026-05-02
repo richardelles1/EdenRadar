@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   Search, Lightbulb, FlaskConical, Building2, Bell,
   Layers, User, Moon, Sun, LogOut, Menu, X, Radar,
-  LayoutDashboard, Settings, Newspaper,
+  LayoutDashboard, Settings, Newspaper, ShoppingBag,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
@@ -54,6 +54,12 @@ const NAV_GROUPS: NavGroup[] = [
       { href: "/assets", label: "Pipelines", icon: Layers },
       { href: "/industry/concepts", label: "Discovery", icon: Lightbulb },
       { href: "/industry/projects", label: "Lab", icon: FlaskConical },
+    ],
+  },
+  {
+    groupLabel: "EdenMarket",
+    items: [
+      { href: "/market", label: "Deal Marketplace", icon: ShoppingBag, exact: true },
     ],
   },
 ];

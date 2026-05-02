@@ -28,6 +28,9 @@ import {
   teamActivities, type TeamActivity, type InsertTeamActivity,
   stripeBillingEvents, type StripeBillingEvent, type InsertStripeBillingEvent,
   savedReports, type SavedReport, type InsertSavedReport,
+  marketListings, type MarketListing, type InsertMarketListing,
+  marketEois, type MarketEoi, type InsertMarketEoi,
+  marketSubscriptions, type MarketSubscription, type InsertMarketSubscription,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -360,6 +363,29 @@ export interface IStorage {
   createSavedReport(data: InsertSavedReport): Promise<SavedReport>;
   getSavedReports(userId: string): Promise<SavedReport[]>;
   deleteSavedReport(id: number, userId: string): Promise<void>;
+
+  // EdenMarket — Listings
+  createMarketListing(data: InsertMarketListing & { sellerId: string }): Promise<MarketListing>;
+  getMarketListing(id: number): Promise<MarketListing | undefined>;
+  getMarketListings(filters?: { status?: string; therapeuticArea?: string; modality?: string; stage?: string; engagementStatus?: string }): Promise<MarketListing[]>;
+  getMarketListingsBySeller(sellerId: string): Promise<MarketListing[]>;
+  updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing>): Promise<MarketListing | undefined>;
+  adminUpdateMarketListing(id: number, data: { status: string; adminNote?: string }): Promise<MarketListing | undefined>;
+  deleteMarketListing(id: number, sellerId: string): Promise<void>;
+
+  // EdenMarket — EOIs
+  createMarketEoi(data: InsertMarketEoi & { buyerId: string }): Promise<MarketEoi>;
+  getMarketEoisForListing(listingId: number): Promise<MarketEoi[]>;
+  getMarketEoisByBuyer(buyerId: string): Promise<(MarketEoi & { listing: MarketListing | null })[]>;
+  getMarketEoiCount(listingId: number): Promise<number>;
+  getBuyerEoiForListing(listingId: number, buyerId: string): Promise<MarketEoi | undefined>;
+
+  // EdenMarket — Subscriptions
+  createMarketSubscription(data: InsertMarketSubscription): Promise<MarketSubscription>;
+  getMarketSubscription(orgId: number): Promise<MarketSubscription | undefined>;
+
+  // EdenMarket — Admin stats
+  getMarketAdminStats(): Promise<{ totalListings: number; pendingListings: number; activeListings: number; totalEois: number; marketSubscribers: number }>;
 }
 
 export type SubscriberMatchEntry = {
@@ -3246,6 +3272,120 @@ export class DatabaseStorage implements IStorage {
     await db
       .delete(savedReports)
       .where(and(eq(savedReports.id, id), eq(savedReports.userId, userId)));
+  }
+
+  // ── EdenMarket ────────────────────────────────────────────────────────────────
+
+  async createMarketListing(data: InsertMarketListing & { sellerId: string }): Promise<MarketListing> {
+    const [row] = await db.insert(marketListings).values({ ...data, status: "pending" }).returning();
+    return row;
+  }
+
+  async getMarketListing(id: number): Promise<MarketListing | undefined> {
+    const [row] = await db.select().from(marketListings).where(eq(marketListings.id, id));
+    return row;
+  }
+
+  async getMarketListings(filters?: { status?: string; therapeuticArea?: string; modality?: string; stage?: string; engagementStatus?: string }): Promise<MarketListing[]> {
+    const conditions: SQL[] = [];
+    if (filters?.status) conditions.push(eq(marketListings.status, filters.status));
+    if (filters?.therapeuticArea) conditions.push(ilike(marketListings.therapeuticArea, `%${filters.therapeuticArea}%`));
+    if (filters?.modality) conditions.push(ilike(marketListings.modality, `%${filters.modality}%`));
+    if (filters?.stage) conditions.push(ilike(marketListings.stage, `%${filters.stage}%`));
+    if (filters?.engagementStatus) conditions.push(eq(marketListings.engagementStatus, filters.engagementStatus));
+    return db.select().from(marketListings)
+      .where(conditions.length ? and(...conditions) : undefined)
+      .orderBy(desc(marketListings.createdAt));
+  }
+
+  async getMarketListingsBySeller(sellerId: string): Promise<MarketListing[]> {
+    return db.select().from(marketListings)
+      .where(eq(marketListings.sellerId, sellerId))
+      .orderBy(desc(marketListings.createdAt));
+  }
+
+  async updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing>): Promise<MarketListing | undefined> {
+    const [row] = await db.update(marketListings)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(marketListings.id, id), eq(marketListings.sellerId, sellerId)))
+      .returning();
+    return row;
+  }
+
+  async adminUpdateMarketListing(id: number, data: { status: string; adminNote?: string }): Promise<MarketListing | undefined> {
+    const [row] = await db.update(marketListings)
+      .set({ status: data.status, adminNote: data.adminNote, updatedAt: new Date() })
+      .where(eq(marketListings.id, id))
+      .returning();
+    return row;
+  }
+
+  async deleteMarketListing(id: number, sellerId: string): Promise<void> {
+    await db.delete(marketListings)
+      .where(and(eq(marketListings.id, id), eq(marketListings.sellerId, sellerId)));
+  }
+
+  async createMarketEoi(data: InsertMarketEoi & { buyerId: string }): Promise<MarketEoi> {
+    const [row] = await db.insert(marketEois).values(data).returning();
+    return row;
+  }
+
+  async getMarketEoisForListing(listingId: number): Promise<MarketEoi[]> {
+    return db.select().from(marketEois)
+      .where(eq(marketEois.listingId, listingId))
+      .orderBy(desc(marketEois.createdAt));
+  }
+
+  async getMarketEoisByBuyer(buyerId: string): Promise<(MarketEoi & { listing: MarketListing | null })[]> {
+    const rows = await db.select().from(marketEois)
+      .where(eq(marketEois.buyerId, buyerId))
+      .orderBy(desc(marketEois.createdAt));
+    const listingIds = [...new Set(rows.map(r => r.listingId))];
+    const listings = listingIds.length
+      ? await db.select().from(marketListings).where(inArray(marketListings.id, listingIds))
+      : [];
+    const listingMap = new Map(listings.map(l => [l.id, l]));
+    return rows.map(r => ({ ...r, listing: listingMap.get(r.listingId) ?? null }));
+  }
+
+  async getMarketEoiCount(listingId: number): Promise<number> {
+    const [row] = await db.select({ count: sql<number>`count(*)` }).from(marketEois)
+      .where(eq(marketEois.listingId, listingId));
+    return Number(row?.count ?? 0);
+  }
+
+  async getBuyerEoiForListing(listingId: number, buyerId: string): Promise<MarketEoi | undefined> {
+    const [row] = await db.select().from(marketEois)
+      .where(and(eq(marketEois.listingId, listingId), eq(marketEois.buyerId, buyerId)));
+    return row;
+  }
+
+  async createMarketSubscription(data: InsertMarketSubscription): Promise<MarketSubscription> {
+    const [row] = await db.insert(marketSubscriptions).values(data).returning();
+    return row;
+  }
+
+  async getMarketSubscription(orgId: number): Promise<MarketSubscription | undefined> {
+    const [row] = await db.select().from(marketSubscriptions)
+      .where(eq(marketSubscriptions.orgId, orgId))
+      .orderBy(desc(marketSubscriptions.createdAt))
+      .limit(1);
+    return row;
+  }
+
+  async getMarketAdminStats(): Promise<{ totalListings: number; pendingListings: number; activeListings: number; totalEois: number; marketSubscribers: number }> {
+    const [total] = await db.select({ count: sql<number>`count(*)` }).from(marketListings);
+    const [pending] = await db.select({ count: sql<number>`count(*)` }).from(marketListings).where(eq(marketListings.status, "pending"));
+    const [active] = await db.select({ count: sql<number>`count(*)` }).from(marketListings).where(eq(marketListings.status, "active"));
+    const [eois] = await db.select({ count: sql<number>`count(*)` }).from(marketEois);
+    const [subs] = await db.select({ count: sql<number>`count(*)` }).from(organizations).where(eq(organizations.edenMarketAccess, true));
+    return {
+      totalListings: Number(total?.count ?? 0),
+      pendingListings: Number(pending?.count ?? 0),
+      activeListings: Number(active?.count ?? 0),
+      totalEois: Number(eois?.count ?? 0),
+      marketSubscribers: Number(subs?.count ?? 0),
+    };
   }
 }
 

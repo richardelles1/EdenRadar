@@ -36,7 +36,7 @@ import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } 
 import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, APP_URL } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, APP_URL, sendEmail } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -9043,6 +9043,424 @@ If multiple assets appear, return each as a separate array item.`;
     } catch (err: any) {
       console.error("[share/resolve]", err?.message);
       res.status(500).json({ error: err.message ?? "Failed to retrieve shared link" });
+    }
+  });
+
+  // ── EdenMarket routes ─────────────────────────────────────────────────────────
+
+  // GET /api/market/access — check if current user's org has EdenMarket access
+  app.get("/api/market/access", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      res.json({ access: org?.edenMarketAccess ?? false, orgId: org?.id ?? null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/checkout — Stripe checkout for EdenMarket subscription
+  app.post("/api/market/checkout", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe is not configured on this server" });
+
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const priceId = process.env.STRIPE_PRICE_EDENMARKET;
+      if (!priceId) return res.status(503).json({ error: "STRIPE_PRICE_EDENMARKET env var not set" });
+
+      let org = await storage.getOrgForUser(userId);
+      if (!org) {
+        const profile = await storage.getIndustryProfileByUserId(userId).catch(() => null);
+        org = await storage.createOrganization({
+          name: profile?.companyName?.trim() || "Personal Workspace",
+          planTier: "none",
+          seatLimit: 1,
+          billingMethod: "stripe",
+        });
+        await storage.addOrgMember({ orgId: org.id, userId, role: "owner", inviteSource: "self_service", inviteStatus: "active" });
+        await storage.setIndustryProfileOrg(userId, org.id);
+      }
+
+      if (org.edenMarketAccess) {
+        return res.status(409).json({ error: "Your organization already has EdenMarket access." });
+      }
+
+      let customerId: string;
+      if (org.stripeCustomerId) {
+        customerId = org.stripeCustomerId;
+      } else {
+        const customer = await stripe.customers.create({
+          email: org.billingEmail ?? undefined,
+          metadata: { orgId: String(org.id), product: "edenmarket" },
+        });
+        customerId = customer.id;
+        await storage.updateOrganization(org.id, { stripeCustomerId: customerId });
+      }
+
+      const origin = (req.headers.origin ?? req.headers.referer ?? "").replace(/\/$/, "");
+      const baseUrl = origin || `https://${req.headers.host}`;
+
+      const session = await stripe.checkout.sessions.create({
+        customer: customerId,
+        mode: "subscription",
+        payment_method_types: ["card"],
+        line_items: [{ price: priceId, quantity: 1 }],
+        success_url: `${baseUrl}/market?market_session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${baseUrl}/market`,
+        metadata: { orgId: String(org.id), product: "edenmarket" },
+        subscription_data: { metadata: { orgId: String(org.id), product: "edenmarket" } },
+      });
+
+      res.json({ url: session.url });
+    } catch (err: any) {
+      console.error("[market/checkout]", err?.message);
+      res.status(500).json({ error: err.message ?? "Failed to create checkout session" });
+    }
+  });
+
+  // GET /api/market/verify-session — activate market access after checkout
+  app.get("/api/market/verify-session", verifyAnyAuth, async (req, res) => {
+    const stripe = getStripe();
+    if (!stripe) return res.status(503).json({ error: "Stripe not configured" });
+
+    try {
+      const sessionId = String(req.query.market_session_id ?? "");
+      if (!sessionId) return res.status(400).json({ error: "market_session_id required" });
+
+      const userId = req.headers["x-user-id"] as string;
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+
+      const safeStatuses = ["paid", "no_payment_required"];
+      if (!safeStatuses.includes(session.payment_status)) {
+        return res.status(402).json({ error: "Payment not completed" });
+      }
+
+      const orgId = parseInt(String(session.metadata?.orgId ?? "0"), 10);
+      if (!orgId) return res.status(400).json({ error: "No orgId in session metadata" });
+
+      const org = await storage.getOrganization(orgId);
+      if (!org) return res.status(404).json({ error: "Org not found" });
+
+      const subId = typeof session.subscription === "string" ? session.subscription : (session.subscription as any)?.id ?? "";
+
+      await storage.updateOrganization(orgId, {
+        edenMarketAccess: true,
+        edenMarketStripeSubId: subId || undefined,
+      });
+
+      if (subId) {
+        await storage.createMarketSubscription({ orgId, stripeSubscriptionId: subId, status: "active" });
+      }
+
+      res.json({ access: true });
+    } catch (err: any) {
+      console.error("[market/verify-session]", err?.message);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/listings — buyer feed (active listings)
+  app.get("/api/market/listings", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const { therapeuticArea, modality, stage, engagementStatus } = req.query as Record<string, string | undefined>;
+      const listings = await storage.getMarketListings({ status: "active", therapeuticArea, modality, stage, engagementStatus });
+
+      const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
+      const myEois = await storage.getMarketEoisByBuyer(userId);
+      const myEoiMap = new Map(myEois.map(e => [e.listingId, e.status]));
+
+      const result = listings.map((l, i) => ({
+        ...l,
+        assetName: l.blind ? null : l.assetName,
+        eoiCount: eoiCounts[i],
+        myEoiStatus: myEoiMap.get(l.id) ?? null,
+      }));
+
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/listings — create listing (seller)
+  app.post("/api/market/listings", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const schema = z.object({
+        therapeuticArea: z.string().min(1),
+        modality: z.string().min(1),
+        stage: z.string().min(1),
+        assetName: z.string().optional().nullable(),
+        blind: z.boolean().default(false),
+        milestoneHistory: z.string().optional().nullable(),
+        mechanism: z.string().optional().nullable(),
+        ipStatus: z.string().optional().nullable(),
+        ipSummary: z.string().optional().nullable(),
+        askingPrice: z.string().optional().nullable(),
+        priceRangeMin: z.number().int().optional().nullable(),
+        priceRangeMax: z.number().int().optional().nullable(),
+        engagementStatus: z.string().default("actively_seeking"),
+      });
+
+      const data = schema.parse(req.body);
+
+      // Generate AI summary using GPT-4o-mini
+      let aiSummary: string | null = null;
+      try {
+        const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+        const prompt = `Write a concise one-paragraph deal summary for a biopharma asset listing:
+Therapeutic Area: ${data.therapeuticArea}
+Modality: ${data.modality}
+Clinical Stage: ${data.stage}
+Mechanism: ${data.mechanism || "Not specified"}
+IP Status: ${data.ipStatus || "Not specified"}
+${data.assetName && !data.blind ? `Asset Name: ${data.assetName}` : "(Blind listing — name withheld)"}
+Price Range: ${data.priceRangeMin ? `$${data.priceRangeMin}M–$${data.priceRangeMax}M` : data.askingPrice || "Not disclosed"}
+
+Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic value and fit.`;
+
+        const completion = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 180,
+        });
+        aiSummary = completion.choices[0]?.message?.content?.trim() ?? null;
+      } catch (aiErr: any) {
+        console.warn("[market/listings] AI summary failed:", aiErr?.message);
+      }
+
+      const listing = await storage.createMarketListing({
+        ...data,
+        sellerId: userId,
+        orgId: org.id,
+        aiSummary,
+      } as any);
+
+      res.json(listing);
+    } catch (err: any) {
+      console.error("[market/listings POST]", err?.message);
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/listings/:id — single listing detail
+  app.get("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const id = parseInt(String(req.params.id), 10);
+      const listing = await storage.getMarketListing(id);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+
+      const isSeller = listing.sellerId === userId;
+      if (!isSeller && listing.status !== "active") {
+        return res.status(404).json({ error: "Listing not found" });
+      }
+
+      const eoiCount = await storage.getMarketEoiCount(id);
+      const myEoi = await storage.getBuyerEoiForListing(id, userId);
+
+      res.json({
+        ...listing,
+        assetName: listing.blind && !isSeller ? null : listing.assetName,
+        eoiCount,
+        myEoi: myEoi ?? null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/market/listings/:id — update own listing
+  app.patch("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = parseInt(String(req.params.id), 10);
+      const listing = await storage.getMarketListing(id);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+      if (listing.sellerId !== userId) return res.status(403).json({ error: "Forbidden" });
+
+      const allowed = z.object({
+        assetName: z.string().optional().nullable(),
+        blind: z.boolean().optional(),
+        therapeuticArea: z.string().optional(),
+        modality: z.string().optional(),
+        stage: z.string().optional(),
+        milestoneHistory: z.string().optional().nullable(),
+        mechanism: z.string().optional().nullable(),
+        ipStatus: z.string().optional().nullable(),
+        ipSummary: z.string().optional().nullable(),
+        askingPrice: z.string().optional().nullable(),
+        priceRangeMin: z.number().int().optional().nullable(),
+        priceRangeMax: z.number().int().optional().nullable(),
+        engagementStatus: z.string().optional(),
+        status: z.enum(["paused", "active", "closed"]).optional(),
+      });
+
+      const data = allowed.parse(req.body);
+      const updated = await storage.updateMarketListing(id, userId, data as any);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // DELETE /api/market/listings/:id
+  app.delete("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = parseInt(String(req.params.id), 10);
+      const listing = await storage.getMarketListing(id);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+      if (listing.sellerId !== userId) return res.status(403).json({ error: "Forbidden" });
+      await storage.deleteMarketListing(id, userId);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/my-listings — seller's own listings
+  app.get("/api/market/my-listings", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const listings = await storage.getMarketListingsBySeller(userId);
+      const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
+      res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // POST /api/market/eois — submit EOI
+  app.post("/api/market/eois", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
+      const schema = z.object({
+        listingId: z.number().int(),
+        company: z.string().min(1),
+        role: z.string().min(1),
+        rationale: z.string().min(1),
+        budgetRange: z.string().optional().nullable(),
+        timeline: z.string().optional().nullable(),
+      });
+
+      const data = schema.parse(req.body);
+
+      const listing = await storage.getMarketListing(data.listingId);
+      if (!listing || listing.status !== "active") {
+        return res.status(404).json({ error: "Listing not found or not active" });
+      }
+
+      const existing = await storage.getBuyerEoiForListing(data.listingId, userId);
+      if (existing) return res.status(409).json({ error: "You have already submitted an EOI for this listing" });
+
+      const eoi = await storage.createMarketEoi({ ...data, buyerId: userId });
+
+      // Notify admin
+      try {
+        await sendEmail(
+          "admin@edenradar.com",
+          `New EOI submitted — Listing #${data.listingId}`,
+          `<p>A new Expression of Interest has been submitted for listing #${data.listingId}.</p>
+           <p>Company: ${data.company}<br>Role: ${data.role}</p>
+           <p><a href="${APP_URL}/market/listing/${data.listingId}">View listing</a></p>`
+        );
+      } catch {}
+
+      res.json(eoi);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/my-eois — buyer's submitted EOIs
+  app.get("/api/market/my-eois", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const eois = await storage.getMarketEoisByBuyer(userId);
+      res.json(eois);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/seller/eois — EOIs on seller's listings
+  app.get("/api/market/seller/eois", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const listings = await storage.getMarketListingsBySeller(userId);
+      const listingIds = listings.map(l => l.id);
+      if (!listingIds.length) return res.json([]);
+
+      const eoisByListing = await Promise.all(
+        listingIds.map(async id => ({ listingId: id, eois: await storage.getMarketEoisForListing(id) }))
+      );
+      res.json(eoisByListing);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ── Admin: EdenMarket ─────────────────────────────────────────────────────────
+
+  app.get("/api/admin/market/stats", async (req, res) => {
+    try {
+      const stats = await storage.getMarketAdminStats();
+      res.json(stats);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/market/listings", async (req, res) => {
+    try {
+      const { status } = req.query as { status?: string };
+      const listings = await storage.getMarketListings(status ? { status } : undefined);
+      const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
+      res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/admin/market/listings/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id, 10);
+      const schema = z.object({
+        status: z.enum(["active", "pending", "paused", "closed", "draft"]),
+        adminNote: z.string().optional(),
+      });
+      const data = schema.parse(req.body);
+      const updated = await storage.adminUpdateMarketListing(id, data);
+      res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/market/eois", async (req, res) => {
+    try {
+      const listings = await storage.getMarketListings();
+      const result = await Promise.all(
+        listings.map(async l => ({ listing: l, eois: await storage.getMarketEoisForListing(l.id) }))
+      );
+      res.json(result.filter(r => r.eois.length > 0));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

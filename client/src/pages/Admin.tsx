@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
+import { EdenMarketTab } from "@/components/admin/EdenMarketTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -9563,6 +9564,21 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <BarChart3 className="h-4 w-4" />
               Analytics
             </button>
+
+            {/* ── EDENMARKET ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-edenmarket">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">EdenMarket</p>
+            </div>
+            <button
+              onClick={() => setActiveTab("edenmarket")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "edenmarket" ? "bg-violet-500/10 text-violet-600" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-edenmarket"
+            >
+              <Globe className="h-4 w-4" />
+              EdenMarket
+            </button>
           </nav>
         </aside>
 
@@ -9696,6 +9712,19 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
                 <p className="text-sm text-muted-foreground mt-1">Platform usage metrics: search volume, AI sessions, feature adoption, and top search queries. No user PII is shown.</p>
               </div>
               <AnalyticsTab pw={pw} />
+            </>
+          )}
+
+          {activeTab === "edenmarket" && (
+            <>
+              <div className="mb-6">
+                <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
+                  <Globe className="h-6 w-6 text-violet-500" />
+                  EdenMarket
+                </h2>
+                <p className="text-sm text-muted-foreground mt-1">Review and approve biopharma deal listings, monitor EOI submissions, and manage marketplace subscribers.</p>
+              </div>
+              <EdenMarketTab />
             </>
           )}
 
