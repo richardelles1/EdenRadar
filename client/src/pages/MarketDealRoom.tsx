@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
-  Send, CheckCircle2, Clock, AlertCircle, Shield, Building2,
+  Send, CheckCircle2, Clock, AlertCircle, Shield, Building2, Download, History,
 } from "lucide-react";
 import type { MarketDeal, MarketDealDocument, MarketDealMessage } from "@shared/schema";
 
@@ -46,7 +46,8 @@ type PartialEoi = {
   timeline: string | null;
 };
 
-type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null };
+type StatusHistoryEntry = { status: string; changedAt: string; changedBy: string };
+type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null };
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -258,7 +259,7 @@ export default function MarketDealRoom() {
     );
   }
 
-  const { deal, listing, eoi } = roomData;
+  const { deal, listing, eoi, ndaDocumentUrl } = roomData;
   const isSeller = deal.sellerId === userId;
   const isBuyer = deal.buyerId === userId;
   const ndaUnlocked = !!deal.ndaSignedAt;
@@ -352,13 +353,26 @@ export default function MarketDealRoom() {
           ) : (
             <p className="text-xs text-muted-foreground">Listing details not available.</p>
           )}
-          {eoi && ndaUnlocked && (
+          {/* Identity is revealed to both parties as soon as the deal is created (EOI accepted) */}
+          {eoi && (eoi.company || eoi.role) && (
             <div className="pt-2 border-t border-border text-xs space-y-1">
-              <p className="font-medium text-foreground">EOI Details</p>
-              <p><span className="text-muted-foreground">Company:</span> {eoi.company} · {eoi.role}</p>
-              <p><span className="text-muted-foreground">Rationale:</span> {eoi.rationale}</p>
-              {eoi.budgetRange && <p><span className="text-muted-foreground">Budget:</span> {eoi.budgetRange}</p>}
-              {eoi.timeline && <p><span className="text-muted-foreground">Timeline:</span> {eoi.timeline}</p>}
+              <div className="flex items-center gap-1.5 mb-1">
+                <Building2 className="w-3 h-3 text-muted-foreground" />
+                <span className="font-medium text-foreground">Counterparty Identity</span>
+                <Badge variant="outline" className="text-[10px] border-violet-500/30 text-violet-700 dark:text-violet-400">Revealed</Badge>
+              </div>
+              {eoi.company && <p><span className="text-muted-foreground">Company:</span> {eoi.company}</p>}
+              {eoi.role && <p><span className="text-muted-foreground">Role:</span> {eoi.role}</p>}
+              {ndaUnlocked && (
+                <>
+                  {eoi.rationale && <p><span className="text-muted-foreground">Rationale:</span> {eoi.rationale}</p>}
+                  {eoi.budgetRange && <p><span className="text-muted-foreground">Budget:</span> {eoi.budgetRange}</p>}
+                  {eoi.timeline && <p><span className="text-muted-foreground">Timeline:</span> {eoi.timeline}</p>}
+                </>
+              )}
+              {!ndaUnlocked && (
+                <p className="text-muted-foreground/60 italic text-[10px]">Due diligence details (rationale, budget, timeline) unlock after NDA execution.</p>
+              )}
             </div>
           )}
         </div>
@@ -377,7 +391,7 @@ export default function MarketDealRoom() {
           </div>
 
           {ndaUnlocked ? (
-            <div className="text-xs text-muted-foreground space-y-1">
+            <div className="text-xs text-muted-foreground space-y-1.5">
               <p>Both parties have executed the NDA. The deal room is fully unlocked.</p>
               <p>
                 <span className="font-medium text-foreground">Party A (Seller):</span> {deal.sellerSignedName} —{" "}
@@ -387,6 +401,18 @@ export default function MarketDealRoom() {
                 <span className="font-medium text-foreground">Party B (Buyer):</span> {deal.buyerSignedName} —{" "}
                 {deal.buyerSignedAt ? new Date(deal.buyerSignedAt).toLocaleString() : ""}
               </p>
+              {ndaDocumentUrl && (
+                <a
+                  href={ndaDocumentUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 dark:text-violet-400 hover:underline mt-1"
+                  data-testid="nda-download-link"
+                >
+                  <Download className="w-3 h-3" />
+                  Download executed NDA
+                </a>
+              )}
             </div>
           ) : (
             <div className="space-y-4">
@@ -455,6 +481,33 @@ export default function MarketDealRoom() {
             </div>
           )}
         </div>
+
+        {/* Status History Timeline */}
+        {Array.isArray((deal as any).statusHistory) && (deal as any).statusHistory.length > 0 && (
+          <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
+            <div className="flex items-center gap-2">
+              <History className="w-4 h-4 text-muted-foreground" />
+              <span className="text-sm font-semibold text-foreground">Deal Timeline</span>
+            </div>
+            <div className="relative pl-4 space-y-3">
+              <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
+              {((deal as any).statusHistory as StatusHistoryEntry[]).map((entry, i) => (
+                <div key={i} className="relative flex items-start gap-3" data-testid={`status-history-${i}`}>
+                  <div className="absolute -left-3 top-1 w-2 h-2 rounded-full border-2 border-violet-500 bg-background" />
+                  <div className="min-w-0">
+                    <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full border", STATUS_COLORS[entry.status] ?? "border-border text-muted-foreground")}>
+                      {STATUS_LABELS[entry.status] ?? entry.status}
+                    </span>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {new Date(entry.changedAt).toLocaleString()}
+                      {entry.changedBy === "system" ? " · system" : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Documents Section */}
         <div className={cn("rounded-xl border border-card-border bg-card p-5 space-y-4", !ndaUnlocked && "opacity-50 pointer-events-none")}>

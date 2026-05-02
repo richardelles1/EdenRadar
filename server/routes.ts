@@ -9718,7 +9718,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const listing = await storage.getMarketListing(deal.listingId);
       const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, deal.eoiId)).limit(1);
 
-      // Redact sensitive fields until NDA is fully signed by both parties
+      // After EOI acceptance (deal created), identities are mutually revealed.
+      // Deep IP/financial data and EOI rationale/budget are gated behind NDA execution.
       if (!deal.ndaSignedAt) {
         const redactedListing = listing ? {
           id: listing.id,
@@ -9730,8 +9731,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           status: listing.status,
           createdAt: listing.createdAt,
           updatedAt: listing.updatedAt,
-          // Redact everything sensitive
-          assetName: null,
+          sellerId: listing.sellerId,
+          // Identity reveal: asset name is shared post-accept
+          assetName: listing.blind ? null : listing.assetName,
+          // Gate deep technical/financial data behind NDA
           mechanism: null,
           ipStatus: null,
           ipSummary: null,
@@ -9741,17 +9744,17 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           priceRangeMax: null,
           aiSummary: null,
           adminNote: null,
-          sellerId: listing.sellerId,
         } : null;
         const redactedEoi = eoi ? {
           id: eoi.id,
           listingId: eoi.listingId,
           status: eoi.status,
           createdAt: eoi.createdAt,
-          // Redact buyer identity & details until NDA signed
-          buyerId: null,
-          company: null,
-          role: null,
+          // Identity reveal: buyer company/role are shared post-accept
+          buyerId: eoi.buyerId,
+          company: eoi.company,
+          role: eoi.role,
+          // Gate due-diligence details behind NDA
           rationale: null,
           budgetRange: null,
           timeline: null,
@@ -9759,7 +9762,22 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         return res.json({ deal, listing: redactedListing, eoi: redactedEoi });
       }
 
-      res.json({ deal, listing, eoi });
+      // NDA signed — return NDA download URL if document exists
+      let ndaDocumentUrl: string | null = null;
+      if (deal.ndaDocumentPath) {
+        const sbUrl = process.env.VITE_SUPABASE_URL;
+        const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (sbUrl && sbServiceKey) {
+          try {
+            const { createClient: createSbClient } = await import("@supabase/supabase-js");
+            const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+            const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(deal.ndaDocumentPath, 3600);
+            ndaDocumentUrl = data?.signedUrl ?? null;
+          } catch {}
+        }
+      }
+
+      res.json({ deal, listing, eoi, ndaDocumentUrl });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -9802,10 +9820,29 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         updatedDeal = await storage.updateMarketDeal(dealId, {
           ndaSignedAt: now,
           status: "nda_signed",
+          statusHistory: [...(Array.isArray(deal.statusHistory) ? deal.statusHistory : []), { status: "nda_signed", changedAt: now.toISOString(), changedBy: "system" }] as any,
         }) ?? updatedDeal;
 
-        // Send NDA signed emails
+        // Generate and store NDA artifact (HTML → stored in Supabase)
         const listing = await storage.getMarketListing(deal.listingId);
+        const assetRef = listing?.blind
+          ? `a ${listing.therapeuticArea} ${listing.modality} asset (EdenMarket Listing #${deal.listingId})`
+          : (listing?.assetName || `EdenMarket Listing #${deal.listingId}`);
+        const signedDate = new Date(updatedDeal.sellerSignedAt!).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+        const ndaHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Mutual NDA — Deal #${dealId}</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#222;line-height:1.7}h1{text-align:center;font-size:1.2rem;margin-bottom:2rem}p{margin-bottom:1rem}strong{color:#000}.signatures{border-top:1px solid #ddd;margin-top:2rem;padding-top:1.5rem}.sig-block{margin-bottom:1.5rem}</style></head><body><h1>MUTUAL NON-DISCLOSURE AGREEMENT</h1><p>This Mutual Non-Disclosure Agreement ("Agreement") is entered into as of <strong>${signedDate}</strong>, between the Seller party (Deal Party A) and the Buyer party (Deal Party B) in connection with <strong>${assetRef}</strong>, facilitated through EdenMarket by EdenRadar.</p><p><strong>1. CONFIDENTIAL INFORMATION.</strong> Each party ("Disclosing Party") may disclose to the other party ("Receiving Party") certain non-public, proprietary, or confidential information ("Confidential Information") in connection with the evaluation of a potential business transaction regarding the above-referenced asset.</p><p><strong>2. NON-DISCLOSURE.</strong> Each Receiving Party agrees to: (a) hold the Disclosing Party's Confidential Information in strict confidence; (b) not disclose it to any third party without prior written consent; (c) use it solely for evaluating the Potential Transaction; and (d) protect it using at least the same degree of care applied to its own confidential information.</p><p><strong>3. TERM.</strong> This Agreement shall remain in force for three (3) years from the date of execution, unless otherwise terminated by mutual written agreement.</p><p><strong>4. RETURN OF INFORMATION.</strong> Upon request, each party shall promptly return or certifiably destroy all Confidential Information received.</p><p><strong>5. GOVERNING LAW.</strong> This Agreement shall be governed by the laws of the jurisdiction in which the Disclosing Party is incorporated.</p><p><strong>6. ENTIRE AGREEMENT.</strong> This Agreement constitutes the entire agreement between the parties with respect to the subject matter herein.</p><div class="signatures"><div class="sig-block"><strong>Party A (Seller):</strong> ${updatedDeal.sellerSignedName ?? ""}<br>Signed: ${updatedDeal.sellerSignedAt ? new Date(updatedDeal.sellerSignedAt).toLocaleString() : ""}</div><div class="sig-block"><strong>Party B (Buyer):</strong> ${updatedDeal.buyerSignedName ?? ""}<br>Signed: ${updatedDeal.buyerSignedAt ? new Date(updatedDeal.buyerSignedAt).toLocaleString() : ""}</div><p style="font-size:0.8rem;color:#888;margin-top:2rem">Document ID: DEAL-${dealId}-NDA · EdenMarket · Generated: ${new Date().toISOString()}</p></div></body></html>`;
+
+        try {
+          const sbUrl = process.env.VITE_SUPABASE_URL;
+          const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+          if (sbUrl && sbServiceKey) {
+            const { createClient: createSbClient } = await import("@supabase/supabase-js");
+            const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+            const ndaPath = `deal-${dealId}/nda-executed.html`;
+            await sbAdmin.storage.from("market-deal-docs").upload(ndaPath, Buffer.from(ndaHtml, "utf-8"), { contentType: "text/html", upsert: true });
+            await storage.updateMarketDeal(dealId, { ndaDocumentPath: ndaPath });
+          }
+        } catch {}
+
         const assetLabel = listing?.blind
           ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
           : (listing?.assetName || `Listing #${deal.listingId}`);
@@ -9842,7 +9879,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         status: z.enum(["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"]),
       }).parse(req.body);
 
-      const updated = await storage.updateMarketDeal(dealId, { status });
+      // Append to status history
+      const historyEntry = { status, changedAt: new Date().toISOString(), changedBy: userId };
+      const currentHistory = Array.isArray(deal.statusHistory) ? deal.statusHistory : [];
+      const updated = await storage.updateMarketDeal(dealId, {
+        status,
+        statusHistory: [...currentHistory, historyEntry] as any,
+      });
 
       // Alert admin on LOI or Closed
       if (status === "loi" || status === "closed") {
@@ -9874,6 +9917,25 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
       if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before accessing documents" });
       const docs = await storage.getMarketDealDocuments(dealId);
+
+      // Generate short-lived signed URLs for each document
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (sbUrl && sbServiceKey && docs.length > 0) {
+        try {
+          const { createClient: createSbClient } = await import("@supabase/supabase-js");
+          const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+          const docsWithUrls = await Promise.all(docs.map(async (doc) => {
+            // If fileUrl looks like a path (not a full URL), generate signed URL
+            if (!doc.fileUrl.startsWith("http")) {
+              const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
+              return { ...doc, fileUrl: data?.signedUrl ?? doc.fileUrl };
+            }
+            return doc;
+          }));
+          return res.json(docsWithUrls);
+        } catch {}
+      }
       res.json(docs);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -9938,13 +10000,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         }
       }
 
-      const { data: { publicUrl } } = adminClient.storage.from("market-deal-docs").getPublicUrl(path);
-
+      // Store bucket path — signed URLs are generated on retrieval
       const doc = await storage.createMarketDealDocument({
         dealId,
         uploaderId: userId,
         fileName: file.originalname,
-        fileUrl: publicUrl,
+        fileUrl: path,
         fileSize: file.size,
       });
 
@@ -10006,6 +10067,54 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // ── Admin: Deal Pipeline ──────────────────────────────────────────────────────
+
+  // GET /api/admin/market/deals/:id/messages — read-only deal message thread
+  app.get("/api/admin/market/deals/:id/messages", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      const messages = await storage.getMarketDealMessages(dealId);
+      res.json(messages);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/market/deals/:id/documents — read-only deal document list
+  app.get("/api/admin/market/deals/:id/documents", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      const docs = await storage.getMarketDealDocuments(dealId);
+
+      // Generate signed URLs for admin visibility
+      const sbUrl = process.env.VITE_SUPABASE_URL;
+      const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+      if (sbUrl && sbServiceKey && docs.length > 0) {
+        try {
+          const { createClient: createSbClient } = await import("@supabase/supabase-js");
+          const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+          const docsWithUrls = await Promise.all(docs.map(async (doc) => {
+            if (!doc.fileUrl.startsWith("http")) {
+              const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(doc.fileUrl, 3600);
+              return { ...doc, fileUrl: data?.signedUrl ?? doc.fileUrl };
+            }
+            return doc;
+          }));
+          return res.json(docsWithUrls);
+        } catch {}
+      }
+      res.json(docs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // GET /api/admin/market/deals — all deals pipeline view
   app.get("/api/admin/market/deals", async (req, res) => {

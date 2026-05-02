@@ -1125,11 +1125,13 @@ async function createMarketDealsTables() {
         seller_id               TEXT NOT NULL,
         buyer_id                TEXT NOT NULL,
         status                  TEXT NOT NULL DEFAULT 'nda_pending',
+        status_history          JSONB NOT NULL DEFAULT '[]',
         seller_signed_at        TIMESTAMP,
         seller_signed_name      TEXT,
         buyer_signed_at         TIMESTAMP,
         buyer_signed_name       TEXT,
         nda_signed_at           TIMESTAMP,
+        nda_document_path       TEXT,
         success_fee_invoice_id  TEXT,
         success_fee_deal_size_m INTEGER,
         success_fee_amount      INTEGER,
@@ -1137,6 +1139,9 @@ async function createMarketDealsTables() {
         updated_at              TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    // Add new columns if they don't exist (for existing tables)
+    await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS status_history JSONB NOT NULL DEFAULT '[]'`);
+    await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS nda_document_path TEXT`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_deal_documents (
         id           SERIAL PRIMARY KEY,
