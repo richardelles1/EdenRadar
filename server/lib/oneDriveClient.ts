@@ -53,30 +53,43 @@ export async function getUncachableOneDriveClient(): Promise<Client> {
   });
 }
 
-async function ensureOneDriveFolder(
-  accessToken: string,
-  folderName: string
-): Promise<void> {
-  // Try to create the folder; if it already exists (409 Conflict), that's fine
+export async function isOneDriveConnected(): Promise<boolean> {
   try {
-    await fetch(
-      "https://graph.microsoft.com/v1.0/me/drive/root/children",
-      {
+    await getAccessToken();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function ensureOneDriveFolderPath(
+  accessToken: string,
+  folderPath: string
+): Promise<void> {
+  // Create each segment in turn; conflictBehavior:replace returns the existing folder.
+  const parts = folderPath.split("/").filter(Boolean);
+  let parentPath = "";
+  for (const part of parts) {
+    const parentEndpoint = parentPath
+      ? `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(parentPath)}:/children`
+      : "https://graph.microsoft.com/v1.0/me/drive/root/children";
+    try {
+      await fetch(parentEndpoint, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          name: folderName,
+          name: part,
           folder: {},
-          "@microsoft.graph.conflictBehavior": "fail",
+          "@microsoft.graph.conflictBehavior": "replace",
         }),
-      }
-    );
-    // 201 = created, 409 = already exists — both are acceptable
-  } catch {
-    // folder creation errors are non-fatal; upload will still work if folder exists
+      });
+    } catch {
+      // non-fatal: upload will still work if folder exists
+    }
+    parentPath = parentPath ? `${parentPath}/${part}` : part;
   }
 }
 
@@ -85,15 +98,31 @@ export interface UploadResult {
   webUrl: string;
 }
 
+const DOCX_MIME =
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+function inferContentType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "docx") return DOCX_MIME;
+  if (ext === "csv") return "text/csv";
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (ext === "json") return "application/json";
+  if (ext === "txt") return "text/plain";
+  if (ext === "html" || ext === "htm") return "text/html";
+  return "application/octet-stream";
+}
+
 export async function uploadToOneDrive(
   filename: string,
   buffer: Buffer,
-  folder = "EdenRadar Templates"
+  folder = "EdenRadar Templates",
+  contentType?: string
 ): Promise<UploadResult> {
   const accessToken = await getAccessToken();
 
-  // Ensure the target folder exists before uploading
-  await ensureOneDriveFolder(accessToken, folder);
+  // Ensure the target folder path exists (supports nested paths like "EdenRadar/Documents")
+  await ensureOneDriveFolderPath(accessToken, folder);
 
   const remotePath = `${folder}/${filename}`;
   const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(remotePath)}:/content`;
@@ -102,8 +131,7 @@ export async function uploadToOneDrive(
     method: "PUT",
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      "Content-Type":
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "Content-Type": contentType ?? inferContentType(filename),
     },
     body: buffer,
   });

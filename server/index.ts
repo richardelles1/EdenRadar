@@ -1114,6 +1114,31 @@ async function createSavedReportsTable() {
   }
 }
 
+// ── Ensure export_logs table exists (cloud export audit log) ──────────────────
+async function createExportLogsTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS export_logs (
+        id              SERIAL PRIMARY KEY,
+        filename        TEXT NOT NULL,
+        destination     TEXT NOT NULL,
+        file_type       TEXT NOT NULL DEFAULT 'document',
+        exported_by     TEXT,
+        share_url       TEXT,
+        success         BOOLEAN NOT NULL DEFAULT TRUE,
+        error_message   TEXT,
+        exported_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS export_logs_exported_at_idx ON export_logs (exported_at DESC)
+    `);
+    log("[startup] export_logs table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] export_logs table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure market_deals tables exist ──────────────────────────────────────────
 async function createMarketDealsTables() {
   try {
@@ -1373,6 +1398,8 @@ async function migrateAssetStatusValues() {
       createSavedReportsTable().catch(() => {});
       // ── Ensure market_deals tables exist (idempotent) ────────────────────
       createMarketDealsTables().catch(() => {});
+      // ── Ensure export_logs table exists (idempotent) ─────────────────────
+      createExportLogsTable().catch(() => {});
       // ── Trial-ending reminder emails (every 6h, 25h window) ────────────
       scheduleTrialReminderCheck();
       // ── Backfill industry_profiles for Supabase digest subscribers ───────

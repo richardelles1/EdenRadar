@@ -34,6 +34,7 @@ import {
   marketDeals, type MarketDeal, type InsertMarketDeal,
   marketDealDocuments, type MarketDealDocument, type InsertMarketDealDocument,
   marketDealMessages, type MarketDealMessage, type InsertMarketDealMessage,
+  exportLogs, type ExportLog, type InsertExportLog,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
@@ -407,6 +408,9 @@ export interface IStorage {
   // EdenMarket — Deal Messages
   createMarketDealMessage(data: InsertMarketDealMessage): Promise<MarketDealMessage>;
   getMarketDealMessages(dealId: number): Promise<MarketDealMessage[]>;
+
+  logExport(data: InsertExportLog): Promise<ExportLog>;
+  getRecentExports(limit?: number): Promise<ExportLog[]>;
 }
 
 export type SubscriberMatchEntry = {
@@ -3479,6 +3483,19 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(marketDealMessages)
       .where(eq(marketDealMessages.dealId, dealId))
       .orderBy(marketDealMessages.sentAt);
+  }
+
+  // ── Cloud Export Log ──────────────────────────────────────────────────────
+
+  async logExport(data: InsertExportLog): Promise<ExportLog> {
+    const [row] = await db.insert(exportLogs).values(data).returning();
+    return row;
+  }
+
+  async getRecentExports(limit = 20): Promise<ExportLog[]> {
+    return db.select().from(exportLogs)
+      .orderBy(desc(exportLogs.exportedAt))
+      .limit(limit);
   }
 }
 

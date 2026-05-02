@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Moon, Printer, Sun, Share2, Eye, EyeOff, Copy, Check, Lock, Loader2 } from "lucide-react";
 import { PRINT_STYLES, PrintFooter, formatDate, GREEN, BG_DARK } from "@/lib/print-shared";
+import { ExportMenu } from "@/components/ExportMenu";
 
 type BriefData = {
   brief: string;
@@ -246,6 +247,18 @@ export default function PipelineBriefPrint() {
           <Printer size={13} />
           Print / Save PDF
         </button>
+        <ExportMenu
+          label="Cloud"
+          getContent={async () => {
+            const { captureCurrentPageAsHtml, utf8ToBase64 } = await import("@/components/ExportMenu");
+            const html = captureCurrentPageAsHtml();
+            return {
+              content: utf8ToBase64(html),
+              filename: `EdenRadar_Pipeline_Brief_${new Date().toISOString().slice(0, 10)}.html`,
+              fileType: "html",
+            };
+          }}
+        />
       </div>
 
       <div style={{ maxWidth: "760px", margin: "0 auto", padding: "3rem 2rem 4rem" }}>

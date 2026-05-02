@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Printer, Search, BarChart3, GitBranch, Shield, Bell, FileText, CheckCircle2, Globe, ShoppingBag, Lock, Handshake } from "lucide-react";
 import QRCode from "qrcode";
+import { ExportMenu } from "@/components/ExportMenu";
 
 const NAVY = "#0f1e35";
 const EMERALD = "#1e7a4a";
@@ -355,10 +356,9 @@ export default function OnePager() {
       `}</style>
 
       <div className="op-shell">
-        <button
-          onClick={handlePrint}
-          data-testid="button-download-pdf"
+        <div
           className="no-print"
+          data-export-control
           style={{
             position: "fixed",
             top: "20px",
@@ -366,24 +366,46 @@ export default function OnePager() {
             display: "flex",
             alignItems: "center",
             gap: "8px",
-            padding: "10px 22px",
-            borderRadius: "8px",
-            background: EMERALD,
-            color: WHITE,
-            fontFamily: "'Open Sans', sans-serif",
-            fontSize: "14px",
-            fontWeight: 600,
-            border: "none",
-            cursor: "pointer",
-            boxShadow: "0 4px 14px rgba(30,122,74,0.35)",
             zIndex: 100,
           }}
-          onMouseEnter={(e) => { (e.currentTarget.style.background = "#185e39"); }}
-          onMouseLeave={(e) => { (e.currentTarget.style.background = EMERALD); }}
         >
-          <Printer size={15} />
-          Download as PDF
-        </button>
+          <ExportMenu
+            label="Save to Cloud"
+            getContent={async () => {
+              const { captureCurrentPageAsHtml, utf8ToBase64 } = await import("@/components/ExportMenu");
+              const html = captureCurrentPageAsHtml();
+              return {
+                content: utf8ToBase64(html),
+                filename: `EdenRadar_One_Pager_${new Date().toISOString().slice(0, 10)}.html`,
+                fileType: "html",
+              };
+            }}
+          />
+          <button
+            onClick={handlePrint}
+            data-testid="button-download-pdf"
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              padding: "10px 22px",
+              borderRadius: "8px",
+              background: EMERALD,
+              color: WHITE,
+              fontFamily: "'Open Sans', sans-serif",
+              fontSize: "14px",
+              fontWeight: 600,
+              border: "none",
+              cursor: "pointer",
+              boxShadow: "0 4px 14px rgba(30,122,74,0.35)",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget.style.background = "#185e39"); }}
+            onMouseLeave={(e) => { (e.currentTarget.style.background = EMERALD); }}
+          >
+            <Printer size={15} />
+            Download as PDF
+          </button>
+        </div>
 
         <div className="op-document" data-testid="one-pager-document">
 

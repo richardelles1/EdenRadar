@@ -48,34 +48,71 @@ export interface DriveUploadResult {
   editUrl: string;
 }
 
-async function getOrCreateDriveFolder(
+function escapeDriveQuery(value: string): string {
+  // Escape single quotes for Drive query syntax (q=...)
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function findOrCreateChildFolder(
   drive: any,
-  folderName: string
+  name: string,
+  parentId: string | null
 ): Promise<string> {
-  // Search for existing folder
+  const safeName = escapeDriveQuery(name);
+  const parentClause = parentId
+    ? ` and '${parentId}' in parents`
+    : ` and 'root' in parents`;
   const list = await drive.files.list({
-    q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`,
+    q: `mimeType='application/vnd.google-apps.folder' and name='${safeName}' and trashed=false${parentClause}`,
     fields: "files(id,name)",
     spaces: "drive",
   });
   if (list.data.files && list.data.files.length > 0) {
     return list.data.files[0].id;
   }
-  // Create folder
   const created = await drive.files.create({
     requestBody: {
-      name: folderName,
+      name,
       mimeType: "application/vnd.google-apps.folder",
+      ...(parentId ? { parents: [parentId] } : {}),
     },
     fields: "id",
   });
   return created.data.id;
 }
 
+async function getOrCreateDriveFolder(
+  drive: any,
+  folderPath: string
+): Promise<string> {
+  // Walk path segments, creating each as a child of the previous (root for the first).
+  // Supports nested folders like "EdenRadar/Documents".
+  const parts = folderPath.split("/").map((p) => p.trim()).filter(Boolean);
+  if (parts.length === 0) return "root";
+  let parentId: string | null = null;
+  for (const part of parts) {
+    parentId = await findOrCreateChildFolder(drive, part, parentId);
+  }
+  return parentId!;
+}
+
+function inferDriveMime(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === "csv") return "text/csv";
+  if (ext === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  if (ext === "json") return "application/json";
+  if (ext === "txt") return "text/plain";
+  if (ext === "html" || ext === "htm") return "text/html";
+  return "application/octet-stream";
+}
+
 export async function uploadToGoogleDrive(
   filename: string,
   buffer: Buffer,
-  folder = "EdenRadar Templates"
+  folder = "EdenRadar Templates",
+  contentType?: string
 ): Promise<DriveUploadResult | null> {
   const accessToken = await getGoogleDriveAccessToken();
   if (!accessToken) return null;
@@ -85,9 +122,7 @@ export async function uploadToGoogleDrive(
   const drive = google.drive({ version: "v3", auth });
 
   const folderId = await getOrCreateDriveFolder(drive, folder);
-
-  const docxMime =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const mimeType = contentType ?? inferDriveMime(filename);
 
   const response = await drive.files.create({
     requestBody: {
@@ -95,14 +130,20 @@ export async function uploadToGoogleDrive(
       parents: [folderId],
     },
     media: {
-      mimeType: docxMime,
+      mimeType,
       body: Readable.from(buffer),
     },
     fields: "id,name,webViewLink",
   });
 
   const fileId = response.data.id!;
-  const editUrl = `https://docs.google.com/document/d/${fileId}/edit`;
+  // Word docs uploaded to Drive open via Google Docs editor; everything else uses the
+  // standard Drive file viewer. webViewLink works for any file type.
+  const editUrl =
+    response.data.webViewLink ??
+    (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+      ? `https://docs.google.com/document/d/${fileId}/edit`
+      : `https://drive.google.com/file/d/${fileId}/view`);
 
   return {
     name: response.data.name ?? filename,

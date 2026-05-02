@@ -971,3 +971,20 @@ export const marketAvailabilityNotifications = pgTable("market_availability_noti
   userListingUnique: uniqueIndex("man_user_listing_unique").on(t.userId, t.listingId),
 }));
 export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;
+
+// ── Cloud Export Log ──────────────────────────────────────────────────────────
+export const exportLogs = pgTable("export_logs", {
+  id: serial("id").primaryKey(),
+  filename: text("filename").notNull(),
+  destination: text("destination").notNull(),
+  fileType: text("file_type").notNull().default("document"),
+  exportedBy: text("exported_by"),
+  shareUrl: text("share_url"),
+  success: boolean("success").notNull().default(true),
+  errorMessage: text("error_message"),
+  exportedAt: timestamp("exported_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertExportLogSchema = createInsertSchema(exportLogs).omit({ id: true, exportedAt: true });
+export type InsertExportLog = z.infer<typeof insertExportLogSchema>;
+export type ExportLog = typeof exportLogs.$inferSelect;

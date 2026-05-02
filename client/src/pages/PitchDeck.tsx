@@ -40,6 +40,7 @@ import imgLabWork from "@assets/pexels-yaroslav-shuraev-8515114_1773638670424.jp
 import wafickPhoto from "@assets/WM_phot_1774028682960.jpg";
 import richardPhoto from "@assets/Headshot1_1774028710682.jpg";
 import { EdenOrb, EdenAvatar } from "@/components/EdenOrb";
+import { ExportMenu } from "@/components/ExportMenu";
 
 const SLIDE_COUNT = 9;
 
@@ -1857,6 +1858,20 @@ export default function PitchDeck() {
             <Printer className="w-4 h-4" />
             Export PDF
           </button>
+          <span data-export-control className="no-print">
+            <ExportMenu
+              label="Save to Cloud"
+              getContent={async () => {
+                const { captureCurrentPageAsHtml, utf8ToBase64 } = await import("@/components/ExportMenu");
+                const html = captureCurrentPageAsHtml();
+                return {
+                  content: utf8ToBase64(html),
+                  filename: `EdenRadar_Pitch_Deck_${new Date().toISOString().slice(0, 10)}.html`,
+                  fileType: "html",
+                };
+              }}
+            />
+          </span>
         </div>
       )}
 

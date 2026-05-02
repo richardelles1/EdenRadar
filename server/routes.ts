@@ -10793,6 +10793,174 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // ── CLOUD EXPORT: status + upload endpoints ─────────────────────────────────
+  // Used by the public-facing <ExportMenu /> dropdown on Pitch Deck, One-Pager,
+  // Pipeline Brief, and admin CSV export. OneDrive is always available (preauthorized
+  // org-wide); Google Drive is conditional on the user having completed OAuth.
+  app.get("/api/export/status", async (_req, res) => {
+    try {
+      const { isOneDriveConnected } = await import("./lib/oneDriveClient");
+      const { isGoogleDriveConnected } = await import("./lib/googleDriveClient");
+      const [onedrive, googledrive] = await Promise.all([
+        isOneDriveConnected(),
+        isGoogleDriveConnected(),
+      ]);
+      res.json({ onedrive, googledrive });
+    } catch {
+      res.json({ onedrive: false, googledrive: false });
+    }
+  });
+
+  // Note: no client-supplied folder override — destination is strictly derived from
+  // fileType server-side so users can't write outside the EdenRadar/* folder tree.
+  const exportBodySchema = z.object({
+    filename: z.string().min(1).max(200),
+    fileType: z.string().min(1).max(50).default("document"),
+    content: z.string().min(1),                 // base64-encoded file content
+  });
+
+  function folderForFileType(fileType: string): string {
+    const t = fileType.toLowerCase();
+    if (t === "csv" || t === "xlsx" || t === "export") return "EdenRadar/Exports";
+    if (t === "template" || t === "email") return "EdenRadar/Templates";
+    return "EdenRadar/Documents";
+  }
+
+  // 8 MB hard limit on the decoded payload (matches Express default body size budget;
+  // larger files would exceed Microsoft Graph's "small file" upload window anyway).
+  const MAX_EXPORT_BYTES = 8 * 1024 * 1024;
+  const EXPORT_RATE_WINDOW_MS = 60_000;
+  const EXPORT_RATE_MAX = 20; // per user, per minute
+  const exportRateBuckets = new Map<string, { count: number; resetAt: number }>();
+  function rateLimitOk(userId: string): boolean {
+    const now = Date.now();
+    const bucket = exportRateBuckets.get(userId);
+    if (!bucket || now > bucket.resetAt) {
+      exportRateBuckets.set(userId, { count: 1, resetAt: now + EXPORT_RATE_WINDOW_MS });
+      return true;
+    }
+    if (bucket.count >= EXPORT_RATE_MAX) return false;
+    bucket.count += 1;
+    return true;
+  }
+
+  app.post("/api/export/onedrive", async (req, res) => {
+    // Auth required — these endpoints upload into shared org cloud storage.
+    const userId = await tryGetUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required to export to cloud storage." });
+    }
+    if (!rateLimitOk(userId)) {
+      return res.status(429).json({ error: "Too many exports. Please wait a minute and try again." });
+    }
+    let parsed: z.infer<typeof exportBodySchema>;
+    try {
+      parsed = exportBodySchema.parse(req.body);
+    } catch (err: any) {
+      return res.status(400).json({ error: "Invalid request: " + (err.message ?? String(err)) });
+    }
+    // Reject oversize payloads (base64 → bytes ~ length * 3/4)
+    if (Math.floor(parsed.content.length * 0.75) > MAX_EXPORT_BYTES) {
+      return res.status(413).json({ error: `Payload too large. Max ${Math.floor(MAX_EXPORT_BYTES / 1024 / 1024)}MB.` });
+    }
+    const folder = folderForFileType(parsed.fileType);
+    try {
+      const { uploadToOneDrive } = await import("./lib/oneDriveClient");
+      const buffer = Buffer.from(parsed.content, "base64");
+      const result = await uploadToOneDrive(parsed.filename, buffer, folder);
+      await storage.logExport({
+        filename: parsed.filename,
+        destination: "onedrive",
+        fileType: parsed.fileType,
+        exportedBy: userId ?? null,
+        shareUrl: result.webUrl,
+        success: true,
+        errorMessage: null,
+      });
+      res.json({ success: true, url: result.webUrl, webUrl: result.webUrl });
+    } catch (err: any) {
+      const message = err?.message ?? "OneDrive upload failed";
+      await storage.logExport({
+        filename: parsed.filename,
+        destination: "onedrive",
+        fileType: parsed.fileType,
+        exportedBy: userId ?? null,
+        shareUrl: null,
+        success: false,
+        errorMessage: message,
+      }).catch(() => {});
+      res.status(502).json({ error: message });
+    }
+  });
+
+  app.post("/api/export/googledrive", async (req, res) => {
+    const userId = await tryGetUserId(req);
+    if (!userId) {
+      return res.status(401).json({ error: "Authentication required to export to cloud storage." });
+    }
+    if (!rateLimitOk(userId)) {
+      return res.status(429).json({ error: "Too many exports. Please wait a minute and try again." });
+    }
+    let parsed: z.infer<typeof exportBodySchema>;
+    try {
+      parsed = exportBodySchema.parse(req.body);
+    } catch (err: any) {
+      return res.status(400).json({ error: "Invalid request: " + (err.message ?? String(err)) });
+    }
+    if (Math.floor(parsed.content.length * 0.75) > MAX_EXPORT_BYTES) {
+      return res.status(413).json({ error: `Payload too large. Max ${Math.floor(MAX_EXPORT_BYTES / 1024 / 1024)}MB.` });
+    }
+    const folder = folderForFileType(parsed.fileType);
+    try {
+      const { uploadToGoogleDrive, isGoogleDriveConnected } = await import("./lib/googleDriveClient");
+      if (!(await isGoogleDriveConnected())) {
+        return res.status(400).json({ error: "Google Drive is not connected. Connect it in your Replit workspace integrations to enable Drive exports." });
+      }
+      const buffer = Buffer.from(parsed.content, "base64");
+      const result = await uploadToGoogleDrive(parsed.filename, buffer, folder);
+      if (!result) {
+        return res.status(400).json({ error: "Google Drive is not connected." });
+      }
+      await storage.logExport({
+        filename: parsed.filename,
+        destination: "googledrive",
+        fileType: parsed.fileType,
+        exportedBy: userId ?? null,
+        shareUrl: result.editUrl,
+        success: true,
+        errorMessage: null,
+      });
+      res.json({ success: true, url: result.editUrl, editUrl: result.editUrl });
+    } catch (err: any) {
+      const message = err?.message ?? "Google Drive upload failed";
+      await storage.logExport({
+        filename: parsed.filename,
+        destination: "googledrive",
+        fileType: parsed.fileType,
+        exportedBy: userId ?? null,
+        shareUrl: null,
+        success: false,
+        errorMessage: message,
+      }).catch(() => {});
+      res.status(502).json({ error: message });
+    }
+  });
+
+  // Admin-only — recent exports for the Documents tab log
+  app.get("/api/admin/export-log", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const limit = Math.min(Number(req.query.limit ?? 20), 100);
+      const exports = await storage.getRecentExports(limit);
+      res.json({ exports });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── DOCUMENTS: check integration status ─────────────────────────────────────
   app.get("/api/admin/documents/status", async (req, res) => {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
@@ -10821,6 +10989,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const { EMAIL_TEMPLATES } = await import("./lib/emailTemplates");
 
       const driveConnected = await isGoogleDriveConnected();
+      // Use the new hierarchical folder convention shared with /api/export/*.
+      const TEMPLATE_FOLDER = "EdenRadar/Templates";
 
       const results: Array<{
         filename: string;
@@ -10835,7 +11005,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         // OneDrive upload
         let oneDriveResult: (typeof results)[0]["oneDrive"];
         try {
-          const uploaded = await uploadToOneDrive(template.filename, buffer, "EdenRadar Templates");
+          const uploaded = await uploadToOneDrive(template.filename, buffer, TEMPLATE_FOLDER);
           oneDriveResult = { status: "done", webUrl: uploaded.webUrl };
         } catch (err: any) {
           oneDriveResult = { status: "failed", error: err.message };
@@ -10845,7 +11015,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         let driveResult: (typeof results)[0]["googleDrive"];
         if (driveConnected) {
           try {
-            const uploaded = await uploadToGoogleDrive(template.filename, buffer, "EdenRadar Templates");
+            const uploaded = await uploadToGoogleDrive(template.filename, buffer, TEMPLATE_FOLDER);
             driveResult = uploaded
               ? { status: "done", editUrl: uploaded.editUrl }
               : { status: "skipped" };
