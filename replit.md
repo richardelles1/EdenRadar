@@ -378,6 +378,16 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
 
 **P0 bug found and fixed during the smoke test**: `getStripe()` in `server/routes.ts` used CommonJS `require("stripe")`, which throws `ReferenceError: require is not defined` under tsx ESM. Every Stripe webhook delivery was returning HTTP 500 in dev/prod. Replaced with a top-level `import Stripe from "stripe"` so the helper instantiates the SDK synchronously.
 
+**How to reproduce the smoke test** (server must be running on :5000; uses `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_EDENMARKET`, `SUPABASE_DATABASE_URL`):
+1. Insert a throwaway org: `INSERT INTO organizations (name, plan_tier, seat_limit, billing_method) VALUES ('e2e', 'none', 1, 'stripe') RETURNING id;`
+2. Create a Stripe test customer, attach `pm_card_visa`, set as default. Update the org's `stripe_customer_id` to match.
+3. `stripe.subscriptions.create({ customer, items: [{ price: STRIPE_PRICE_EDENMARKET }], metadata: { product: "edenmarket", orgId: <id> }, payment_behavior: "default_incomplete" })`, then `stripe.invoices.pay(latest_invoice)` → subscription becomes `active`.
+4. POST a synthesized `customer.subscription.created` event to `/api/stripe/webhook` signed with `STRIPE_WEBHOOK_SECRET` (HMAC-SHA256 of `${ts}.${payload}`, header `stripe-signature: t=${ts},v1=${sig}`). Expect 200 and `eden_market_access = true` in the org row.
+5. Re-POST the same event with a different `id` to confirm idempotency.
+6. POST `invoice.payment_succeeded` with the paid invoice → expect access remains true.
+7. `stripe.subscriptions.cancel(sub.id)`, then POST `customer.subscription.deleted` → expect `eden_market_access = false`, `eden_market_stripe_sub_id = null`.
+8. Cleanup: `stripe.customers.del(custId)`, `DELETE FROM organizations WHERE id = <id>`.
+
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)
 - `SUPABASE_DATABASE_URL`: Supabase PostgreSQL connection (used in server/db.ts)
