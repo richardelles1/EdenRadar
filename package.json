@@ -69,7 +69,7 @@
     "express-session": "^1.18.1",
     "fast-xml-parser": "^5.4.2",
     "framer-motion": "^10.18.0",
-    "googleapis": "^171.4.0",
+    "googleapis": "^148.0.0",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.453.0",
     "mammoth": "^1.12.0",
