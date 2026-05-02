@@ -249,6 +249,7 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
   const { data: intel, isLoading } = useQuery<IntelligenceData>({
     queryKey: ["/api/market/listings/intelligence", listingId],
     staleTime: 5 * 60 * 1000,
+    enabled: !!session,
     queryFn: async () => {
       const res = await fetch(`/api/market/listings/${listingId}/intelligence`, {
         headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },

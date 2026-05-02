@@ -1032,9 +1032,8 @@ export async function registerRoutes(
       const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
 
       let enrichedId: number | null = null;
-      const numericId = parseInt(fingerprintStr, 10);
-      if (!isNaN(numericId)) {
-        enrichedId = numericId;
+      if (/^\d+$/.test(fingerprintStr)) {
+        enrichedId = parseInt(fingerprintStr, 10);
       } else {
         const [rec] = await db.select({ id: ingestedAssets.id })
           .from(ingestedAssets)
@@ -9303,6 +9302,12 @@ If multiple assets appear, return each as a separate array item.`;
 
       const data = schema.parse(req.body);
 
+      // Verify ingestedAssetId exists if provided
+      if (data.ingestedAssetId != null) {
+        const [linked] = await db.select({ id: ingestedAssets.id }).from(ingestedAssets).where(eq(ingestedAssets.id, data.ingestedAssetId)).limit(1);
+        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenScout asset." });
+      }
+
       // Generate AI summary using GPT-4o-mini
       let aiSummary: string | null = null;
       try {
@@ -9414,9 +9419,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
 
-      // Admin bypass
+      // Admin bypass — only valid if ADMIN_PANEL_PASSWORD env var is set
+      const adminPwEnv = process.env.ADMIN_PANEL_PASSWORD;
       const adminPw = (req.query.pw ?? req.headers["x-admin-password"]) as string | undefined;
-      const isAdmin = adminPw === (process.env.ADMIN_PANEL_PASSWORD ?? "eden");
+      const isAdmin = !!(adminPwEnv && adminPw && adminPw === adminPwEnv);
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
@@ -9518,6 +9524,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       const data = allowed.parse(req.body);
+
+      // Verify ingestedAssetId exists if provided
+      if (data.ingestedAssetId != null) {
+        const [linked] = await db.select({ id: ingestedAssets.id }).from(ingestedAssets).where(eq(ingestedAssets.id, data.ingestedAssetId)).limit(1);
+        if (!linked) return res.status(400).json({ error: "ingestedAssetId does not reference a valid EdenScout asset." });
+      }
 
       // Block self-activation from draft or pending (must go through admin review)
       if (data.status === "active" && listing.status !== "paused") {
