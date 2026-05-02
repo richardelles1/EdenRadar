@@ -188,6 +188,8 @@ export default function MarketBrowse() {
   const [modalityFilter, setModalityFilter] = useState("all");
   const [stageFilter, setStageFilter] = useState("all");
   const [engagementFilter, setEngagementFilter] = useState("all");
+  const [minPriceFilter, setMinPriceFilter] = useState("");
+  const [maxPriceFilter, setMaxPriceFilter] = useState("");
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [showComparison, setShowComparison] = useState(false);
 
@@ -208,8 +210,16 @@ export default function MarketBrowse() {
     if (modalityFilter !== "all" && l.modality !== modalityFilter) return false;
     if (stageFilter !== "all" && l.stage !== stageFilter) return false;
     if (engagementFilter !== "all" && l.engagementStatus !== engagementFilter) return false;
+    if (minPriceFilter) {
+      const min = parseInt(minPriceFilter, 10);
+      if (!isNaN(min) && l.priceRangeMax != null && l.priceRangeMax < min) return false;
+    }
+    if (maxPriceFilter) {
+      const max = parseInt(maxPriceFilter, 10);
+      if (!isNaN(max) && l.priceRangeMin != null && l.priceRangeMin > max) return false;
+    }
     return true;
-  }), [listings, taFilter, modalityFilter, stageFilter, engagementFilter]);
+  }), [listings, taFilter, modalityFilter, stageFilter, engagementFilter, minPriceFilter, maxPriceFilter]);
 
   const compareListings = listings.filter(l => compareIds.includes(l.id));
   const modalities = [...new Set(listings.map(l => l.modality))];
@@ -281,9 +291,25 @@ export default function MarketBrowse() {
             {Object.entries(ENGAGEMENT_LABELS).map(([v, l]) => <SelectItem key={v} value={v}>{l}</SelectItem>)}
           </SelectContent>
         </Select>
-        {(taFilter || modalityFilter !== "all" || stageFilter !== "all" || engagementFilter !== "all") && (
+        <Input
+          type="number"
+          placeholder="Min $M"
+          value={minPriceFilter}
+          onChange={e => setMinPriceFilter(e.target.value)}
+          className="h-8 text-xs w-24"
+          data-testid="market-filter-min-price"
+        />
+        <Input
+          type="number"
+          placeholder="Max $M"
+          value={maxPriceFilter}
+          onChange={e => setMaxPriceFilter(e.target.value)}
+          className="h-8 text-xs w-24"
+          data-testid="market-filter-max-price"
+        />
+        {(taFilter || modalityFilter !== "all" || stageFilter !== "all" || engagementFilter !== "all" || minPriceFilter || maxPriceFilter) && (
           <button
-            onClick={() => { setTaFilter(""); setModalityFilter("all"); setStageFilter("all"); setEngagementFilter("all"); }}
+            onClick={() => { setTaFilter(""); setModalityFilter("all"); setStageFilter("all"); setEngagementFilter("all"); setMinPriceFilter(""); setMaxPriceFilter(""); }}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             data-testid="market-filter-clear"
           >

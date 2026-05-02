@@ -28,7 +28,7 @@ import {
   teamActivities, type TeamActivity, type InsertTeamActivity,
   stripeBillingEvents, type StripeBillingEvent, type InsertStripeBillingEvent,
   savedReports, type SavedReport, type InsertSavedReport,
-  marketListings, type MarketListing, type InsertMarketListing,
+  marketListings, type MarketListing, type InsertMarketListing, type InsertMarketListingFull,
   marketEois, type MarketEoi, type InsertMarketEoi,
   marketSubscriptions, type MarketSubscription, type InsertMarketSubscription,
 } from "@shared/schema";
@@ -365,11 +365,11 @@ export interface IStorage {
   deleteSavedReport(id: number, userId: string): Promise<void>;
 
   // EdenMarket — Listings
-  createMarketListing(data: InsertMarketListing & { sellerId: string }): Promise<MarketListing>;
+  createMarketListing(data: InsertMarketListingFull): Promise<MarketListing>;
   getMarketListing(id: number): Promise<MarketListing | undefined>;
   getMarketListings(filters?: { status?: string; therapeuticArea?: string; modality?: string; stage?: string; engagementStatus?: string }): Promise<MarketListing[]>;
   getMarketListingsBySeller(sellerId: string): Promise<MarketListing[]>;
-  updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing>): Promise<MarketListing | undefined>;
+  updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing> & { status?: string }): Promise<MarketListing | undefined>;
   adminUpdateMarketListing(id: number, data: { status: string; adminNote?: string }): Promise<MarketListing | undefined>;
   deleteMarketListing(id: number, sellerId: string): Promise<void>;
 
@@ -3276,9 +3276,9 @@ export class DatabaseStorage implements IStorage {
 
   // ── EdenMarket ────────────────────────────────────────────────────────────────
 
-  async createMarketListing(data: InsertMarketListing & { sellerId: string; status?: string }): Promise<MarketListing> {
-    const status = data.status === "draft" ? "draft" : "pending";
-    const { status: _s, ...rest } = data as any;
+  async createMarketListing(data: InsertMarketListingFull): Promise<MarketListing> {
+    const { status: providedStatus, ...rest } = data;
+    const status = providedStatus === "draft" ? "draft" : "pending";
     const [row] = await db.insert(marketListings).values({ ...rest, status }).returning();
     return row;
   }
@@ -3306,7 +3306,7 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(marketListings.createdAt));
   }
 
-  async updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing>): Promise<MarketListing | undefined> {
+  async updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing> & { status?: string }): Promise<MarketListing | undefined> {
     const [row] = await db.update(marketListings)
       .set({ ...data, updatedAt: new Date() })
       .where(and(eq(marketListings.id, id), eq(marketListings.sellerId, sellerId)))

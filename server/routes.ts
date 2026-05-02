@@ -9276,7 +9276,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         orgId: org.id,
         aiSummary,
         status: listingStatus,
-      } as any);
+      });
 
       res.json(listing);
     } catch (err: any) {
@@ -9354,7 +9354,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         return res.status(400).json({ error: "Only draft listings can be submitted for review." });
       }
 
-      const updated = await storage.updateMarketListing(id, userId, data as any);
+      const updated = await storage.updateMarketListing(id, userId, data);
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -9484,9 +9484,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   // ── Admin: EdenMarket ─────────────────────────────────────────────────────────
   // All admin/market routes require the shared admin password via x-admin-password header.
 
+  const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD ?? "eden";
   function requireAdminPw(req: import("express").Request, res: import("express").Response): boolean {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") {
+    if (!pw || pw !== ADMIN_PANEL_PASSWORD) {
       res.status(401).json({ error: "Unauthorized" });
       return false;
     }

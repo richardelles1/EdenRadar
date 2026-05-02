@@ -829,6 +829,12 @@ export const marketListings = pgTable("market_listings", {
 
 export const insertMarketListingSchema = createInsertSchema(marketListings).omit({ id: true, createdAt: true, updatedAt: true, aiSummary: true, adminNote: true, status: true });
 export type InsertMarketListing = z.infer<typeof insertMarketListingSchema>;
+export type InsertMarketListingFull = InsertMarketListing & {
+  sellerId: string;
+  orgId?: number | null;
+  aiSummary?: string | null;
+  status?: string;
+};
 export type MarketListing = typeof marketListings.$inferSelect;
 
 export const MARKET_EOI_STATUSES = ["submitted", "viewed", "accepted", "declined"] as const;
