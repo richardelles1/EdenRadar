@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/aceternity-sidebar";
 import {
   ShoppingBag, Briefcase, FileText, LayoutDashboard,
-  Moon, Sun, LogOut, Menu, X, Settings,
+  Moon, Sun, LogOut, Menu, X, Settings, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -84,11 +84,14 @@ function NavButton({ href, label, icon: Icon, exact, location, navigate }: NavIt
   );
 }
 
+const ADMIN_KEY = "eden-admin-pw";
+
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { open, animate } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
+  const isAdmin = typeof window !== "undefined" && !!localStorage.getItem(ADMIN_KEY);
 
   function navigate(href: string) {
     setLocation(href);
@@ -143,6 +146,26 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
             </div>
           </div>
         ))}
+        {isAdmin && (
+          <div>
+            <motion.p
+              animate={{ opacity: animate ? (open ? 1 : 0) : 1, height: animate ? (open ? "auto" : 0) : "auto" }}
+              transition={{ duration: 0.12, ease: "easeOut" }}
+              className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
+            >
+              Admin
+            </motion.p>
+            <div className="space-y-0.5">
+              <NavButton
+                href="/admin"
+                label="Admin Panel"
+                icon={Shield}
+                location={location}
+                navigate={navigate}
+              />
+            </div>
+          </div>
+        )}
       </nav>
 
       {/* Bottom controls */}
