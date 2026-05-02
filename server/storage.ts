@@ -370,6 +370,7 @@ export interface IStorage {
   getMarketListings(filters?: { status?: string; therapeuticArea?: string; modality?: string; stage?: string; engagementStatus?: string }): Promise<MarketListing[]>;
   getMarketListingsBySeller(sellerId: string): Promise<MarketListing[]>;
   updateMarketListing(id: number, sellerId: string, data: Partial<InsertMarketListing> & { status?: string }): Promise<MarketListing | undefined>;
+  getMarketSubscriberOrgs(): Promise<Organization[]>;
   adminUpdateMarketListing(id: number, data: { status: string; adminNote?: string }): Promise<MarketListing | undefined>;
   deleteMarketListing(id: number, sellerId: string): Promise<void>;
 
@@ -3373,6 +3374,10 @@ export class DatabaseStorage implements IStorage {
       .orderBy(desc(marketSubscriptions.createdAt))
       .limit(1);
     return row;
+  }
+
+  async getMarketSubscriberOrgs(): Promise<Organization[]> {
+    return db.select().from(organizations).where(eq(organizations.edenMarketAccess, true)).orderBy(desc(organizations.createdAt));
   }
 
   async getMarketAdminStats(): Promise<{ totalListings: number; pendingListings: number; activeListings: number; totalEois: number; marketSubscribers: number }> {

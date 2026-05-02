@@ -1,14 +1,32 @@
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag } from "lucide-react";
+import { Plus, Edit, Pause, Play, Trash2, Eye, EyeOff, FileText, ShoppingBag, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
 type ListingWithEoi = MarketListing & { eoiCount: number };
+
+type EoiEntry = {
+  id: number;
+  buyerId: string;
+  company: string;
+  role: string;
+  rationale: string;
+  budgetRange: string | null;
+  timeline: string | null;
+  status: string;
+  createdAt: string;
+};
+
+type SellerEoiGroup = {
+  listingId: number;
+  eois: EoiEntry[];
+};
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -18,6 +36,13 @@ const STATUS_BADGE: Record<string, string> = {
   active: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
   paused: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
   closed: "bg-muted text-muted-foreground border-border",
+};
+
+const EOI_STATUS_COLORS: Record<string, string> = {
+  submitted: "border-border text-muted-foreground",
+  viewed: "border-blue-500/30 text-blue-700 dark:text-blue-400",
+  accepted: "border-emerald-500/30 text-emerald-700 dark:text-emerald-400",
+  declined: "border-destructive/30 text-destructive",
 };
 
 function priceLabel(l: ListingWithEoi) {
@@ -31,28 +56,40 @@ export default function MarketSellerDashboard() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [expandedEois, setExpandedEois] = useState<Record<number, boolean>>({});
+
+  const authHeaders = {
+    Authorization: `Bearer ${session!.access_token}`,
+    "x-user-id": session!.user.id,
+  };
 
   const { data: listings = [], isLoading } = useQuery<ListingWithEoi[]>({
     queryKey: ["/api/market/my-listings"],
     staleTime: 2 * 60 * 1000,
     queryFn: async () => {
-      const res = await fetch("/api/market/my-listings", {
-        headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },
-      });
+      const res = await fetch("/api/market/my-listings", { headers: authHeaders });
       if (!res.ok) throw new Error("Failed to load listings");
       return res.json();
     },
   });
 
+  const { data: eoiGroups = [] } = useQuery<SellerEoiGroup[]>({
+    queryKey: ["/api/market/seller/eois"],
+    staleTime: 2 * 60 * 1000,
+    queryFn: async () => {
+      const res = await fetch("/api/market/seller/eois", { headers: authHeaders });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const eoiMap = Object.fromEntries(eoiGroups.map(g => [g.listingId, g.eois]));
+
   const { mutate: updateStatus, isPending: updatingId } = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
       const res = await fetch(`/api/market/listings/${id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session!.access_token}`,
-          "x-user-id": session!.user.id,
-        },
+        headers: { "Content-Type": "application/json", ...authHeaders },
         body: JSON.stringify({ status }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
@@ -66,7 +103,7 @@ export default function MarketSellerDashboard() {
     mutationFn: async (id: number) => {
       const res = await fetch(`/api/market/listings/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },
+        headers: authHeaders,
       });
       if (!res.ok) throw new Error("Delete failed");
     },
@@ -79,7 +116,10 @@ export default function MarketSellerDashboard() {
 
   const active = listings.filter(l => l.status === "active");
   const pending = listings.filter(l => l.status === "pending");
-  const paused = listings.filter(l => l.status === "paused");
+
+  function toggleEois(id: number) {
+    setExpandedEois(prev => ({ ...prev, [id]: !prev[id] }));
+  }
 
   return (
     <div className="px-4 sm:px-6 py-6 max-w-4xl mx-auto space-y-6">
@@ -134,110 +174,152 @@ export default function MarketSellerDashboard() {
         </div>
       ) : (
         <div className="space-y-3">
-          {listings.map(l => (
-            <div
-              key={l.id}
-              className="rounded-xl border border-card-border bg-card p-5 flex flex-col sm:flex-row sm:items-center gap-4"
-              data-testid={`seller-listing-card-${l.id}`}
-            >
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {l.blind ? (
-                    <span className="flex items-center gap-1 text-xs text-muted-foreground italic">
-                      <EyeOff className="w-3 h-3" /> Blind
-                    </span>
-                  ) : (
-                    l.assetName && <span className="text-sm font-semibold text-foreground truncate">{l.assetName}</span>
-                  )}
-                  <Badge variant="outline" className={cn("text-[10px]", STATUS_BADGE[l.status])}>
-                    {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
-                  </Badge>
-                  {l.status === "pending" && (
-                    <span className="text-[10px] text-amber-600 font-medium">Awaiting admin review</span>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <Badge variant="outline" className="text-[10px] border-border">{l.therapeuticArea}</Badge>
-                  <Badge variant="outline" className="text-[10px] border-border">{l.modality}</Badge>
-                  <Badge variant="outline" className="text-[10px] border-border">{l.stage}</Badge>
-                  <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                    <FileText className="w-3 h-3" /> {l.eoiCount} EOI{l.eoiCount !== 1 ? "s" : ""}
-                  </span>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">{priceLabel(l)}</p>
-                {l.adminNote && (
-                  <p className="text-xs text-destructive mt-1 flex items-center gap-1">
-                    Admin note: {l.adminNote}
-                  </p>
-                )}
-              </div>
+          {listings.map(l => {
+            const eois = eoiMap[l.id] ?? [];
+            const expanded = expandedEois[l.id] ?? false;
+            return (
+              <div
+                key={l.id}
+                className="rounded-xl border border-card-border bg-card overflow-hidden"
+                data-testid={`seller-listing-card-${l.id}`}
+              >
+                <div className="p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      {l.blind ? (
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground italic">
+                          <EyeOff className="w-3 h-3" /> Blind
+                        </span>
+                      ) : (
+                        l.assetName && <span className="text-sm font-semibold text-foreground truncate">{l.assetName}</span>
+                      )}
+                      <Badge variant="outline" className={cn("text-[10px]", STATUS_BADGE[l.status])}>
+                        {l.status.charAt(0).toUpperCase() + l.status.slice(1)}
+                      </Badge>
+                      {l.status === "pending" && (
+                        <span className="text-[10px] text-amber-600 font-medium">Awaiting admin review</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline" className="text-[10px] border-border">{l.therapeuticArea}</Badge>
+                      <Badge variant="outline" className="text-[10px] border-border">{l.modality}</Badge>
+                      <Badge variant="outline" className="text-[10px] border-border">{l.stage}</Badge>
+                      <button
+                        onClick={() => toggleEois(l.id)}
+                        className="flex items-center gap-0.5 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                        data-testid={`seller-listing-eoi-toggle-${l.id}`}
+                      >
+                        {expanded ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                        <FileText className="w-3 h-3" /> {l.eoiCount} EOI{l.eoiCount !== 1 ? "s" : ""}
+                      </button>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">{priceLabel(l)}</p>
+                    {l.adminNote && (
+                      <p className="text-xs text-destructive mt-1">Admin note: {l.adminNote}</p>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => navigate(`/market/listing/${l.id}`)}
-                  data-testid={`seller-listing-view-${l.id}`}
-                >
-                  <Eye className="w-3 h-3" /> View
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1"
-                  onClick={() => navigate(`/market/edit-listing/${l.id}`)}
-                  data-testid={`seller-listing-edit-${l.id}`}
-                >
-                  <Edit className="w-3 h-3" /> Edit
-                </Button>
-                {l.status === "draft" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1 text-violet-600 border-violet-500/30"
-                    onClick={() => updateStatus({ id: l.id, status: "pending" })}
-                    data-testid={`seller-listing-submit-${l.id}`}
-                  >
-                    <Play className="w-3 h-3" /> Submit for Review
-                  </Button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => navigate(`/market/listing/${l.id}`)}
+                      data-testid={`seller-listing-view-${l.id}`}
+                    >
+                      <Eye className="w-3 h-3" /> View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => navigate(`/market/edit-listing/${l.id}`)}
+                      data-testid={`seller-listing-edit-${l.id}`}
+                    >
+                      <Edit className="w-3 h-3" /> Edit
+                    </Button>
+                    {l.status === "draft" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1 text-violet-600 border-violet-500/30"
+                        onClick={() => updateStatus({ id: l.id, status: "pending" })}
+                        disabled={updatingId}
+                        data-testid={`seller-listing-submit-${l.id}`}
+                      >
+                        <Play className="w-3 h-3" /> Submit for Review
+                      </Button>
+                    )}
+                    {l.status === "active" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => updateStatus({ id: l.id, status: "paused" })}
+                        disabled={updatingId}
+                        data-testid={`seller-listing-pause-${l.id}`}
+                      >
+                        <Pause className="w-3 h-3" /> Pause
+                      </Button>
+                    )}
+                    {l.status === "paused" && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs gap-1"
+                        onClick={() => updateStatus({ id: l.id, status: "active" })}
+                        disabled={updatingId}
+                        data-testid={`seller-listing-resume-${l.id}`}
+                      >
+                        <Play className="w-3 h-3" /> Resume
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
+                      onClick={() => {
+                        if (confirm("Delete this listing? This cannot be undone.")) deleteListing(l.id);
+                      }}
+                      data-testid={`seller-listing-delete-${l.id}`}
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* EOI summaries — expandable */}
+                {expanded && (
+                  <div className="border-t border-border">
+                    {eois.length === 0 ? (
+                      <p className="px-5 py-3 text-xs text-muted-foreground">No EOIs yet for this listing.</p>
+                    ) : (
+                      <div className="divide-y divide-border">
+                        {eois.map(eoi => (
+                          <div key={eoi.id} className="px-5 py-3 text-xs space-y-1 bg-muted/10" data-testid={`seller-eoi-row-${eoi.id}`}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-foreground">{eoi.company}</span>
+                              <span className="text-muted-foreground">·</span>
+                              <span className="text-muted-foreground">{eoi.role}</span>
+                              <Badge variant="outline" className={cn("text-[10px] ml-auto", EOI_STATUS_COLORS[eoi.status] ?? "border-border text-muted-foreground")}>
+                                {eoi.status.charAt(0).toUpperCase() + eoi.status.slice(1)}
+                              </Badge>
+                            </div>
+                            <p className="text-muted-foreground line-clamp-2">{eoi.rationale}</p>
+                            <div className="flex gap-4 text-muted-foreground/70">
+                              {eoi.budgetRange && <span>Budget: <span className="text-foreground">{eoi.budgetRange}</span></span>}
+                              {eoi.timeline && <span>Timeline: <span className="text-foreground">{eoi.timeline}</span></span>}
+                              <span className="ml-auto">{new Date(eoi.createdAt).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
-                {l.status === "active" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => updateStatus({ id: l.id, status: "paused" })}
-                    data-testid={`seller-listing-pause-${l.id}`}
-                  >
-                    <Pause className="w-3 h-3" /> Pause
-                  </Button>
-                )}
-                {l.status === "paused" && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs gap-1"
-                    onClick={() => updateStatus({ id: l.id, status: "active" })}
-                    data-testid={`seller-listing-resume-${l.id}`}
-                  >
-                    <Play className="w-3 h-3" /> Resume
-                  </Button>
-                )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-7 text-xs gap-1 text-destructive hover:text-destructive"
-                  onClick={() => {
-                    if (confirm("Delete this listing? This cannot be undone.")) deleteListing(l.id);
-                  }}
-                  data-testid={`seller-listing-delete-${l.id}`}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

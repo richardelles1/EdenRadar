@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, BarChart3, EyeOff, MessageSquare } from "lucide-react";
+import { ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff, MessageSquare, Building2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type AdminStats = {
@@ -47,6 +47,14 @@ type EoiGroup = {
   }>;
 };
 
+type SubscriberOrg = {
+  id: number;
+  name: string;
+  billingEmail: string | null;
+  edenMarketStripeSubId: string | null;
+  createdAt: string;
+};
+
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground border-border",
   pending: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
@@ -79,7 +87,7 @@ export function EdenMarketTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeSection, setActiveSection] = useState<"listings" | "eois">("listings");
+  const [activeSection, setActiveSection] = useState<"listings" | "eois" | "subscribers">("listings");
   const [noteInputs, setNoteInputs] = useState<Record<number, string>>({});
 
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
@@ -101,6 +109,7 @@ export function EdenMarketTab() {
       if (!res.ok) throw new Error("Failed to load listings");
       return res.json();
     },
+    enabled: activeSection === "listings",
   });
 
   const { data: eoiGroups = [], isLoading: eoisLoading } = useQuery<EoiGroup[]>({
@@ -111,6 +120,16 @@ export function EdenMarketTab() {
       return res.json();
     },
     enabled: activeSection === "eois",
+  });
+
+  const { data: subscribers = [], isLoading: subscribersLoading } = useQuery<SubscriberOrg[]>({
+    queryKey: ["/api/admin/market/subscribers"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/market/subscribers", { headers: adminHeaders() });
+      if (!res.ok) throw new Error("Failed to load subscribers");
+      return res.json();
+    },
+    enabled: activeSection === "subscribers",
   });
 
   const { mutate: updateListing, isPending: updating } = useMutation({
@@ -184,11 +203,21 @@ export function EdenMarketTab() {
           <FileText className="w-3.5 h-3.5 inline mr-1.5" />
           EOIs
         </button>
+        <button
+          onClick={() => setActiveSection("subscribers")}
+          className={cn(
+            "px-4 py-2 text-sm font-medium border-b-2 transition-colors",
+            activeSection === "subscribers" ? "border-violet-500 text-violet-600" : "border-transparent text-muted-foreground hover:text-foreground"
+          )}
+          data-testid="admin-market-subscribers-tab"
+        >
+          <Building2 className="w-3.5 h-3.5 inline mr-1.5" />
+          Subscribers
+        </button>
       </div>
 
       {activeSection === "listings" && (
         <div className="space-y-4">
-          {/* Filter */}
           <div className="flex items-center gap-3">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-44 h-8 text-xs" data-testid="admin-market-status-filter">
@@ -263,7 +292,6 @@ export function EdenMarketTab() {
                     </div>
                   )}
 
-                  {/* Action row */}
                   <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 pt-2 border-t border-border">
                     <Input
                       placeholder="Admin note (optional)"
@@ -364,6 +392,47 @@ export function EdenMarketTab() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+      )}
+
+      {activeSection === "subscribers" && (
+        <div className="space-y-4">
+          <span className="text-xs text-muted-foreground">{subscribers.length} active subscriber{subscribers.length !== 1 ? "s" : ""}</span>
+          {subscribersLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : subscribers.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">No active subscribers</p>
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-muted/30">
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Org</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Billing Email</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Stripe Sub ID</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Since</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {subscribers.map(org => (
+                    <tr key={org.id} data-testid={`admin-market-subscriber-${org.id}`} className="hover:bg-muted/20 transition-colors">
+                      <td className="px-4 py-2.5 font-medium text-foreground">{org.name}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{org.billingEmail ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground font-mono">
+                        {org.edenMarketStripeSubId ? org.edenMarketStripeSubId.slice(0, 14) + "…" : "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{new Date(org.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

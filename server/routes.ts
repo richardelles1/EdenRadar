@@ -9160,18 +9160,36 @@ If multiple assets appear, return each as a separate array item.`;
       if (!sessionId) return res.status(400).json({ error: "market_session_id required" });
 
       const userId = req.headers["x-user-id"] as string;
-      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const session = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["line_items"] });
+
+      // Verify this session is specifically for the EdenMarket product
+      if (session.metadata?.product !== "edenmarket") {
+        return res.status(400).json({ error: "Session is not for EdenMarket" });
+      }
 
       const safeStatuses = ["paid", "no_payment_required"];
       if (!safeStatuses.includes(session.payment_status)) {
         return res.status(402).json({ error: "Payment not completed" });
       }
 
+      // Optionally validate the price matches the configured EdenMarket price
+      const expectedPriceId = process.env.STRIPE_PRICE_EDENMARKET;
+      if (expectedPriceId) {
+        const lineItems = (session as any).line_items?.data ?? [];
+        const hasMarketPrice = lineItems.some((item: any) => item.price?.id === expectedPriceId);
+        if (lineItems.length > 0 && !hasMarketPrice) {
+          return res.status(400).json({ error: "Session does not contain EdenMarket price" });
+        }
+      }
+
       const orgId = parseInt(String(session.metadata?.orgId ?? "0"), 10);
       if (!orgId) return res.status(400).json({ error: "No orgId in session metadata" });
 
-      const org = await storage.getOrganization(orgId);
-      if (!org) return res.status(404).json({ error: "Org not found" });
+      // Verify the authenticated user belongs to this org
+      const userOrg = await storage.getOrgForUser(userId);
+      if (!userOrg || userOrg.id !== orgId) {
+        return res.status(403).json({ error: "User is not a member of the purchasing org" });
+      }
 
       const subId = typeof session.subscription === "string" ? session.subscription : (session.subscription as any)?.id ?? "";
 
@@ -9319,6 +9337,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.patch("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -9365,6 +9385,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.delete("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -9468,6 +9490,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/seller/eois", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const listingIds = listings.map(l => l.id);
       if (!listingIds.length) return res.json([]);
@@ -9540,6 +9564,16 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         listings.map(async l => ({ listing: l, eois: await storage.getMarketEoisForListing(l.id) }))
       );
       res.json(result.filter(r => r.eois.length > 0));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/admin/market/subscribers", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const orgs = await storage.getMarketSubscriberOrgs();
+      res.json(orgs);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
