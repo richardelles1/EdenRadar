@@ -1145,6 +1145,28 @@ async function createMarketDealsTables() {
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS market_deals_eoi_id_unique ON market_deals(eoi_id)`);
     // EdenScout linkage — allow sellers to link a listing to an ingested_assets record
     await db.execute(sql`ALTER TABLE market_listings ADD COLUMN IF NOT EXISTS ingested_asset_id INTEGER`);
+    // Add FK constraint (idempotent via pg_constraint check)
+    await db.execute(sql`
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_market_listings_ingested_asset') THEN
+          ALTER TABLE market_listings ADD CONSTRAINT fk_market_listings_ingested_asset
+            FOREIGN KEY (ingested_asset_id) REFERENCES ingested_assets(id) ON DELETE SET NULL;
+        END IF;
+      END $$
+    `);
+    // In-app notifications table for EdenScout → EdenMarket availability signal
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_availability_notifications (
+        id               SERIAL PRIMARY KEY,
+        user_id          TEXT NOT NULL,
+        listing_id       INTEGER NOT NULL,
+        ingested_asset_id INTEGER,
+        message          TEXT NOT NULL,
+        read_at          TIMESTAMP,
+        created_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS man_user_unread ON market_availability_notifications(user_id) WHERE read_at IS NULL`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_deal_documents (
         id           SERIAL PRIMARY KEY,

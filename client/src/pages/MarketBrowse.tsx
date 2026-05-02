@@ -10,7 +10,7 @@ import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap 
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
-type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null };
+type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null; edenSignalScore?: number };
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -34,7 +34,9 @@ function priceLabel(l: ListingWithMeta) {
   return "Price on request";
 }
 
-function edenSignalScore(l: ListingWithMeta): number {
+function getEdenSignalScore(l: ListingWithMeta): number {
+  // Prefer server-computed score; fall back to client-side formula
+  if (l.edenSignalScore != null) return l.edenSignalScore;
   let s = 0;
   if (l.ingestedAssetId) s += 40;
   if (l.mechanism) s += 10;
@@ -120,7 +122,7 @@ function ListingCard({
           {listing.eoiCount > 0 && (
             <span className="text-[10px] text-muted-foreground">{listing.eoiCount} EOI{listing.eoiCount !== 1 ? "s" : ""}</span>
           )}
-          <EdenSignalBadge score={edenSignalScore(listing)} />
+          <EdenSignalBadge score={getEdenSignalScore(listing)} />
         </div>
         <div className="flex items-center gap-1.5">
           <button

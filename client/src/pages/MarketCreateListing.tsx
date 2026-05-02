@@ -301,16 +301,27 @@ export default function MarketCreateListing() {
   // Auto-fill form fields from linked EdenScout asset
   function handleLinkAsset(a: SuggestedAsset) {
     setLinkedAsset(a);
-    if (a.mechanismOfAction && !form.getValues("mechanism")) {
-      form.setValue("mechanism", a.mechanismOfAction);
+    // Mechanism: combine target + mechanismOfAction
+    if (!form.getValues("mechanism")) {
+      const parts: string[] = [];
+      if (a.target) parts.push(`Target: ${a.target}`);
+      if (a.mechanismOfAction) parts.push(a.mechanismOfAction);
+      if (parts.length) form.setValue("mechanism", parts.join("\n"));
     }
+    // IP status from ipType
     if (a.ipType && !form.getValues("ipStatus")) {
       form.setValue("ipStatus", a.ipType);
     }
+    // IP summary from innovationClaim
+    if (a.innovationClaim && !form.getValues("ipSummary")) {
+      form.setValue("ipSummary", a.innovationClaim);
+    }
+    // Modality
     if (a.modality && !form.getValues("modality")) {
       const match = MODALITIES.find(m => m.toLowerCase() === a.modality!.toLowerCase());
       if (match) form.setValue("modality", match);
     }
+    // Stage
     if (a.developmentStage && !form.getValues("stage")) {
       const stageMap: Record<string, string> = {
         discovery: "Discovery", preclinical: "Preclinical",

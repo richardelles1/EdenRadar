@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -9252,6 +9252,22 @@ If multiple assets appear, return each as a separate array item.`;
     }
   });
 
+  // Eden Signal Score — server-side computation from listing field completeness + EdenScout link
+  function edenSignalScore(l: { ingestedAssetId?: number | null; mechanism?: string | null; ipStatus?: string | null; milestoneHistory?: string | null; priceRangeMin?: number | null; aiSummary?: string | null; therapeuticArea?: string | null; modality?: string | null; stage?: string | null; engagementStatus?: string | null }): number {
+    let s = 0;
+    if (l.ingestedAssetId) s += 40;   // EdenScout linkage (primary signal)
+    if (l.mechanism) s += 10;          // Mechanism of action disclosed
+    if (l.ipStatus) s += 5;            // IP status specified
+    if (l.milestoneHistory) s += 5;    // Milestone history provided
+    if (l.priceRangeMin) s += 10;      // Price range disclosed
+    if (l.aiSummary) s += 10;          // AI deal summary generated
+    if (l.therapeuticArea) s += 5;     // TA specified
+    if (l.modality) s += 5;            // Modality specified
+    if (l.stage) s += 5;               // Stage specified
+    if (l.engagementStatus && l.engagementStatus !== "closed") s += 5; // Actively engaging
+    return Math.min(100, s);
+  }
+
   // GET /api/market/listings — buyer feed (active listings)
   app.get("/api/market/listings", verifyAnyAuth, async (req, res) => {
     try {
@@ -9271,6 +9287,7 @@ If multiple assets appear, return each as a separate array item.`;
         assetName: l.blind ? null : l.assetName,
         eoiCount: eoiCounts[i],
         myEoiStatus: myEoiMap.get(l.id) ?? null,
+        edenSignalScore: edenSignalScore(l),
       }));
 
       res.json(result);
@@ -9753,7 +9770,16 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             ? `a ${updated.therapeuticArea} ${updated.modality} asset`
             : (updated.assetName || `a ${updated.therapeuticArea} asset`);
 
+          const notifMessage = `An asset you track in EdenScout — ${assetLabel} — is now listed in EdenMarket.`;
           await Promise.allSettled(saved.map(async uid => {
+            // Insert in-app notification (deduplicated by user+listing)
+            await db.insert(marketAvailabilityNotifications).values({
+              userId: uid,
+              listingId: updated.id,
+              ingestedAssetId: assetId,
+              message: notifMessage,
+            }).onConflictDoNothing().catch(() => {});
+            // Send email notification
             const userOrg = await storage.getOrgForUser(uid);
             const email = userOrg?.billingEmail;
             if (email) {
@@ -9772,6 +9798,35 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/notifications — unread EdenScout→EdenMarket availability alerts for current user
+  app.get("/api/market/notifications", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const rows = await db.select()
+        .from(marketAvailabilityNotifications)
+        .where(and(
+          eq(marketAvailabilityNotifications.userId, userId),
+          isNull(marketAvailabilityNotifications.readAt),
+        ))
+        .orderBy(desc(marketAvailabilityNotifications.createdAt))
+        .limit(20);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/market/notifications/read — mark all notifications read for current user
+  app.patch("/api/market/notifications/read", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      await db.execute(sql`UPDATE market_availability_notifications SET read_at = NOW() WHERE user_id = ${userId} AND read_at IS NULL`);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 

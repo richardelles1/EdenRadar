@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   AceternitySidebar,
   AceternitySidebarBody,
@@ -10,7 +11,7 @@ import {
 } from "@/components/ui/aceternity-sidebar";
 import {
   ShoppingBag, Briefcase, FileText, LayoutDashboard,
-  Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock,
+  Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock, Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -87,6 +88,60 @@ function NavButton({ href, label, icon: Icon, exact, location, navigate }: NavIt
 
 const ADMIN_KEY = "eden-admin-pw";
 
+function NotificationBell() {
+  const { session } = useAuth();
+  const { open, animate } = useSidebar();
+  const qc = useQueryClient();
+  const { data: notifs } = useQuery<Array<{ id: number; message: string; listingId: number; createdAt: string }>>({
+    queryKey: ["/api/market/notifications"],
+    enabled: !!session,
+    staleTime: 60_000,
+    refetchInterval: 120_000,
+    queryFn: async () => {
+      const res = await fetch("/api/market/notifications", {
+        headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+  const markRead = useMutation({
+    mutationFn: async () => {
+      await fetch("/api/market/notifications/read", {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },
+      });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["/api/market/notifications"] }),
+  });
+  const unread = notifs?.length ?? 0;
+  if (unread === 0) return null;
+  return (
+    <div
+      className="mx-2 mb-1 rounded-lg border border-violet-500/20 bg-violet-500/5 px-3 py-2 cursor-pointer hover:bg-violet-500/10 transition-colors"
+      onClick={() => markRead.mutate()}
+      data-testid="market-notifications-bell"
+    >
+      <div className="flex items-center gap-2">
+        <div className="relative shrink-0">
+          <Bell className="w-4 h-4 text-violet-500" />
+          <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-violet-500 flex items-center justify-center text-[7px] font-bold text-white">{unread > 9 ? "9+" : unread}</span>
+        </div>
+        <motion.span
+          animate={{ opacity: animate ? (open ? 1 : 0) : 1, width: animate ? (open ? "auto" : 0) : "auto" }}
+          transition={{ duration: 0.15, ease: "easeOut" }}
+          className="whitespace-pre overflow-hidden text-xs text-violet-600 dark:text-violet-400 font-medium"
+        >
+          {unread} new alert{unread !== 1 ? "s" : ""}
+        </motion.span>
+      </div>
+      {open && notifs && notifs.length > 0 && (
+        <p className="text-[10px] text-muted-foreground mt-1 leading-snug line-clamp-2">{notifs[0].message}</p>
+      )}
+    </div>
+  );
+}
+
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { open, animate } = useSidebar();
   const { theme, toggleTheme } = useTheme();
@@ -128,6 +183,9 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           </Button>
         )}
       </div>
+
+      {/* EdenScout → EdenMarket notification alerts */}
+      <NotificationBell />
 
       {/* Nav groups */}
       <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">

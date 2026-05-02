@@ -957,3 +957,15 @@ export const marketDealMessages = pgTable("market_deal_messages", {
 export const insertMarketDealMessageSchema = createInsertSchema(marketDealMessages).omit({ id: true, sentAt: true });
 export type InsertMarketDealMessage = z.infer<typeof insertMarketDealMessageSchema>;
 export type MarketDealMessage = typeof marketDealMessages.$inferSelect;
+
+// In-app notifications: EdenScout → EdenMarket availability signal (one per user per listing activation)
+export const marketAvailabilityNotifications = pgTable("market_availability_notifications", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  listingId: integer("listing_id").notNull(),
+  ingestedAssetId: integer("ingested_asset_id"),
+  message: text("message").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;
