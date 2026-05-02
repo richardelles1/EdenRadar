@@ -74,6 +74,7 @@ type AdminDeal = {
   successFeeDealSizeM: number | null;
   successFeeAmount: number | null;
   createdAt: string;
+  updatedAt: string;
   assetLabel: string;
   therapeuticArea: string;
   eoiCreatedAt: string | null;
@@ -131,7 +132,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
 
   return (
     <tr>
-      <td colSpan={9} className="px-0 pb-0">
+      <td colSpan={10} className="px-0 pb-0">
         <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Messages */}
           <div className="space-y-2">
@@ -665,6 +666,7 @@ export function EdenMarketTab() {
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Seller</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Buyer</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Stage Date</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">EOI Date</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">NDA Signed</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Fee</th>
@@ -700,6 +702,9 @@ export function EdenMarketTab() {
                             {(deal.status === "loi" || deal.status === "closed") && (
                               <AlertTriangle className="w-3 h-3 text-amber-500 inline ml-1" />
                             )}
+                          </td>
+                          <td className="px-4 py-2.5 text-muted-foreground text-[11px]">
+                            {deal.updatedAt ? new Date(deal.updatedAt).toLocaleDateString() : "—"}
                           </td>
                           <td className="px-4 py-2.5 text-muted-foreground">
                             {deal.eoiCreatedAt ? new Date(deal.eoiCreatedAt).toLocaleDateString() : "—"}

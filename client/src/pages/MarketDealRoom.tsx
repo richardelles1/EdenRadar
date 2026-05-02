@@ -569,6 +569,8 @@ export default function MarketDealRoom() {
                       {doc.fileName}
                     </a>
                     <p className="text-[10px] text-muted-foreground">
+                      {doc.uploaderId === userId ? "You" : (isSeller ? "Buyer" : "Seller")}
+                      {" · "}
                       {doc.fileSize ? `${(doc.fileSize / 1024).toFixed(0)} KB · ` : ""}
                       {new Date(doc.uploadedAt).toLocaleDateString()}
                     </p>
