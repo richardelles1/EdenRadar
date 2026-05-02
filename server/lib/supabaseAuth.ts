@@ -75,6 +75,49 @@ export async function verifyConceptAuth(
   return next();
 }
 
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS ?? "relles@edennx.com,wmohamed@edennx.com")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+export function getAdminEmails(): string[] {
+  return [...ADMIN_EMAILS];
+}
+
+/**
+ * Resolve the Supabase user from the Bearer token and return their identity
+ * iff their email is in the admin allowlist. Returns null otherwise. Use this
+ * for routes that conditionally surface admin data without rejecting non-admins.
+ */
+export async function getAdminUser(req: Request): Promise<{ id: string; email: string } | null> {
+  const token = req.headers.authorization?.replace("Bearer ", "");
+  if (!token) return null;
+  try {
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user?.email) return null;
+    const email = data.user.email.toLowerCase();
+    if (!ADMIN_EMAILS.includes(email)) return null;
+    return { id: data.user.id, email };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Express middleware that requires an authenticated user whose email is in
+ * the ADMIN_EMAILS allowlist. Replaces the legacy shared-password admin gate.
+ */
+export async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  const u = await getAdminUser(req);
+  if (!u) {
+    return res.status(401).json({ error: "Admin authentication required" });
+  }
+  req.headers["x-admin-id"] = u.id;
+  req.headers["x-admin-email"] = u.email;
+  req.headers["x-user-id"] = u.id;
+  return next();
+}
+
 export async function verifyAnyAuth(
   req: Request,
   res: Response,

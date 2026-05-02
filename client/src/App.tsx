@@ -78,6 +78,9 @@ import { useLocation } from "wouter";
 
 function ThemeInit() {
   useEffect(() => {
+    // One-time cleanup of legacy shared admin password (replaced by Supabase auth + ADMIN_EMAILS).
+    try { localStorage.removeItem(["eden", "admin", "pw"].join("-")); } catch {}
+
     const stored = localStorage.getItem("eden-theme");
     const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const theme = stored ?? (prefersDark ? "dark" : "light");

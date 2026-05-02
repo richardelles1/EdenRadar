@@ -33,7 +33,7 @@ import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
-import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId } from "./lib/supabaseAuth";
+import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
 import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1628,9 +1628,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ingest/history", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/ingest/history", requireAdmin, async (req, res) => {
     try {
       const runs = await storage.getIngestionRunHistory(5);
       res.json(runs);
@@ -1870,10 +1868,20 @@ export async function registerRoutes(
     }
   });
 
+  // ── Admin auth: every /api/admin/* route requires a Supabase Bearer token
+  // for a user whose email is in the ADMIN_EMAILS allowlist.
+  app.use("/api/admin", requireAdmin);
+
+  app.get("/api/admin/whoami", (req, res) => {
+    res.json({
+      id: req.headers["x-admin-id"],
+      email: req.headers["x-admin-email"],
+      isAdmin: true,
+    });
+  });
+
   app.get("/api/admin/scan-matrix", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const limit = Math.min(parseInt(String(req.query.limit ?? "10"), 10) || 10, 50);
       const [data, indexedCounts] = await Promise.all([
         storage.getScanMatrix(limit),
@@ -1887,8 +1895,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/collector-health", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const allInstitutionNames = ALL_SCRAPERS.filter((s) => s.scraperType !== "stub").map((s) => s.institution);
 
@@ -2038,8 +2044,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/new-arrivals", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const groups = await storage.getNewArrivals();
       const totalUnindexed = groups.reduce((s, g) => s + g.count, 0);
       const totalPendingEnrichment = totalUnindexed;
@@ -2052,8 +2056,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/new-arrivals/push", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const body = req.body as { institution?: unknown };
       const institution: string | undefined = typeof body.institution === "string" ? body.institution : undefined;
       const result = await storage.pushNewArrivals(institution);
@@ -2065,8 +2067,6 @@ export async function registerRoutes(
 
   app.delete("/api/admin/new-arrivals/:id", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       const found = await storage.rejectStagingItem(id);
@@ -2077,10 +2077,8 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ingest/sync/sessions", async (req, res) => {
+  app.get("/api/ingest/sync/sessions", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const sessions = await storage.getLatestSyncSessions();
       res.json({ sessions });
@@ -2089,9 +2087,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ingest/sync-global-status", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/ingest/sync-global-status", requireAdmin, async (req, res) => {
     res.json({
       syncRunning: isSyncRunning(),
       syncRunningFor: getSyncRunningFor(),
@@ -2099,22 +2095,16 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/ingest/scheduler/status", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/ingest/scheduler/status", requireAdmin, async (req, res) => {
     res.json(getSchedulerStatus());
   });
 
-  app.post("/api/ingest/scheduler/start", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/start", requireAdmin, async (req, res) => {
     const result = startScheduler();
     res.json(result);
   });
 
-  app.post("/api/ingest/scheduler/pause", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/pause", requireAdmin, async (req, res) => {
     try {
       const result = await pauseScheduler();
       res.json(result);
@@ -2124,34 +2114,26 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ingest/scheduler/reset", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/reset", requireAdmin, async (req, res) => {
     const result = resetAndStartScheduler();
     res.json({ ...result, status: getSchedulerStatus() });
   });
 
-  app.post("/api/ingest/scheduler/run-tier", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/run-tier", requireAdmin, async (req, res) => {
     const { tier } = req.body ?? {};
     if (![1, 2, 3, 4].includes(tier)) return res.status(400).json({ error: "tier must be 1, 2, 3, or 4" });
     const result = startTierOnly(tier as 1 | 2 | 3 | 4);
     res.json({ ...result, status: getSchedulerStatus() });
   });
 
-  app.post("/api/ingest/scheduler/bump", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/bump", requireAdmin, async (req, res) => {
     const { institution } = req.body ?? {};
     if (!institution) return res.status(400).json({ error: "institution is required" });
     const result = bumpToFront(institution);
     res.json(result);
   });
 
-  app.post("/api/ingest/scheduler/delay", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/delay", requireAdmin, async (req, res) => {
     const { delayMs } = req.body ?? {};
     if (typeof delayMs !== "number") return res.status(400).json({ error: "delayMs (number) is required" });
     const result = setDelay(delayMs);
@@ -2159,9 +2141,7 @@ export async function registerRoutes(
     res.json(result);
   });
 
-  app.post("/api/ingest/scheduler/concurrency", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/ingest/scheduler/concurrency", requireAdmin, async (req, res) => {
     const { concurrency } = req.body ?? {};
     if (concurrency !== 1 && concurrency !== 2 && concurrency !== 3) return res.status(400).json({ error: "concurrency must be 1, 2, or 3" });
     setConcurrency(concurrency as 1 | 2 | 3);
@@ -2170,8 +2150,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/scraper-health", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const rows = await getAllScraperHealth();
       const now = Date.now();
       const enriched = rows.map((r) => ({
@@ -2189,9 +2167,7 @@ export async function registerRoutes(
 
   app.post("/api/admin/scraper-health/:institution/clear-backoff", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       await clearScraperBackoff(institution);
       invalidateHealthCacheEntry(institution);  // immediate effect on scheduling decisions
       res.json({ ok: true, message: `Backoff cleared for ${institution}` });
@@ -2200,12 +2176,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ingest/sync/:institution/cancel", async (req, res) => {
+  app.post("/api/ingest/sync/:institution/cancel", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       const sessions = await storage.getLatestSyncSessions();
       const session = sessions.find((s) => s.institution === institution && s.status === "running");
 
@@ -2227,12 +2201,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ingest/sync/:institution", async (req, res) => {
+  app.post("/api/ingest/sync/:institution", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       if (isIngestionRunning()) return res.status(409).json({ error: "Full ingestion is running — cannot sync" });
 
       const scraper = ALL_SCRAPERS.find((s) => s.institution === institution);
@@ -2263,12 +2235,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ingest/sync/:institution/status", async (req, res) => {
+  app.get("/api/ingest/sync/:institution/status", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       const sessions = await storage.getLatestSyncSessions();
       const session = sessions.find((s) => s.institution === institution);
 
@@ -2305,11 +2275,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/ingest/sync/:institution/history", async (req, res) => {
+  app.get("/api/ingest/sync/:institution/history", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       const sessions = await storage.getInstitutionSyncHistory(institution, 5);
       res.json({ sessions });
     } catch (err: any) {
@@ -2317,12 +2285,10 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/ingest/sync/:institution/push", async (req, res) => {
+  app.post("/api/ingest/sync/:institution/push", requireAdmin, async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
-      const institution = decodeURIComponent(req.params.institution);
+      const institution = decodeURIComponent(String(req.params.institution));
       const sessions = await storage.getLatestSyncSessions();
       const session = sessions.find((s) => s.institution === institution);
 
@@ -2481,8 +2447,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/stats", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const stats = await storage.getEnrichmentStats();
       res.json(stats);
     } catch (err: any) {
@@ -2494,8 +2458,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/rule-fill/estimate", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const { estimateRuleBasedFill } = await import("./lib/pipeline/ruleBasedFill");
       const result = await estimateRuleBasedFill();
       res.json(result);
@@ -2511,8 +2473,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/rule-fill/status", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       res.json({
         running: ruleFillRunning,
         progress: ruleFillProgress,
@@ -2525,8 +2485,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/rule-fill", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (ruleFillRunning) return res.status(409).json({ error: "Rule-based fill already running" });
 
       ruleFillRunning = true;
@@ -2558,8 +2516,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/rule-fill/stop", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       ruleFillShouldStop = true;
       res.json({ stopped: true });
     } catch (err: any) {
@@ -2571,8 +2527,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/assets/:id/verify-field", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const assetId = parseInt(req.params.id);
       if (isNaN(assetId)) return res.status(400).json({ error: "Invalid asset ID" });
       const { field, verified } = req.body;
@@ -2588,8 +2542,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/enrichment/mini-queue", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const queue = await storage.getMiniEnrichQueue();
       res.json(queue);
     } catch (err: any) {
@@ -2601,8 +2553,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/dataset-quality", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const globalResult = await db.execute(sql`
         SELECT
@@ -2653,8 +2603,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/dataset-quality/by-class", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       // Include ALL relevant rows so sparse_count reflects real sparse assets per class.
       // Fill-rate metrics are scoped to non-sparse rows via CASE guards.
@@ -2690,8 +2638,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/dataset-quality/dimensions", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const dim = String(req.query.dim ?? "modality");
       const col = DIM_COL[dim];
@@ -2719,8 +2665,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/dataset-quality/dimensions/export", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const dim = String(req.query.dim ?? "modality");
       const col = DIM_COL[dim];
@@ -2759,8 +2703,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/dataset-quality/institution/:name", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const institutionName = req.params.name;
       const rows = await db.execute(sql`
@@ -2782,8 +2724,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/export/unenriched-csv", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const rows = await db.execute(sql`
         SELECT id, asset_name, abstract, summary, source_name
@@ -2813,8 +2753,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/export/full-relevant-csv", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const rows = await db.execute(sql`
         SELECT id, asset_name, source_name, target, indication, modality, development_stage,
@@ -2854,8 +2792,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/assets/filter-values", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const [modRows, stageRows] = await Promise.all([
         db.execute(sql`
@@ -2906,8 +2842,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/assets", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10));
       const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit ?? "50"), 10)));
@@ -2950,8 +2884,6 @@ export async function registerRoutes(
 
   app.get("/api/admin/assets/export", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const where = buildAssetWhere(req.query as Record<string, any>);
 
@@ -2992,8 +2924,6 @@ export async function registerRoutes(
 
   app.patch("/api/admin/assets/:id", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
@@ -3067,8 +2997,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/enrichment/status", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
     const lastJob = await storage.getLatestEnrichmentJob();
 
@@ -3103,8 +3031,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/reset", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (liveEnrichment) {
         return res.status(409).json({ error: "Cannot reset while enrichment is running" });
       }
@@ -3117,8 +3043,6 @@ export async function registerRoutes(
 
   app.post("/api/admin/enrichment/run", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       if (liveEnrichment) {
         return res.status(409).json({ error: "Enrichment job already running" });
@@ -3186,8 +3110,6 @@ export async function registerRoutes(
   let edenLastCycleDeferred = 0;
 
   app.get("/api/admin/eden/stats", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const [coverage, embeddingCoverage, latest, breakdown] = await Promise.all([
         storage.getDeepEnrichmentCoverage(),
@@ -3209,8 +3131,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/eden/enrich", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (edenPaused) return res.status(409).json({ error: "Deep enrichment is paused — resume it first" });
     if (edenRunning) return res.status(409).json({ error: "Deep enrichment already running" });
     try {
@@ -3300,8 +3220,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/eden/enrich/status", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const latest = await storage.getLatestDeepEnrichmentJob();
       // staleJobDetected: a job was in-progress when the server last restarted and
@@ -3328,8 +3246,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/eden/enrich/toggle-pause", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (edenRunning) return res.status(409).json({ error: "Cannot toggle pause while enrichment is running — stop it first" });
     edenPaused = !edenPaused;
     console.log(`[EDEN] Deep enrichment ${edenPaused ? "paused" : "resumed"} by admin`);
@@ -3337,16 +3253,12 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/eden/enrich/stop", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (!edenRunning) return res.json({ message: "No EDEN enrichment running" });
     edenShouldStop = true;
     res.json({ message: "Stop signal sent — finishing in-flight batch then halting" });
   });
 
   app.post("/api/admin/enrichment/stop", async (req, res) => {
-    const pass = req.query.pw ?? req.headers["x-admin-password"];
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (!liveEnrichment) return res.json({ message: "No standard enrichment running" });
     standardEnrichShouldStop = true;
     res.json({ message: "Stop signal sent — finishing in-flight assets then halting" });
@@ -3361,8 +3273,6 @@ export async function registerRoutes(
   let embedFailed = 0;
 
   app.post("/api/admin/eden/embed", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     if (embedRunning) return res.status(409).json({ error: "Embedding already running" });
     try {
       const assets = await storage.getAssetsNeedingEmbedding();
@@ -3396,8 +3306,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/eden/embed/status", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.query.adminPassword;
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
     res.json({
       running: embedRunning,
       processed: embedProcessed,
@@ -3409,10 +3317,7 @@ export async function registerRoutes(
 
   // ── EDEN chat routes ──────────────────────────────────────────────────────
 
-  app.post("/api/eden/chat", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
-    if (pass !== "eden" && pass !== SITE_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/eden/chat", verifyAnyAuth, async (req, res) => {
 
     const { message, sessionId, userContext } = req.body ?? {};
     if (!message || typeof message !== "string" || !message.trim()) {
@@ -3966,12 +3871,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/feedback/:sessionId", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
-    const SITE_PASSWORD = process.env.SITE_PASSWORD ?? "quality";
-    if (pass !== "eden" && pass !== SITE_PASSWORD) return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/eden/feedback/:sessionId", verifyAnyAuth, async (req, res) => {
     try {
-      const data = await storage.getEdenFeedbackForSession(req.params.sessionId);
+      const data = await storage.getEdenFeedbackForSession(String(req.params.sessionId));
       return res.json(data);
     } catch (err) {
       console.error("[EDEN feedback GET]", err);
@@ -3979,10 +3881,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/eden/feedback", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-    const SITE_PASSWORD2 = process.env.SITE_PASSWORD ?? "quality";
-    if (pass !== "eden" && pass !== SITE_PASSWORD2) return res.status(401).json({ error: "Unauthorized" });
+  app.post("/api/eden/feedback", verifyAnyAuth, async (req, res) => {
     const { sessionId, messageIndex, sentiment } = req.body ?? {};
     if (!sessionId || typeof messageIndex !== "number" || !["up", "down"].includes(sentiment)) {
       return res.status(400).json({ error: "sessionId, messageIndex, and sentiment (up|down) required" });
@@ -3996,10 +3895,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/sessions", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
-    const SITE_PASSWORD3 = process.env.SITE_PASSWORD ?? "quality";
-    if (pass !== "eden" && pass !== SITE_PASSWORD3) return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/eden/sessions", verifyAnyAuth, async (req, res) => {
     try {
       const limit = Math.min(100, parseInt(String(req.query.limit ?? "50"), 10) || 50);
       const sessions = await storage.listEdenSessions(limit);
@@ -4010,11 +3906,9 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/sessions/:sessionId", async (req, res) => {
-    const pass = req.headers["x-admin-password"] ?? (req.query.adminPassword as string);
-    if (pass !== "eden") return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/eden/sessions/:sessionId", verifyAnyAuth, async (req, res) => {
     try {
-      const session = await storage.getEdenSession(req.params.sessionId);
+      const session = await storage.getEdenSession(String(req.params.sessionId));
       if (!session) return res.status(404).json({ error: "Session not found" });
       res.json(session);
     } catch (err: unknown) {
@@ -4023,21 +3917,9 @@ export async function registerRoutes(
     }
   });
 
-  // ── Eden data-query tool routes ───────────────────────────────────────────
-  // Simple SQL aggregations — authenticated with site or admin password
+  // ── Eden data-query tool routes (authenticated user) ─────────────────────
 
-  function edenQueryAuth(req: import("express").Request, res: import("express").Response): boolean {
-    const pass = (req.headers["x-admin-password"] ?? req.query.adminPassword) as string;
-    const SITE_PW = process.env.SITE_PASSWORD ?? "quality";
-    if (pass !== "eden" && pass !== SITE_PW) {
-      res.status(401).json({ error: "Unauthorized" });
-      return false;
-    }
-    return true;
-  }
-
-  app.get("/api/eden/query/count-by-institution", async (req, res) => {
-    if (!edenQueryAuth(req, res)) return;
+  app.get("/api/eden/query/count-by-institution", verifyAnyAuth, async (req, res) => {
     try {
       const area = typeof req.query.area === "string" ? req.query.area.toLowerCase() : null;
       const rows = await db
@@ -4060,8 +3942,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/query/top-institutions", async (req, res) => {
-    if (!edenQueryAuth(req, res)) return;
+  app.get("/api/eden/query/top-institutions", verifyAnyAuth, async (req, res) => {
     try {
       const area = typeof req.query.area === "string" ? req.query.area.toLowerCase() : "";
       const rows = await db
@@ -4084,8 +3965,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/query/count-by-modality", async (req, res) => {
-    if (!edenQueryAuth(req, res)) return;
+  app.get("/api/eden/query/count-by-modality", verifyAnyAuth, async (req, res) => {
     try {
       const rows = await db
         .select({
@@ -4103,8 +3983,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/query/count-by-stage", async (req, res) => {
-    if (!edenQueryAuth(req, res)) return;
+  app.get("/api/eden/query/count-by-stage", verifyAnyAuth, async (req, res) => {
     try {
       const rows = await db
         .select({
@@ -4122,8 +4001,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/eden/query/newest-by-institution", async (req, res) => {
-    if (!edenQueryAuth(req, res)) return;
+  app.get("/api/eden/query/newest-by-institution", verifyAnyAuth, async (req, res) => {
     try {
       const institution = typeof req.query.institution === "string" ? req.query.institution : null;
       if (!institution) return res.status(400).json({ error: "institution param required" });
@@ -4159,8 +4037,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/wipe-assets", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       await storage.wipeAllAssets();
       res.json({ ok: true, message: "All ingested assets wiped" });
@@ -4174,12 +4050,10 @@ export async function registerRoutes(
   //   GET    /api/admin/orphaned-records              — counts + 20-row preview
   //   POST   /api/admin/orphaned-records/reassign     — reassign to a target userId
   //   DELETE /api/admin/orphaned-records              — hard delete (requires confirm: true)
-  // Auth: x-admin-password header (consistent with all other admin endpoints).
+  // Auth: requireAdmin middleware (mounted on /api/admin).
   // Destructive operations additionally require { confirm: true } in the request body.
 
   app.get("/api/admin/orphaned-records", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const [saCountResult, plCountResult, saPreview, plPreview] = await Promise.all([
         db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id IS NULL`),
@@ -4205,8 +4079,6 @@ export async function registerRoutes(
   // Reassign null-userId rows to a specific user (and optionally an org).
   // Call GET first to confirm what will be affected, then POST to commit.
   app.post("/api/admin/orphaned-records/reassign", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { targetUserId, targetOrgId, confirm: confirmed } = req.body as {
       targetUserId?: string;
       targetOrgId?: number;
@@ -4240,8 +4112,6 @@ export async function registerRoutes(
 
   // Hard-delete all remaining null-userId rows.  Run /reassign first for records worth keeping.
   app.delete("/api/admin/orphaned-records", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { confirm: confirmed } = req.body as { confirm?: boolean };
     if (!confirmed) return res.status(400).json({ error: "Pass { confirm: true } to execute" });
     try {
@@ -4271,9 +4141,7 @@ export async function registerRoutes(
   // Safeguards: institution must be registered in ALL_SCRAPERS; body must include
   // { confirm: true } to prevent accidental destructive calls.
   app.post("/api/admin/wipe-assets/:institution", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
-    const institution = decodeURIComponent(req.params.institution);
+    const institution = decodeURIComponent(String(req.params.institution));
     // Only allow wiping institutions that have a registered scraper
     if (!ALL_SCRAPERS.some((s) => s.institution === institution)) {
       return res.status(400).json({ error: `No registered scraper for: ${institution}` });
@@ -4297,8 +4165,6 @@ export async function registerRoutes(
   // Used to resolve false-new floods from URL/dedup churn before they reach the push step.
   // Legacy path kept for backward compat — new path is /api/admin/indexing-queue/quarantine.
   app.post("/api/admin/staging/quarantine", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { institution } = req.body as { institution?: string };
     if (!institution || typeof institution !== "string" || !institution.trim()) {
       return res.status(400).json({ error: "institution is required" });
@@ -4314,8 +4180,6 @@ export async function registerRoutes(
   // ── Indexing Queue quarantine controls ────────────────────────────────────
 
   app.get("/api/admin/indexing-queue/quarantine-summary", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const summary = await storage.getQuarantineSummary();
       res.json({ summary });
@@ -4325,8 +4189,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/indexing-queue/quarantine", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { institution } = req.body as { institution?: string };
     if (!institution || typeof institution !== "string" || !institution.trim()) {
       return res.status(400).json({ error: "institution is required" });
@@ -4340,8 +4202,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/indexing-queue/release-quarantine", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { institution } = req.body as { institution?: string };
     if (!institution || typeof institution !== "string" || !institution.trim()) {
       return res.status(400).json({ error: "institution is required" });
@@ -4355,8 +4215,6 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/indexing-queue/discard-quarantine", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const { institution } = req.body as { institution?: string };
     if (!institution || typeof institution !== "string" || !institution.trim()) {
       return res.status(400).json({ error: "institution is required" });
@@ -4370,8 +4228,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/admin/review-queue", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const items = await storage.getReviewQueue();
       res.json({ items });
@@ -4381,8 +4237,6 @@ export async function registerRoutes(
   });
 
   app.patch("/api/admin/review-queue/:id", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     const { note } = req.body as { note?: string };
@@ -4396,8 +4250,6 @@ export async function registerRoutes(
 
   // Admin: research queue — all published discovery cards for review
   app.get("/api/admin/research-queue", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const cards = await storage.getAllDiscoveryCardsForAdmin();
       res.json({ cards });
@@ -4408,8 +4260,6 @@ export async function registerRoutes(
 
   // Admin: approve or reject a discovery card
   app.patch("/api/admin/research-queue/:id", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     const id = parseInt(req.params.id);
     if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
     const { adminStatus, adminNote } = req.body as { adminStatus: string; adminNote?: string };
@@ -5266,8 +5116,6 @@ If a field cannot be determined, use "N/A".`
   });
 
   app.post("/api/admin/taxonomy/refresh", async (req, res) => {
-    const pw = req.headers["x-admin-password"] as string;
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const { refreshTaxonomyCounts, detectConvergenceSignals } = await import("./lib/pipeline/taxonomyPipeline");
       await refreshTaxonomyCounts();
@@ -5414,8 +5262,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/concepts", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const results = await db
         .select()
         .from(conceptCards)
@@ -5429,8 +5275,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/industry-projects", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const results = await db
         .select({
           id: researchProjects.id,
@@ -5459,8 +5303,6 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/industry-projects/:id/status", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const { id } = req.params;
       const schema = z.object({ adminStatus: z.enum(["pending", "published", "rejected"]) });
       const { adminStatus } = schema.parse(req.body);
@@ -5479,8 +5321,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/analytics/overview", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const analyticsSupabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
       const analyticsSupabaseUrl = process.env.VITE_SUPABASE_URL || "";
@@ -5616,8 +5456,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/analytics/top-searches", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const result = await db.execute(sql`
         SELECT query, COUNT(*) AS count
         FROM search_history
@@ -5637,8 +5475,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/users", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5663,8 +5499,6 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/users/:id/email", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5691,8 +5525,6 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/users/:id/subscribed", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5723,8 +5555,6 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/users/:id/role", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5750,8 +5580,6 @@ If a field cannot be determined, use "N/A".`
 
   app.post("/api/admin/users/invite", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5794,17 +5622,8 @@ If a field cannot be determined, use "N/A".`
     billingNotes: z.string().nullable().optional(),
   });
 
-  function adminGuard(req: any, res: any): boolean {
-    if (req.headers["x-admin-password"] !== "eden") {
-      res.status(401).json({ error: "Unauthorized" });
-      return false;
-    }
-    return true;
-  }
-
   app.get("/api/admin/organizations", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const orgs = await storage.getAllOrganizations();
       const orgsWithCounts = await Promise.all(
         orgs.map(async (org) => ({
@@ -5820,7 +5639,6 @@ If a field cannot be determined, use "N/A".`
 
   app.get("/api/admin/organizations/:id", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const org = await storage.getOrganization(Number(req.params.id));
       if (!org) return res.status(404).json({ error: "Not found" });
       const members = await storage.getOrgMembers(org.id);
@@ -5832,7 +5650,6 @@ If a field cannot be determined, use "N/A".`
 
   app.post("/api/admin/organizations", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const data = orgBodySchema.parse(req.body);
       const org = await storage.createOrganization(data);
       res.json(org);
@@ -5844,7 +5661,6 @@ If a field cannot be determined, use "N/A".`
 
   app.patch("/api/admin/organizations/:id", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const data = orgBodySchema.partial().parse(req.body);
       const org = await storage.updateOrganization(Number(req.params.id), data);
       if (!org) return res.status(404).json({ error: "Not found" });
@@ -5857,7 +5673,6 @@ If a field cannot be determined, use "N/A".`
 
   app.delete("/api/admin/organizations/:id", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       await storage.deleteOrganization(Number(req.params.id));
       res.json({ ok: true });
     } catch (err: any) {
@@ -5868,7 +5683,6 @@ If a field cannot be determined, use "N/A".`
   // Billing history — returns all billing events for an org in reverse-chronological order
   app.get("/api/admin/organizations/:id/billing-history", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const orgId = Number(req.params.id);
       if (!orgId) return res.status(400).json({ error: "Invalid org id" });
       const events = await storage.getBillingHistory(orgId);
@@ -5881,7 +5695,6 @@ If a field cannot be determined, use "N/A".`
   // Logo upload — stores a URL or base64 data URL in logoUrl field
   app.post("/api/admin/organizations/:id/logo", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const { logoUrl } = z.object({ logoUrl: z.string().min(1) }).parse(req.body);
       const org = await storage.updateOrganization(Number(req.params.id), { logoUrl });
       if (!org) return res.status(404).json({ error: "Not found" });
@@ -5895,7 +5708,6 @@ If a field cannot be determined, use "N/A".`
   // Add member — creates Supabase account, adds to org_members, sets industry_profiles.org_id
   app.post("/api/admin/organizations/:id/members", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -5963,7 +5775,6 @@ If a field cannot be determined, use "N/A".`
   // Remove member — removes from org_members, nulls industry_profiles.org_id
   app.delete("/api/admin/organizations/:id/members/:userId", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const orgId = Number(req.params.id);
       const { userId } = req.params;
       await storage.removeOrgMember(orgId, userId);
@@ -5976,7 +5787,6 @@ If a field cannot be determined, use "N/A".`
   // Resend invite — generates a fresh recovery link and re-sends the team invite email
   app.post("/api/admin/organizations/:id/members/:userId/resend-invite", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -6019,7 +5829,6 @@ If a field cannot be determined, use "N/A".`
   // Delete user account — deletes from Supabase Auth, org_members (all orgs), and industry_profiles
   app.delete("/api/admin/members/:userId", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const { userId } = req.params;
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
@@ -6079,7 +5888,6 @@ If a field cannot be determined, use "N/A".`
   // Change member role
   app.patch("/api/admin/organizations/:id/members/:userId/role", async (req, res) => {
     try {
-      if (!adminGuard(req, res)) return;
       const { role } = z.object({ role: z.enum(["owner", "admin", "member"]) }).parse(req.body);
       const orgId = Number(req.params.id);
       const { userId } = req.params;
@@ -7243,8 +7051,6 @@ If a field cannot be determined, use "N/A".`
 
   // ── Institutions — merged scraped + manual list ──────────────────────────
   app.get("/api/admin/institutions", async (req, res) => {
-    const pw = req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const manual = await storage.getManualInstitutions();
       const scraperNames = ALL_SCRAPERS.map((s) => s.institution);
@@ -7257,8 +7063,6 @@ If a field cannot be determined, use "N/A".`
   });
 
   app.post("/api/admin/institutions", async (req, res) => {
-    const pw = req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
     try {
       const parsed = insertManualInstitutionSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.message });
@@ -7285,8 +7089,6 @@ If a field cannot be determined, use "N/A".`
       { name: "documents", maxCount: 5 },
     ]),
     async (req: any, res) => {
-    const pw = req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
     const institution: string = (req.body?.institution ?? "").trim();
     if (!institution) return res.status(400).json({ error: "institution is required" });
@@ -7497,8 +7299,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   // ── Manual Import — Batch Commit to Indexing Queue ───────────────────────
   app.post("/api/admin/manual-import/commit", async (req, res) => {
-    const pw = req.headers["x-admin-password"];
-    if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
     const assetSchema = z.object({
       name: z.string().min(1),
@@ -7628,8 +7428,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/dispatch/filter-options", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const rows = await db
         .select({ institution: ingestedAssets.institution, modality: ingestedAssets.modality })
         .from(ingestedAssets)
@@ -7647,8 +7445,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/new-discoveries", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours ?? 168)));
       const parseList = (val: unknown): string[] => {
         if (typeof val === "string" && val) return val.split(",").map((s) => s.trim()).filter(Boolean);
@@ -7667,8 +7463,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/dispatch/preview", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"] ?? req.query.pw;
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const schema = z.object({
         subject: z.string().min(1).max(200),
@@ -7699,8 +7493,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/dispatch/send", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"] ?? req.query.pw;
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const schema = z.object({
         subject: z.string().min(1).max(200),
@@ -7780,8 +7572,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/alerts/trigger-emails", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const { checkAndSendAlerts } = await import("./lib/alertMailer");
       // Run async — don't await so the HTTP response returns immediately
       checkAndSendAlerts().catch((err: any) => {
@@ -7796,8 +7586,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/dispatch/subscribers", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       if (!supabaseServiceRoleKey || !supabaseUrl) {
         return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
       }
@@ -7821,8 +7609,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/dispatch/subscriber-matches", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours) || 168));
       const [profileMatches, supabaseSubscribers, windowSummary] = await Promise.all([
         storage.getSubscriberMatches(windowHours),
@@ -7853,8 +7639,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/dispatch/suggestions/:userId", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const { userId } = req.params;
       if (!userId) return res.status(400).json({ error: "userId required" });
       const windowHours = Math.max(1, Math.min(8760, Number(req.query.windowHours) || 168));
@@ -7868,8 +7652,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/dispatch/history", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const history = await storage.getDispatchHistory(30);
       return res.json({ history });
     } catch (err: any) {
@@ -7880,8 +7662,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/all-institutions", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const institutions = await storage.getAllInstitutionNames();
       return res.json({ institutions });
     } catch (err: any) {
@@ -7893,8 +7673,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/platform-stats", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const stats = await storage.getPlatformStats();
       res.json(stats);
     } catch (err: any) {
@@ -7904,8 +7682,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/duplicate-candidates", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const candidates = await storage.getDuplicateCandidates();
       res.json({ candidates, total: candidates.length });
     } catch (err: any) {
@@ -7916,8 +7692,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/duplicate-candidates/:id/dismiss", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const id = parseInt(req.params.id, 10);
       if (isNaN(id)) return res.status(400).json({ error: "Invalid id" });
       await storage.dismissDuplicateCandidate(id);
@@ -7930,8 +7704,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/duplicate-detection/run", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const result = await storage.runNearDuplicateDetection((msg) => console.log(`[dedup] ${msg}`));
       res.json(result);
     } catch (err: any) {
@@ -7942,8 +7714,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/assets/export-csv", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       function csvEscape(val: unknown): string {
         if (val === null || val === undefined) return "";
@@ -8017,8 +7787,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/assets/bulk-update", async (req, res) => {
     try {
-      const pw = req.query.pw ?? req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
 
       const rowSchema = z.object({
         id: z.number().int(),
@@ -8152,8 +7920,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.get("/api/admin/industry-profiles", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"];
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const profiles = await storage.getAllIndustryProfiles();
       return res.json({ profiles });
     } catch (err: any) {
@@ -8218,8 +7984,6 @@ If multiple assets appear, return each as a separate array item.`;
 
   app.post("/api/admin/alerts/dispatch", async (req, res) => {
     try {
-      const pw = req.headers["x-admin-password"] ?? req.body?.adminPassword;
-      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
       const { runAlertDispatch } = await import("./lib/alertDispatch.js");
       const result = await runAlertDispatch();
       return res.json({ ok: true, ...result });
@@ -9598,10 +9362,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
 
-      // Admin bypass — only valid if ADMIN_PANEL_PASSWORD env var is set; header only (never query string)
-      const adminPwEnv = process.env.ADMIN_PANEL_PASSWORD;
-      const adminPw = req.headers["x-admin-password"] as string | undefined;
-      const isAdmin = !!(adminPwEnv && adminPw && adminPw === adminPwEnv);
+      // Admin bypass — Supabase Bearer token + ADMIN_EMAILS allowlist
+      const isAdmin = !!(await getAdminUser(req));
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
@@ -9872,9 +9634,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // ── Admin: EdenMarket ─────────────────────────────────────────────────────────
-  // All admin/market routes require the shared admin password via x-admin-password header.
-
-  const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD ?? "eden";
+  // All admin/market routes are mounted under /api/admin and protected by the
+  // requireAdmin middleware (Supabase Bearer token + ADMIN_EMAILS allowlist).
 
   async function logDealEvent(dealId: number, actorId: string, eventType: string, detail?: string) {
     try {
@@ -9884,17 +9645,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     } catch (e) { console.warn("[market] deal event log failed", dealId, eventType, e); }
   }
 
-  function requireAdminPw(req: import("express").Request, res: import("express").Response): boolean {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (!pw || pw !== ADMIN_PANEL_PASSWORD) {
-      res.status(401).json({ error: "Unauthorized" });
-      return false;
-    }
-    return true;
-  }
-
   app.get("/api/admin/market/stats", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const stats = await storage.getMarketAdminStats();
       res.json(stats);
@@ -9904,7 +9655,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/api/admin/market/listings", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const { status } = req.query as { status?: string };
       const listings = await storage.getMarketListings(status ? { status } : undefined);
@@ -9916,7 +9666,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.patch("/api/admin/market/listings/:id", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const id = parseInt(String(req.params.id), 10);
       const schema = z.object({
@@ -10003,7 +9752,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/api/admin/market/eois", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const listings = await storage.getMarketListings();
       const result = await Promise.all(
@@ -10016,7 +9764,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   app.get("/api/admin/market/subscribers", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const orgs = await storage.getMarketSubscriberOrgs();
       res.json(orgs);
@@ -10130,7 +9877,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/deals/:id", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const isAdmin = (req.query.pw ?? req.headers["x-admin-password"]) === ADMIN_PANEL_PASSWORD;
+      const isAdmin = !!(await getAdminUser(req));
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
@@ -10605,7 +10352,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // GET /api/admin/market/deals/:id/events — deal activity log (admin only)
   app.get("/api/admin/market/deals/:id/events", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
@@ -10623,7 +10369,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // GET /api/admin/market/deals/:id — full deal room payload (admin read-only)
   app.get("/api/admin/market/deals/:id", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
@@ -10654,7 +10399,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // GET /api/admin/market/deals/:id/messages — read-only deal message thread
   app.get("/api/admin/market/deals/:id/messages", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
@@ -10669,7 +10413,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // GET /api/admin/market/deals/:id/documents — read-only deal document list
   app.get("/api/admin/market/deals/:id/documents", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
@@ -10702,7 +10445,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // GET /api/admin/market/deals — all deals pipeline view
   app.get("/api/admin/market/deals", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const deals = await storage.getAllMarketDeals();
       const enriched = await Promise.all(deals.map(async d => {
@@ -10729,7 +10471,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // POST /api/admin/market/deals/:id/invoice — generate success fee invoice
   app.post("/api/admin/market/deals/:id/invoice", async (req, res) => {
-    if (!requireAdminPw(req, res)) return;
     try {
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -10970,10 +10711,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // Admin-only — recent exports for the Documents tab log
   app.get("/api/admin/export-log", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
     try {
       const limit = Math.min(Number(req.query.limit ?? 20), 100);
       const exports = await storage.getRecentExports(limit);
@@ -10985,10 +10722,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // ── DOCUMENTS: check integration status ─────────────────────────────────────
   app.get("/api/admin/documents/status", async (req, res) => {
-    const pw = req.query.pw ?? req.headers["x-admin-password"];
-    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
     try {
       const { isGoogleDriveConnected } = await import("./lib/googleDriveClient");
       const driveConnected = await isGoogleDriveConnected();
@@ -11000,10 +10733,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
   // ── DOCUMENTS: generate & upload outbound email templates to OneDrive (+Drive) ─
   app.post("/api/admin/documents/generate-templates", async (req, res) => {
-    const pw = req.headers["x-admin-password"];
-    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
     try {
       const { generateTemplateDocx } = await import("./lib/generateDocx");
       const { uploadToOneDrive } = await import("./lib/oneDriveClient");

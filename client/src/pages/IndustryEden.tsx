@@ -12,8 +12,7 @@ import { useEdenChat, type EdenSessionSummary, type EdenUserContext } from "@/ho
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useToast } from "@/hooks/use-toast";
 import { getIndustryProfile } from "@/hooks/use-industry";
-
-const SITE_PW = "quality";
+import { useAuth } from "@/hooks/use-auth";
 
 // ── Empty state with prompt cards ────────────────────────────────────────
 function EmptyState({
@@ -105,6 +104,8 @@ function EmptyState({
 // ── Main component ────────────────────────────────────────────────────────
 export default function IndustryEden() {
   const { toast } = useToast();
+  const { session } = useAuth();
+  const pw = session?.access_token ?? "";
   const [historyOpen, setHistoryOpen] = useState(false);
   const [expandedCitations, setExpandedCitations] = useState<Record<number, boolean>>({});
   const [messageFeedback, setMessageFeedback] = useState<Record<number, "up" | "down">>({});
@@ -141,7 +142,7 @@ export default function IndustryEden() {
   const { data: embedData } = useQuery<{ embeddingCoverage: { totalEmbedded: number } }>({
     queryKey: ["/api/admin/eden/stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/stats", { headers: { "x-admin-password": "eden" } });
+      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return { embeddingCoverage: { totalEmbedded: 0 } };
       return res.json();
     },
@@ -158,7 +159,7 @@ export default function IndustryEden() {
     send,
     clearChat,
     loadSession,
-  } = useEdenChat(SITE_PW, userContext);
+  } = useEdenChat(pw, userContext);
 
   useEffect(() => {
     if (messages.length > 0) {
@@ -172,7 +173,7 @@ export default function IndustryEden() {
   const { data: sessionsData, refetch: refetchSessions } = useQuery<EdenSessionSummary[]>({
     queryKey: ["/api/eden/sessions"],
     queryFn: async () => {
-      const res = await fetch("/api/eden/sessions?limit=25", { headers: { "x-admin-password": SITE_PW } });
+      const res = await fetch("/api/eden/sessions?limit=25", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return [];
       return res.json();
     },
@@ -193,7 +194,7 @@ export default function IndustryEden() {
     try {
       const res = await fetch("/api/eden/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": SITE_PW },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ sessionId, messageIndex: msgIndex, sentiment }),
       });
       if (!res.ok) throw new Error("server error");
@@ -215,7 +216,7 @@ export default function IndustryEden() {
 
   useEffect(() => {
     if (!sessionId) return;
-    fetch(`/api/eden/feedback/${sessionId}`, { headers: { "x-admin-password": SITE_PW } })
+    fetch(`/api/eden/feedback/${sessionId}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } })
       .then((r) => r.ok ? r.json() : [])
       .then((data: Array<{ messageIndex: number; sentiment: string }>) => {
         if (!Array.isArray(data)) return;

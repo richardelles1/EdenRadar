@@ -5,10 +5,11 @@ import {
   Play, Pause, Loader2, CheckCircle2, AlertTriangle, Zap, Database,
   RefreshCw, ChevronRight, ChevronDown, X, Trash2, ArrowUpCircle,
   Eye, Mail, Clock, Building2, Check, Search, AlertCircle,
-  Microscope, Lightbulb, BarChart3, XCircle,
+  Microscope, Lightbulb, BarChart3, XCircle, Lock,
 } from "lucide-react";
-
-const ADMIN_KEY = "eden-admin-pw";
+import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useLocation, Link } from "wouter";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -175,7 +176,7 @@ function adminFetch(url: string, pw: string, options?: RequestInit) {
   return fetch(url, {
     ...options,
     headers: {
-      "x-admin-password": pw,
+      ...(pw ? { Authorization: `Bearer ${pw}` } : {}),
       "Content-Type": "application/json",
       ...(options?.headers ?? {}),
     },
@@ -223,52 +224,40 @@ function roleBadge(role: string | null): { label: string; color: string } {
   }
 }
 
-// ── Password Gate ──────────────────────────────────────────────────────────────
+// ── Auth Gate ──────────────────────────────────────────────────────────────────
 
-function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState(() => localStorage.getItem(ADMIN_KEY) ?? "");
-  const [error, setError] = useState(false);
+function AdminAuthGate({ children }: { children: React.ReactNode }) {
+  const { session, loading: authLoading } = useAuth();
+  const { isAdmin, loading: adminLoading } = useIsAdmin();
+  const [, navigate] = useLocation();
 
-  function attempt() {
-    if (pw === "eden") {
-      localStorage.setItem(ADMIN_KEY, pw);
-      onAuth();
-    } else {
-      setError(true);
-    }
-  }
+  useEffect(() => {
+    if (!authLoading && !session) navigate("/login?next=/admin/mobile", { replace: true });
+  }, [authLoading, session, navigate]);
 
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-6">
-      <div className="w-full max-w-sm space-y-5">
-        <div className="flex items-center gap-2 justify-center">
-          <Shield className="h-6 w-6 text-primary" />
-          <span className="text-lg font-semibold text-foreground">EdenRadar Admin</span>
-        </div>
-        <form onSubmit={(e) => { e.preventDefault(); attempt(); }} className="space-y-3">
-          <input
-            type="password"
-            value={pw}
-            onChange={(e) => { setPw(e.target.value); setError(false); }}
-            placeholder="Admin password"
-            className={`w-full rounded-xl border px-4 py-3 text-base bg-background focus:outline-none focus:ring-2 focus:ring-primary ${
-              error ? "border-destructive focus:ring-destructive" : "border-border"
-            }`}
-            data-testid="input-mobile-admin-password"
-            autoFocus
-          />
-          {error && <p className="text-sm text-destructive text-center">Incorrect password</p>}
-          <button
-            type="submit"
-            className="w-full rounded-xl bg-primary text-primary-foreground py-3 text-base font-semibold active:opacity-80"
-            data-testid="button-mobile-admin-login"
-          >
-            Enter
-          </button>
-        </form>
+  if (authLoading || (session && adminLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-6 w-6 text-primary animate-spin" />
       </div>
-    </div>
-  );
+    );
+  }
+  if (!session) return null;
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-6">
+        <div className="w-full max-w-sm space-y-4 p-8 border border-border rounded-xl bg-card text-center">
+          <Lock className="h-6 w-6 text-destructive mx-auto" />
+          <h1 className="text-lg font-semibold text-foreground">Admin access required</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account ({session.user.email}) is not on the admin allowlist.
+          </p>
+          <Link href="/" className="text-sm text-primary underline">Return home</Link>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
 }
 
 // ── Per-Institution Sync Panel ─────────────────────────────────────────────────
@@ -2171,15 +2160,18 @@ function MobileAdminPanel({ pw, onLogout }: { pw: string; onLogout: () => void }
 
 // ── Default Export ─────────────────────────────────────────────────────────────
 
-export default function AdminMobile() {
-  const [authed, setAuthed] = useState(() => localStorage.getItem(ADMIN_KEY) === "eden");
+function AdminMobileInner() {
+  const { session, signOut } = useAuth();
+  const pw = session?.access_token ?? "";
 
-  function handleLogout() {
-    localStorage.removeItem(ADMIN_KEY);
-    setAuthed(false);
+  async function handleLogout() {
+    await signOut();
+    window.location.href = "/login";
   }
 
-  if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
-  const pw = localStorage.getItem(ADMIN_KEY) ?? "";
   return <MobileAdminPanel pw={pw} onLogout={handleLogout} />;
+}
+
+export default function AdminMobile() {
+  return <AdminAuthGate><AdminMobileInner /></AdminAuthGate>;
 }

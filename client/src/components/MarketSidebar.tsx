@@ -2,6 +2,7 @@ import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -86,8 +87,6 @@ function NavButton({ href, label, icon: Icon, exact, location, navigate }: NavIt
   );
 }
 
-const ADMIN_KEY = "eden-admin-pw";
-
 function NotificationBell() {
   const { session } = useAuth();
   const { open, animate } = useSidebar();
@@ -147,7 +146,7 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
-  const isAdmin = typeof window !== "undefined" && !!localStorage.getItem(ADMIN_KEY);
+  const { isAdmin } = useIsAdmin();
 
   function navigate(href: string) {
     setLocation(href);

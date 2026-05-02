@@ -75,7 +75,7 @@ export function useEdenChat(pw: string, userContext?: EdenUserContext) {
     try {
       const response = await fetch("/api/eden/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ message: msg, sessionId: sessionId || undefined, userContext: userContext || undefined }),
       });
 

@@ -144,7 +144,7 @@ async function adminFetch(url: string, options: RequestInit = {}, pw: string) {
     ...options,
     headers: {
       "Content-Type": "application/json",
-      "x-admin-password": pw,
+      ...(pw ? { Authorization: `Bearer ${pw}` } : {}),
       ...options.headers,
     },
   });

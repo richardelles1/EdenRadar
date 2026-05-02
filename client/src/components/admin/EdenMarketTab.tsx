@@ -11,6 +11,9 @@ import {
   History as HistoryIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getAuthHeaders } from "@/lib/queryClient";
+
+const adminHeaders = () => getAuthHeaders();
 
 type AdminStats = {
   totalListings: number;
@@ -105,7 +108,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   const { data: messages = [], isLoading: msgsLoading } = useQuery<AdminDealMessage[]>({
     queryKey: ["/api/admin/market/deals", deal.id, "messages"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/market/deals/${deal.id}/messages`, { headers: adminHeaders() });
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/messages`, { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -113,7 +116,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   const { data: docs = [], isLoading: docsLoading } = useQuery<AdminDealDocument[]>({
     queryKey: ["/api/admin/market/deals", deal.id, "documents"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/market/deals/${deal.id}/documents`, { headers: adminHeaders() });
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/documents`, { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -121,7 +124,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   const { data: events = [], isLoading: eventsLoading } = useQuery<AdminDealEvent[]>({
     queryKey: ["/api/admin/market/deals", deal.id, "events"],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/market/deals/${deal.id}/events`, { headers: adminHeaders() });
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/events`, { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -272,9 +275,6 @@ function StatCard({ icon: Icon, label, value, color }: {
   );
 }
 
-const ADMIN_KEY = "eden-admin-pw";
-const adminHeaders = () => ({ "x-admin-password": localStorage.getItem(ADMIN_KEY) ?? "" });
-
 function SuccessFeeModal({ deal, onClose }: { deal: AdminDeal; onClose: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -292,7 +292,7 @@ function SuccessFeeModal({ deal, onClose }: { deal: AdminDeal; onClose: () => vo
     mutationFn: async () => {
       const res = await fetch(`/api/admin/market/deals/${deal.id}/invoice`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", ...adminHeaders() },
+        headers: { "Content-Type": "application/json", ...(await adminHeaders()) },
         body: JSON.stringify({ dealSizeM: sizeM }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
@@ -360,7 +360,7 @@ export function EdenMarketTab() {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/market/stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/stats", { headers: adminHeaders() });
+      const res = await fetch("/api/admin/market/stats", { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed to load stats");
       return res.json();
     },
@@ -372,7 +372,7 @@ export function EdenMarketTab() {
       const url = statusFilter === "all"
         ? "/api/admin/market/listings"
         : `/api/admin/market/listings?status=${statusFilter}`;
-      const res = await fetch(url, { headers: adminHeaders() });
+      const res = await fetch(url, { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed to load listings");
       return res.json();
     },
@@ -382,7 +382,7 @@ export function EdenMarketTab() {
   const { data: eoiGroups = [], isLoading: eoisLoading } = useQuery<EoiGroup[]>({
     queryKey: ["/api/admin/market/eois"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/eois", { headers: adminHeaders() });
+      const res = await fetch("/api/admin/market/eois", { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed to load EOIs");
       return res.json();
     },
@@ -392,7 +392,7 @@ export function EdenMarketTab() {
   const { data: subscribers = [], isLoading: subscribersLoading } = useQuery<SubscriberOrg[]>({
     queryKey: ["/api/admin/market/subscribers"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/subscribers", { headers: adminHeaders() });
+      const res = await fetch("/api/admin/market/subscribers", { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed to load subscribers");
       return res.json();
     },
@@ -402,7 +402,7 @@ export function EdenMarketTab() {
   const { data: deals = [], isLoading: dealsLoading } = useQuery<AdminDeal[]>({
     queryKey: ["/api/admin/market/deals"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/deals", { headers: adminHeaders() });
+      const res = await fetch("/api/admin/market/deals", { headers: await adminHeaders() });
       if (!res.ok) throw new Error("Failed to load deals");
       return res.json();
     },
@@ -413,7 +413,7 @@ export function EdenMarketTab() {
     mutationFn: async ({ id, status, adminNote }: { id: number; status: string; adminNote?: string }) => {
       const res = await fetch(`/api/admin/market/listings/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", ...adminHeaders() },
+        headers: { "Content-Type": "application/json", ...(await adminHeaders()) },
         body: JSON.stringify({ status, adminNote }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }

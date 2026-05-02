@@ -21,47 +21,42 @@ import { useEdenChat, type ChatAsset, type ChatMessage, type EdenSessionSummary 
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
 import { ExportMenu } from "@/components/ExportMenu";
 import { EdenAvatar, MarkdownContent, EdenIntro, PROMPT_CARDS, getFollowUpPills } from "@/components/EdenOrb";
+import { useAuth } from "@/hooks/use-auth";
+import { useIsAdmin } from "@/hooks/useIsAdmin";
+import { useLocation, Link } from "wouter";
 
-const ADMIN_KEY = "eden-admin-pw";
+function AdminAuthGate({ children }: { children: ReactNode }) {
+  const { session, loading: authLoading } = useAuth();
+  const { isAdmin, adminEmail, loading: adminLoading } = useIsAdmin();
+  const [, navigate] = useLocation();
 
-function PasswordGate({ onAuth }: { onAuth: () => void }) {
-  const [pw, setPw] = useState(() => localStorage.getItem(ADMIN_KEY) ?? "");
-  const [error, setError] = useState(false);
+  useEffect(() => {
+    if (!authLoading && !session) navigate("/login?next=/admin", { replace: true });
+  }, [authLoading, session, navigate]);
 
-  const submit = () => {
-    if (pw === "eden") {
-      localStorage.setItem(ADMIN_KEY, pw);
-      onAuth();
-    } else {
-      setError(true);
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-background" data-testid="admin-gate">
-      <div className="w-full max-w-sm space-y-6 p-8 border border-border rounded-xl bg-card">
-        <div className="flex items-center gap-3">
-          <Lock className="h-6 w-6 text-primary" />
-          <h1 className="text-xl font-semibold text-foreground">Admin Access</h1>
-        </div>
-        <div className="space-y-3">
-          <Input
-            type="password"
-            placeholder="Portal password"
-            value={pw}
-            onChange={(e) => { setPw(e.target.value); setError(false); }}
-            onKeyDown={(e) => e.key === "Enter" && submit()}
-            data-testid="input-admin-password"
-            className={error ? "border-destructive" : ""}
-          />
-          {error && <p className="text-sm text-destructive">Incorrect password</p>}
-          <Button onClick={submit} className="w-full" data-testid="button-admin-login">
-            Enter
-          </Button>
+  if (authLoading || (session && adminLoading)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background" data-testid="admin-gate-loading">
+        <Loader2 className="h-6 w-6 text-primary animate-spin" />
+      </div>
+    );
+  }
+  if (!session) return null;
+  if (!isAdmin) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background px-6" data-testid="admin-gate-denied">
+        <div className="w-full max-w-sm space-y-4 p-8 border border-border rounded-xl bg-card text-center">
+          <Lock className="h-6 w-6 text-destructive mx-auto" />
+          <h1 className="text-lg font-semibold text-foreground">Admin access required</h1>
+          <p className="text-sm text-muted-foreground">
+            Your account ({session.user.email}) is not on the admin allowlist. Contact an administrator to request access.
+          </p>
+          <Link href="/" className="text-sm text-primary underline">Return home</Link>
         </div>
       </div>
-    </div>
-  );
+    );
+  }
+  return <>{children}</>;
 }
 
 
@@ -242,7 +237,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     queryKey: ["/api/ingest/sync/status", institution, pw],
     queryFn: async () => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/status`, {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to load sync status");
       return res.json();
@@ -254,7 +249,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     queryKey: ["/api/ingest/sync/history", institution, pw],
     queryFn: async () => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/history`, {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) return { sessions: [] };
       return res.json();
@@ -280,7 +275,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     mutationFn: async () => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json();
@@ -302,7 +297,7 @@ function ExpandedSyncPanel({ institution, pw, onCollapse, liveInDb }: { institut
     mutationFn: async () => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/push`, {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const data = await res.json();
@@ -730,7 +725,7 @@ function DataHealth({ pw }: { pw: string }) {
     queryKey: ["/api/admin/collector-health", pw],
     queryFn: async () => {
       const res = await fetch("/api/admin/collector-health", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to load collector health");
       return res.json();
@@ -749,7 +744,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}`, {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json();
@@ -772,7 +767,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch(`/api/ingest/sync/${encodeURIComponent(institution)}/cancel`, {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json();
@@ -793,7 +788,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch("/api/ingest/scheduler/bump", {
         method: "POST",
-        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}), "Content-Type": "application/json" },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) {
@@ -814,7 +809,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/ingest/scheduler/start", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Request failed" }));
@@ -839,7 +834,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/ingest/scheduler/pause", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Request failed" }));
@@ -867,7 +862,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/ingest/scheduler/reset", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Request failed" }));
@@ -908,7 +903,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (tier: 1 | 2 | 3 | 4) => {
       const res = await fetch("/api/ingest/scheduler/run-tier", {
         method: "POST",
-        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}), "Content-Type": "application/json" },
         body: JSON.stringify({ tier }),
       });
       if (!res.ok) {
@@ -952,7 +947,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (concurrency: 1 | 2 | 3) => {
       const res = await fetch("/api/ingest/scheduler/concurrency", {
         method: "POST",
-        headers: { "x-admin-password": pw, "Content-Type": "application/json" },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}), "Content-Type": "application/json" },
         body: JSON.stringify({ concurrency }),
       });
       if (!res.ok) {
@@ -984,7 +979,7 @@ function DataHealth({ pw }: { pw: string }) {
   const { data: scraperHealthData, refetch: refetchScraperHealth } = useQuery<{ rows: ScraperHealthRow[]; total: number; inBackoff: number }>({
     queryKey: ["/api/admin/scraper-health", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/scraper-health", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/scraper-health", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load scraper health");
       return res.json();
     },
@@ -995,7 +990,7 @@ function DataHealth({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch(`/api/admin/scraper-health/${encodeURIComponent(institution)}/clear-backoff`, {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({ error: "Failed" }));
@@ -1981,7 +1976,7 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
   const { data, isLoading } = useQuery<{ dim: string; rows: DimRow[] }>({
     queryKey: ["/api/admin/dataset-quality/dimensions", pw, activeTab],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/dataset-quality/dimensions?dim=${activeTab}`, { headers: { "x-admin-password": pw } });
+      const res = await fetch(`/api/admin/dataset-quality/dimensions?dim=${activeTab}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2256,7 +2251,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
   const filterValues = useQuery<{ modalities: string[]; stages: string[] }>({
     queryKey: ["/api/admin/assets/filter-values", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/assets/filter-values", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/assets/filter-values", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2278,7 +2273,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
     queryKey: ["/api/admin/assets", pw, institution, modality, stage, indication, tier, missing, q, page, sort, dir],
     queryFn: async () => {
       const params = buildParams({ page: String(page), limit: "50", sort, dir });
-      const res = await fetch(`/api/admin/assets?${params}`, { headers: { "x-admin-password": pw } });
+      const res = await fetch(`/api/admin/assets?${params}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2311,7 +2306,7 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
     mutationFn: async ({ id, field, verified }: { id: number; field: string; verified: boolean }) => {
       const res = await fetch(`/api/admin/assets/${id}/verify-field`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ field, verified }),
       });
       if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Verify failed"); }
@@ -2631,7 +2626,7 @@ function Enrichment({ pw }: { pw: string }) {
   const { data: stats, isLoading: statsLoading, refetch: refetchStats } = useQuery<EnrichmentStats>({
     queryKey: ["/api/admin/enrichment/stats", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stats", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load enrichment stats");
       return res.json();
     },
@@ -2640,7 +2635,7 @@ function Enrichment({ pw }: { pw: string }) {
   const { data: quality, isLoading: qualityLoading, refetch: refetchQuality } = useQuery<DatasetQualityResponse>({
     queryKey: ["/api/admin/dataset-quality", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/dataset-quality", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/dataset-quality", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load dataset quality");
       return res.json();
     },
@@ -2650,7 +2645,7 @@ function Enrichment({ pw }: { pw: string }) {
     queryKey: ["/api/admin/dataset-quality/institution", expandedInstitution, pw],
     queryFn: async () => {
       const res = await fetch(`/api/admin/dataset-quality/institution/${encodeURIComponent(expandedInstitution!)}`, {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to load institution assets");
       return res.json();
@@ -2662,7 +2657,7 @@ function Enrichment({ pw }: { pw: string }) {
   const { data: byClass } = useQuery<ClassRow[]>({
     queryKey: ["/api/admin/dataset-quality/by-class", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/dataset-quality/by-class", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/dataset-quality/by-class", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load class breakdown");
       return res.json();
     },
@@ -2673,7 +2668,7 @@ function Enrichment({ pw }: { pw: string }) {
   const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
     queryKey: ["/api/admin/enrichment/status", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/status", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load enrichment status");
       return res.json();
     },
@@ -2683,7 +2678,7 @@ function Enrichment({ pw }: { pw: string }) {
   const { data: miniQueue } = useQuery<{ count: number; costEstimate: number }>({
     queryKey: ["/api/admin/enrichment/mini-queue", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load mini-queue");
       return res.json();
     },
@@ -2709,7 +2704,7 @@ function Enrichment({ pw }: { pw: string }) {
 
   const runEnrichment = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/run", { method: "POST", headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/run", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
@@ -2719,7 +2714,7 @@ function Enrichment({ pw }: { pw: string }) {
 
   const stopEnrichment = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/stop", { method: "POST", headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to stop"); }
       return res.json();
     },
@@ -2729,7 +2724,7 @@ function Enrichment({ pw }: { pw: string }) {
 
   const dismissError = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/reset", { method: "POST", headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/reset", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to dismiss"); }
       return res.json();
     },
@@ -2745,7 +2740,7 @@ function Enrichment({ pw }: { pw: string }) {
   }>({
     queryKey: ["/api/admin/enrichment/rule-fill/status", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/status", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/rule-fill/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -2757,7 +2752,7 @@ function Enrichment({ pw }: { pw: string }) {
   }>({
     queryKey: ["/api/admin/enrichment/rule-fill/estimate", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/estimate", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/rule-fill/estimate", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to estimate");
       return res.json();
     },
@@ -2775,7 +2770,7 @@ function Enrichment({ pw }: { pw: string }) {
 
   const runRuleFill = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
@@ -2785,7 +2780,7 @@ function Enrichment({ pw }: { pw: string }) {
 
   const stopRuleFill = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/rule-fill/stop", { method: "POST", headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/enrichment/rule-fill/stop", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
       return res.json();
     },
@@ -3452,7 +3447,7 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
     queryKey: ["/api/admin/industry-projects"],
     queryFn: async () => {
       const res = await fetch("/api/admin/industry-projects", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -3464,7 +3459,7 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
     mutationFn: async ({ id, adminStatus }: { id: number; adminStatus: string }) => {
       const res = await fetch(`/api/admin/industry-projects/${id}/status`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ adminStatus }),
       });
       if (!res.ok) throw new Error("Failed to update");
@@ -4041,7 +4036,7 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
     queryKey: ["/api/admin/review-queue"],
     queryFn: async () => {
       const res = await fetch("/api/admin/review-queue", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -4053,7 +4048,7 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
     mutationFn: async ({ id, note }: { id: number; note: string }) => {
       const res = await fetch(`/api/admin/review-queue/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ note }),
       });
       if (!res.ok) throw new Error("Failed");
@@ -4069,7 +4064,7 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/wipe-assets", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to wipe");
       return res.json();
@@ -4091,7 +4086,7 @@ function PipelineReviewQueue({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch("/api/admin/staging/quarantine", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error("Failed to quarantine");
@@ -4233,7 +4228,7 @@ function ConceptQueue({ pw }: { pw: string }) {
     queryKey: ["/api/admin/concepts"],
     queryFn: async () => {
       const res = await fetch("/api/admin/concepts", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -4295,7 +4290,7 @@ function ResearchQueue({ pw }: { pw: string }) {
     queryKey: ["/api/admin/research-queue"],
     queryFn: async () => {
       const res = await fetch("/api/admin/research-queue", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -4307,7 +4302,7 @@ function ResearchQueue({ pw }: { pw: string }) {
     mutationFn: async ({ id, adminStatus, adminNote }: { id: number; adminStatus: string; adminNote?: string }) => {
       const res = await fetch(`/api/admin/research-queue/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ adminStatus, adminNote }),
       });
       if (!res.ok) throw new Error("Failed to update");
@@ -4538,7 +4533,7 @@ function AccountCenter({ pw }: { pw: string }) {
   const { data, isLoading } = useQuery<{ users: AdminUser[] }>({
     queryKey: ["/api/admin/users"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/users", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/users", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load users");
       return res.json();
     },
@@ -4549,7 +4544,7 @@ function AccountCenter({ pw }: { pw: string }) {
   const { data: profilesData } = useQuery<{ profiles: AdminIndustryProfile[] }>({
     queryKey: ["/api/admin/industry-profiles"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/industry-profiles", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/industry-profiles", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return { profiles: [] };
       return res.json();
     },
@@ -4565,7 +4560,7 @@ function AccountCenter({ pw }: { pw: string }) {
     mutationFn: async ({ userId, role }: { userId: string; role: PortalRole }) => {
       const res = await fetch(`/api/admin/users/${userId}/role`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ role }),
       });
       if (!res.ok) {
@@ -4600,7 +4595,7 @@ function AccountCenter({ pw }: { pw: string }) {
     mutationFn: async ({ userId, contactEmail }: { userId: string; contactEmail: string }) => {
       const res = await fetch(`/api/admin/users/${userId}/email`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ contactEmail }),
       });
       if (!res.ok) {
@@ -4623,7 +4618,7 @@ function AccountCenter({ pw }: { pw: string }) {
     mutationFn: async ({ userId, subscribedToDigest }: { userId: string; subscribedToDigest: boolean }) => {
       const res = await fetch(`/api/admin/users/${userId}/subscribed`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ subscribedToDigest }),
       });
       if (!res.ok) {
@@ -4655,7 +4650,7 @@ function AccountCenter({ pw }: { pw: string }) {
     mutationFn: async (userId: string) => {
       const res = await fetch(`/api/admin/members/${userId}`, {
         method: "DELETE",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
@@ -4677,7 +4672,7 @@ function AccountCenter({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/users/invite", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ email: inviteEmail, password: invitePassword, role: inviteRole }),
       });
       if (!res.ok) {
@@ -5068,7 +5063,7 @@ function QuarantinePanel({ pw }: { pw: string }) {
     queryKey: ["/api/admin/indexing-queue/quarantine-summary"],
     queryFn: async () => {
       const res = await fetch("/api/admin/indexing-queue/quarantine-summary", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to load quarantine summary");
       return res.json();
@@ -5081,7 +5076,7 @@ function QuarantinePanel({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch("/api/admin/indexing-queue/release-quarantine", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Release failed");
@@ -5099,7 +5094,7 @@ function QuarantinePanel({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch("/api/admin/indexing-queue/discard-quarantine", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Discard failed");
@@ -5191,7 +5186,7 @@ function NewArrivals({ pw }: { pw: string }) {
     queryKey: ["/api/admin/new-arrivals"],
     queryFn: async () => {
       const res = await fetch("/api/admin/new-arrivals", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -5205,7 +5200,7 @@ function NewArrivals({ pw }: { pw: string }) {
       setPendingRejectIds((prev) => new Set(prev).add(id));
       const res = await fetch(`/api/admin/new-arrivals/${id}`, {
         method: "DELETE",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Reject failed");
       return res.json();
@@ -5225,7 +5220,7 @@ function NewArrivals({ pw }: { pw: string }) {
     mutationFn: async ({ institution }: { institution?: string }) => {
       const res = await fetch("/api/admin/new-arrivals/push", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Push failed");
@@ -5244,7 +5239,7 @@ function NewArrivals({ pw }: { pw: string }) {
     mutationFn: async (institution: string) => {
       const res = await fetch("/api/admin/indexing-queue/quarantine", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ institution }),
       });
       if (!res.ok) throw new Error((await res.json()).error ?? "Quarantine failed");
@@ -5614,7 +5609,7 @@ function EdenTab({ pw }: { pw: string }) {
   const { data: stats, refetch: refetchStats } = useQuery<EdenStatsResponse>({
     queryKey: ["/api/admin/eden/stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/stats", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/eden/stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load EDEN stats");
       return res.json();
     },
@@ -5624,7 +5619,7 @@ function EdenTab({ pw }: { pw: string }) {
   const { data: status, refetch: refetchStatus } = useQuery<EdenStatusResponse>({
     queryKey: ["/api/admin/eden/enrich/status"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load status");
       return res.json();
     },
@@ -5634,7 +5629,7 @@ function EdenTab({ pw }: { pw: string }) {
   const { data: embedStatus } = useQuery<EdenEmbedStatusResponse>({
     queryKey: ["/api/admin/eden/embed/status"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/embed/status", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/eden/embed/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load embed status");
       return res.json();
     },
@@ -5645,8 +5640,7 @@ function EdenTab({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/enrich", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ adminPassword: pw }),
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const e = await res.json();
@@ -5670,8 +5664,7 @@ function EdenTab({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/enrich/stop", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ adminPassword: pw }),
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to stop"); }
       return res.json();
@@ -5687,8 +5680,7 @@ function EdenTab({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/embed", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ adminPassword: pw }),
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) {
         const e = await res.json();
@@ -5710,7 +5702,7 @@ function EdenTab({ pw }: { pw: string }) {
   const { data: sessionsData, refetch: refetchSessions } = useQuery<EdenSessionSummary[]>({
     queryKey: ["/api/eden/sessions"],
     queryFn: async () => {
-      const res = await fetch("/api/eden/sessions?limit=25", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/eden/sessions?limit=25", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return [];
       return res.json();
     },
@@ -5731,7 +5723,7 @@ function EdenTab({ pw }: { pw: string }) {
     try {
       const res = await fetch("/api/eden/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ sessionId: chatSessionId, messageIndex: msgIndex, sentiment }),
       });
       if (!res.ok) throw new Error("server error");
@@ -5754,7 +5746,7 @@ function EdenTab({ pw }: { pw: string }) {
 
   useEffect(() => {
     if (!chatSessionId) return;
-    fetch(`/api/eden/feedback/${chatSessionId}`, { headers: { "x-admin-password": pw } })
+    fetch(`/api/eden/feedback/${chatSessionId}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } })
       .then((r) => r.ok ? r.json() : [])
       .then((data: Array<{ messageIndex: number; sentiment: string }>) => {
         if (!Array.isArray(data)) return;
@@ -6356,16 +6348,26 @@ function EdenTab({ pw }: { pw: string }) {
   );
 }
 
-export default function Admin() {
-  const [authed, setAuthed] = useState(() => localStorage.getItem(ADMIN_KEY) === "eden");
+function AdminInner() {
   const [activeTab, setActiveTab] = useState("data-pipeline");
   const { theme, setTheme } = useTheme();
+  const { session, signOut } = useAuth();
+  const pw = session?.access_token ?? "";
 
-  if (!authed) return <PasswordGate onAuth={() => setAuthed(true)} />;
+  return (
+    <AdminPanel
+      pw={pw}
+      setAuthed={async (v) => { if (!v) { await signOut(); window.location.href = "/login"; } }}
+      theme={theme}
+      setTheme={setTheme}
+      activeTab={activeTab}
+      setActiveTab={setActiveTab}
+    />
+  );
+}
 
-  const pw = localStorage.getItem(ADMIN_KEY) ?? "";
-
-  return <AdminPanel pw={pw} setAuthed={setAuthed} theme={theme} setTheme={setTheme} activeTab={activeTab} setActiveTab={setActiveTab} />;
+export default function Admin() {
+  return <AdminAuthGate><AdminInner /></AdminAuthGate>;
 }
 
 type ParsedImportAsset = {
@@ -6494,7 +6496,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
   const { data: instData } = useQuery<{ institutions: string[]; manual: { name: string; ttoUrl: string }[] }>({
     queryKey: ["/api/admin/institutions", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/institutions", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/institutions", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load institutions");
       return res.json();
     },
@@ -6508,7 +6510,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
       if (!newInstName.trim()) throw new Error("Institution name is required");
       const res = await fetch("/api/admin/institutions", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({ name: newInstName.trim(), ttoUrl: newInstTtoUrl.trim() || undefined }),
       });
       const d = await res.json();
@@ -6550,7 +6552,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
 
       const res = await fetch("/api/admin/manual-import/parse", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: formData,
       });
       const d = await res.json();
@@ -6573,7 +6575,7 @@ function ManualImportTab({ pw, setActiveTab }: { pw: string; setActiveTab: (tab:
       if (selected.length === 0) throw new Error("Select at least one asset to import");
       const res = await fetch("/api/admin/manual-import/commit", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({
           institution: parsedInstitution,
           assets: selected.map(({ name, description, abstract, sourceUrl, inventors, patentStatus, technologyId, contactEmail, target, modality, indication, developmentStage }) =>
@@ -7110,7 +7112,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const subscriberCountQuery = useQuery<{ subscribers: { id: string; username: string; effectiveEmail: string }[] }>({
     queryKey: ["/api/admin/dispatch/subscribers"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/dispatch/subscribers", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/dispatch/subscribers", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return { subscribers: [] };
       return res.json();
     },
@@ -7130,7 +7132,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const allInstitutionsQuery = useQuery<{ institutions: string[] }>({
     queryKey: ["/api/admin/all-institutions"],
     queryFn: async () => {
-      const r = await fetch("/api/admin/all-institutions", { headers: { "x-admin-password": pw } });
+      const r = await fetch("/api/admin/all-institutions", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) return { institutions: [] };
       return r.json();
     },
@@ -7141,7 +7143,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const allUsersQuery = useQuery<{ users: Array<{ id: string; email: string; contactEmail: string | null; subscribedToDigest: boolean; role: string | null }> }>({
     queryKey: ["/api/admin/users"],
     queryFn: async () => {
-      const r = await fetch("/api/admin/users", { headers: { "x-admin-password": pw } });
+      const r = await fetch("/api/admin/users", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) return { users: [] };
       return r.json();
     },
@@ -7153,7 +7155,7 @@ function DispatchTab({ pw }: { pw: string }) {
     queryKey: ["/api/admin/new-discoveries", windowHours],
     queryFn: async () => {
       const params = new URLSearchParams({ windowHours: String(windowHours) });
-      const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { "x-admin-password": pw } });
+      const r = await fetch(`/api/admin/new-discoveries?${params}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) throw new Error("Failed to load discoveries");
       return r.json();
     },
@@ -7162,7 +7164,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const historyQuery = useQuery<{ history: DispatchLogEntry[] }>({
     queryKey: ["/api/admin/dispatch/history"],
     queryFn: async () => {
-      const r = await fetch(`/api/admin/dispatch/history`, { headers: { "x-admin-password": pw } });
+      const r = await fetch(`/api/admin/dispatch/history`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) throw new Error("Failed to load history");
       return r.json();
     },
@@ -7172,7 +7174,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const subscriberMatchesQuery = useQuery<{ subscribers: SubscriberMatchData[]; windowHours: number }>({
     queryKey: ["/api/admin/dispatch/subscriber-matches", windowHours],
     queryFn: async () => {
-      const r = await fetch(`/api/admin/dispatch/subscriber-matches?windowHours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      const r = await fetch(`/api/admin/dispatch/subscriber-matches?windowHours=${windowHours}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) throw new Error("Failed to load subscriber matches");
       return r.json();
     },
@@ -7183,7 +7185,7 @@ function DispatchTab({ pw }: { pw: string }) {
   const suggestionsQuery = useQuery<{ assets: SmartAsset[]; windowHours: number }>({
     queryKey: ["/api/admin/dispatch/suggestions", selectedSubId, windowHours],
     queryFn: async () => {
-      const r = await fetch(`/api/admin/dispatch/suggestions/${selectedSubId}?windowHours=${windowHours}`, { headers: { "x-admin-password": pw } });
+      const r = await fetch(`/api/admin/dispatch/suggestions/${selectedSubId}?windowHours=${windowHours}`, { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!r.ok) throw new Error("Failed to load suggestions");
       return r.json();
     },
@@ -7195,7 +7197,7 @@ function DispatchTab({ pw }: { pw: string }) {
     mutationFn: async (payload: { isTest: boolean }) => {
       const r = await fetch("/api/admin/dispatch/send", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({
           subject,
           recipients,
@@ -7270,7 +7272,7 @@ function DispatchTab({ pw }: { pw: string }) {
       try {
         const r = await fetch("/api/admin/dispatch/preview", {
           method: "POST",
-          headers: { "Content-Type": "application/json", "x-admin-password": pw },
+          headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
           body: JSON.stringify({ subject, assetIds: digestAssets.map((a) => a.id), windowHours, isTest: false, colorMode }),
         });
         if (!r.ok) return;
@@ -7362,7 +7364,7 @@ function DispatchTab({ pw }: { pw: string }) {
     setLoadingSubscribers(true);
     try {
       const res = await fetch("/api/admin/dispatch/subscribers", {
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to load subscribers");
       const { subscribers } = await res.json() as { subscribers: { id: string; username: string; effectiveEmail: string }[] };
@@ -7410,7 +7412,7 @@ function DispatchTab({ pw }: { pw: string }) {
     try {
       const r = await fetch("/api/admin/dispatch/preview", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
         body: JSON.stringify({
           subject,
           assetIds: digestAssets.map((a) => a.id),
@@ -7510,7 +7512,7 @@ function DispatchTab({ pw }: { pw: string }) {
     const staged = getSmartDigest(sub.userId);
     const r = await fetch("/api/admin/dispatch/send", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+      headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       body: JSON.stringify({
         subject: `EdenRadar: ${staged.length} new TTO asset${staged.length !== 1 ? "s" : ""} matched for you`,
         recipients: [sub.email],
@@ -8284,7 +8286,7 @@ function DispatchTab({ pw }: { pw: string }) {
                           const allUsers = allUsersQuery.data?.users ?? [];
                           const existing = allUsers.find((u) => u.email.toLowerCase() === testSubscriberEmail.trim().toLowerCase());
                           if (existing) {
-                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-admin-password": pw }, body: JSON.stringify({ subscribedToDigest: true }) });
+                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify({ subscribedToDigest: true }) });
                             if (!r.ok) throw new Error("Failed");
                           } else {
                             toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet. Ask them to sign up first.`, variant: "destructive" }); return;
@@ -8308,7 +8310,7 @@ function DispatchTab({ pw }: { pw: string }) {
                           const allUsers = allUsersQuery.data?.users ?? [];
                           const existing = allUsers.find((u) => u.email.toLowerCase() === testSubscriberEmail.trim().toLowerCase());
                           if (existing) {
-                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", "x-admin-password": pw }, body: JSON.stringify({ subscribedToDigest: true }) });
+                            const r = await fetch(`/api/admin/users/${existing.id}/subscribed`, { method: "PATCH", headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) }, body: JSON.stringify({ subscribedToDigest: true }) });
                             if (!r.ok) throw new Error("Failed");
                           } else {
                             toast({ title: "User not found", description: `${testSubscriberEmail} has no account yet.`, variant: "destructive" }); return;
@@ -8369,7 +8371,7 @@ function DispatchTab({ pw }: { pw: string }) {
                                   try {
                                     const r = await fetch(`/api/admin/users/${u.id}/subscribed`, {
                                       method: "PATCH",
-                                      headers: { "Content-Type": "application/json", "x-admin-password": pw },
+                                      headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
                                       body: JSON.stringify({ subscribedToDigest: !u.subscribedToDigest }),
                                     });
                                     if (!r.ok) throw new Error("Failed");
@@ -8811,7 +8813,7 @@ function PlatformInfo({ pw }: { pw: string }) {
   }>({
     queryKey: ["/api/admin/platform-stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/platform-stats", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/platform-stats", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -8913,7 +8915,7 @@ function DataPipeline({ pw }: { pw: string }) {
   }>({
     queryKey: ["/api/admin/eden/enrich/status", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/eden/enrich/status", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/eden/enrich/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load enrichment status");
       return res.json();
     },
@@ -8925,8 +8927,7 @@ function DataPipeline({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/enrich", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-admin-password": pw },
-        body: JSON.stringify({ adminPassword: pw }),
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error ?? "Failed to resume"); }
       return res.json();
@@ -8943,7 +8944,7 @@ function DataPipeline({ pw }: { pw: string }) {
     mutationFn: async () => {
       const res = await fetch("/api/admin/eden/enrich/toggle-pause", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       if (!res.ok) throw new Error("Failed to toggle enrichment pause");
       return res.json();
@@ -9195,7 +9196,7 @@ function AnalyticsTab({ pw }: { pw: string }) {
   const { data: overview, isLoading: loadingOverview } = useQuery<AnalyticsOverview>({
     queryKey: ["/api/admin/analytics/overview", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/analytics/overview", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/analytics/overview", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load analytics");
       return res.json();
     },
@@ -9206,7 +9207,7 @@ function AnalyticsTab({ pw }: { pw: string }) {
   const { data: topSearchData, isLoading: loadingSearches } = useQuery<TopSearchData>({
     queryKey: ["/api/admin/analytics/top-searches", pw],
     queryFn: async () => {
-      const res = await fetch("/api/admin/analytics/top-searches", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/analytics/top-searches", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) throw new Error("Failed to load top searches");
       return res.json();
     },
@@ -9406,7 +9407,7 @@ function DocumentsTab({ pw }: { pw: string }) {
 
   // Check integration status on mount
   React.useEffect(() => {
-    fetch("/api/admin/documents/status", { headers: { "x-admin-password": pw } })
+    fetch("/api/admin/documents/status", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } })
       .then(r => r.json())
       .then(d => setGoogleDriveConnected(!!d.googleDriveConnected))
       .catch(() => setGoogleDriveConnected(false));
@@ -9426,7 +9427,7 @@ function DocumentsTab({ pw }: { pw: string }) {
     try {
       const res = await fetch("/api/admin/documents/generate-templates", {
         method: "POST",
-        headers: { "x-admin-password": pw },
+        headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
@@ -9721,7 +9722,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
   const { data: queueData } = useQuery<{ cards: any[] }>({
     queryKey: ["/api/admin/research-queue"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/research-queue", { headers: { "x-admin-password": pw } });
+      const res = await fetch("/api/admin/research-queue", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) return { cards: [] };
       return res.json();
     },
@@ -9757,7 +9758,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => { localStorage.removeItem(ADMIN_KEY); setAuthed(false); }}
+              onClick={() => { setAuthed(false); }}
               data-testid="button-admin-logout"
             >
               <LogOut className="h-4 w-4 mr-1" /> Logout
