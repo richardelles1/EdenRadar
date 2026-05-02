@@ -3281,8 +3281,11 @@ function Enrichment({ pw }: { pw: string }) {
               <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2</span>
                 <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
-                <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400">
-                  ~${costEstimate.toFixed(2)} est.
+                <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400 flex items-center gap-1.5">
+                  <span className="bg-amber-100 dark:bg-amber-900/50 px-1.5 py-0.5 rounded font-mono text-[10px]">gpt-4o-mini</span>
+                  <span>~$0.15/1k assets</span>
+                  <span className="text-amber-500">·</span>
+                  <span>~${costEstimate.toFixed(2)} est.</span>
                 </span>
               </div>
               <div className="p-4 space-y-3">

@@ -3109,9 +3109,12 @@ export async function registerRoutes(
     try {
       const staleJob = await storage.getRunningEnrichmentJob();
       if (staleJob) {
-        const remaining = await storage.getIncompleteAssets(staleJob.startedAt);
+        // Use mini-queue criteria (relevant, non-sparse, >150 chars, unscored OR 3+ unknowns,
+        // capped at 500) so resume respects the same cost-controlled batch semantics as a
+        // fresh run — preventing unbounded reprocessing after a restart.
+        const remaining = await storage.getMiniEnrichBatch(500);
         if (remaining.length > 0) {
-          console.log(`[enrichment] Resuming job ${staleJob.id}: ${remaining.length} assets remaining (${staleJob.processed} already processed)`);
+          console.log(`[enrichment] Resuming job ${staleJob.id}: ${remaining.length} assets in mini-queue (${staleJob.processed} already processed)`);
           runEnrichmentWorker(staleJob.id, remaining, staleJob.processed, staleJob.improved, true);
         } else {
           await storage.updateEnrichmentJob(staleJob.id, { status: "done", completedAt: new Date() });

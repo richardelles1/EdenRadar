@@ -126,6 +126,7 @@ const SPARSE_THRESHOLD = 150;
 
 export function applyRulesToAsset(asset: {
   id: number;
+  assetName?: string | null;
   summary: string;
   abstract: string | null;
   developmentStage: string;
@@ -134,7 +135,9 @@ export function applyRulesToAsset(asset: {
   indication: string | null;
   humanVerified: Record<string, boolean> | null;
 }): { fields: Record<string, string>; dataSparse: boolean } {
-  const text = [(asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
+  // Include asset name in text so title-level cues (e.g. "Phase 2 trial of X")
+  // contribute to rule matching alongside summary and abstract.
+  const text = [(asset.assetName ?? ""), (asset.summary ?? ""), (asset.abstract ?? "")].join(" ");
   const humanV = asset.humanVerified ?? {};
   const fields: Record<string, string> = {};
   const isDrug = looksLikeDrug(text);
@@ -169,6 +172,7 @@ export async function runRuleBasedFill(
 ): Promise<RuleFillSummary> {
   const rows = await db.execute<{
     id: number;
+    asset_name: string;
     summary: string;
     abstract: string | null;
     development_stage: string;
@@ -177,7 +181,7 @@ export async function runRuleBasedFill(
     indication: string;
     human_verified: Record<string, boolean> | null;
   }>(sql`
-    SELECT id, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
+    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -203,6 +207,7 @@ export async function runRuleBasedFill(
 
     const { fields, dataSparse } = applyRulesToAsset({
       id: row.id,
+      assetName: row.asset_name,
       summary: row.summary,
       abstract: row.abstract,
       developmentStage: row.development_stage,
@@ -275,6 +280,7 @@ export async function estimateRuleBasedFill(): Promise<{
 }> {
   const rows = await db.execute<{
     id: number;
+    asset_name: string;
     summary: string;
     abstract: string | null;
     development_stage: string;
@@ -283,7 +289,7 @@ export async function estimateRuleBasedFill(): Promise<{
     indication: string;
     human_verified: Record<string, boolean> | null;
   }>(sql`
-    SELECT id, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
+    SELECT id, asset_name, summary, abstract, development_stage, ip_type, licensing_readiness, indication, human_verified
     FROM ingested_assets
     WHERE relevant = true
       AND (
@@ -303,6 +309,7 @@ export async function estimateRuleBasedFill(): Promise<{
   for (const row of rows.rows) {
     const { fields, dataSparse } = applyRulesToAsset({
       id: row.id,
+      assetName: row.asset_name,
       summary: row.summary,
       abstract: row.abstract,
       developmentStage: row.development_stage,
