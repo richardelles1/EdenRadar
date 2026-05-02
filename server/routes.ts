@@ -9687,28 +9687,19 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // GET /api/market/deals/:id — get single deal room data (parties + admin read-only)
-  app.get("/api/market/deals/:id", async (req, res) => {
+  // GET /api/market/deals/:id — get single deal room data (seller or buyer only)
+  app.get("/api/market/deals/:id", verifyAnyAuth, async (req, res) => {
     try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
-
-      // Allow admin access via x-admin-password header
-      const adminPw = req.headers["x-admin-password"];
-      const isAdmin = adminPw === (process.env.ADMIN_PANEL_PASSWORD ?? "eden");
-
-      if (!isAdmin) {
-        // Require party auth for non-admin access
-        const authHeader = req.headers["authorization"];
-        const userId = req.headers["x-user-id"] as string;
-        if (!authHeader && !userId) return res.status(401).json({ error: "Unauthorized" });
-        const org = await storage.getOrgForUser(userId);
-        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
-        if (deal.sellerId !== userId && deal.buyerId !== userId) {
-          return res.status(403).json({ error: "Access denied" });
-        }
+      if (deal.sellerId !== userId && deal.buyerId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
       }
 
       const listing = await storage.getMarketListing(deal.listingId);
@@ -10111,6 +10102,37 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   });
 
   // ── Admin: Deal Pipeline ──────────────────────────────────────────────────────
+
+  // GET /api/admin/market/deals/:id — full deal room payload (admin read-only)
+  app.get("/api/admin/market/deals/:id", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const deal = await storage.getMarketDeal(dealId);
+      if (!deal) return res.status(404).json({ error: "Deal not found" });
+      const listing = await storage.getMarketListing(deal.listingId);
+      const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, deal.eoiId)).limit(1);
+
+      let ndaDocumentUrl: string | null = null;
+      if (deal.ndaDocumentPath) {
+        const sbUrl = process.env.VITE_SUPABASE_URL;
+        const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (sbUrl && sbServiceKey) {
+          try {
+            const { createClient: createSbClient } = await import("@supabase/supabase-js");
+            const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+            const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(deal.ndaDocumentPath, 3600);
+            ndaDocumentUrl = data?.signedUrl ?? null;
+          } catch (e) { console.warn("[market] admin NDA signed URL failed", e); }
+        }
+      }
+
+      res.json({ deal, listing: listing ?? null, eoi: eoi ?? null, ndaDocumentUrl });
+    } catch (err: unknown) {
+      res.status(500).json({ error: err instanceof Error ? err.message : "Server error" });
+    }
+  });
 
   // GET /api/admin/market/deals/:id/messages — read-only deal message thread
   app.get("/api/admin/market/deals/:id/messages", async (req, res) => {
