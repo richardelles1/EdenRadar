@@ -206,6 +206,17 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
             </span>
           </Link>
         )}
+        {alert.lastAlertSentAt ? (
+          <p className="text-[10px] text-muted-foreground flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
+            <Clock className="w-2.5 h-2.5 shrink-0" />
+            Last triggered {new Date(alert.lastAlertSentAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+          </p>
+        ) : (
+          <p className="text-[10px] text-muted-foreground/60 flex items-center gap-1" data-testid={`alert-last-triggered-${alert.id}`}>
+            <Clock className="w-2.5 h-2.5 shrink-0" />
+            Never triggered
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-0.5 shrink-0">
         <button

@@ -6701,7 +6701,7 @@ If a field cannot be determined, use "N/A".`
         modalities: isAllNew ? null : (modalities ?? null),
         stages: isAllNew ? null : (stages ?? null),
         institutions: isAllNew ? null : (institutions ?? null),
-        criteriaType: criteriaType ?? null,
+        criteriaType: criteriaType ?? "custom",
         enabled: enabled !== false,
       }, userId);
       res.status(201).json(alert);
@@ -6760,7 +6760,7 @@ If a field cannot be determined, use "N/A".`
         modalities: isAllNew ? null : (modalities ?? null),
         stages: isAllNew ? null : (stages ?? null),
         institutions: isAllNew ? null : (institutions ?? null),
-        criteriaType: criteriaType ?? null,
+        criteriaType: criteriaType ?? "custom",
         ...(enabled !== undefined ? { enabled: enabled !== false } : {}),
       });
       if (!updated) return res.status(404).json({ error: "Alert not found or access denied" });

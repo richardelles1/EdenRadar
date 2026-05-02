@@ -272,7 +272,7 @@ async function evaluateAlerts(): Promise<void> {
       isTest: false,
       colorMode: "light",
       totalCount,
-      settingsUrl: "https://edenradar.com/industry/settings",
+      settingsUrl: `${process.env.APP_BASE_URL ?? "https://edenradar.com"}/industry/settings`,
     });
 
     try {
