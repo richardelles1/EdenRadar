@@ -17,6 +17,8 @@ export interface DeepEnrichResult {
   comparableDrugs: string;
   licensingReadiness: string;
   completenessScore: number;
+  assetClass?: string | null;
+  deviceAttributes?: Record<string, unknown> | null;
 }
 
 
@@ -155,20 +157,22 @@ export async function deepEnrichBatch(
 
         const result: DeepEnrichResult = {
           id: asset.id,
-          target: classification.target,
-          modality: classification.modality,
-          indication: classification.indication,
+          target: classification.target ?? "unknown",
+          modality: classification.modality ?? "unknown",
+          indication: classification.indication ?? "unknown",
           developmentStage: classification.developmentStage,
           biotechRelevant: classification.biotechRelevant,
           categories: classification.categories,
           categoryConfidence: classification.categoryConfidence,
-          innovationClaim: classification.innovationClaim,
-          mechanismOfAction: classification.mechanismOfAction,
+          innovationClaim: classification.innovationClaim ?? "",
+          mechanismOfAction: classification.mechanismOfAction ?? "",
           ipType: classification.ipType,
-          unmetNeed: classification.unmetNeed,
-          comparableDrugs: classification.comparableDrugs,
+          unmetNeed: classification.unmetNeed ?? "",
+          comparableDrugs: classification.comparableDrugs ?? "",
           licensingReadiness: classification.licensingReadiness,
           completenessScore,
+          assetClass: classification.assetClass,
+          deviceAttributes: classification.deviceAttributes,
         };
 
         allResults.set(asset.id, result);

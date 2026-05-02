@@ -2553,6 +2553,7 @@ function FillBar({ pct, color }: { pct: number | null; color: string }) {
 function Enrichment({ pw }: { pw: string }) {
   const [polling, setPolling] = useState(false);
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [ruleFillPolling, setRuleFillPolling] = useState(false);
   const [institutionFilter, setInstitutionFilter] = useState("");
   const [institutionSortKey, setInstitutionSortKey] = useState<"relevant_count" | "avg_completeness" | "fill_target" | "fill_indication">("relevant_count");
   const [institutionSortDir, setInstitutionSortDir] = useState<"asc" | "desc">("desc");
@@ -2629,7 +2630,7 @@ function Enrichment({ pw }: { pw: string }) {
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
-    onSuccess: () => { setPolling(true); refetchStatus(); toast({ title: "Enrichment started", description: "Running GPT-4o-mini pass on incomplete assets..." }); },
+    onSuccess: () => { setPolling(true); refetchStatus(); toast({ title: "Step 2 started", description: "Running GPT-4o-mini pass on incomplete assets..." }); },
     onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
   });
 
@@ -2653,12 +2654,70 @@ function Enrichment({ pw }: { pw: string }) {
     onError: (err: Error) => toast({ title: "Failed to dismiss", description: err.message, variant: "destructive" }),
   });
 
+  // ── Rule-Based Fill state ──────────────────────────────────────────────────
+  const { data: ruleFillStatus, refetch: refetchRuleFillStatus } = useQuery<{
+    running: boolean;
+    progress: { processed: number; total: number; filled: number } | null;
+    result: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number } | null;
+  }>({
+    queryKey: ["/api/admin/enrichment/rule-fill/status", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/status", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    refetchInterval: ruleFillPolling ? 1500 : false,
+  });
+
+  const { data: ruleFillEstimate, refetch: refetchRuleFillEstimate, isFetching: estimateFetching } = useQuery<{
+    total: number; fillable: number; byField: Record<string, number>; dataSparseCount: number;
+  }>({
+    queryKey: ["/api/admin/enrichment/rule-fill/estimate", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/estimate", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to estimate");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
+  useEffect(() => {
+    if (ruleFillStatus?.running && !ruleFillPolling) setRuleFillPolling(true);
+    if (!ruleFillStatus?.running && ruleFillPolling) {
+      setRuleFillPolling(false);
+      refetchStats();
+      refetchQuality();
+    }
+  }, [ruleFillStatus?.running]);
+
+  const runRuleFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill", { method: "POST", headers: { "x-admin-password": pw } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
+      return res.json();
+    },
+    onSuccess: () => { setRuleFillPolling(true); refetchRuleFillStatus(); toast({ title: "Step 1 started", description: "Rule-based fill running (no AI cost)" }); },
+    onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
+  });
+
+  const stopRuleFill = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/enrichment/rule-fill/stop", { method: "POST", headers: { "x-admin-password": pw } });
+      if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed"); }
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Stop signal sent" }),
+    onError: (err: Error) => toast({ title: "Failed to stop", description: err.message, variant: "destructive" }),
+  });
+
   const isRunning = status?.status === "running";
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
   const totalAssets = stats?.total ?? 0;
   const costEstimate = unknownCount * 0.0003;
   const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
+  const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
+    ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
 
   const g = quality?.global;
   const totalRelevant = g?.total_relevant ?? 0;
@@ -2941,7 +3000,7 @@ function Enrichment({ pw }: { pw: string }) {
         </div>
       )}
 
-      {/* ── Enrichment Controls (collapsible) ── */}
+      {/* ── Enrichment Pipeline (3-step) ── */}
       <div className="border border-border rounded-xl bg-card overflow-hidden">
         <button
           className="w-full px-5 py-3 flex items-center justify-between bg-muted/20 hover:bg-muted/40 transition-colors text-left"
@@ -2950,141 +3009,258 @@ function Enrichment({ pw }: { pw: string }) {
         >
           <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <Sparkles className="h-4 w-4" />
-            Enrichment Controls
-            {isRunning && <span className="text-xs font-normal text-primary ml-1">(running...)</span>}
+            Enrichment Pipeline
+            {(isRunning || ruleFillStatus?.running) && (
+              <span className="text-xs font-normal text-primary ml-1">(running...)</span>
+            )}
           </h3>
           <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${controlsOpen ? "rotate-180" : ""}`} />
         </button>
         {controlsOpen && (
-          <div className="px-5 py-4 space-y-4 border-t border-border">
-            <p className="text-xs text-muted-foreground">AI enrichment for assets with unknown fields (resumable, auto-recovers after restart)</p>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="rounded-xl border border-border bg-background p-4 text-center">
-                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Total Assets (DB)</div>
+          <div className="px-5 py-4 space-y-5 border-t border-border">
+
+            {/* ── Coverage summary ── */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-border bg-background p-3 text-center">
+                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-total-assets">{totalAssets.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Total Assets</div>
               </div>
-              <div className="rounded-xl border border-border bg-background p-4 text-center">
-                <div className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">With Unknown Fields</div>
+              <div className="rounded-xl border border-border bg-background p-3 text-center">
+                <div className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400" data-testid="stat-unknown-count">{unknownCount.toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Unknown Fields</div>
               </div>
-              <div className="rounded-xl border border-border bg-background p-4 text-center">
-                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
-                <div className="text-xs text-muted-foreground mt-1">Fully Enriched</div>
+              <div className="rounded-xl border border-border bg-background p-3 text-center">
+                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-complete-count">{(totalAssets - unknownCount).toLocaleString()}</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Fully Enriched</div>
               </div>
-              <div className="rounded-xl border border-border bg-background p-4 text-center">
-                <div className="text-2xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
+              <div className="rounded-xl border border-border bg-background p-3 text-center">
+                <div className="text-xl font-bold tabular-nums text-foreground" data-testid="stat-completion-rate">
                   {totalAssets > 0 ? Math.round(((totalAssets - unknownCount) / totalAssets) * 100) : 0}%
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">Completion Rate</div>
+                <div className="text-xs text-muted-foreground mt-0.5">Completion Rate</div>
               </div>
             </div>
 
-            {stats && unknownCount > 0 && (
-              <div className="border border-border rounded-xl bg-background overflow-hidden">
-                <div className="px-4 py-2.5 border-b border-border bg-muted/20">
-                  <h4 className="text-xs font-semibold text-foreground">Per-Field Unknown Counts</h4>
-                </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-border">
-                  {[
-                    { label: "Target", val: stats.byField.target, testId: "stat-unknown-target" },
-                    { label: "Modality", val: stats.byField.modality, testId: "stat-unknown-modality" },
-                    { label: "Indication", val: stats.byField.indication, testId: "stat-unknown-indication" },
-                    { label: "Dev Stage", val: stats.byField.developmentStage, testId: "stat-unknown-stage" },
-                  ].map(f => (
-                    <div key={f.label} className="bg-background p-3 text-center">
-                      <div className="text-lg font-bold tabular-nums text-foreground" data-testid={f.testId}>{f.val.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">{f.label}</div>
+            {/* ── Step 1: Rule-Based Fill ── */}
+            <div className="border border-emerald-200 dark:border-emerald-900 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-emerald-200 dark:border-emerald-900 bg-emerald-100/60 dark:bg-emerald-950/40 flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-emerald-500 text-white text-xs font-bold shrink-0">1</span>
+                <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">Rule-Based Fill</span>
+                <span className="ml-auto text-xs font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full">FREE — no AI cost</span>
+              </div>
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Applies regex pattern rules to fill <em>developmentStage</em>, <em>ipType</em>, <em>licensingReadiness</em>, and <em>indication</em> from asset text.
+                  Also tags data-sparse assets (description &lt; 150 chars). Respects human-verified locks.
+                </p>
+
+                {ruleFillEstimate && (
+                  <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                    {Object.entries(ruleFillEstimate.byField).map(([field, count]) => (
+                      <div key={field} className="rounded-lg border border-emerald-200 dark:border-emerald-800 bg-background p-2 text-center">
+                        <div className="text-base font-bold tabular-nums text-emerald-700 dark:text-emerald-400">{(count as number).toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground capitalize">{field}</div>
+                      </div>
+                    ))}
+                    <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
+                      <div className="text-base font-bold tabular-nums text-amber-600 dark:text-amber-400">{ruleFillEstimate.dataSparseCount.toLocaleString()}</div>
+                      <div className="text-xs text-muted-foreground">Sparse</div>
                     </div>
-                  ))}
-                </div>
-              </div>
-            )}
+                  </div>
+                )}
 
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-background">
-              <div>
-                <div className="text-sm font-medium text-foreground">GPT-4o-mini Enrichment</div>
-                <div className="text-xs text-muted-foreground">{unknownCount.toLocaleString()} assets &times; ~$0.0003/asset</div>
-              </div>
-              <div className="text-lg font-bold tabular-nums text-foreground" data-testid="cost-estimate">~${costEstimate.toFixed(2)}</div>
-            </div>
+                {/* Rule fill progress */}
+                {ruleFillStatus?.running && ruleFillStatus.progress && (
+                  <div className="space-y-2" data-testid="rule-fill-progress">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-600" />
+                      <span className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Running…</span>
+                      <span className="text-xs tabular-nums text-muted-foreground ml-auto">
+                        {ruleFillStatus.progress.processed.toLocaleString()}/{ruleFillStatus.progress.total.toLocaleString()} ({ruleFillProgressPct}%)
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => stopRuleFill.mutate()}
+                        disabled={stopRuleFill.isPending}
+                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                        data-testid="button-rule-fill-stop"
+                      >
+                        Stop
+                      </Button>
+                    </div>
+                    <div className="w-full bg-emerald-100 dark:bg-emerald-900/40 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-emerald-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${ruleFillProgressPct}%` }} />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{ruleFillStatus.progress.filled.toLocaleString()} fields filled so far</p>
+                  </div>
+                )}
 
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => runEnrichment.mutate()}
-                disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
-                className="flex-1"
-                data-testid="button-run-enrichment"
-              >
-                {isRunning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Sparkles className="h-4 w-4 mr-2" />}
-                Run Enrichment (mini)
-              </Button>
-            </div>
+                {/* Rule fill result */}
+                {!ruleFillStatus?.running && ruleFillStatus?.result && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="rule-fill-result">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                        Done — {ruleFillStatus.result.fieldsWritten.toLocaleString()} fields written across {ruleFillStatus.result.filled.toLocaleString()} assets
+                        {ruleFillStatus.result.dataSparseTagged > 0 && `, ${ruleFillStatus.result.dataSparseTagged} sparse-flagged`}
+                      </p>
+                      <div className="flex flex-wrap gap-1.5 mt-1.5">
+                        {Object.entries(ruleFillStatus.result.byField).map(([f, n]) => (
+                          <span key={f} className="text-xs bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded">
+                            {f}: {(n as number).toLocaleString()}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
-            {isRunning && status && (
-              <div className="border border-border rounded-xl bg-background p-5 space-y-3" data-testid="enrichment-progress">
                 <div className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span className="text-sm font-medium text-foreground">
-                    Field Enrichment (GPT-4o-mini){isResumed ? " (resuming from checkpoint)" : ""}
-                  </span>
-                  <span className="text-sm tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
-                    {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
-                  </span>
                   <Button
-                    variant="ghost"
                     size="sm"
-                    onClick={() => stopEnrichment.mutate()}
-                    disabled={stopEnrichment.isPending}
-                    className="h-7 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
-                    data-testid="button-enrichment-stop"
+                    variant="outline"
+                    onClick={() => refetchRuleFillEstimate()}
+                    disabled={estimateFetching}
+                    className="gap-1.5 border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                    data-testid="button-rule-fill-estimate"
                   >
-                    {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                    {estimateFetching ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+                    Estimate
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => runRuleFill.mutate()}
+                    disabled={ruleFillStatus?.running || runRuleFill.isPending}
+                    className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white"
+                    data-testid="button-run-rule-fill"
+                  >
+                    {ruleFillStatus?.running ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                    Run Rule Fill
                   </Button>
                 </div>
-                <div className="w-full bg-muted rounded-full h-2.5 overflow-hidden">
-                  <div
-                    className="bg-primary h-2.5 rounded-full transition-all duration-500"
-                    style={{ width: `${progressPct}%` }}
-                    data-testid="enrichment-progress-bar"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
               </div>
-            )}
+            </div>
 
-            {status?.status === "done" && (
-              <div className="flex items-start gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/30" data-testid="enrichment-done">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">Enrichment complete</p>
-                  <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-1">{status.improved} out of {status.total} assets improved</p>
-                </div>
+            {/* ── Step 2: GPT-4o-mini Re-enrich ── */}
+            <div className="border border-amber-200 dark:border-amber-900 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-amber-200 dark:border-amber-900 bg-amber-100/60 dark:bg-amber-950/40 flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-500 text-white text-xs font-bold shrink-0">2</span>
+                <span className="text-sm font-semibold text-amber-800 dark:text-amber-300">GPT-4o-mini Re-enrich</span>
+                <span className="ml-auto text-xs font-medium text-amber-700 dark:text-amber-400">
+                  ~${costEstimate.toFixed(2)} est.
+                </span>
               </div>
-            )}
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-muted-foreground">
+                  Runs GPT-4o-mini on assets that still have unknown fields after rule fill.
+                  Type-aware classification: nulls returned for non-applicable fields (e.g. indication on a research tool). Resumable.
+                </p>
 
-            {status?.status === "error" && (
-              <div className="flex items-start gap-3 p-4 rounded-xl border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
-                <AlertTriangle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-red-700 dark:text-red-400">Last enrichment job failed</p>
-                  <p className="text-xs text-red-600 dark:text-red-500 mt-1">{status.error ?? "The job ended with an error. Dismiss to return to idle."}</p>
-                </div>
+                {stats && unknownCount > 0 && (
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { label: "Target", val: stats.byField.target },
+                      { label: "Modality", val: stats.byField.modality },
+                      { label: "Indication", val: stats.byField.indication },
+                      { label: "Dev Stage", val: stats.byField.developmentStage },
+                    ].map(f => (
+                      <div key={f.label} className="rounded-lg border border-amber-200 dark:border-amber-800 bg-background p-2 text-center">
+                        <div className="text-base font-bold tabular-nums text-amber-700 dark:text-amber-400">{f.val.toLocaleString()}</div>
+                        <div className="text-xs text-muted-foreground">{f.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {isRunning && status && (
+                  <div className="space-y-2" data-testid="enrichment-progress">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-600" />
+                      <span className="text-xs text-amber-700 dark:text-amber-400 font-medium">
+                        Running{isResumed ? " (resumed)" : ""}…
+                      </span>
+                      <span className="text-xs tabular-nums text-muted-foreground ml-auto" data-testid="enrichment-progress-text">
+                        {status.processed.toLocaleString()}/{status.total.toLocaleString()} ({progressPct}%)
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => stopEnrichment.mutate()}
+                        disabled={stopEnrichment.isPending}
+                        className="h-6 px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30"
+                        data-testid="button-enrichment-stop"
+                      >
+                        {stopEnrichment.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Stop"}
+                      </Button>
+                    </div>
+                    <div className="w-full bg-amber-100 dark:bg-amber-900/40 rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-amber-500 h-1.5 rounded-full transition-all duration-500" style={{ width: `${progressPct}%` }} data-testid="enrichment-progress-bar" />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{status.improved.toLocaleString()} assets improved so far</p>
+                  </div>
+                )}
+
+                {status?.status === "done" && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/30" data-testid="enrichment-done">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+                    <p className="text-xs font-medium text-emerald-700 dark:text-emerald-400">
+                      Complete — {status.improved} of {status.total} assets improved
+                    </p>
+                  </div>
+                )}
+
+                {status?.status === "error" && (
+                  <div className="flex items-start gap-2 p-3 rounded-lg border border-red-200 dark:border-red-900 bg-red-50 dark:bg-red-950/30" data-testid="enrichment-error">
+                    <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-medium text-red-700 dark:text-red-400">Job failed</p>
+                      <p className="text-xs text-red-600 dark:text-red-500">{status.error ?? "Dismiss to return to idle."}</p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-6 text-xs text-red-600 dark:text-red-400 hover:text-red-800 shrink-0"
+                      onClick={() => dismissError.mutate()}
+                      disabled={dismissError.isPending}
+                      data-testid="button-dismiss-enrichment-error"
+                    >
+                      {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                    </Button>
+                  </div>
+                )}
+
                 <Button
                   size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 shrink-0"
-                  onClick={() => dismissError.mutate()}
-                  disabled={dismissError.isPending}
-                  data-testid="button-dismiss-enrichment-error"
+                  onClick={() => runEnrichment.mutate()}
+                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
+                  className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+                  data-testid="button-run-enrichment"
                 >
-                  {dismissError.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Dismiss"}
+                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Run mini Re-enrich
                 </Button>
               </div>
-            )}
+            </div>
+
+            {/* ── Step 3: Deep Pass ── */}
+            <div className="border border-violet-200 dark:border-violet-900 rounded-xl bg-violet-50/50 dark:bg-violet-950/20 overflow-hidden">
+              <div className="px-4 py-2.5 border-b border-violet-200 dark:border-violet-900 bg-violet-100/60 dark:bg-violet-950/40 flex items-center gap-2">
+                <span className="flex items-center justify-center w-5 h-5 rounded-full bg-violet-500 text-white text-xs font-bold shrink-0">3</span>
+                <span className="text-sm font-semibold text-violet-800 dark:text-violet-300">GPT-4o Deep Pass</span>
+                <span className="ml-auto text-xs font-medium text-violet-600 dark:text-violet-400">highest quality</span>
+              </div>
+              <div className="p-4">
+                <p className="text-xs text-muted-foreground">
+                  Full GPT-4o deep enrichment with long-context reasoning. Handles innovation claims, unmet needs, comparable drugs, and licensing readiness scoring.
+                  Run from the <span className="font-semibold text-violet-700 dark:text-violet-400">EDEN tab</span> using the Deep Enrich controls.
+                </p>
+              </div>
+            </div>
 
             {unknownCount === 0 && totalAssets > 0 && (
-              <div className="text-center py-6 text-muted-foreground" data-testid="enrichment-all-complete">
-                <CheckCircle2 className="h-8 w-8 mx-auto mb-2 opacity-40" />
+              <div className="text-center py-4 text-muted-foreground" data-testid="enrichment-all-complete">
+                <CheckCircle2 className="h-7 w-7 mx-auto mb-2 opacity-40" />
                 <p className="text-sm font-medium">All assets fully enriched</p>
                 <p className="text-xs mt-1">No unknown fields remaining.</p>
               </div>

@@ -2424,6 +2424,113 @@ export async function registerRoutes(
     }
   });
 
+  // ── Rule-Based Fill ────────────────────────────────────────────────────────
+
+  app.get("/api/admin/enrichment/rule-fill/estimate", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const { estimateRuleBasedFill } = await import("./lib/pipeline/ruleBasedFill");
+      const result = await estimateRuleBasedFill();
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to estimate" });
+    }
+  });
+
+  let ruleFillRunning = false;
+  let ruleFillProgress: { processed: number; total: number; filled: number } | null = null;
+  let ruleFillResult: { processed: number; filled: number; fieldsWritten: number; byField: Record<string, number>; dataSparseTagged: number } | null = null;
+  let ruleFillShouldStop = false;
+
+  app.get("/api/admin/enrichment/rule-fill/status", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      res.json({
+        running: ruleFillRunning,
+        progress: ruleFillProgress,
+        result: ruleFillResult,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  app.post("/api/admin/enrichment/rule-fill", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      if (ruleFillRunning) return res.status(409).json({ error: "Rule-based fill already running" });
+
+      ruleFillRunning = true;
+      ruleFillProgress = { processed: 0, total: 0, filled: 0 };
+      ruleFillResult = null;
+      ruleFillShouldStop = false;
+
+      res.json({ started: true });
+
+      // Run async
+      import("./lib/pipeline/ruleBasedFill").then(({ runRuleBasedFill }) => {
+        runRuleBasedFill(
+          (processed, total, filled) => { ruleFillProgress = { processed, total, filled }; },
+          () => ruleFillShouldStop,
+        ).then(summary => {
+          ruleFillResult = summary;
+          console.log(`[rule-fill] Done: ${summary.filled} assets filled, ${summary.fieldsWritten} field writes`);
+        }).catch(err => {
+          console.error("[rule-fill] Failed:", err);
+        }).finally(() => {
+          ruleFillRunning = false;
+        });
+      });
+    } catch (err: any) {
+      ruleFillRunning = false;
+      res.status(500).json({ error: err.message ?? "Failed to start rule-based fill" });
+    }
+  });
+
+  app.post("/api/admin/enrichment/rule-fill/stop", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      ruleFillShouldStop = true;
+      res.json({ stopped: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  // ── Human-Verified Field Locking ──────────────────────────────────────────
+
+  app.post("/api/admin/assets/:id/verify-field", async (req, res) => {
+    try {
+      const pw = req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const assetId = parseInt(req.params.id);
+      if (isNaN(assetId)) return res.status(400).json({ error: "Invalid asset ID" });
+      const { field, verified } = req.body;
+      if (!field || typeof field !== "string") return res.status(400).json({ error: "field required" });
+      await storage.setHumanVerified(assetId, field, verified !== false);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
+  // ── Mini Enrich Queue ──────────────────────────────────────────────────────
+
+  app.get("/api/admin/enrichment/mini-queue", async (req, res) => {
+    try {
+      const pw = req.query.pw ?? req.headers["x-admin-password"];
+      if (pw !== "eden") return res.status(401).json({ error: "Unauthorized" });
+      const queue = await storage.getMiniEnrichQueue();
+      res.json(queue);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed" });
+    }
+  });
+
   // --- Dataset Quality Analytics (relevant=true only) ---
 
   app.get("/api/admin/dataset-quality", async (req, res) => {
@@ -7284,9 +7391,9 @@ If multiple assets appear, return each as a separate array item.`;
             const stored = newAssetById.get(id);
             const listing = listingMap.get(makeFingerprint(stored?.assetName ?? "", institution));
             // Prefer parse-extracted values; only use classifier result when parse had "unknown"
-            const finalTarget = (listing?.target && listing.target !== "unknown") ? listing.target : classification.target;
-            const finalModality = (listing?.modality && listing.modality !== "unknown") ? listing.modality : classification.modality;
-            const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : classification.indication;
+            const finalTarget = (listing?.target && listing.target !== "unknown") ? listing.target : (classification.target ?? "unknown");
+            const finalModality = (listing?.modality && listing.modality !== "unknown") ? listing.modality : (classification.modality ?? "unknown");
+            const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : (classification.indication ?? "unknown");
             const finalStage = (listing?.developmentStage && listing.developmentStage !== "unknown") ? listing.developmentStage : classification.developmentStage;
             const score = computeCompletenessScore({
               target: finalTarget,

@@ -267,6 +267,12 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
               });
               await storage.updateIngestedAssetEnrichment(id, {
                 ...classification,
+                target: classification.target ?? "unknown",
+                modality: classification.modality ?? "unknown",
+                indication: classification.indication ?? "unknown",
+                mechanismOfAction: classification.mechanismOfAction ?? undefined,
+                comparableDrugs: classification.comparableDrugs ?? undefined,
+                unmetNeed: classification.unmetNeed ?? undefined,
                 completenessScore: score,
               });
               classifiedCount++;

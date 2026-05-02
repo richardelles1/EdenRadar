@@ -1614,33 +1614,49 @@ export class DatabaseStorage implements IStorage {
     id: number; target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
-  }>): Promise<number> {
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
+  }>, source: "mini" | "gpt4o" = "gpt4o"): Promise<number> {
     if (batch.length === 0) return 0;
     let written = 0;
     const now = new Date();
     await db.transaction(async (tx) => {
       for (const data of batch) {
         try {
-          await tx.update(ingestedAssets).set({
-            target: data.target,
-            modality: data.modality,
-            indication: data.indication,
-            developmentStage: data.developmentStage,
+          // Fetch current humanVerified so we don't overwrite locked fields
+          const [cur] = await tx.select({ humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
+            .from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
+          const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
+          const existingSources: Record<string, string> = (cur?.enrichmentSources as Record<string, string>) ?? {};
+
+          const newSources: Record<string, string> = { ...existingSources };
+          const update: Record<string, unknown> = {
             relevant: data.biotechRelevant,
             categories: data.categories,
             categoryConfidence: data.categoryConfidence,
-            innovationClaim: data.innovationClaim || null,
-            mechanismOfAction: data.mechanismOfAction || null,
-            ipType: data.ipType,
-            unmetNeed: data.unmetNeed || null,
-            comparableDrugs: data.comparableDrugs || null,
-            licensingReadiness: data.licensingReadiness,
             completenessScore: data.completenessScore,
-            enrichedAt: now, // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+            enrichedAt: now,
             deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
-            // Clear stale dedupe embedding — forces re-embedding on next scan after target/indication update
             dedupeEmbedding: null,
-          }).where(eq(ingestedAssets.id, data.id));
+          };
+
+          if (!hv.target) { update.target = data.target; newSources.target = source; }
+          if (!hv.modality) { update.modality = data.modality; newSources.modality = source; }
+          if (!hv.indication) { update.indication = data.indication; newSources.indication = source; }
+          if (!hv.developmentStage) { update.developmentStage = data.developmentStage; newSources.developmentStage = source; }
+          if (!hv.mechanismOfAction) { update.mechanismOfAction = data.mechanismOfAction || null; newSources.mechanismOfAction = source; }
+          if (!hv.innovationClaim) { update.innovationClaim = data.innovationClaim || null; newSources.innovationClaim = source; }
+          if (!hv.ipType) { update.ipType = data.ipType; newSources.ipType = source; }
+          if (!hv.unmetNeed) { update.unmetNeed = data.unmetNeed || null; newSources.unmetNeed = source; }
+          if (!hv.comparableDrugs) { update.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = source; }
+          if (!hv.licensingReadiness) { update.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = source; }
+
+          if (data.assetClass) { update.assetClass = data.assetClass; newSources.assetClass = source; }
+          if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes;
+
+          update.enrichmentSources = newSources;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await tx.update(ingestedAssets).set(update as any).where(eq(ingestedAssets.id, data.id));
           written++;
         } catch (e) {
           console.error(`[bulkUpdate] failed for asset ${data.id}:`, e);
@@ -1648,6 +1664,45 @@ export class DatabaseStorage implements IStorage {
       }
     });
     return written;
+  }
+
+  async setHumanVerified(assetId: number, field: string, verified: boolean): Promise<void> {
+    const [cur] = await db.select({ humanVerified: ingestedAssets.humanVerified })
+      .from(ingestedAssets).where(eq(ingestedAssets.id, assetId));
+    const existing: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
+    if (verified) {
+      existing[field] = true;
+    } else {
+      delete existing[field];
+    }
+    await db.update(ingestedAssets)
+      .set({ humanVerified: existing })
+      .where(eq(ingestedAssets.id, assetId));
+  }
+
+  async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(ingestedAssets)
+      .where(
+        and(
+          eq(ingestedAssets.relevant, true),
+          sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`
+        )
+      );
+    const count = row?.count ?? 0;
+    return { count, costEstimate: count * 0.0003 };
+  }
+
+  async flagDataSparse(): Promise<number> {
+    const result = await db.execute(sql`
+      UPDATE ingested_assets
+      SET data_sparse = true
+      WHERE relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) < 150
+    `);
+    return (result as any).rowCount ?? 0;
   }
 
   async backfillCompletenessScores(): Promise<{ total: number; updated: number; unchanged: number }> {

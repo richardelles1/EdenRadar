@@ -221,6 +221,16 @@ export const ingestedAssets = pgTable("ingested_assets", {
   //   - The retry increments 1 → 2, permanently excluding the asset (2 > 1).
   //   - Maximum 2 GPT-4o calls per asset; reset to 0 on content change.
   deepEnrichAttempts: integer("deep_enrich_attempts").default(0).notNull(),
+  // Asset class detected by the type-aware classifier (managed via db:push)
+  assetClass: text("asset_class"),
+  // Device/tool/software-specific attributes stored as JSONB (managed via db:push)
+  deviceAttributes: jsonb("device_attributes").$type<Record<string, unknown>>(),
+  // Tracks which pipeline wrote each enriched field: { indication: "rule"|"mini"|"gpt4o", ... }
+  enrichmentSources: jsonb("enrichment_sources").$type<Record<string, string>>(),
+  // Human-verified fields that are protected from AI overwrites: { indication: true, target: true }
+  humanVerified: jsonb("human_verified").$type<Record<string, boolean>>(),
+  // True when stored description text is too short for meaningful AI enrichment (< 150 chars)
+  dataSparse: boolean("data_sparse").default(false),
 });
 
 export const insertIngestedAssetSchema = createInsertSchema(ingestedAssets, {

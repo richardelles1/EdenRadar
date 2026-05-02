@@ -1,4 +1,5 @@
 import { createHash } from "crypto";
+import type { AssetClass } from "./classifyAsset";
 
 export function computeContentHash(title: string, description: string, abstract?: string): string {
   const normalized = [
@@ -11,50 +12,110 @@ export function computeContentHash(title: string, description: string, abstract?
 }
 
 export type CompletenessAsset = {
+  assetClass?: AssetClass | string | null;
+  // Drug/Biologic fields
   target?: string | null;
   modality?: string | null;
   indication?: string | null;
   developmentStage?: string | null;
-  summary?: string | null;
-  abstract?: string | null;
-  categories?: string[] | null;
-  innovationClaim?: string | null;
   mechanismOfAction?: string | null;
+  innovationClaim?: string | null;
   unmetNeed?: string | null;
   comparableDrugs?: string | null;
   licensingReadiness?: string | null;
+  // Device/Tool/Software attributes (stored in deviceAttributes JSONB)
+  deviceAttributes?: Record<string, unknown> | null;
+  // Common
+  summary?: string | null;
+  abstract?: string | null;
+  categories?: string[] | null;
   inventors?: string[] | null;
   patentStatus?: string | null;
 };
 
-export function computeCompletenessScore(asset: CompletenessAsset): number {
-  let score = 0;
-  const checks: [keyof CompletenessAsset, number][] = [
-    ["target", 15],
-    ["modality", 15],
-    ["indication", 15],
-    ["developmentStage", 10],
-    ["summary", 5],
-    ["abstract", 5],
-    ["mechanismOfAction", 10],
-    ["innovationClaim", 5],
-    ["unmetNeed", 5],
-    ["comparableDrugs", 3],
-    ["licensingReadiness", 2],
-    ["categories", 5],
-    ["inventors", 3],
-    ["patentStatus", 2],
-  ];
+function hasValue(val: unknown): boolean {
+  if (val == null) return false;
+  if (typeof val === "string") return val.length >= 3 && val !== "unknown" && val !== "";
+  if (Array.isArray(val)) return val.length > 0;
+  return false;
+}
 
-  for (const [field, weight] of checks) {
-    const val = asset[field];
-    if (val && val !== "unknown" && val !== "") {
-      if (Array.isArray(val) && val.length === 0) continue;
-      if (typeof val === "string" && val.length < 3) continue;
-      score += weight;
-    }
+function deviceAttr(attrs: Record<string, unknown> | null | undefined, key: string): unknown {
+  return attrs?.[key] ?? null;
+}
+
+export function computeCompletenessScore(asset: CompletenessAsset): number {
+  const cls = (asset.assetClass ?? "").toLowerCase();
+
+  // ── Medical Device ─────────────────────────────────────────────────────────
+  if (cls === "medical_device") {
+    let score = 0;
+    const da = asset.deviceAttributes ?? null;
+    if (hasValue(deviceAttr(da, "primaryApplication"))) score += 20;
+    if (hasValue(deviceAttr(da, "keyAdvantages"))) score += 15;
+    if (hasValue(deviceAttr(da, "regulatoryPathway")) && deviceAttr(da, "regulatoryPathway") !== "unknown") score += 15;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
+    if (hasValue(asset.innovationClaim)) score += 8;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 5;
+    if (hasValue(asset.summary)) score += 5;
+    if (hasValue(asset.abstract)) score += 5;
+    if (hasValue(asset.categories)) score += 5;
+    if (hasValue(asset.inventors)) score += 5;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 7;
+    return Math.min(100, score);
   }
 
+  // ── Research Tool ──────────────────────────────────────────────────────────
+  if (cls === "research_tool") {
+    let score = 0;
+    const da = asset.deviceAttributes ?? null;
+    if (hasValue(deviceAttr(da, "applications"))) score += 20;
+    if (hasValue(deviceAttr(da, "targetUsers"))) score += 15;
+    if (hasValue(asset.innovationClaim)) score += 10;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 8;
+    if (hasValue(asset.summary)) score += 7;
+    if (hasValue(asset.abstract)) score += 7;
+    if (hasValue(asset.categories)) score += 7;
+    if (hasValue(asset.inventors)) score += 5;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 8;
+    return Math.min(100, score);
+  }
+
+  // ── Software ───────────────────────────────────────────────────────────────
+  if (cls === "software") {
+    let score = 0;
+    const da = asset.deviceAttributes ?? null;
+    if (hasValue(deviceAttr(da, "useCase"))) score += 20;
+    if (hasValue(deviceAttr(da, "deploymentModel")) && deviceAttr(da, "deploymentModel") !== "unknown") score += 15;
+    if (hasValue(asset.innovationClaim)) score += 10;
+    if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 8;
+    if (hasValue(asset.summary)) score += 7;
+    if (hasValue(asset.abstract)) score += 7;
+    if (hasValue(asset.categories)) score += 7;
+    if (hasValue(asset.inventors)) score += 5;
+    if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 8;
+    if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 8;
+    return Math.min(100, score);
+  }
+
+  // ── Drug/Biologic (default for null/unknown/other) ─────────────────────────
+  // Backward-compatible formula so existing scored assets aren't disrupted
+  let score = 0;
+  if (hasValue(asset.target)) score += 15;
+  if (hasValue(asset.modality)) score += 15;
+  if (hasValue(asset.indication)) score += 15;
+  if (hasValue(asset.developmentStage) && asset.developmentStage !== "unknown") score += 10;
+  if (hasValue(asset.summary)) score += 5;
+  if (hasValue(asset.abstract)) score += 5;
+  if (hasValue(asset.mechanismOfAction)) score += 10;
+  if (hasValue(asset.innovationClaim)) score += 5;
+  if (hasValue(asset.unmetNeed)) score += 5;
+  if (hasValue(asset.comparableDrugs)) score += 3;
+  if (hasValue(asset.licensingReadiness) && asset.licensingReadiness !== "unknown") score += 2;
+  if (hasValue(asset.categories)) score += 5;
+  if (hasValue(asset.inventors)) score += 3;
+  if (hasValue(asset.patentStatus) && asset.patentStatus !== "unknown") score += 2;
   return score;
 }
 
