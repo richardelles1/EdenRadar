@@ -67,6 +67,7 @@ RESEND_FROM_ADDRESS = "EdenRadar <noreply@edenradar.com>"
 STRIPE_PRICE_INDIVIDUAL = "price_1TP9ImGalzdvFwc8uYy5Mog3"
 STRIPE_PRICE_TEAM5 = "price_1TP9IpGalzdvFwc8XVICeyAa"
 STRIPE_PRICE_TEAM10 = "price_1TP9IsGalzdvFwc84fxy1S2C"
+STRIPE_PRICE_EDENMARKET = "price_1TSkU1GalzdvFwc8Kf4TFmqU"
 
 [postMerge]
 path = "scripts/post-merge.sh"
