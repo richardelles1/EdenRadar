@@ -2711,12 +2711,22 @@ function Enrichment({ pw }: { pw: string }) {
   }, [status?.status]);
 
   const runEnrichment = useMutation({
-    mutationFn: async () => {
-      const res = await fetch("/api/admin/enrichment/run", { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+    mutationFn: async (opts?: { all?: boolean }) => {
+      const url = opts?.all ? "/api/admin/enrichment/run?all=1" : "/api/admin/enrichment/run";
+      const res = await fetch(url, { method: "POST", headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
       if (!res.ok) { const data = await res.json(); throw new Error(data.error || "Failed to start"); }
       return res.json();
     },
-    onSuccess: () => { setPolling(true); refetchStatus(); toast({ title: "Step 2 started", description: "Running GPT-4o-mini pass on incomplete assets..." }); },
+    onSuccess: (_data, vars) => {
+      setPolling(true);
+      refetchStatus();
+      toast({
+        title: vars?.all ? "Drain enrichment started" : "Step 2 started",
+        description: vars?.all
+          ? "Running GPT-4o-mini on every un-scanned asset until the queue is empty..."
+          : "Running GPT-4o-mini pass on incomplete assets...",
+      });
+    },
     onError: (err: Error) => toast({ title: "Failed to start", description: err.message, variant: "destructive" }),
   });
 
@@ -3400,16 +3410,37 @@ function Enrichment({ pw }: { pw: string }) {
                   </div>
                 )}
 
-                <Button
-                  size="sm"
-                  onClick={() => runEnrichment.mutate()}
-                  disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
-                  className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
-                  data-testid="button-run-enrichment"
-                >
-                  {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
-                  Run mini Re-enrich
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => runEnrichment.mutate(undefined)}
+                    disabled={isRunning || unknownCount === 0 || runEnrichment.isPending}
+                    className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+                    data-testid="button-run-enrichment"
+                  >
+                    {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Run 500 batch
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const remaining = miniQueue?.count ?? 0;
+                      const cost = miniQueue?.costEstimate ?? 0;
+                      const ok = window.confirm(
+                        `Run mini-40 enrichment on ALL ${remaining.toLocaleString()} un-scanned assets in the mini-queue?\n\nEstimated cost: $${cost.toFixed(2)}\n\nThe job will keep pulling the next 500 until the queue is empty. You can stop it at any time.`,
+                      );
+                      if (ok) runEnrichment.mutate({ all: true });
+                    }}
+                    disabled={isRunning || unknownCount === 0 || runEnrichment.isPending || (miniQueue?.count ?? 0) === 0}
+                    className="gap-1.5 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                    data-testid="button-run-enrichment-all"
+                    title="Drain the entire mini-queue under one job. Only un-scanned assets are spent on."
+                  >
+                    {isRunning ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                    Run all{miniQueue?.count ? ` (${miniQueue.count.toLocaleString()})` : ""}
+                  </Button>
+                </div>
               </div>
             </div>
 

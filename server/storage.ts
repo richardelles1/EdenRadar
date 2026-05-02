@@ -166,7 +166,7 @@ export interface IStorage {
   getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
 
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
-  updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
+  updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void>;
   getRunningEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   resetLatestEnrichmentJob(): Promise<void>;
@@ -1458,7 +1458,7 @@ export class DatabaseStorage implements IStorage {
     return row;
   }
 
-  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void> {
+  async updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void> {
     await db.update(enrichmentJobs).set(data).where(eq(enrichmentJobs.id, id));
   }
 

@@ -2362,6 +2362,7 @@ export async function registerRoutes(
     improved: number;
     total: number;
     resumed: boolean;
+    drain: boolean;
   } | null = null;
   let standardEnrichShouldStop = false;
 
@@ -2371,8 +2372,9 @@ export async function registerRoutes(
     startProcessed: number,
     startImproved: number,
     resumed: boolean,
+    drain: boolean = false,
   ) {
-    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed };
+    liveEnrichment = { jobId, processed: startProcessed, improved: startImproved, total: startProcessed + assets.length, resumed, drain };
     const CONCURRENCY = 30;
     let idx = 0;
 
@@ -2435,6 +2437,23 @@ export async function registerRoutes(
 
     try {
       await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
+
+      // Drain mode: after the current batch finishes, keep pulling the next 500
+      // un-scanned assets from the same mini-queue and continue under the same
+      // job until the queue is empty (or stop is requested). The mini-queue
+      // criteria already exclude assets we've just scored, so we will not pay
+      // twice for the same asset.
+      while (drain && !standardEnrichShouldStop) {
+        const next = await storage.getMiniEnrichBatch(500);
+        if (next.length === 0) break;
+        idx = 0;
+        assets = next;
+        liveEnrichment!.total += next.length;
+        await storage.updateEnrichmentJob(jobId, { total: liveEnrichment!.total });
+        console.log(`[enrichment] Drain: fetched next batch of ${next.length} assets for job ${jobId}`);
+        await Promise.all(Array.from({ length: Math.min(CONCURRENCY, assets.length) }, worker));
+      }
+
       await storage.updateEnrichmentJob(jobId, { status: "done", processed: liveEnrichment!.processed, improved: liveEnrichment!.improved, completedAt: new Date() });
       console.log(`[enrichment] Job ${jobId} completed: ${liveEnrichment!.improved} improved out of ${liveEnrichment!.processed} processed`);
     } catch (e: any) {
@@ -3053,6 +3072,12 @@ export async function registerRoutes(
         return res.status(409).json({ error: "Enrichment job already running (will resume on next restart)" });
       }
 
+      // ?all=1 (or POST body { all: true }) drains the entire mini-queue under a single
+      // job, fetching the next 500 un-scanned assets after each batch finishes. The
+      // selection query already excludes anything we just scored, so we never re-pay
+      // for the same asset.
+      const drainAll = req.query.all === "1" || req.body?.all === true;
+
       // Use mini-queue criteria (relevant, non-sparse, >150 chars, 3+ unknowns) capped at
       // 500 assets per cycle so each run is cost-controlled and predictable.
       const MINI_BATCH_CAP = 500;
@@ -3062,10 +3087,10 @@ export async function registerRoutes(
       }
 
       const job = await storage.createEnrichmentJob(assets.length);
-      res.json({ message: "Enrichment started", total: assets.length, jobId: job.id });
+      res.json({ message: drainAll ? "Drain enrichment started" : "Enrichment started", total: assets.length, jobId: job.id, drain: drainAll });
 
       standardEnrichShouldStop = false;
-      runEnrichmentWorker(job.id, assets, 0, 0, false);
+      runEnrichmentWorker(job.id, assets, 0, 0, false, drainAll);
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to start enrichment" });
     }
