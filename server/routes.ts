@@ -9516,6 +9516,15 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   // All admin/market routes require the shared admin password via x-admin-password header.
 
   const ADMIN_PANEL_PASSWORD = process.env.ADMIN_PANEL_PASSWORD ?? "eden";
+
+  async function logDealEvent(dealId: number, actorId: string, eventType: string, detail?: string) {
+    try {
+      await db.execute(
+        sql`INSERT INTO market_deal_events (deal_id, actor_id, event_type, detail) VALUES (${dealId}, ${actorId}, ${eventType}, ${detail ?? null})`
+      );
+    } catch (e) { console.warn("[market] deal event log failed", dealId, eventType, e); }
+  }
+
   function requireAdminPw(req: import("express").Request, res: import("express").Response): boolean {
     const pw = req.query.pw ?? req.headers["x-admin-password"];
     if (!pw || pw !== ADMIN_PANEL_PASSWORD) {
@@ -9687,18 +9696,22 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // GET /api/market/deals/:id — get single deal room data (seller or buyer only)
+  // GET /api/market/deals/:id — get single deal room data (seller or buyer, or admin read-only)
   app.get("/api/market/deals/:id", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const isAdmin = (req.query.pw ?? req.headers["x-admin-password"]) === ADMIN_PANEL_PASSWORD;
+
+      if (!isAdmin) {
+        const org = await storage.getOrgForUser(userId);
+        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      }
 
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
-      if (deal.sellerId !== userId && deal.buyerId !== userId) {
+      if (!isAdmin && deal.sellerId !== userId && deal.buyerId !== userId) {
         return res.status(403).json({ error: "Access denied" });
       }
 
@@ -9903,6 +9916,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         } catch (e) { console.warn("[market] buyer NDA-signed email failed", e); }
       }
 
+      void logDealEvent(dealId, userId, "nda_signed", `${isSeller ? "seller" : "buyer"} signed as "${signedName}"`);
+      if (updatedDeal?.ndaSignedAt) void logDealEvent(dealId, userId, "nda_executed", "NDA fully executed by both parties");
+
       res.json({ deal: updatedDeal, alreadySigned: false });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
@@ -9943,6 +9959,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         status,
         statusHistory: [...currentHistory, historyEntry],
       });
+
+      void logDealEvent(dealId, userId, "status_changed", `→ ${status}`);
 
       // Alert admin on LOI or Closed
       if (status === "loi" || status === "closed") {
@@ -10067,6 +10085,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         fileSize: file.size,
       });
 
+      void logDealEvent(dealId, userId, "document_uploaded", file.originalname);
       res.json(doc);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10102,6 +10121,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       }
 
       await storage.deleteMarketDealDocument(docId, userId);
+      void logDealEvent(dealId, userId, "document_deleted", doc.fileName);
       res.json({ ok: true });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -10138,9 +10158,26 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       const { body } = z.object({ body: z.string().min(1).max(4000) }).parse(req.body);
       const msg = await storage.createMarketDealMessage({ dealId, senderId: userId, body });
+      void logDealEvent(dealId, userId, "message_sent");
       res.json(msg);
     } catch (err: any) {
       res.status(400).json({ error: err.message });
+    }
+  });
+
+  // GET /api/admin/market/deals/:id/events — deal activity log (admin only)
+  app.get("/api/admin/market/deals/:id/events", async (req, res) => {
+    if (!requireAdminPw(req, res)) return;
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
+      const events = await db.execute(
+        sql`SELECT id, deal_id, actor_id, event_type, detail, created_at FROM market_deal_events WHERE deal_id = ${dealId} ORDER BY created_at ASC`
+      );
+      res.json(events.rows);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
     }
   });
 

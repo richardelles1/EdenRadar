@@ -1163,6 +1163,16 @@ async function createMarketDealsTables() {
         sent_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_deal_events (
+        id          SERIAL PRIMARY KEY,
+        deal_id     INTEGER NOT NULL REFERENCES market_deals(id) ON DELETE CASCADE,
+        actor_id    TEXT NOT NULL,
+        event_type  TEXT NOT NULL,
+        detail      TEXT,
+        created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
     log("[startup] market_deals tables ensured", "startup");
   } catch (err: any) {
     log(`[startup] market_deals tables check: ${err?.message}`, "startup");
