@@ -56,6 +56,17 @@ export interface AssetContext {
   licensingStatus?: string | null;
   inventors?: string[] | null;
   sourceUrl?: string | null;
+  /**
+   * Fields that already have a non-"unknown" value on the asset. Passed into the
+   * prompt so the model knows what to keep vs. fill. Improves the
+   * unknown→known hit rate and avoids re-guessing already-good fields.
+   */
+  currentValues?: {
+    target?: string | null;
+    modality?: string | null;
+    indication?: string | null;
+    developmentStage?: string | null;
+  } | null;
 }
 
 const SYSTEM_PROMPT = `You are a biotech licensing analyst classifying university TTO listings. Analyze the technology and return JSON only (no markdown).
@@ -115,11 +126,32 @@ export async function classifyAsset(
   if (ctx?.inventors?.length) contextLines.push(`Inventors: ${ctx.inventors.join(", ")}`);
   if (ctx?.sourceUrl) contextLines.push(`Source URL: ${ctx.sourceUrl}`);
 
+  // Render currently-known field values so the model focuses on filling the
+  // unknowns rather than re-deriving everything from scratch every pass.
+  const cv = ctx?.currentValues;
+  const knownLines: string[] = [];
+  const unknownFields: string[] = [];
+  if (cv) {
+    const isKnown = (v: string | null | undefined) => v != null && v !== "" && v.toLowerCase() !== "unknown";
+    if (isKnown(cv.target)) knownLines.push(`- target: ${cv.target}`); else unknownFields.push("target");
+    if (isKnown(cv.modality)) knownLines.push(`- modality: ${cv.modality}`); else unknownFields.push("modality");
+    if (isKnown(cv.indication)) knownLines.push(`- indication: ${cv.indication}`); else unknownFields.push("indication");
+    if (isKnown(cv.developmentStage)) knownLines.push(`- developmentStage: ${cv.developmentStage}`); else unknownFields.push("developmentStage");
+  }
+  const knownBlock = knownLines.length
+    ? `\nAlready-known fields (keep these values unless the source text clearly contradicts them):\n${knownLines.join("\n")}`
+    : "";
+  const focusBlock = unknownFields.length
+    ? `\nFocus on filling these currently-unknown fields if the source supports it: ${unknownFields.join(", ")}.`
+    : "";
+
   const inputText = [
     `Title: ${title}`,
     description && description !== title ? `Description: ${description.slice(0, 2000)}` : "",
     abstract ? `Abstract: ${abstract.slice(0, 2000)}` : "",
     ...contextLines,
+    knownBlock,
+    focusBlock,
   ].filter(Boolean).join("\n");
 
   const fallback: AssetClassification = {
@@ -144,7 +176,10 @@ export async function classifyAsset(
     const response = await openai.chat.completions.create({
       model,
       temperature: 0,
-      max_tokens: 500,
+      // Bumped from 500 — full drug_biologic JSON with categories[], deviceAttributes,
+      // an innovationClaim sentence and MOA frequently exceeded 500 tokens, causing
+      // truncated JSON, parse failure, and a silent "unknown" fallback.
+      max_tokens: 1000,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
