@@ -6,3 +6,21 @@ id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"
 type = "pdf"
 title = "EdenRadar One-Pager (PDF)"
+
+[[outputs]]
+id = "gxgabI7bPCbxGSznKSlec"
+uri = "file://attached_assets/edenradar_first_leads.csv"
+type = "table"
+title = "EdenRadar First Leads — CSV (same data, CRM-importable)"
+
+[[outputs]]
+id = "70GQzXI15fN3CSzKu4i4K"
+uri = "file://attached_assets/edenradar_first_leads.xlsx"
+type = "table"
+title = "EdenRadar First Leads — XLSX (105 US biotech prospects)"
+
+[[outputs]]
+id = "Z3bRWhTA_OGeHKMwWd_11"
+uri = "file://docs/edenradar-icp-and-outreach-brief.md"
+type = "text"
+title = "ICP & Outreach Brief — companion methodology"
