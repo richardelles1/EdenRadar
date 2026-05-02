@@ -9343,6 +9343,167 @@ function AnalyticsTab({ pw }: { pw: string }) {
   );
 }
 
+// ── Documents Tab ────────────────────────────────────────────────────────────
+type TemplateResult = {
+  filename: string;
+  title: string;
+  status: "done" | "failed";
+  webUrl?: string;
+  error?: string;
+};
+
+function DocumentsTab({ pw }: { pw: string }) {
+  const [results, setResults] = React.useState<TemplateResult[]>([]);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadError, setUploadError] = React.useState<string | null>(null);
+
+  const templates = [
+    {
+      id: "eden-scout-bd",
+      filename: "EdenScout_BD_Outreach_Template.docx",
+      title: "EdenScout BD Outreach",
+      audience: "VP BD / Head of S&E at pharma/biotech",
+      description: "Cold outreach pitching EdenScout. Includes value prop, social proof, CTA, and P.S. line.",
+    },
+    {
+      id: "tto-partner-invite",
+      filename: "EdenRadar_TTO_Partner_Invite.docx",
+      title: "TTO Data Partner Invite",
+      audience: "Technology Transfer Office directors",
+      description: "Relationship-building email positioning EdenRadar as a visibility amplifier for TTO listings.",
+    },
+    {
+      id: "edenmarket-lister-invite",
+      filename: "EdenMarket_Lister_Invite.docx",
+      title: "EdenMarket Lister Invite",
+      audience: "Biotech founders / BD leads",
+      description: "Invites asset holders to list on EdenMarket. Covers curated buyers, confidential listing, and success-fee model.",
+    },
+  ];
+
+  const handleGenerate = async () => {
+    setUploading(true);
+    setUploadError(null);
+    setResults([]);
+    try {
+      const res = await fetch("/api/admin/documents/generate-templates", {
+        method: "POST",
+        headers: { "x-admin-password": pw },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setResults(data.results ?? []);
+    } catch (err: any) {
+      setUploadError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const resultMap = Object.fromEntries(results.map(r => [r.filename, r]));
+
+  return (
+    <div className="space-y-6 max-w-3xl" data-testid="documents-tab">
+      <div className="mb-6">
+        <h2 className="text-2xl font-semibold text-foreground flex items-center gap-2" data-testid="text-section-title">
+          <BookOpen className="h-6 w-6 text-primary" />
+          Outbound Documents
+        </h2>
+        <p className="text-sm text-muted-foreground mt-1">
+          Generate polished .docx email templates and upload them directly to OneDrive (Word Online). Amber-highlighted fields are placeholders — replace before sending.
+        </p>
+      </div>
+
+      {/* Template cards */}
+      <div className="space-y-3">
+        {templates.map((t) => {
+          const result = resultMap[t.filename];
+          return (
+            <div
+              key={t.id}
+              className="border border-border rounded-xl bg-card p-4 flex items-start gap-4"
+              data-testid={`card-template-${t.id}`}
+            >
+              <div className="mt-0.5 p-2 rounded-lg bg-primary/10 shrink-0">
+                <FileText className="h-4 w-4 text-primary" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-semibold text-foreground" data-testid={`text-template-title-${t.id}`}>{t.title}</p>
+                  <span className="text-[10px] bg-muted text-muted-foreground rounded px-1.5 py-0.5">{t.audience}</span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
+                <p className="text-[10px] text-muted-foreground/60 font-mono mt-1">{t.filename}</p>
+                {result && (
+                  <div className="mt-2">
+                    {result.status === "done" && result.webUrl ? (
+                      <a
+                        href={result.webUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
+                        data-testid={`link-template-open-${t.id}`}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Open in Word Online
+                      </a>
+                    ) : result.status === "failed" ? (
+                      <p className="text-xs text-destructive" data-testid={`text-template-error-${t.id}`}>
+                        <AlertTriangle className="h-3 w-3 inline mr-1" />
+                        {result.error ?? "Upload failed"}
+                      </p>
+                    ) : null}
+                  </div>
+                )}
+              </div>
+              <div className="shrink-0 mt-1">
+                {uploading ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid={`status-uploading-${t.id}`} />
+                ) : result?.status === "done" ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid={`status-done-${t.id}`} />
+                ) : result?.status === "failed" ? (
+                  <XCircle className="h-4 w-4 text-destructive" data-testid={`status-failed-${t.id}`} />
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Google Drive notice */}
+      <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 flex items-start gap-3">
+        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+            Google Drive upload is available once you authorize the Google Drive integration. Contact your Replit admin to connect Google Drive — uploads will then be included automatically.
+          </p>
+        </div>
+      </div>
+
+      {uploadError && (
+        <div className="border border-destructive/30 bg-destructive/10 rounded-xl p-3 text-sm text-destructive flex items-center gap-2" data-testid="text-upload-error">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          {uploadError}
+        </div>
+      )}
+
+      <Button
+        onClick={handleGenerate}
+        disabled={uploading}
+        className="gap-2"
+        data-testid="button-generate-templates"
+      >
+        {uploading ? (
+          <><Loader2 className="h-4 w-4 animate-spin" /> Generating & uploading…</>
+        ) : (
+          <><Upload className="h-4 w-4" /> Generate & Upload to OneDrive</>
+        )}
+      </Button>
+    </div>
+  );
+}
+
 function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }: {
   pw: string;
   setAuthed: (v: boolean) => void;
@@ -9579,6 +9740,21 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <Globe className="h-4 w-4" />
               EdenMarket
             </button>
+
+            {/* ── DOCUMENTS ── */}
+            <div className="hidden lg:block border-t border-border mt-3 pt-3 pb-1.5" data-testid="nav-section-documents">
+              <p className="text-[10px] uppercase tracking-widest font-semibold text-muted-foreground px-3">Outbound</p>
+            </div>
+            <button
+              onClick={() => setActiveTab("documents")}
+              className={`shrink-0 whitespace-nowrap lg:w-full text-left px-3 py-2 rounded-md text-sm font-medium flex items-center gap-2 ${
+                activeTab === "documents" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+              data-testid="nav-documents"
+            >
+              <BookOpen className="h-4 w-4" />
+              Documents
+            </button>
           </nav>
         </aside>
 
@@ -9727,6 +9903,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab }:
               <EdenMarketTab />
             </>
           )}
+
+          {activeTab === "documents" && <DocumentsTab pw={pw} />}
 
         </main>
       </div>

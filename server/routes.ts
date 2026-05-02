@@ -10707,5 +10707,40 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // ── DOCUMENTS: generate & upload outbound email templates to OneDrive ──────
+  app.post("/api/admin/documents/generate-templates", async (req, res) => {
+    const pw = req.headers["x-admin-password"];
+    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const { generateTemplateDocx } = await import("./lib/generateDocx");
+      const { uploadToOneDrive } = await import("./lib/oneDriveClient");
+      const { EMAIL_TEMPLATES } = await import("./lib/emailTemplates");
+
+      const results: Array<{
+        filename: string;
+        title: string;
+        status: "done" | "failed";
+        webUrl?: string;
+        error?: string;
+      }> = [];
+
+      for (const template of EMAIL_TEMPLATES) {
+        try {
+          const buffer = await generateTemplateDocx(template);
+          const uploaded = await uploadToOneDrive(template.filename, buffer, "EdenRadar Templates");
+          results.push({ filename: template.filename, title: template.title, status: "done", webUrl: uploaded.webUrl });
+        } catch (err: any) {
+          results.push({ filename: template.filename, title: template.title, status: "failed", error: err.message });
+        }
+      }
+
+      res.json({ results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   return httpServer;
 }
