@@ -188,6 +188,15 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
       upsertProgress = { done, total };
     });
 
+    // Flag newly-ingested assets whose description is too short to enrich reliably.
+    // This runs synchronously so data_sparse is set before classification begins.
+    try {
+      const sparseCount = await storage.flagDataSparse();
+      if (sparseCount > 0) console.log(`[ingestion] Flagged ${sparseCount} sparse assets (description < 150 chars)`);
+    } catch (err: any) {
+      console.error(`[ingestion] flagDataSparse failed: ${err?.message}`);
+    }
+
     const newCount = newAssets.length;
     console.log(`[ingestion] Saved ${totalProcessed} listings (${newCount} new)`);
 

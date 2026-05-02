@@ -1737,11 +1737,14 @@ export class DatabaseStorage implements IStorage {
         AND (data_sparse IS NULL OR data_sparse = false)
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
         AND (
-          (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-        ) >= 3
+          (completeness_score IS NULL OR completeness_score = 0)
+          OR (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+          ) >= 3
+        )
       ORDER BY COALESCE(enriched_at, '1970-01-01'::timestamptz) ASC
       LIMIT ${limit}
     `);
@@ -1749,8 +1752,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {
-    // Select relevant, non-sparse assets with 3+ unknown key fields (target/modality/indication/developmentStage)
-    // and sufficient description length (>150 chars) to be worth a mini pass.
+    // Select relevant, non-sparse assets that are either unscored OR have 3+ unknown key fields,
+    // with sufficient description length (>150 chars) to be worth a mini pass.
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(ingestedAssets)
@@ -1759,11 +1762,14 @@ export class DatabaseStorage implements IStorage {
         AND (data_sparse IS NULL OR data_sparse = false)
         AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
         AND (
-          (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
-          (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
-        ) >= 3
+          (completeness_score IS NULL OR completeness_score = 0)
+          OR (
+            (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+            (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+          ) >= 3
+        )
       `);
     const count = row?.count ?? 0;
     return { count, costEstimate: count * 0.0003 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, type ReactNode } from "react";
 import { OrganizationsTab } from "@/components/admin/OrganizationsTab";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Shield, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
+import { Shield, ShieldCheck, Lock, LogOut, Loader2, Download, Database, RefreshCw, ArrowUpCircle, AlertTriangle, CheckCircle2, ExternalLink, Zap, Sparkles, DollarSign, Activity, AlertCircle, XCircle, Microscope, Trash2, ClipboardList, Lightbulb, Users, UserPlus, Copy, Check, Inbox, ChevronDown, ChevronRight, ChevronUp, Building2, Clock, PackagePlus, BrainCircuit, PlayCircle, BarChart3, Mic, MicOff, ThumbsUp, ThumbsDown, Bookmark, Layers, Plus, Upload, FileText, Image as ImageIcon, Pencil, BookOpen, X, CreditCard, Server, TrendingUp, Globe, MessageSquare, FlaskConical, Send, Eye, Tag, ArrowUp, ArrowDown, type LucideIcon } from "lucide-react";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import type { ConceptCard } from "@shared/schema";
 import { PORTAL_CONFIG, ALL_PORTAL_ROLES, getPortalConfig, type PortalRole } from "@shared/portals";
@@ -1946,6 +1946,8 @@ interface BrowsedAsset {
   patent_status: string | null;
   categories: string[] | null;
   inventors: string[] | null;
+  human_verified: Record<string, boolean> | null;
+  enrichment_sources: Record<string, string> | null;
 }
 
 type AssetBrowserInit = { dim: "modality" | "stage" | "indication"; value: string } | null;
@@ -2093,7 +2095,7 @@ function DimensionBreakdown({ pw, onFilterSelect }: { pw: string; onFilterSelect
 }
 
 function AssetEditorPanel({
-  asset, editFields, setEditFields, liveScore, isPending, onSave, onCancel,
+  asset, editFields, setEditFields, liveScore, isPending, onSave, onCancel, pw: _pw, onVerifyField,
 }: {
   asset: BrowsedAsset;
   editFields: Record<string, string>;
@@ -2102,6 +2104,8 @@ function AssetEditorPanel({
   isPending: boolean;
   onSave: () => void;
   onCancel: () => void;
+  pw: string;
+  onVerifyField: (field: string, verified: boolean) => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -2152,17 +2156,40 @@ function AssetEditorPanel({
           { key: "licensing_readiness", label: "Licensing Readiness" },
           { key: "comparable_drugs", label: "Comparable Drugs" },
           { key: "unmet_need", label: "Unmet Need" },
-        ] as { key: string; label: string }[]).map(f => (
-          <div key={f.key} className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
-            <Input
-              value={editFields[f.key] ?? ""}
-              onChange={set(f.key)}
-              className="h-7 text-xs"
-              data-testid={`input-edit-${f.key}-${asset.id}`}
-            />
-          </div>
-        ))}
+        ] as { key: string; label: string }[]).map(f => {
+          const src = asset.enrichment_sources?.[f.key];
+          const isVerified = asset.human_verified?.[f.key] === true;
+          return (
+            <div key={f.key} className="space-y-1">
+              <div className="flex items-center justify-between gap-1">
+                <label className="text-xs font-medium text-muted-foreground">{f.label}</label>
+                <div className="flex items-center gap-1">
+                  {src && (
+                    <span className={`text-[9px] px-1 py-0 rounded font-mono leading-4 ${
+                      src === "deep" ? "bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
+                      : src === "mini" ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400"
+                      : "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400"
+                    }`} data-testid={`badge-source-${f.key}-${asset.id}`}>{src}</span>
+                  )}
+                  <button
+                    onClick={() => onVerifyField(f.key, !isVerified)}
+                    className={`p-0.5 rounded transition-colors ${isVerified ? "text-emerald-600 dark:text-emerald-400" : "text-muted-foreground/40 hover:text-muted-foreground"}`}
+                    title={isVerified ? "Verified — click to unlock" : "Mark as human-verified"}
+                    data-testid={`button-verify-${f.key}-${asset.id}`}
+                  >
+                    {isVerified ? <ShieldCheck className="h-3 w-3" /> : <Shield className="h-3 w-3" />}
+                  </button>
+                </div>
+              </div>
+              <Input
+                value={editFields[f.key] ?? ""}
+                onChange={set(f.key)}
+                className={`h-7 text-xs ${isVerified ? "border-emerald-400/50 dark:border-emerald-600/40" : ""}`}
+                data-testid={`input-edit-${f.key}-${asset.id}`}
+              />
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2276,6 +2303,25 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
       setTimeout(() => setSavedId(null), 2500);
     },
     onError: (err: Error) => toast({ title: "Save failed", description: err.message, variant: "destructive" }),
+  });
+
+  const verifyField = useMutation({
+    mutationFn: async ({ id, field, verified }: { id: number; field: string; verified: boolean }) => {
+      const res = await fetch(`/api/admin/assets/${id}/verify-field`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-admin-password": pw },
+        body: JSON.stringify({ field, verified }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "Verify failed"); }
+      return { id, field, verified };
+    },
+    onSuccess: ({ id, field, verified }) => {
+      setLocalAssets(prev => prev.map(a => {
+        if (a.id !== id) return a;
+        return { ...a, human_verified: { ...(a.human_verified ?? {}), [field]: verified } };
+      }));
+    },
+    onError: (err: Error) => toast({ title: "Verify failed", description: err.message, variant: "destructive" }),
   });
 
   const activeFilters = [institution, modality, stage, indication, tier, missing, q].filter(Boolean).length;
@@ -2511,6 +2557,8 @@ function AssetBrowser({ pw, initialFilter }: { pw: string; initialFilter: AssetB
                             isPending={patchAsset.isPending}
                             onSave={() => patchAsset.mutate({ id: asset.id, fields: editFields })}
                             onCancel={() => setExpandedId(null)}
+                            pw={pw}
+                            onVerifyField={(field, verified) => verifyField.mutate({ id: asset.id, field, verified })}
                           />
                         </td>
                       </tr>

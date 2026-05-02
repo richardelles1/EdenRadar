@@ -2878,7 +2878,8 @@ export async function registerRoutes(
           SELECT id, asset_name, institution, target, indication, modality, development_stage,
                  ip_type, licensing_readiness, completeness_score, mechanism_of_action,
                  innovation_claim, unmet_need, comparable_drugs, source_url, abstract, summary,
-                 first_seen_at, enriched_at, patent_status, categories, inventors
+                 first_seen_at, enriched_at, patent_status, categories, inventors,
+                 human_verified, enrichment_sources
           FROM ingested_assets
           WHERE ${where}
           ORDER BY ${sql.raw(sortCol)} ${sql.raw(dirParam)} ${sql.raw(nullsClause)}

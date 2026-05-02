@@ -480,6 +480,41 @@ export const arizonaScraper: InstitutionScraper = {
       }
       page++;
     } while (page < nbPages);
+
+    // Depth-fetch: for listings where Algolia returned a short description (<150 chars),
+    // attempt to fetch the individual listing page and extract a fuller meta description.
+    const SHORT_DESC = 150;
+    const DEPTH_CONCURRENCY = 5;
+    const needsDepth = results
+      .map((r, i) => ({ r, i }))
+      .filter(({ r }) => (r.description ?? "").length < SHORT_DESC);
+    if (needsDepth.length > 0) {
+      let di = 0;
+      const depthWorker = async () => {
+        while (di < needsDepth.length) {
+          const item = needsDepth[di++];
+          if (!item) continue;
+          try {
+            const pr = await fetch(item.r.url, {
+              signal: AbortSignal.timeout(5000),
+              headers: { "User-Agent": "Mozilla/5.0 (compatible; EdenRadar/2.0)" },
+            });
+            if (!pr.ok) continue;
+            const html = await pr.text();
+            const m =
+              html.match(/<meta[^>]+name=["']description["'][^>]+content=["']([^"']{50,})["']/i) ??
+              html.match(/<meta[^>]+content=["']([^"']{50,})["'][^>]+name=["']description["']/i);
+            if (m?.[1] && m[1].length > (item.r.description ?? "").length) {
+              results[item.i] = { ...results[item.i], description: m[1].trim() };
+            }
+          } catch { /* depth fetch failed — keep existing description */ }
+        }
+      };
+      await Promise.allSettled(
+        Array.from({ length: Math.min(DEPTH_CONCURRENCY, needsDepth.length) }, depthWorker)
+      );
+    }
+
     return results;
   },
 };

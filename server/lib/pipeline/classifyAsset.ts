@@ -181,18 +181,21 @@ export async function classifyAsset(
       };
     }
 
-    // Normalize indication and target through vocab
+    // Normalize indication and target through vocab.
+    // Semantics: null = non-applicable for this asset class; "unknown" = applicable but unresolved.
     const rawIndication = isDrug ? nullIfUnknown(parsed.indication) : null;
     const rawTarget = isDrug ? nullIfUnknown(parsed.target) : null;
-    const indication = rawIndication ? sanitizeToVocab(rawIndication, "indication") : null;
-    const target = rawTarget ? sanitizeToVocab(rawTarget, "target") : null;
+    // Drug assets: if AI couldn't determine the value, keep "unknown" (not null).
+    // null is reserved for non-drug classes where the concept doesn't apply.
+    const indication = !isDrug ? null : (rawIndication ? sanitizeToVocab(rawIndication, "indication") : "unknown");
+    const target = !isDrug ? null : (rawTarget ? sanitizeToVocab(rawTarget, "target") : "unknown");
 
     return {
       biotechRelevant: parsed.biotechRelevant === true,
       assetClass,
       target,
       modality: isDrug ? sanitize(parsed.modality ?? "", MODALITY_VALUES, "unknown") : null,
-      indication: indication === "unknown" ? null : indication,
+      indication,
       mechanismOfAction: isDrug ? nullIfUnknown(parsed.mechanismOfAction) : null,
       comparableDrugs: isDrug ? nullIfUnknown(parsed.comparableDrugs) : null,
       unmetNeed: isDrug ? nullIfUnknown(parsed.unmetNeed) : null,
