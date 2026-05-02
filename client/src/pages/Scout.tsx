@@ -282,6 +282,8 @@ export default function Scout() {
   const [buyerProfile, setBuyerProfile] = useState<BuyerProfile>(loadBuyerProfile);
   const skipNextPersist = useRef(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [patentFiltersOpen, setPatentFiltersOpen] = useState(false);
+  const [trialFiltersOpen, setTrialFiltersOpen] = useState(false);
   const [patentSortMode, setPatentSortMode] = useState<"newest" | "best_match">(() => ssGet("scout-patent-sort", "newest"));
   const [patentOwnerFilter, setPatentOwnerFilter] = useState<"all" | "university" | "company">(() => ssGet("scout-patent-owner", "all"));
   const [patentAssigneeSearch, setPatentAssigneeSearch] = useState<string>(() => ssGet("scout-patent-assignee", ""));
@@ -856,6 +858,20 @@ export default function Scout() {
     minScore !== 0,
   ].filter(Boolean).length;
 
+  const patentActiveFilterCount = [
+    patentSortMode !== "newest",
+    patentOwnerFilter !== "all",
+    patentDateFilter !== "any",
+    patentAssigneeSearch.trim() !== "",
+  ].filter(Boolean).length;
+
+  const trialActiveFilterCount = [
+    trialSortMode !== "newest",
+    trialPhaseFilter !== "all",
+    trialStatusFilter !== "all",
+    trialSponsorSearch.trim() !== "",
+  ].filter(Boolean).length;
+
   return (
     <div className="min-h-full flex flex-col bg-gradient-to-b from-background via-background to-muted/20">
       <div className="flex flex-1 w-full">
@@ -1294,8 +1310,29 @@ export default function Scout() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {/* Patent controls */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    {/* Mobile compact patent controls row */}
+                    <div className="flex md:hidden items-center gap-2">
+                      <button
+                        onClick={() => setPatentFiltersOpen(true)}
+                        className={`flex items-center gap-1.5 h-9 px-3 rounded-md border text-xs font-semibold transition-colors ${
+                          patentActiveFilterCount > 0
+                            ? "border-primary/40 bg-primary/5 text-primary"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="button-mobile-patent-filters"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        Filters
+                        {patentActiveFilterCount > 0 && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold">
+                            {patentActiveFilterCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Patent controls — desktop only */}
+                    <div className="hidden md:flex flex-wrap items-center gap-3">
                       {/* Sort toggle */}
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
@@ -1378,47 +1415,47 @@ export default function Scout() {
                           />
                         </div>
                       </div>
-
-                      {/* Active filter chips */}
-                      {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim() || patentDateFilter !== "any") && (
-                        <div className="flex items-center gap-1.5 flex-wrap mt-4">
-                          {patentOwnerFilter !== "all" && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner">
-                              {patentOwnerFilter} ×
-                            </Badge>
-                          )}
-                          {patentDateFilter !== "any" && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => {
-                              setPatentDateFilter("any");
-                              if (currentQuery) {
-                                patentMutation.mutate({ query: currentQuery });
-                              }
-                            }} data-testid="patent-active-filter-date">
-                              {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
-                            </Badge>
-                          )}
-                          {patentAssigneeSearch.trim() && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
-                              "{patentAssigneeSearch}" ×
-                            </Badge>
-                          )}
-                          <button
-                            onClick={() => {
-                              setPatentOwnerFilter("all");
-                              setPatentAssigneeSearch("");
-                              setPatentDateFilter("any");
-                              if (patentDateFilter !== "any" && currentQuery) {
-                                patentMutation.mutate({ query: currentQuery });
-                              }
-                            }}
-                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
-                            data-testid="button-clear-patent-filters"
-                          >
-                            Clear filters
-                          </button>
-                        </div>
-                      )}
                     </div>
+
+                    {/* Active filter chips — visible on both mobile and desktop */}
+                    {(patentOwnerFilter !== "all" || patentAssigneeSearch.trim() || patentDateFilter !== "any") && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {patentOwnerFilter !== "all" && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setPatentOwnerFilter("all")} data-testid="patent-active-filter-owner">
+                            {patentOwnerFilter} ×
+                          </Badge>
+                        )}
+                        {patentDateFilter !== "any" && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => {
+                            setPatentDateFilter("any");
+                            if (currentQuery) {
+                              patentMutation.mutate({ query: currentQuery });
+                            }
+                          }} data-testid="patent-active-filter-date">
+                            {patentDateFilter === "6m" ? "Last 6 months" : patentDateFilter === "2022" ? "2022 and older" : patentDateFilter} ×
+                          </Badge>
+                        )}
+                        {patentAssigneeSearch.trim() && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setPatentAssigneeSearch("")} data-testid="patent-active-filter-assignee">
+                            "{patentAssigneeSearch}" ×
+                          </Badge>
+                        )}
+                        <button
+                          onClick={() => {
+                            setPatentOwnerFilter("all");
+                            setPatentAssigneeSearch("");
+                            setPatentDateFilter("any");
+                            if (patentDateFilter !== "any" && currentQuery) {
+                              patentMutation.mutate({ query: currentQuery });
+                            }
+                          }}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
+                          data-testid="button-clear-patent-filters"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+                    )}
 
                     <p className="text-sm text-muted-foreground" data-testid="patents-results-count">
                       {filteredPatentResults.length > shownPatentCount ? (
@@ -1590,8 +1627,29 @@ export default function Scout() {
                         </div>
                       );
                     })()}
-                    {/* Trial controls */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    {/* Mobile compact trial controls row */}
+                    <div className="flex md:hidden items-center gap-2">
+                      <button
+                        onClick={() => setTrialFiltersOpen(true)}
+                        className={`flex items-center gap-1.5 h-9 px-3 rounded-md border text-xs font-semibold transition-colors ${
+                          trialActiveFilterCount > 0
+                            ? "border-primary/40 bg-primary/5 text-primary"
+                            : "border-border bg-background text-muted-foreground hover:text-foreground"
+                        }`}
+                        data-testid="button-mobile-trial-filters"
+                      >
+                        <SlidersHorizontal className="w-3.5 h-3.5" />
+                        Filters
+                        {trialActiveFilterCount > 0 && (
+                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold">
+                            {trialActiveFilterCount}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Trial controls — desktop only */}
+                    <div className="hidden md:flex flex-wrap items-center gap-3">
                       {/* Sort toggle */}
                       <div className="flex flex-col gap-1">
                         <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Sort</span>
@@ -1669,35 +1727,35 @@ export default function Scout() {
                           />
                         </div>
                       </div>
-
-                      {/* Active filter chips */}
-                      {(trialPhaseFilter !== "all" || trialStatusFilter !== "all" || trialSponsorSearch.trim()) && (
-                        <div className="flex items-center gap-1.5 flex-wrap mt-4">
-                          {trialPhaseFilter !== "all" && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase">
-                              {trialPhaseFilter} ×
-                            </Badge>
-                          )}
-                          {trialStatusFilter !== "all" && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status">
-                              {trialStatusFilter} ×
-                            </Badge>
-                          )}
-                          {trialSponsorSearch.trim() && (
-                            <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
-                              "{trialSponsorSearch}" ×
-                            </Badge>
-                          )}
-                          <button
-                            onClick={() => { setTrialPhaseFilter("all"); setTrialStatusFilter("all"); setTrialSponsorSearch(""); }}
-                            className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
-                            data-testid="button-clear-trial-filters"
-                          >
-                            Clear filters
-                          </button>
-                        </div>
-                      )}
                     </div>
+
+                    {/* Active filter chips — visible on both mobile and desktop */}
+                    {(trialPhaseFilter !== "all" || trialStatusFilter !== "all" || trialSponsorSearch.trim()) && (
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {trialPhaseFilter !== "all" && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialPhaseFilter("all")} data-testid="trial-active-filter-phase">
+                            {trialPhaseFilter} ×
+                          </Badge>
+                        )}
+                        {trialStatusFilter !== "all" && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize" onClick={() => setTrialStatusFilter("all")} data-testid="trial-active-filter-status">
+                            {trialStatusFilter} ×
+                          </Badge>
+                        )}
+                        {trialSponsorSearch.trim() && (
+                          <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setTrialSponsorSearch("")} data-testid="trial-active-filter-sponsor">
+                            "{trialSponsorSearch}" ×
+                          </Badge>
+                        )}
+                        <button
+                          onClick={() => { setTrialPhaseFilter("all"); setTrialStatusFilter("all"); setTrialSponsorSearch(""); }}
+                          className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 ml-1 transition-colors"
+                          data-testid="button-clear-trial-filters"
+                        >
+                          Clear filters
+                        </button>
+                      </div>
+                    )}
 
                     <p className="text-sm text-muted-foreground" data-testid="trials-results-count">
                       {filteredTrialResults.length > shownTrialCount ? (
@@ -1990,6 +2048,185 @@ export default function Scout() {
                 data-testid="button-reset-filters"
               >
                 Reset all filters
+              </button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={patentFiltersOpen} onOpenChange={setPatentFiltersOpen}>
+        <SheetContent side={isMobile ? "bottom" : "right"} className={isMobile ? "h-[85dvh] rounded-t-2xl overflow-y-auto" : "w-full sm:max-w-sm overflow-y-auto"}>
+          <SheetHeader>
+            <SheetTitle>Patent Filters</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
+              <Select value={patentSortMode} onValueChange={(v) => setPatentSortMode(v as "newest" | "best_match")} data-testid="filter-patent-sort-select">
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest</SelectItem>
+                  <SelectItem value="best_match">Best Match</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assignee Type</p>
+              <Select value={patentOwnerFilter} onValueChange={(v) => setPatentOwnerFilter(v as "all" | "university" | "company")} data-testid="filter-patent-owner-select">
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="university">University</SelectItem>
+                  <SelectItem value="company">Company</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Date</p>
+              <Select
+                value={patentDateFilter}
+                onValueChange={(v) => {
+                  const next = v as "any" | "6m" | "2024" | "2023" | "2022";
+                  setPatentDateFilter(next);
+                  if (currentQuery) {
+                    patentMutation.mutate({ query: currentQuery, patentSince: next !== "any" ? next : undefined });
+                  }
+                }}
+                data-testid="filter-patent-date-select"
+              >
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any time</SelectItem>
+                  <SelectItem value="6m">Last 6 months</SelectItem>
+                  <SelectItem value="2024">2024</SelectItem>
+                  <SelectItem value="2023">2023</SelectItem>
+                  <SelectItem value="2022">2022 and older</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Assignee</p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={patentAssigneeSearch}
+                  onChange={(e) => setPatentAssigneeSearch(e.target.value)}
+                  placeholder="Filter by assignee…"
+                  className="h-9 pl-8 pr-2 text-xs w-full border-border"
+                  data-testid="input-patent-assignee-search-mobile"
+                />
+              </div>
+            </div>
+
+            {patentActiveFilterCount > 0 && (
+              <button
+                onClick={() => {
+                  setPatentSortMode("newest");
+                  setPatentOwnerFilter("all");
+                  setPatentAssigneeSearch("");
+                  const hadDate = patentDateFilter !== "any";
+                  setPatentDateFilter("any");
+                  if (hadDate && currentQuery) {
+                    patentMutation.mutate({ query: currentQuery });
+                  }
+                }}
+                className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-2 border border-dashed border-card-border rounded-md"
+                data-testid="button-reset-patent-filters"
+              >
+                Reset patent filters
+              </button>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      <Sheet open={trialFiltersOpen} onOpenChange={setTrialFiltersOpen}>
+        <SheetContent side={isMobile ? "bottom" : "right"} className={isMobile ? "h-[85dvh] rounded-t-2xl overflow-y-auto" : "w-full sm:max-w-sm overflow-y-auto"}>
+          <SheetHeader>
+            <SheetTitle>Trial Filters</SheetTitle>
+          </SheetHeader>
+
+          <div className="mt-6 space-y-6">
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sort</p>
+              <Select value={trialSortMode} onValueChange={(v) => setTrialSortMode(v as "newest" | "by_phase")} data-testid="filter-trial-sort-select">
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="newest">Newest</SelectItem>
+                  <SelectItem value="by_phase">By Phase</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Phase</p>
+              <Select value={trialPhaseFilter} onValueChange={(v) => setTrialPhaseFilter(v as "all" | "phase 1" | "phase 2" | "phase 3" | "preclinical")} data-testid="filter-trial-phase-select">
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Phases</SelectItem>
+                  <SelectItem value="phase 1">Phase 1</SelectItem>
+                  <SelectItem value="phase 2">Phase 2</SelectItem>
+                  <SelectItem value="phase 3">Phase 3</SelectItem>
+                  <SelectItem value="preclinical">Preclinical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Status</p>
+              <Select value={trialStatusFilter} onValueChange={(v) => setTrialStatusFilter(v as "all" | "recruiting" | "active" | "completed")} data-testid="filter-trial-status-select">
+                <SelectTrigger className="h-9 text-xs w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  <SelectItem value="recruiting">Recruiting</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sponsor</p>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                <Input
+                  value={trialSponsorSearch}
+                  onChange={(e) => setTrialSponsorSearch(e.target.value)}
+                  placeholder="Filter by sponsor…"
+                  className="h-9 pl-8 pr-2 text-xs w-full border-border"
+                  data-testid="input-trial-sponsor-search-mobile"
+                />
+              </div>
+            </div>
+
+            {trialActiveFilterCount > 0 && (
+              <button
+                onClick={() => {
+                  setTrialSortMode("newest");
+                  setTrialPhaseFilter("all");
+                  setTrialStatusFilter("all");
+                  setTrialSponsorSearch("");
+                }}
+                className="w-full text-xs text-muted-foreground hover:text-red-500 transition-colors text-center py-2 border border-dashed border-card-border rounded-md"
+                data-testid="button-reset-trial-filters"
+              >
+                Reset trial filters
               </button>
             )}
           </div>
