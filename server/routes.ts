@@ -9846,6 +9846,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           : (listing?.assetName || `EdenMarket Listing #${deal.listingId}`);
         const signedDate = new Date(updatedDeal.sellerSignedAt!).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 
+        // Resolve legal names for PDF preamble
+        const [ndaSellerOrg, ndaBuyerOrg] = await Promise.all([
+          storage.getOrgForUser(deal.sellerId),
+          storage.getOrgForUser(deal.buyerId),
+        ]);
+        const sellerLegalName = ndaSellerOrg?.name ?? `Party A (Deal #${dealId})`;
+        const buyerLegalName = ndaBuyerOrg?.name ?? `Party B (Deal #${dealId})`;
+
         try {
           const sbUrl = process.env.VITE_SUPABASE_URL;
           const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -9861,7 +9869,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
               doc.font("Helvetica-Bold").fontSize(14).text("MUTUAL NON-DISCLOSURE AGREEMENT", { align: "center" });
               doc.moveDown();
               doc.font("Helvetica").fontSize(10);
-              doc.text(`This Mutual Non-Disclosure Agreement ("Agreement") is entered into as of ${signedDate}, between the Seller party (Deal Party A) and the Buyer party (Deal Party B) in connection with ${assetRef}, facilitated through EdenMarket by EdenRadar.`, { align: "justify" });
+              doc.text(`This Mutual Non-Disclosure Agreement ("Agreement") is entered into as of ${signedDate}, between ${sellerLegalName} ("Seller", Deal Party A) and ${buyerLegalName} ("Buyer", Deal Party B) in connection with ${assetRef}, facilitated through EdenMarket by EdenRadar.`, { align: "justify" });
               doc.moveDown();
               const clauses = [
                 ["1. CONFIDENTIAL INFORMATION.", 'Each party ("Disclosing Party") may disclose to the other party ("Receiving Party") certain non-public, proprietary, or confidential information ("Confidential Information") in connection with the evaluation of a potential business transaction regarding the above-referenced asset.'],

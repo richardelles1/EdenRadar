@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import {
   ShoppingBag, CheckCircle2, XCircle, Clock, FileText, Users, EyeOff,
   MessageSquare, Building2, Shield, DollarSign, AlertTriangle, ChevronDown, ChevronUp, Paperclip,
+  History as HistoryIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +99,8 @@ type AdminDealDocument = {
   uploadedAt: string;
 };
 
+type AdminDealEvent = { id: number; deal_id: number; actor_id: string; event_type: string; detail: string | null; created_at: string };
+
 function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   const { data: messages = [], isLoading: msgsLoading } = useQuery<AdminDealMessage[]>({
     queryKey: ["/api/admin/market/deals", deal.id, "messages"],
@@ -111,6 +114,14 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
     queryKey: ["/api/admin/market/deals", deal.id, "documents"],
     queryFn: async () => {
       const res = await fetch(`/api/admin/market/deals/${deal.id}/documents`, { headers: adminHeaders() });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+  });
+  const { data: events = [], isLoading: eventsLoading } = useQuery<AdminDealEvent[]>({
+    queryKey: ["/api/admin/market/deals", deal.id, "events"],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/market/deals/${deal.id}/events`, { headers: adminHeaders() });
       if (!res.ok) throw new Error("Failed");
       return res.json();
     },
@@ -133,7 +144,7 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
   return (
     <tr>
       <td colSpan={10} className="px-0 pb-0">
-        <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-muted/20 border-t border-violet-500/10 px-4 py-4 grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Messages */}
           <div className="space-y-2">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
@@ -182,6 +193,30 @@ function DealInspectionPanel({ deal }: { deal: AdminDeal }) {
                     <span className="text-xs text-foreground truncate flex-1">{d.fileName}</span>
                     <span className="text-[10px] text-muted-foreground/60 shrink-0">{uploaderLabel(d.uploaderId)}</span>
                   </a>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Activity Log */}
+          <div className="space-y-2">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest flex items-center gap-1">
+              <HistoryIcon className="w-3 h-3" /> Activity ({events.length})
+            </p>
+            {eventsLoading ? (
+              <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+                <div className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin" /> Loading…
+              </div>
+            ) : events.length === 0 ? (
+              <p className="text-xs text-muted-foreground/60 italic">No activity yet</p>
+            ) : (
+              <div className="space-y-1 max-h-52 overflow-y-auto pr-1">
+                {events.map(ev => (
+                  <div key={ev.id} className="flex items-start gap-2 text-[11px]" data-testid={`admin-deal-event-${ev.id}`}>
+                    <span className="text-muted-foreground/50 shrink-0 pt-px">{new Date(ev.created_at).toLocaleDateString()}</span>
+                    <span className="font-medium text-foreground shrink-0">{ev.event_type.replace(/_/g, " ")}</span>
+                    {ev.detail && <span className="text-muted-foreground truncate">{ev.detail}</span>}
+                  </div>
                 ))}
               </div>
             )}
