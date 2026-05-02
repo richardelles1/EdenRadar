@@ -489,9 +489,9 @@ export async function registerRoutes(
         return {
           id: String(r.id),
           asset_name: r.assetName,
-          target: r.target,
-          modality: r.modality,
-          indication: r.indication,
+          target: r.target ?? "unknown",
+          modality: r.modality ?? "unknown",
+          indication: r.indication ?? "unknown",
           development_stage: r.developmentStage,
           institution: r.institution,
           summary: r.summary ?? "",
@@ -3418,7 +3418,7 @@ export async function registerRoutes(
 
         const assetPayload = targeted.map((a) => ({
           id: a.id, assetName: a.assetName, institution: a.institution,
-          indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+          indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
           ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
         }));
         sendEvent("context", { sessionId: sid, assets: assetPayload });
@@ -3679,7 +3679,7 @@ export async function registerRoutes(
           if (fetchedForCompare.length >= 2) {
             const compareAssetPayload = fetchedForCompare.map((a) => ({
               id: a.id, assetName: a.assetName, institution: a.institution,
-              indication: a.indication, modality: a.modality,
+              indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
               developmentStage: a.developmentStage, ipType: a.ipType,
               sourceName: a.sourceName, sourceUrl: a.sourceUrl, similarity: 1.0,
             }));
@@ -3737,7 +3737,7 @@ export async function registerRoutes(
         if (relatedAssets.length > 0) {
           const relatedAssetPayload = relatedAssets.map((a) => ({
             id: a.id, assetName: a.assetName, institution: a.institution,
-            indication: a.indication, modality: a.modality,
+            indication: a.indication ?? "unknown", modality: a.modality ?? "unknown",
             developmentStage: a.developmentStage, ipType: a.ipType,
             sourceName: a.sourceName, sourceUrl: a.sourceUrl,
             similarity: Math.round(a.similarity * 100) / 100,
@@ -3833,7 +3833,7 @@ export async function registerRoutes(
 
       const assetPayload = retrieved.map((a) => ({
         id: a.id, assetName: a.assetName, institution: a.institution,
-        indication: a.indication, modality: a.modality, developmentStage: a.developmentStage,
+        indication: a.indication ?? "unknown", modality: a.modality ?? "unknown", developmentStage: a.developmentStage,
         ipType: a.ipType, sourceName: a.sourceName, sourceUrl: a.sourceUrl,
         similarity: Math.round(a.similarity * 100) / 100,
       }));

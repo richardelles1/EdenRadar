@@ -37,9 +37,9 @@ import { alias } from "drizzle-orm/pg-core";
 export type RetrievedAsset = {
   id: number;
   assetName: string;
-  target: string;
-  modality: string;
-  indication: string;
+  target: string | null;
+  modality: string | null;
+  indication: string | null;
   developmentStage: string;
   institution: string;
   mechanismOfAction: string | null;
@@ -101,9 +101,10 @@ export interface IStorage {
     onProgress?: (done: number, total: number) => void
   ): Promise<{ newAssets: Array<{ id: number; assetName: string; fingerprint: string }>; totalProcessed: number }>;
   updateIngestedAssetEnrichment(id: number, data: {
-    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
-    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string;
-    ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
+    target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
+    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string | null;
+    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number;
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void>;
   wipeAllAssets(): Promise<void>;
   wipeInstitutionAssets(institution: string): Promise<number>;
@@ -153,7 +154,7 @@ export interface IStorage {
     unknownCount: number;
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
-  getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
+  getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
 
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
@@ -182,15 +183,17 @@ export interface IStorage {
   }>>;
   getAssetsNeedingDeepEnrichCount(): Promise<number>;
   updateIngestedAssetDeepEnrichment(id: number, data: {
-    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
-    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
-    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+    target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string | null;
+    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number;
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void>;
   bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
-    id: number; target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    id: number; target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
-  }>): Promise<number>;
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
+  }>, source?: "mini" | "gpt4o" | "deep"): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
@@ -780,16 +783,21 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateIngestedAssetEnrichment(id: number, data: {
-    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
-    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string;
-    ipType?: string; unmetNeed?: string; comparableDrugs?: string; licensingReadiness?: string; completenessScore?: number;
+    target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
+    categories?: string[]; categoryConfidence?: number; innovationClaim?: string; mechanismOfAction?: string | null;
+    ipType?: string; unmetNeed?: string | null; comparableDrugs?: string | null; licensingReadiness?: string; completenessScore?: number;
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
-    // Detect stage change before overwriting
+    // Fetch existing humanVerified and enrichmentSources
     const [existing] = await db
-      .select({ developmentStage: ingestedAssets.developmentStage })
+      .select({ developmentStage: ingestedAssets.developmentStage, humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
       .from(ingestedAssets)
       .where(eq(ingestedAssets.id, id))
       .limit(1);
+
+    const hv: Record<string, boolean> = (existing?.humanVerified as Record<string, boolean>) ?? {};
+    const existingSources: Record<string, string> = (existing?.enrichmentSources as Record<string, string>) ?? {};
+    const newSources: Record<string, string> = { ...existingSources };
 
     const oldStage = existing?.developmentStage;
     const newStage = data.developmentStage;
@@ -798,30 +806,40 @@ export class DatabaseStorage implements IStorage {
       oldStage !== "unknown" && newStage !== "unknown" &&
       oldStage !== newStage;
 
-    const updateData: Record<string, any> = {
-      target: data.target,
-      modality: data.modality,
-      indication: data.indication,
-      developmentStage: data.developmentStage,
+    const updateData: Record<string, unknown> = {
       relevant: data.biotechRelevant,
     };
     if (stageChanged) {
       updateData.previousStage = oldStage;
       updateData.stageChangedAt = new Date();
     }
+
+    // Only write fields that are not human-verified
+    if (!hv.target) { updateData.target = data.target; newSources.target = "mini"; }
+    if (!hv.modality) { updateData.modality = data.modality; newSources.modality = "mini"; }
+    if (!hv.indication) { updateData.indication = data.indication; newSources.indication = "mini"; }
+    if (!hv.developmentStage) { updateData.developmentStage = data.developmentStage; newSources.developmentStage = "mini"; }
+
     if (data.categories) updateData.categories = data.categories;
     if (data.categoryConfidence !== undefined) updateData.categoryConfidence = data.categoryConfidence;
-    if (data.innovationClaim) updateData.innovationClaim = data.innovationClaim;
-    if (data.mechanismOfAction) updateData.mechanismOfAction = data.mechanismOfAction;
-    if (data.ipType) updateData.ipType = data.ipType;
-    if (data.unmetNeed) updateData.unmetNeed = data.unmetNeed;
-    if (data.comparableDrugs) updateData.comparableDrugs = data.comparableDrugs;
-    if (data.licensingReadiness) updateData.licensingReadiness = data.licensingReadiness;
+    if (!hv.innovationClaim && data.innovationClaim) { updateData.innovationClaim = data.innovationClaim; newSources.innovationClaim = "mini"; }
+    if (!hv.mechanismOfAction && data.mechanismOfAction !== undefined) { updateData.mechanismOfAction = data.mechanismOfAction || null; newSources.mechanismOfAction = "mini"; }
+    if (!hv.ipType && data.ipType) { updateData.ipType = data.ipType; newSources.ipType = "mini"; }
+    if (!hv.unmetNeed && data.unmetNeed !== undefined) { updateData.unmetNeed = data.unmetNeed || null; newSources.unmetNeed = "mini"; }
+    if (!hv.comparableDrugs && data.comparableDrugs !== undefined) { updateData.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = "mini"; }
+    if (!hv.licensingReadiness && data.licensingReadiness) { updateData.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "mini"; }
     if (data.completenessScore !== undefined) updateData.completenessScore = data.completenessScore;
+    if (data.assetClass) { updateData.assetClass = data.assetClass; newSources.assetClass = "mini"; }
+    if (data.deviceAttributes !== undefined) updateData.deviceAttributes = data.deviceAttributes;
 
+    updateData.enrichmentSources = newSources;
+
+    // Using Record<string, any> for dynamic update with mixed field types — consistent with existing
+    // bulkUpdateIngestedAssetsDeepEnrichment pattern in this file (dynamic fields + SQL expressions).
     await db
       .update(ingestedAssets)
-      .set(updateData)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      .set(updateData as Record<string, any>)
       .where(eq(ingestedAssets.id, id));
   }
 
@@ -1367,7 +1385,7 @@ export class DatabaseStorage implements IStorage {
       ? and(unknownFilter, or(isNull(ingestedAssets.enrichedAt), lt(ingestedAssets.enrichedAt, since)))
       : unknownFilter;
 
-    return db
+    const rows = await db
       .select({
         id: ingestedAssets.id,
         assetName: ingestedAssets.assetName,
@@ -1379,6 +1397,12 @@ export class DatabaseStorage implements IStorage {
       })
       .from(ingestedAssets)
       .where(conditions!);
+    return rows.map(r => ({
+      ...r,
+      target: r.target ?? "unknown",
+      modality: r.modality ?? "unknown",
+      indication: r.indication ?? "unknown",
+    }));
   }
 
   async createEnrichmentJob(total: number): Promise<EnrichmentJob> {
@@ -1583,35 +1607,48 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateIngestedAssetDeepEnrichment(id: number, data: {
-    target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
-    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
-    ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
+    target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
+    categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string | null;
+    ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number;
+    assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
-    await db.update(ingestedAssets).set({
-      target: data.target,
-      modality: data.modality,
-      indication: data.indication,
-      developmentStage: data.developmentStage,
+    // Fetch humanVerified + existing enrichmentSources
+    const [cur] = await db.select({ humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
+      .from(ingestedAssets).where(eq(ingestedAssets.id, id));
+    const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
+    const existingSources: Record<string, string> = (cur?.enrichmentSources as Record<string, string>) ?? {};
+    const newSources: Record<string, string> = { ...existingSources };
+
+    const update: Record<string, unknown> = {
       relevant: data.biotechRelevant,
       categories: data.categories,
       categoryConfidence: data.categoryConfidence,
-      innovationClaim: data.innovationClaim || null,
-      mechanismOfAction: data.mechanismOfAction || null,
-      ipType: data.ipType,
-      unmetNeed: data.unmetNeed || null,
-      comparableDrugs: data.comparableDrugs || null,
-      licensingReadiness: data.licensingReadiness,
       completenessScore: data.completenessScore,
-      enrichedAt: new Date(), // Mark as enriched so it is not re-selected by getAssetsNeedingDeepEnrich
+      enrichedAt: new Date(),
       deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
-      // Clear stale dedupe embedding — target/indication changed so the vector must be refreshed
-      // on the next nearDuplicateDetection scan to avoid false-negative dedup comparisons.
       dedupeEmbedding: null,
-    }).where(eq(ingestedAssets.id, id));
+    };
+
+    if (!hv.target) { update.target = data.target; newSources.target = "deep"; }
+    if (!hv.modality) { update.modality = data.modality; newSources.modality = "deep"; }
+    if (!hv.indication) { update.indication = data.indication; newSources.indication = "deep"; }
+    if (!hv.developmentStage) { update.developmentStage = data.developmentStage; newSources.developmentStage = "deep"; }
+    if (!hv.mechanismOfAction) { update.mechanismOfAction = data.mechanismOfAction || null; newSources.mechanismOfAction = "deep"; }
+    if (!hv.innovationClaim) { update.innovationClaim = data.innovationClaim || null; newSources.innovationClaim = "deep"; }
+    if (!hv.ipType) { update.ipType = data.ipType; newSources.ipType = "deep"; }
+    if (!hv.unmetNeed) { update.unmetNeed = data.unmetNeed || null; newSources.unmetNeed = "deep"; }
+    if (!hv.comparableDrugs) { update.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = "deep"; }
+    if (!hv.licensingReadiness) { update.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "deep"; }
+    if (data.assetClass) { update.assetClass = data.assetClass; newSources.assetClass = "deep"; }
+    if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes;
+
+    update.enrichmentSources = newSources;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await db.update(ingestedAssets).set(update as Record<string, any>).where(eq(ingestedAssets.id, id));
   }
 
   async bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
-    id: number; target: string; modality: string; indication: string; developmentStage: string; biotechRelevant: boolean;
+    id: number; target: string | null; modality: string | null; indication: string | null; developmentStage: string; biotechRelevant: boolean;
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
@@ -1681,15 +1718,22 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {
+    // Select relevant, non-sparse assets with 3+ unknown key fields (target/modality/indication/developmentStage)
+    // and sufficient description length (>150 chars) to be worth a mini pass.
     const [row] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(ingestedAssets)
-      .where(
-        and(
-          eq(ingestedAssets.relevant, true),
-          sql`(${ingestedAssets.target} = 'unknown' OR ${ingestedAssets.modality} = 'unknown' OR ${ingestedAssets.indication} = 'unknown' OR ${ingestedAssets.developmentStage} = 'unknown')`
-        )
-      );
+      .where(sql`
+        relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND (
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+        ) >= 3
+      `);
     const count = row?.count ?? 0;
     return { count, costEstimate: count * 0.0003 };
   }

@@ -3,9 +3,9 @@ import { computeCompletenessScore } from "./contentHash";
 
 export interface DeepEnrichResult {
   id: number;
-  target: string;
-  modality: string;
-  indication: string;
+  target: string | null;
+  modality: string | null;
+  indication: string | null;
   developmentStage: string;
   biotechRelevant: boolean;
   categories: string[];
@@ -157,9 +157,9 @@ export async function deepEnrichBatch(
 
         const result: DeepEnrichResult = {
           id: asset.id,
-          target: classification.target ?? "unknown",
-          modality: classification.modality ?? "unknown",
-          indication: classification.indication ?? "unknown",
+          target: classification.target,
+          modality: classification.modality,
+          indication: classification.indication,
           developmentStage: classification.developmentStage,
           biotechRelevant: classification.biotechRelevant,
           categories: classification.categories,

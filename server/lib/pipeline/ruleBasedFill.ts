@@ -1,6 +1,6 @@
 import { db } from "../../db";
 import { ingestedAssets } from "@shared/schema";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, type SQL } from "drizzle-orm";
 
 // ── Development Stage rules ───────────────────────────────────────────────────
 const STAGE_RULES: Array<{ pattern: RegExp; value: string }> = [
@@ -231,13 +231,22 @@ export async function runRuleBasedFill(
   return { processed, filled, fieldsWritten: Object.values(byField).reduce((a, b) => a + b, 0), byField, dataSparseTagged };
 }
 
+type RuleFillUpdateSet = {
+  dataSparse: boolean;
+  developmentStage?: string;
+  ipType?: string;
+  licensingReadiness?: string;
+  indication?: string;
+  enrichmentSources?: SQL;
+};
+
 async function flushWrites(
   batch: Array<{ id: number; fields: Record<string, string>; dataSparse: boolean }>,
 ): Promise<void> {
   for (const item of batch) {
     try {
       const fieldKeys = Object.keys(item.fields);
-      const updates: Record<string, unknown> = { dataSparse: item.dataSparse };
+      const updates: RuleFillUpdateSet = { dataSparse: item.dataSparse };
 
       if (item.fields.developmentStage) updates.developmentStage = item.fields.developmentStage;
       if (item.fields.ipType) updates.ipType = item.fields.ipType;
@@ -250,8 +259,7 @@ async function flushWrites(
         updates.enrichmentSources = sql`COALESCE(${ingestedAssets.enrichmentSources}, '{}'::jsonb) || ${sourcesJson}::jsonb`;
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await db.update(ingestedAssets).set(updates as any).where(eq(ingestedAssets.id, item.id));
+      await db.update(ingestedAssets).set(updates).where(eq(ingestedAssets.id, item.id));
     } catch (e) {
       console.error(`[ruleBasedFill] write failed for asset ${item.id}:`, e);
     }

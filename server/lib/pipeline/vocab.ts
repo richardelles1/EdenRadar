@@ -237,28 +237,21 @@ for (const [canonical, ...aliases] of TARGET_MAP) {
 }
 
 /**
- * Normalize a free-text AI value to the nearest canonical vocab term.
- * Exact match first (case-insensitive), then unknown.
+ * Normalize a free-text AI value to a canonical controlled-vocabulary term.
+ * Exact match only (case-insensitive, whitespace-normalized). Returns "unknown"
+ * for any value not present in the vocabulary — no substring guessing, no
+ * free-text passthrough. This guarantees consistent, enumerable storage.
+ *
  * @param value  - raw string from AI (e.g. "NSCLC", "non small cell lung cancer")
  * @param vocab  - "indication" or "target"
- * @returns canonical term, or "unknown" if no match found
+ * @returns canonical term from controlled vocabulary, or "unknown" if no exact match
  */
 export function sanitizeToVocab(value: string | null | undefined, vocab: "indication" | "target"): string {
   if (!value || value.toLowerCase().trim() === "unknown" || value.trim() === "") return "unknown";
   const lookup = vocab === "indication" ? INDICATION_LOOKUP : TARGET_LOOKUP;
   const normalized = value.toLowerCase().trim();
 
-  // Exact match
-  if (lookup.has(normalized)) return lookup.get(normalized)!;
-
-  // Substring match — check if any key is contained in the value or vice versa
-  for (const [alias, canonical] of lookup) {
-    if (normalized.includes(alias) || alias.includes(normalized)) {
-      return canonical;
-    }
-  }
-
-  // No match — return the original value lowercased (don't force "unknown" for novel terms)
-  // This preserves real but unlisted terms rather than destroying information.
-  return normalized;
+  // Exact match only — deterministic, no substring ambiguity
+  const hit = lookup.get(normalized);
+  return hit ?? "unknown";
 }

@@ -2,8 +2,8 @@ export interface DispatchAsset {
   id: number;
   assetName: string;
   institution: string;
-  indication: string;
-  modality: string;
+  indication: string | null;
+  modality: string | null;
   developmentStage: string;
   summary: string | null;
   sourceUrl: string | null;
@@ -171,7 +171,7 @@ export function renderDispatchEmail(opts: {
       const badgeBg = stageBg(a.developmentStage);
       const badgeTxt = stageText(a.developmentStage);
       const stageLabel = capitalize(a.developmentStage);
-      const modalityLabel = capitalize(a.modality);
+      const modalityLabel = capitalize(a.modality ?? "");
       const indicationLabel = a.indication && a.indication !== "unknown" ? capitalize(a.indication) : "";
       const summarySnippet = a.summary
         ? escapeHtml(a.summary.slice(0, 240)) + (a.summary.length > 240 ? "..." : "")
