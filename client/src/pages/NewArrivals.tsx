@@ -262,7 +262,7 @@ export default function NewArrivals() {
                   key={inst}
                   institution={inst}
                   assets={instAssets}
-                  defaultOpen={idx < 3}
+                  defaultOpen={false}
                 />
               );
             })}

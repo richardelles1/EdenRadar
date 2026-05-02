@@ -455,7 +455,7 @@ export default function IndustryDashboard() {
   const recentSaved = (recentSavedData?.assets ?? []).slice(0, 5) as SavedAssetRow[];
 
   return (
-    <div className="min-h-full relative overflow-hidden" style={{ background: "linear-gradient(180deg, hsl(210 30% 96%) 0%, hsl(var(--background)) 40%)" }}>
+    <div className="min-h-full relative overflow-hidden bg-background">
       <style>{`
         @keyframes dash-fade-up {
           from { opacity: 0; transform: translateY(8px); }

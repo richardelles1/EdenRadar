@@ -596,7 +596,7 @@ export async function registerRoutes(
         WHERE relevant = true AND institution IS NOT NULL AND institution != ''
         GROUP BY institution
         ORDER BY count DESC
-        LIMIT 200
+        LIMIT 2000
       `);
       const institutions = (rows.rows as Record<string, unknown>[]).map((r) => ({
         institution: String(r.institution ?? ""),
@@ -1102,7 +1102,7 @@ export async function registerRoutes(
         sourceUrl: body.source_url,
         pmid: body.pmid,
       }, userId);
-      logTeamActivity(userId ?? null, "saved_asset", asset.id, asset.assetName).catch(() => {});
+      logTeamActivity(userId ?? null, "saved_asset", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
       res.status(201).json({ asset });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to save asset" });
@@ -1274,7 +1274,7 @@ export async function registerRoutes(
           content,
           isSystemEvent: true,
         }).catch((e) => console.error(`[system-event-note] Failed for asset ${id}:`, e));
-        logTeamActivity(userId ?? null, "moved_asset", id, before.assetName, {
+        logTeamActivity(userId ?? null, "moved_asset", before.ingestedAssetId ?? null, before.assetName, {
           fromStage: prevLabel,
           toStage: nextLabel,
         }).catch(() => {});
@@ -1330,7 +1330,7 @@ export async function registerRoutes(
         content,
         isSystemEvent: false,
       });
-      logTeamActivity(userId ?? null, "added_note", id, asset.assetName).catch(() => {});
+      logTeamActivity(userId ?? null, "added_note", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
       const noteOrg = await storage.getOrgForUser(userId ?? "").catch(() => null);
       if (noteOrg) broadcastToOrg(noteOrg.id, "note_added", { savedAssetId: id });
       res.status(201).json({ note });
