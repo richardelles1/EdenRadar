@@ -246,7 +246,7 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
   const { session } = useAuth();
   const [open, setOpen] = useState(true);
 
-  const { data: intel, isLoading } = useQuery<IntelligenceData>({
+  const { data: intel, isLoading, isError } = useQuery<IntelligenceData>({
     queryKey: ["/api/market/listings/intelligence", listingId],
     staleTime: 5 * 60 * 1000,
     enabled: !!session,
@@ -254,7 +254,7 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
       const res = await fetch(`/api/market/listings/${listingId}/intelligence`, {
         headers: { Authorization: `Bearer ${session!.access_token}`, "x-user-id": session!.user.id },
       });
-      if (!res.ok) throw new Error("Failed");
+      if (!res.ok) throw new Error(`${res.status}`);
       return res.json();
     },
   });
@@ -280,6 +280,10 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
               <div className="w-4 h-4 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
               <span className="text-xs text-muted-foreground">Loading intelligence…</span>
             </div>
+          )}
+
+          {isError && (
+            <p className="text-xs text-muted-foreground text-center py-4">Intelligence signals unavailable for this listing.</p>
           )}
 
           {intel && (

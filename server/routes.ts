@@ -1026,8 +1026,12 @@ export async function registerRoutes(
   });
 
   // GET /api/assets/:fingerprint/market-listing — check if this ingestedAsset has an active EdenMarket listing
-  app.get("/api/assets/:fingerprint/market-listing", async (req, res) => {
+  app.get("/api/assets/:fingerprint/market-listing", verifyAnyAuth, async (req, res) => {
     try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+
       const { fingerprint } = req.params;
       const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
 
@@ -9419,9 +9423,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
 
-      // Admin bypass — only valid if ADMIN_PANEL_PASSWORD env var is set
+      // Admin bypass — only valid if ADMIN_PANEL_PASSWORD env var is set; header only (never query string)
       const adminPwEnv = process.env.ADMIN_PANEL_PASSWORD;
-      const adminPw = (req.query.pw ?? req.headers["x-admin-password"]) as string | undefined;
+      const adminPw = req.headers["x-admin-password"] as string | undefined;
       const isAdmin = !!(adminPwEnv && adminPw && adminPw === adminPwEnv);
 
       if (!isAdmin) {
