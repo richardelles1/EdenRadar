@@ -6815,7 +6815,7 @@ If a field cannot be determined, use "N/A".`
         : new Date(Date.now() - 48 * 60 * 60 * 1000);
 
       if (alerts.length === 0) {
-        return res.json({ byAlert: [], total: 0, since: since.toISOString() });
+        return res.json({ byAlert: [], total: 0, distinctTotal: 0, since: since.toISOString() });
       }
 
       type AlertBucket = {

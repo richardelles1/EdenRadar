@@ -963,6 +963,14 @@ const QUICK_TEMPLATES = [
     query: "", modalities: [] as string[], stages: [] as string[], institutions: [] as string[],
   },
   {
+    id: "therapeutic_focus",
+    label: "My Therapeutic Focus",
+    description: "New assets in your therapeutic area (e.g. oncology, rare disease)",
+    criteriaType: null,
+    query: "", modalities: [] as string[], stages: [] as string[], institutions: [] as string[],
+    queryPlaceholder: "e.g. oncology, rare disease, immunology",
+  },
+  {
     id: "phase2plus",
     label: "New Phase 2+ Assets",
     description: "Clinical-stage assets ready for partnership",
@@ -983,7 +991,7 @@ const QUICK_TEMPLATES = [
     criteriaType: null,
     query: "", modalities: ["Gene Therapy", "CAR-T"] as string[], stages: [] as string[], institutions: [] as string[],
   },
-] as const;
+];
 
 function CreateAlertSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { toast } = useToast();
