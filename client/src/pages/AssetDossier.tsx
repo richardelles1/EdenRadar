@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import { ScoreBreakdownCard } from "@/components/ScoreBreakdownCard";
 import { SourceBadge } from "@/components/SourceBadge";
@@ -186,6 +187,7 @@ export default function AssetDossier() {
   const { id } = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { session } = useAuth();
   const [asset, setAsset] = useState<ScoredAsset | null>(null);
   const [dossier, setDossier] = useState<DossierPayload | null>(null);
   const [shareDialogOpen, setShareDialogOpen] = useState(false);
@@ -211,10 +213,15 @@ export default function AssetDossier() {
     listing: { id: number; therapeuticArea: string; modality: string; stage: string; assetName: string | null; blind: boolean; engagementStatus: string } | null;
   }>({
     queryKey: ["/api/assets", fingerprint, "market-listing"],
-    queryFn: () =>
-      fetch(`/api/assets/${encodeURIComponent(fingerprint)}/market-listing`).then(r => r.json()),
-    enabled: !!fingerprint,
+    enabled: !!fingerprint && !!session,
     staleTime: 5 * 60 * 1000,
+    queryFn: () =>
+      fetch(`/api/assets/${encodeURIComponent(fingerprint)}/market-listing`, {
+        headers: {
+          Authorization: `Bearer ${session!.access_token}`,
+          "x-user-id": session!.user.id,
+        },
+      }).then(r => r.ok ? r.json() : { listing: null }),
   });
   const marketListing = marketListingData?.listing ?? null;
 

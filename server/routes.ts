@@ -9353,6 +9353,36 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // GET /api/market/listings/suggest-asset — fuzzy search ingested_assets for listing creation assist
+  // IMPORTANT: Must be declared before /:id to avoid Express treating "suggest-asset" as a param value
+  app.get("/api/market/listings/suggest-asset", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const q = String(req.query.q ?? "").trim();
+      const ta = String(req.query.ta ?? "").trim();
+      const query = [q, ta].filter(Boolean).join(" ");
+      if (query.length < 2) return res.json([]);
+      const results = await storage.keywordSearchIngestedAssets(query, 5);
+      res.json(results.map(r => ({
+        id: r.id,
+        assetName: r.assetName,
+        institution: r.institution,
+        modality: r.modality,
+        developmentStage: r.developmentStage,
+        indication: r.indication,
+        target: r.target,
+        innovationClaim: r.innovationClaim,
+        mechanismOfAction: r.mechanismOfAction,
+        ipType: r.ipType,
+        completenessScore: r.completenessScore,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // GET /api/market/listings/:id — single listing detail
   app.get("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
     try {
@@ -9378,36 +9408,6 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         eoiCount,
         myEoi: myEoi ?? null,
       });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
-  // GET /api/market/listings/suggest-asset — fuzzy search ingested_assets for listing creation assist
-  // Must be before /:id to avoid Express routing it as a param
-  app.get("/api/market/listings/suggest-asset", verifyAnyAuth, async (req, res) => {
-    try {
-      const userId = req.headers["x-user-id"] as string;
-      const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
-      const q = String(req.query.q ?? "").trim();
-      const ta = String(req.query.ta ?? "").trim();
-      const query = [q, ta].filter(Boolean).join(" ");
-      if (query.length < 2) return res.json([]);
-      const results = await storage.keywordSearchIngestedAssets(query, 5);
-      res.json(results.map(r => ({
-        id: r.id,
-        assetName: r.assetName,
-        institution: r.institution,
-        modality: r.modality,
-        developmentStage: r.developmentStage,
-        indication: r.indication,
-        target: r.target,
-        innovationClaim: r.innovationClaim,
-        mechanismOfAction: r.mechanismOfAction,
-        ipType: r.ipType,
-        completenessScore: r.completenessScore,
-      })));
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

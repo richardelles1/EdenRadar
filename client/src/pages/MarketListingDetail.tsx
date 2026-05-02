@@ -345,12 +345,34 @@ function EdenIntelligenceSidebar({ listingId }: { listingId: number }) {
               {intel.relatedTtoAssets.length > 0 && (
                 <IntelSection icon={Microscope} title="Related TTO Assets" count={intel.relatedTtoAssets.length}>
                   {intel.relatedTtoAssets.map(a => (
-                    <IntelligenceItem
-                      key={a.id}
-                      title={a.assetName}
-                      subtitle={a.institution ? `${a.institution} · ${a.developmentStage}` : a.developmentStage}
-                      meta={a.modality}
-                    />
+                    <div key={a.id} className="flex items-start gap-2 py-2 border-b border-border/50 last:border-0">
+                      <div className="flex-1 min-w-0">
+                        <a
+                          href={`/asset/${a.id}`}
+                          className="text-xs font-medium text-foreground hover:text-violet-500 leading-snug line-clamp-2 transition-colors"
+                          data-testid={`tto-asset-link-${a.id}`}
+                        >
+                          {a.assetName}
+                        </a>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
+                          {a.institution ? `${a.institution} · ${a.developmentStage}` : a.developmentStage}
+                          {a.modality ? ` · ${a.modality}` : ""}
+                        </p>
+                      </div>
+                      {a.completenessScore != null && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-1 text-[9px] font-bold px-1 py-0.5 rounded border shrink-0",
+                            a.completenessScore >= 70 ? "text-emerald-600 border-emerald-500/30 bg-emerald-500/8" :
+                            a.completenessScore >= 40 ? "text-amber-600 border-amber-500/30 bg-amber-500/8" :
+                            "text-muted-foreground border-border"
+                          )}
+                          title={`EdenScout completeness: ${a.completenessScore}%`}
+                        >
+                          <Zap className="w-2 h-2" />{a.completenessScore}
+                        </span>
+                      )}
+                    </div>
                   ))}
                 </IntelSection>
               )}
