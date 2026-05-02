@@ -9,25 +9,32 @@ import {
   ShadingType,
   Header,
   ImageRun,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
   convertInchesToTwip,
 } from "docx";
 import type { EmailTemplate, TemplateSection } from "./emailTemplates";
 import fs from "fs";
 import path from "path";
 
-// Amber highlight for placeholder fields
-const AMBER_HIGHLIGHT = "FFD966";
-const AMBER_SHADING = "FFF3CD";
+// Amber highlight color for placeholder [FIELD] tokens
+const AMBER_FILL = "FFF3CD";
+
+// Load logo once at module scope (file read is cheap and only happens on first import)
+let logoBuffer: Buffer | undefined;
+function getLogoBuffer(): Buffer {
+  if (!logoBuffer) {
+    const logoPath = path.resolve("attached_assets/EdenNX_Logo_T_1774480105524.png");
+    if (fs.existsSync(logoPath)) {
+      logoBuffer = fs.readFileSync(logoPath);
+    }
+  }
+  return logoBuffer ?? Buffer.alloc(0);
+}
 
 function buildRuns(text: string, placeholder: boolean, bold = false): TextRun[] {
   if (!placeholder) {
     return [new TextRun({ text, bold, size: 22 })];
   }
-  // Split on [PLACEHOLDER] patterns and highlight them
+  // Split on [PLACEHOLDER] tokens and highlight each one in amber
   const parts = text.split(/(\[[^\]]+\])/g);
   return parts.map((part) => {
     const isTag = /^\[[^\]]+\]$/.test(part);
@@ -36,7 +43,7 @@ function buildRuns(text: string, placeholder: boolean, bold = false): TextRun[] 
       bold: isTag ? true : bold,
       size: 22,
       shading: isTag
-        ? { type: ShadingType.CLEAR, fill: AMBER_SHADING, color: AMBER_SHADING }
+        ? { type: ShadingType.CLEAR, fill: AMBER_FILL, color: AMBER_FILL }
         : undefined,
     });
   });
@@ -66,12 +73,7 @@ function sectionToParagraphs(section: TemplateSection): Paragraph[] {
         spacing: { after: 120, before: 240 },
         alignment: AlignmentType.LEFT,
         children: [
-          new TextRun({
-            text,
-            bold: true,
-            size: 32,
-            color: "1E3A5F",
-          }),
+          new TextRun({ text, bold: true, size: 32, color: "1E3A5F" }),
         ],
       }),
     ];
@@ -104,15 +106,14 @@ function sectionToParagraphs(section: TemplateSection): Paragraph[] {
   }
 
   if (tag === "signature") {
+    const lines = text.split("\n");
     return [
       new Paragraph({
         spacing: { after: 60, before: 240 },
-        border: {
-          top: { style: BorderStyle.SINGLE, size: 6, color: "CCCCCC" },
-        },
+        border: { top: { style: BorderStyle.SINGLE, size: 6, color: "CCCCCC" } },
         children: [],
       }),
-      ...text.split("\n").map(
+      ...lines.map(
         (line) =>
           new Paragraph({
             spacing: { after: 40 },
@@ -126,12 +127,12 @@ function sectionToParagraphs(section: TemplateSection): Paragraph[] {
     return [
       new Paragraph({
         spacing: { after: 80, before: 120 },
-        children: buildRuns(text, placeholder, false),
+        children: buildRuns(text, placeholder),
       }),
     ];
   }
 
-  // tag === "body" — handle multiline bullet lists
+  // tag === "body" — handle multi-line bullet lists
   const lines = text.split("\n");
   return lines.map((line) => {
     const isBullet = line.startsWith("• ");
@@ -144,26 +145,24 @@ function sectionToParagraphs(section: TemplateSection): Paragraph[] {
 }
 
 function buildLogoHeader(): Header {
-  // Inline a small text-based "EdenRadar" header since we have no logo file
-  return new Header({
-    children: [
+  const logo = getLogoBuffer();
+  const children: (Paragraph)[] = [];
+
+  if (logo.length > 0) {
+    children.push(
       new Paragraph({
-        spacing: { after: 40 },
+        spacing: { after: 60 },
         border: {
           bottom: { style: BorderStyle.SINGLE, size: 6, color: "1E3A5F" },
         },
         children: [
-          new TextRun({
-            text: "EDEN",
-            bold: true,
-            size: 28,
-            color: "1E3A5F",
-          }),
-          new TextRun({
-            text: "RADAR",
-            bold: true,
-            size: 28,
-            color: "27AE60",
+          new ImageRun({
+            data: logo,
+            transformation: {
+              width: 120,  // display width in pixels
+              height: 40,  // display height in pixels (aspect ratio preserved visually)
+            },
+            type: "png",
           }),
           new TextRun({
             text: "  |  AI-Powered Biopharma Intelligence",
@@ -171,20 +170,35 @@ function buildLogoHeader(): Header {
             color: "666666",
           }),
         ],
-      }),
-    ],
-  });
+      })
+    );
+  } else {
+    // Fallback text header when logo file unavailable
+    children.push(
+      new Paragraph({
+        spacing: { after: 60 },
+        border: {
+          bottom: { style: BorderStyle.SINGLE, size: 6, color: "1E3A5F" },
+        },
+        children: [
+          new TextRun({ text: "EDEN", bold: true, size: 28, color: "1E3A5F" }),
+          new TextRun({ text: "RADAR", bold: true, size: 28, color: "27AE60" }),
+          new TextRun({ text: "  |  AI-Powered Biopharma Intelligence", size: 20, color: "666666" }),
+        ],
+      })
+    );
+  }
+
+  return new Header({ children });
 }
 
 export async function generateTemplateDocx(template: EmailTemplate): Promise<Buffer> {
   const allParagraphs: Paragraph[] = [];
 
   for (const section of template.sections) {
-    const paras = sectionToParagraphs(section);
-    allParagraphs.push(...paras);
+    allParagraphs.push(...sectionToParagraphs(section));
   }
 
-  // Audience note at top
   const audienceNote = new Paragraph({
     spacing: { after: 80, before: 80 },
     shading: { type: ShadingType.CLEAR, fill: "F5F5F5", color: "F5F5F5" },
@@ -196,7 +210,7 @@ export async function generateTemplateDocx(template: EmailTemplate): Promise<Buf
 
   const placeholderNote = new Paragraph({
     spacing: { after: 160 },
-    shading: { type: ShadingType.CLEAR, fill: AMBER_SHADING, color: AMBER_SHADING },
+    shading: { type: ShadingType.CLEAR, fill: AMBER_FILL, color: AMBER_FILL },
     children: [
       new TextRun({
         text: "Fields highlighted in amber are placeholders — replace before sending.",

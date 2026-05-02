@@ -10707,7 +10707,22 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // ── DOCUMENTS: generate & upload outbound email templates to OneDrive ──────
+  // ── DOCUMENTS: check integration status ─────────────────────────────────────
+  app.get("/api/admin/documents/status", async (req, res) => {
+    const pw = req.query.pw ?? req.headers["x-admin-password"];
+    if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    try {
+      const { isGoogleDriveConnected } = await import("./lib/googleDriveClient");
+      const driveConnected = await isGoogleDriveConnected();
+      res.json({ oneDriveConnected: true, googleDriveConnected: driveConnected });
+    } catch (err: any) {
+      res.json({ oneDriveConnected: true, googleDriveConnected: false });
+    }
+  });
+
+  // ── DOCUMENTS: generate & upload outbound email templates to OneDrive (+Drive) ─
   app.post("/api/admin/documents/generate-templates", async (req, res) => {
     const pw = req.headers["x-admin-password"];
     if (pw !== (process.env.ADMIN_PANEL_PASSWORD ?? "eden")) {
@@ -10716,27 +10731,54 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const { generateTemplateDocx } = await import("./lib/generateDocx");
       const { uploadToOneDrive } = await import("./lib/oneDriveClient");
+      const { uploadToGoogleDrive, isGoogleDriveConnected } = await import("./lib/googleDriveClient");
       const { EMAIL_TEMPLATES } = await import("./lib/emailTemplates");
+
+      const driveConnected = await isGoogleDriveConnected();
 
       const results: Array<{
         filename: string;
         title: string;
-        status: "done" | "failed";
-        webUrl?: string;
-        error?: string;
+        oneDrive: { status: "done" | "failed"; webUrl?: string; error?: string };
+        googleDrive: { status: "done" | "skipped" | "failed"; editUrl?: string; error?: string };
       }> = [];
 
       for (const template of EMAIL_TEMPLATES) {
+        const buffer = await generateTemplateDocx(template);
+
+        // OneDrive upload
+        let oneDriveResult: (typeof results)[0]["oneDrive"];
         try {
-          const buffer = await generateTemplateDocx(template);
           const uploaded = await uploadToOneDrive(template.filename, buffer, "EdenRadar Templates");
-          results.push({ filename: template.filename, title: template.title, status: "done", webUrl: uploaded.webUrl });
+          oneDriveResult = { status: "done", webUrl: uploaded.webUrl };
         } catch (err: any) {
-          results.push({ filename: template.filename, title: template.title, status: "failed", error: err.message });
+          oneDriveResult = { status: "failed", error: err.message };
         }
+
+        // Google Drive upload (conditional)
+        let driveResult: (typeof results)[0]["googleDrive"];
+        if (driveConnected) {
+          try {
+            const uploaded = await uploadToGoogleDrive(template.filename, buffer, "EdenRadar Templates");
+            driveResult = uploaded
+              ? { status: "done", editUrl: uploaded.editUrl }
+              : { status: "skipped" };
+          } catch (err: any) {
+            driveResult = { status: "failed", error: err.message };
+          }
+        } else {
+          driveResult = { status: "skipped" };
+        }
+
+        results.push({
+          filename: template.filename,
+          title: template.title,
+          oneDrive: oneDriveResult,
+          googleDrive: driveResult,
+        });
       }
 
-      res.json({ results });
+      res.json({ results, googleDriveConnected: driveConnected });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

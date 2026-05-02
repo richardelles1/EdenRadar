@@ -9344,42 +9344,51 @@ function AnalyticsTab({ pw }: { pw: string }) {
 }
 
 // ── Documents Tab ────────────────────────────────────────────────────────────
+type DriveSlot = { status: "done" | "skipped" | "failed"; webUrl?: string; editUrl?: string; error?: string };
 type TemplateResult = {
   filename: string;
   title: string;
-  status: "done" | "failed";
-  webUrl?: string;
-  error?: string;
+  oneDrive: DriveSlot;
+  googleDrive: DriveSlot;
 };
+
+const TEMPLATE_DEFS = [
+  {
+    id: "eden-scout-bd",
+    filename: "EdenScout_BD_Outreach_Template.docx",
+    title: "EdenScout BD Outreach",
+    audience: "VP BD / Head of S&E at pharma/biotech",
+    description: "Cold outreach pitching EdenScout. Includes value prop, social proof, CTA, and P.S. line.",
+  },
+  {
+    id: "tto-partner-invite",
+    filename: "EdenRadar_TTO_Partner_Invite.docx",
+    title: "TTO Data Partner Invite",
+    audience: "Technology Transfer Office directors",
+    description: "Relationship-building email positioning EdenRadar as a visibility amplifier for TTO listings.",
+  },
+  {
+    id: "edenmarket-lister-invite",
+    filename: "EdenMarket_Lister_Invite.docx",
+    title: "EdenMarket Lister Invite",
+    audience: "Biotech founders / BD leads",
+    description: "Invites asset holders to list on EdenMarket. Covers curated buyers, confidential listing, and success-fee model.",
+  },
+];
 
 function DocumentsTab({ pw }: { pw: string }) {
   const [results, setResults] = React.useState<TemplateResult[]>([]);
   const [uploading, setUploading] = React.useState(false);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
+  const [googleDriveConnected, setGoogleDriveConnected] = React.useState<boolean | null>(null);
 
-  const templates = [
-    {
-      id: "eden-scout-bd",
-      filename: "EdenScout_BD_Outreach_Template.docx",
-      title: "EdenScout BD Outreach",
-      audience: "VP BD / Head of S&E at pharma/biotech",
-      description: "Cold outreach pitching EdenScout. Includes value prop, social proof, CTA, and P.S. line.",
-    },
-    {
-      id: "tto-partner-invite",
-      filename: "EdenRadar_TTO_Partner_Invite.docx",
-      title: "TTO Data Partner Invite",
-      audience: "Technology Transfer Office directors",
-      description: "Relationship-building email positioning EdenRadar as a visibility amplifier for TTO listings.",
-    },
-    {
-      id: "edenmarket-lister-invite",
-      filename: "EdenMarket_Lister_Invite.docx",
-      title: "EdenMarket Lister Invite",
-      audience: "Biotech founders / BD leads",
-      description: "Invites asset holders to list on EdenMarket. Covers curated buyers, confidential listing, and success-fee model.",
-    },
-  ];
+  // Check integration status on mount
+  React.useEffect(() => {
+    fetch("/api/admin/documents/status", { headers: { "x-admin-password": pw } })
+      .then(r => r.json())
+      .then(d => setGoogleDriveConnected(!!d.googleDriveConnected))
+      .catch(() => setGoogleDriveConnected(false));
+  }, [pw]);
 
   const handleGenerate = async () => {
     setUploading(true);
@@ -9393,6 +9402,9 @@ function DocumentsTab({ pw }: { pw: string }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
       setResults(data.results ?? []);
+      if (typeof data.googleDriveConnected === "boolean") {
+        setGoogleDriveConnected(data.googleDriveConnected);
+      }
     } catch (err: any) {
       setUploadError(err.message);
     } finally {
@@ -9410,14 +9422,16 @@ function DocumentsTab({ pw }: { pw: string }) {
           Outbound Documents
         </h2>
         <p className="text-sm text-muted-foreground mt-1">
-          Generate polished .docx email templates and upload them directly to OneDrive (Word Online). Amber-highlighted fields are placeholders — replace before sending.
+          Generate polished .docx email templates and upload them to OneDrive (Word Online){googleDriveConnected ? " and Google Drive" : ""}. Amber-highlighted fields are placeholders — replace before sending.
         </p>
       </div>
 
       {/* Template cards */}
       <div className="space-y-3">
-        {templates.map((t) => {
+        {TEMPLATE_DEFS.map((t) => {
           const result = resultMap[t.filename];
+          const od = result?.oneDrive;
+          const gd = result?.googleDrive;
           return (
             <div
               key={t.id}
@@ -9435,22 +9449,39 @@ function DocumentsTab({ pw }: { pw: string }) {
                 <p className="text-xs text-muted-foreground mt-0.5">{t.description}</p>
                 <p className="text-[10px] text-muted-foreground/60 font-mono mt-1">{t.filename}</p>
                 {result && (
-                  <div className="mt-2">
-                    {result.status === "done" && result.webUrl ? (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                    {/* OneDrive link */}
+                    {od?.status === "done" && od.webUrl ? (
                       <a
-                        href={result.webUrl}
+                        href={od.webUrl}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline font-medium"
-                        data-testid={`link-template-open-${t.id}`}
+                        data-testid={`link-onedrive-${t.id}`}
                       >
                         <ExternalLink className="h-3 w-3" />
-                        Open in Word Online
+                        Word Online
                       </a>
-                    ) : result.status === "failed" ? (
-                      <p className="text-xs text-destructive" data-testid={`text-template-error-${t.id}`}>
-                        <AlertTriangle className="h-3 w-3 inline mr-1" />
-                        {result.error ?? "Upload failed"}
+                    ) : od?.status === "failed" ? (
+                      <p className="text-xs text-destructive" data-testid={`text-onedrive-error-${t.id}`}>
+                        <AlertTriangle className="h-3 w-3 inline mr-1" />OneDrive: {od.error ?? "failed"}
+                      </p>
+                    ) : null}
+                    {/* Google Drive link */}
+                    {gd?.status === "done" && gd.editUrl ? (
+                      <a
+                        href={gd.editUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-emerald-600 hover:underline font-medium"
+                        data-testid={`link-gdrive-${t.id}`}
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                        Google Docs
+                      </a>
+                    ) : gd?.status === "failed" ? (
+                      <p className="text-xs text-destructive" data-testid={`text-gdrive-error-${t.id}`}>
+                        <AlertTriangle className="h-3 w-3 inline mr-1" />Drive: {gd.error ?? "failed"}
                       </p>
                     ) : null}
                   </div>
@@ -9459,9 +9490,9 @@ function DocumentsTab({ pw }: { pw: string }) {
               <div className="shrink-0 mt-1">
                 {uploading ? (
                   <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" data-testid={`status-uploading-${t.id}`} />
-                ) : result?.status === "done" ? (
+                ) : od?.status === "done" ? (
                   <CheckCircle2 className="h-4 w-4 text-emerald-500" data-testid={`status-done-${t.id}`} />
-                ) : result?.status === "failed" ? (
+                ) : od?.status === "failed" ? (
                   <XCircle className="h-4 w-4 text-destructive" data-testid={`status-failed-${t.id}`} />
                 ) : null}
               </div>
@@ -9470,16 +9501,24 @@ function DocumentsTab({ pw }: { pw: string }) {
         })}
       </div>
 
-      {/* Google Drive notice */}
-      <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 flex items-start gap-3">
-        <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
-        <div>
-          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
-          <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-            Google Drive upload is available once you authorize the Google Drive integration. Contact your Replit admin to connect Google Drive — uploads will then be included automatically.
-          </p>
+      {/* Google Drive status banner */}
+      {googleDriveConnected === false && (
+        <div className="border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 rounded-xl p-4 flex items-start gap-3" data-testid="banner-gdrive-not-connected">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Google Drive not connected</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+              To also upload to Google Drive, authorize the Google Drive integration in your Replit account settings. Once connected, uploads to "EdenRadar Templates" in Drive will be included automatically alongside OneDrive.
+            </p>
+          </div>
         </div>
-      </div>
+      )}
+      {googleDriveConnected === true && (
+        <div className="border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-3 flex items-center gap-3" data-testid="banner-gdrive-connected">
+          <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />
+          <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">Google Drive connected — templates will also be uploaded to Google Docs.</p>
+        </div>
+      )}
 
       {uploadError && (
         <div className="border border-destructive/30 bg-destructive/10 rounded-xl p-3 text-sm text-destructive flex items-center gap-2" data-testid="text-upload-error">
@@ -9497,7 +9536,7 @@ function DocumentsTab({ pw }: { pw: string }) {
         {uploading ? (
           <><Loader2 className="h-4 w-4 animate-spin" /> Generating & uploading…</>
         ) : (
-          <><Upload className="h-4 w-4" /> Generate & Upload to OneDrive</>
+          <><Upload className="h-4 w-4" /> Generate & Upload Templates</>
         )}
       </Button>
     </div>

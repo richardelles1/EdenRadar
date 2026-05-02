@@ -53,10 +53,36 @@ export async function getUncachableOneDriveClient(): Promise<Client> {
   });
 }
 
+async function ensureOneDriveFolder(
+  accessToken: string,
+  folderName: string
+): Promise<void> {
+  // Try to create the folder; if it already exists (409 Conflict), that's fine
+  try {
+    await fetch(
+      "https://graph.microsoft.com/v1.0/me/drive/root/children",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: folderName,
+          folder: {},
+          "@microsoft.graph.conflictBehavior": "fail",
+        }),
+      }
+    );
+    // 201 = created, 409 = already exists — both are acceptable
+  } catch {
+    // folder creation errors are non-fatal; upload will still work if folder exists
+  }
+}
+
 export interface UploadResult {
   name: string;
   webUrl: string;
-  onlineEditUrl?: string;
 }
 
 export async function uploadToOneDrive(
@@ -64,19 +90,33 @@ export async function uploadToOneDrive(
   buffer: Buffer,
   folder = "EdenRadar Templates"
 ): Promise<UploadResult> {
-  const client = await getUncachableOneDriveClient();
+  const accessToken = await getAccessToken();
 
-  // Ensure the folder exists by creating it (PUT is idempotent via Graph)
+  // Ensure the target folder exists before uploading
+  await ensureOneDriveFolder(accessToken, folder);
+
   const remotePath = `${folder}/${filename}`;
+  const uploadUrl = `https://graph.microsoft.com/v1.0/me/drive/root:/${encodeURIComponent(remotePath)}:/content`;
 
-  const response = await client
-    .api(`/me/drive/root:/${remotePath}:/content`)
-    .headers({ "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document" })
-    .put(buffer);
+  const uploadResponse = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type":
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    },
+    body: buffer,
+  });
+
+  if (!uploadResponse.ok) {
+    const errText = await uploadResponse.text();
+    throw new Error(`OneDrive upload failed (${uploadResponse.status}): ${errText}`);
+  }
+
+  const responseData = await uploadResponse.json() as any;
 
   return {
-    name: response.name ?? filename,
-    webUrl: response.webUrl ?? "",
-    onlineEditUrl: response["@microsoft.graph.downloadUrl"] ?? response.webUrl ?? "",
+    name: responseData.name ?? filename,
+    webUrl: responseData.webUrl ?? "",
   };
 }
