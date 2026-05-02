@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { Sprout, ArrowLeft, Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
 import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
@@ -297,6 +298,13 @@ function EdenMarketTier({ session }: { session: Session | null }) {
   const { subscribe, isLoading } = useMarketSubscribe();
   const VIOLET = "hsl(271 81% 55%)";
 
+  const { data: access } = useQuery<{ access: boolean; orgId: number | null }>({
+    queryKey: ["/api/market/access"],
+    enabled: Boolean(session?.access_token),
+    staleTime: 60 * 1000,
+  });
+  const hasAccess = Boolean(access?.access);
+
   function handleClick() {
     if (!session?.access_token) {
       navigate("/login?mode=signup&redirect=/market/preview");
@@ -357,17 +365,31 @@ function EdenMarketTier({ session }: { session: Session | null }) {
               <span>Document exchange + secure messaging</span>
             </li>
           </ul>
-          <Button
-            className="w-full font-semibold h-9 text-sm gap-1.5"
-            style={{ background: VIOLET, color: "white", border: "none" }}
-            onClick={handleClick}
-            disabled={isLoading}
-            data-testid="button-pricing-edenmarket-subscribe"
-          >
-            {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
-            {isLoading ? "Redirecting…" : "Subscribe to EdenMarket"}
-          </Button>
-          <p className="text-center text-[10px] text-muted-foreground">Free to list · success fees only on close</p>
+          {hasAccess ? (
+            <Button
+              className="w-full font-semibold h-9 text-sm gap-1.5"
+              style={{ background: VIOLET, color: "white", border: "none" }}
+              onClick={() => navigate("/market")}
+              data-testid="button-pricing-edenmarket-active"
+            >
+              <Check className="w-3.5 h-3.5" />
+              Active — Open EdenMarket
+            </Button>
+          ) : (
+            <Button
+              className="w-full font-semibold h-9 text-sm gap-1.5"
+              style={{ background: VIOLET, color: "white", border: "none" }}
+              onClick={handleClick}
+              disabled={isLoading}
+              data-testid="button-pricing-edenmarket-subscribe"
+            >
+              {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShoppingBag className="w-3.5 h-3.5" />}
+              {isLoading ? "Redirecting…" : "Subscribe to EdenMarket"}
+            </Button>
+          )}
+          <p className="text-center text-[10px] text-muted-foreground">
+            {hasAccess ? "Your org has marketplace access." : "Free to list · success fees only on close"}
+          </p>
         </div>
 
         {/* Right: success fee table */}

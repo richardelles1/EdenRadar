@@ -9172,25 +9172,28 @@ If multiple assets appear, return each as a separate array item.`;
 
   // ── EdenMarket routes ─────────────────────────────────────────────────────────
 
-  // GET /api/market/activity-summary — public, lightweight stats for landing/dashboard teasers
-  // Optionally reads bearer token to populate hasAccess for logged-in users.
+  // GET /api/market/activity-summary — used by the IndustryDashboard EdenMarket widget.
+  // Returns counts that work for both subscribers and non-subscribers so the upsell card
+  // always has a number to show (per task #664 spec).
+  // Optionally reads bearer token to populate hasAccess + matchingFilters for logged-in users.
   app.get("/api/market/activity-summary", async (req, res) => {
-    let activeListings = 0;
-    let marketSubscribers = 0;
-    let closedDeals = 0;
+    let newListings7d = 0;
+    let matchingFilters = 0;
     let hasAccess = false;
 
+    let activeListings: any[] = [];
     try {
-      const stats = await storage.getMarketAdminStats();
-      activeListings = stats.activeListings;
-      marketSubscribers = stats.marketSubscribers;
+      activeListings = await storage.getMarketListings({ status: "active" });
     } catch {
-      // surface zeros rather than fail the public teaser
+      activeListings = [];
     }
 
     try {
-      const allDeals = await storage.getAllMarketDeals();
-      closedDeals = allDeals.filter(d => d.status === "closed" || d.status === "signed").length;
+      const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      newListings7d = activeListings.filter((l: any) => {
+        const ts = l?.createdAt ? new Date(l.createdAt).getTime() : 0;
+        return ts >= sevenDaysAgo;
+      }).length;
     } catch {
       // ignore
     }
@@ -9200,12 +9203,31 @@ If multiple assets appear, return each as a separate array item.`;
       if (userId) {
         const org = await storage.getOrgForUser(userId);
         hasAccess = Boolean(org?.edenMarketAccess);
+
+        const profile = await storage.getIndustryProfileByUserId(userId);
+        if (profile) {
+          const tas = (profile.therapeuticAreas || []).map(s => s.toLowerCase());
+          const mods = (profile.modalities || []).map(s => s.toLowerCase());
+          const stages = (profile.dealStages || []).map(s => s.toLowerCase());
+          const hasFilters = tas.length || mods.length || stages.length;
+          if (hasFilters) {
+            matchingFilters = activeListings.filter((l: any) => {
+              const ta = (l?.therapeuticArea || "").toLowerCase();
+              const mod = (l?.modality || "").toLowerCase();
+              const st = (l?.stage || "").toLowerCase();
+              const taOk = !tas.length || tas.includes(ta);
+              const modOk = !mods.length || mods.includes(mod);
+              const stOk = !stages.length || stages.includes(st);
+              return taOk && modOk && stOk;
+            }).length;
+          }
+        }
       }
     } catch {
-      // ignore — public endpoint, hasAccess defaults to false
+      // ignore — public endpoint, defaults stay at 0/false
     }
 
-    res.json({ activeListings, marketSubscribers, closedDeals, hasAccess });
+    res.json({ newListings7d, matchingFilters, hasAccess });
   });
 
   // GET /api/market/access — check if current user's org has EdenMarket access

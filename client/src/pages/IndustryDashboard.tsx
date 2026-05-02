@@ -163,9 +163,8 @@ function getDominantLabel(assets: BrowseAsset[]): string | null {
 
 function EdenMarketTeaser() {
   const { data, isLoading, isError } = useQuery<{
-    activeListings: number;
-    marketSubscribers: number;
-    closedDeals: number;
+    newListings7d: number;
+    matchingFilters: number;
     hasAccess: boolean;
   }>({
     queryKey: ["/api/market/activity-summary"],
@@ -173,11 +172,62 @@ function EdenMarketTeaser() {
   });
 
   const VIOLET = "hsl(271 81% 55%)";
-  const activeListings = data?.activeListings ?? 0;
-  const marketSubscribers = data?.marketSubscribers ?? 0;
-  const closedDeals = data?.closedDeals ?? 0;
+  const newListings7d = data?.newListings7d ?? 0;
+  const matchingFilters = data?.matchingFilters ?? 0;
   const hasAccess = data?.hasAccess ?? false;
 
+  // Non-subscriber upsell card — single CTA per task spec.
+  if (!isLoading && !hasAccess) {
+    return (
+      <div
+        className="rounded-xl p-5 transition-all duration-200 hover:-translate-y-0.5"
+        style={{
+          background: "linear-gradient(135deg, hsl(271 81% 55% / 0.06), hsl(271 81% 55% / 0.01))",
+          border: "1px solid hsl(271 81% 55% / 0.20)",
+          animation: "dash-fade-up 400ms ease 70ms both",
+        }}
+        data-testid="dashboard-edenmarket-upsell"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center gap-4">
+          <div className="flex-1 space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: "hsl(271 81% 55% / 0.15)" }}>
+                <ShoppingBag className="w-4 h-4" style={{ color: VIOLET }} />
+              </div>
+              <p className="text-sm font-bold text-foreground">EdenMarket activity</p>
+              <span
+                className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                style={{ background: "hsl(271 81% 55% / 0.15)", color: VIOLET }}
+              >
+                Marketplace
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {newListings7d > 0
+                ? <><span className="font-semibold text-foreground">{newListings7d.toLocaleString()}</span> new blind {newListings7d === 1 ? "listing" : "listings"} in the last 7 days. Subscribe to access the marketplace and engage anonymously.</>
+                : <>Blind biotech listings, NDA-gated deal rooms, success-fee aligned. Subscribe to access the marketplace and engage anonymously.</>}
+            </p>
+          </div>
+          <div className="shrink-0">
+            <Link href="/market/preview">
+              <Button
+                size="sm"
+                className="font-semibold h-9 text-xs gap-1.5"
+                style={{ background: VIOLET, color: "white", border: "none" }}
+                data-testid="button-dashboard-edenmarket-unlock"
+              >
+                <Lock className="w-3 h-3" />
+                Unlock EdenMarket — $1,000/mo
+                <ArrowRight className="w-3 h-3" />
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Subscriber card — show {newListings7d, matchingFilters} per task spec.
   return (
     <div
       className="rounded-xl p-5 transition-all duration-200 hover:-translate-y-0.5"
@@ -203,37 +253,33 @@ function EdenMarketTeaser() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Blind biotech listings, NDA-gated deal rooms, success-fee aligned. {hasAccess ? "Your org has access." : "Subscribe to engage anonymously."}
+            Blind biotech listings, NDA-gated deal rooms, success-fee aligned. Your org has access.
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 lg:w-auto lg:min-w-[320px]">
+        <div className="grid grid-cols-2 gap-3 lg:w-auto lg:min-w-[260px]">
           {isLoading ? (
-            [1, 2, 3].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)
+            [1, 2].map((i) => <Skeleton key={i} className="h-14 rounded-lg" />)
           ) : isError ? (
-            <div className="col-span-3 rounded-lg p-3 text-center" style={{ background: "hsl(var(--background))", border: "1px dashed hsl(271 81% 55% / 0.25)" }} data-testid="market-stat-error">
+            <div className="col-span-2 rounded-lg p-3 text-center" style={{ background: "hsl(var(--background))", border: "1px dashed hsl(271 81% 55% / 0.25)" }} data-testid="market-stat-error">
               <p className="text-[10px] text-muted-foreground">Marketplace stats unavailable right now.</p>
             </div>
           ) : (
             <>
-              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-listings">
-                <p className="text-lg font-black tabular-nums text-foreground">{activeListings.toLocaleString()}</p>
-                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Live listings</p>
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-new7d">
+                <p className="text-lg font-black tabular-nums text-foreground">{newListings7d.toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">New (7d)</p>
               </div>
-              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-subscribers">
-                <p className="text-lg font-black tabular-nums text-foreground">{marketSubscribers.toLocaleString()}</p>
-                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Subscribers</p>
-              </div>
-              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-deals">
-                <p className="text-lg font-black tabular-nums text-foreground">{closedDeals.toLocaleString()}</p>
-                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Closed deals</p>
+              <div className="rounded-lg p-2.5 text-center" style={{ background: "hsl(var(--background))", border: "1px solid hsl(271 81% 55% / 0.15)" }} data-testid="market-stat-matching">
+                <p className="text-lg font-black tabular-nums text-foreground">{matchingFilters.toLocaleString()}</p>
+                <p className="text-[9px] uppercase tracking-wide text-muted-foreground mt-0.5">Match your filters</p>
               </div>
             </>
           )}
         </div>
 
         <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
-          <Link href={hasAccess ? "/market" : "/market/preview"}>
+          <Link href="/market">
             <Button
               size="sm"
               className="w-full font-semibold h-8 text-xs gap-1.5"
@@ -241,7 +287,7 @@ function EdenMarketTeaser() {
               data-testid="button-dashboard-edenmarket-browse"
             >
               <ShoppingBag className="w-3 h-3" />
-              {hasAccess ? "Open EdenMarket" : "Browse marketplace"}
+              Open EdenMarket
               <ArrowRight className="w-3 h-3" />
             </Button>
           </Link>

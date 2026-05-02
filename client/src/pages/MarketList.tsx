@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import { Link } from "wouter";
 import { Nav } from "@/components/Nav";
 import { Button } from "@/components/ui/button";
 import {
@@ -7,15 +6,15 @@ import {
   EyeOff,
   ShieldCheck,
   ArrowRight,
-  Loader2,
   CheckCircle2,
   Building2,
   FileSearch,
   Handshake,
 } from "lucide-react";
-import { useMarketSubscribe } from "@/hooks/use-market-subscribe";
 
 const ACCENT = "hsl(271 81% 55%)";
+
+const START_LISTING_HREF = "/login?redirect=/market/create-listing";
 
 const SELLER_AUDIENCE = [
   {
@@ -59,8 +58,6 @@ const HOW_LISTING_WORKS = [
 ];
 
 export default function MarketList() {
-  const { subscribe, isLoading } = useMarketSubscribe();
-
   useEffect(() => {
     document.title = "List your biopharma assets on EdenMarket | EdenRadar";
 
@@ -117,31 +114,17 @@ export default function MarketList() {
             Pay only when a deal closes — and stay anonymous until you decide otherwise.
           </p>
           <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
-            <Button
-              size="lg"
-              className="gap-2 text-white"
-              style={{ background: ACCENT }}
-              onClick={() => subscribe({ redirectTo: "/market/create-listing" })}
-              disabled={isLoading}
-              data-testid="market-list-cta-hero"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Redirecting…
-                </>
-              ) : (
-                <>
-                  Subscribe and create a listing
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-            <Link href="/market/preview">
-              <Button size="lg" variant="outline" data-testid="market-list-preview-cta">
-                See the buyer experience
+            <a href={START_LISTING_HREF} data-testid="market-list-cta-hero-link">
+              <Button
+                size="lg"
+                className="gap-2 text-white"
+                style={{ background: ACCENT }}
+                data-testid="market-list-cta-hero"
+              >
+                Start listing
+                <ArrowRight className="w-4 h-4" />
               </Button>
-            </Link>
+            </a>
           </div>
         </section>
 
@@ -259,28 +242,16 @@ export default function MarketList() {
           </div>
 
           <div className="flex items-center justify-center gap-3 flex-wrap pt-2">
-            <Button
-              size="lg"
-              className="gap-2 text-white"
-              style={{ background: ACCENT }}
-              onClick={() => subscribe({ redirectTo: "/market/create-listing" })}
-              disabled={isLoading}
-              data-testid="market-list-cta-footer"
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Redirecting…
-                </>
-              ) : (
-                <>
-                  Subscribe and list your first asset
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-            <a href="mailto:support@edenradar.com" className="text-sm text-violet-500 hover:underline" data-testid="market-list-contact">
-              Or talk to our team →
+            <a href={START_LISTING_HREF} data-testid="market-list-cta-footer-link">
+              <Button
+                size="lg"
+                className="gap-2 text-white"
+                style={{ background: ACCENT }}
+                data-testid="market-list-cta-footer"
+              >
+                Start listing
+                <ArrowRight className="w-4 h-4" />
+              </Button>
             </a>
           </div>
         </section>

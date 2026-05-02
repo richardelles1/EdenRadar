@@ -15,7 +15,7 @@ export function useMarketSubscribe() {
     const redirectTo = opts.redirectTo ?? "/market";
 
     if (!session?.access_token) {
-      window.location.href = `/login?redirectTo=${encodeURIComponent(redirectTo)}`;
+      window.location.href = `/login?redirect=${encodeURIComponent(redirectTo)}`;
       return;
     }
 
