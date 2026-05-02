@@ -1142,6 +1142,7 @@ async function createMarketDealsTables() {
     // Add new columns if they don't exist (for existing tables)
     await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS status_history JSONB NOT NULL DEFAULT '[]'`);
     await db.execute(sql`ALTER TABLE market_deals ADD COLUMN IF NOT EXISTS nda_document_path TEXT`);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS market_deals_eoi_id_unique ON market_deals(eoi_id)`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_deal_documents (
         id           SERIAL PRIMARY KEY,

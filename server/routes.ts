@@ -9449,9 +9449,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
            <p>Company: ${data.company}<br>Role: ${data.role}</p>
            <p><a href="${APP_URL}/market/listing/${data.listingId}">View listing</a></p>`
         );
-      } catch {}
+      } catch (e) { console.warn("[market] admin EOI-submitted email failed", e); }
 
-      // Notify seller via their org billing email — do NOT include buyer identity (confidential until mutual reveal)
+      // Notify seller via their org billing email
       try {
         const sellerOrg = await storage.getOrgForUser(listing.sellerId);
         const sellerEmail = sellerOrg?.billingEmail;
@@ -9465,7 +9465,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
              <p style="font-size:12px;color:#888">Buyer identity is kept confidential until you accept and both parties agree to reveal. This notification was sent by EdenMarket.</p>`
           );
         }
-      } catch {}
+      } catch (e) { console.warn("[market] seller EOI-submitted email failed", e); }
 
       res.json(eoi);
     } catch (err: any) {
@@ -9760,11 +9760,18 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             const sbAdmin = createSbClient(sbUrl, sbServiceKey);
             const { data } = await sbAdmin.storage.from("market-deal-docs").createSignedUrl(deal.ndaDocumentPath, 3600);
             ndaDocumentUrl = data?.signedUrl ?? null;
-          } catch {}
+          } catch (e) { console.warn("[market] NDA signed URL generation failed for deal", deal.id, e); }
         }
       }
 
-      res.json({ deal, listing, eoi, ndaDocumentUrl });
+      // Strip internal-only fields from listing before returning to parties
+      const sanitizedListing = listing ? (() => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { adminNote: _an, ...rest } = listing as typeof listing & { adminNote?: unknown };
+        return rest;
+      })() : null;
+
+      res.json({ deal, listing: sanitizedListing, eoi, ndaDocumentUrl });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -9872,7 +9879,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             await sbAdmin.storage.from("market-deal-docs").upload(ndaPath, ndaPdfBuffer, { contentType: "application/pdf", upsert: true });
             await storage.updateMarketDeal(dealId, { ndaDocumentPath: ndaPath });
           }
-        } catch {}
+        } catch (e) { console.warn("[market] NDA PDF generation/upload failed for deal", dealId, e); }
 
         const assetLabel = listing?.blind
           ? `a ${listing.therapeuticArea} ${listing.modality} opportunity`
@@ -9939,7 +9946,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             `Deal #${dealId} moved to ${status.toUpperCase()} — ${label}`,
             `<p>Deal #${dealId} (${label}) has been moved to <strong>${status}</strong>.</p><p><a href="${APP_URL}/admin">View in admin panel</a></p>`
           );
-        } catch {}
+        } catch (e) { console.warn("[market] admin status-change email failed", e); }
       }
 
       res.json(updated);
@@ -9976,7 +9983,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             return doc;
           }));
           return res.json(docsWithUrls);
-        } catch {}
+        } catch (e) { console.warn("[market] signed URL generation failed for deal docs", e); }
       }
       res.json(docs);
     } catch (err: any) {
@@ -10185,7 +10192,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             return doc;
           }));
           return res.json(docsWithUrls);
-        } catch {}
+        } catch (e) { console.warn("[market] admin signed URL generation failed for deal docs", e); }
       }
       res.json(docs);
     } catch (err: any) {
