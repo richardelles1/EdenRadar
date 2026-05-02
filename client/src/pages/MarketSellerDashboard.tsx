@@ -191,6 +191,17 @@ export default function MarketSellerDashboard() {
                 >
                   <Edit className="w-3 h-3" /> Edit
                 </Button>
+                {l.status === "draft" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs gap-1 text-violet-600 border-violet-500/30"
+                    onClick={() => updateStatus({ id: l.id, status: "pending" })}
+                    data-testid={`seller-listing-submit-${l.id}`}
+                  >
+                    <Play className="w-3 h-3" /> Submit for Review
+                  </Button>
+                )}
                 {l.status === "active" && (
                   <Button
                     variant="outline"

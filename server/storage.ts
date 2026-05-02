@@ -3276,8 +3276,10 @@ export class DatabaseStorage implements IStorage {
 
   // ── EdenMarket ────────────────────────────────────────────────────────────────
 
-  async createMarketListing(data: InsertMarketListing & { sellerId: string }): Promise<MarketListing> {
-    const [row] = await db.insert(marketListings).values({ ...data, status: "pending" }).returning();
+  async createMarketListing(data: InsertMarketListing & { sellerId: string; status?: string }): Promise<MarketListing> {
+    const status = data.status === "draft" ? "draft" : "pending";
+    const { status: _s, ...rest } = data as any;
+    const [row] = await db.insert(marketListings).values({ ...rest, status }).returning();
     return row;
   }
 

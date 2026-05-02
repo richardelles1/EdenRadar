@@ -72,6 +72,9 @@ function StatCard({ icon: Icon, label, value, color }: {
   );
 }
 
+const ADMIN_KEY = "eden-admin-pw";
+const adminHeaders = () => ({ "x-admin-password": localStorage.getItem(ADMIN_KEY) ?? "" });
+
 export function EdenMarketTab() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -82,7 +85,7 @@ export function EdenMarketTab() {
   const { data: stats, isLoading: statsLoading } = useQuery<AdminStats>({
     queryKey: ["/api/admin/market/stats"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/stats");
+      const res = await fetch("/api/admin/market/stats", { headers: adminHeaders() });
       if (!res.ok) throw new Error("Failed to load stats");
       return res.json();
     },
@@ -94,7 +97,7 @@ export function EdenMarketTab() {
       const url = statusFilter === "all"
         ? "/api/admin/market/listings"
         : `/api/admin/market/listings?status=${statusFilter}`;
-      const res = await fetch(url);
+      const res = await fetch(url, { headers: adminHeaders() });
       if (!res.ok) throw new Error("Failed to load listings");
       return res.json();
     },
@@ -103,7 +106,7 @@ export function EdenMarketTab() {
   const { data: eoiGroups = [], isLoading: eoisLoading } = useQuery<EoiGroup[]>({
     queryKey: ["/api/admin/market/eois"],
     queryFn: async () => {
-      const res = await fetch("/api/admin/market/eois");
+      const res = await fetch("/api/admin/market/eois", { headers: adminHeaders() });
       if (!res.ok) throw new Error("Failed to load EOIs");
       return res.json();
     },
@@ -114,7 +117,7 @@ export function EdenMarketTab() {
     mutationFn: async ({ id, status, adminNote }: { id: number; status: string; adminNote?: string }) => {
       const res = await fetch(`/api/admin/market/listings/${id}`, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...adminHeaders() },
         body: JSON.stringify({ status, adminNote }),
       });
       if (!res.ok) { const e = await res.json(); throw new Error(e.error); }

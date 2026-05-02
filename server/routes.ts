@@ -9239,6 +9239,7 @@ If multiple assets appear, return each as a separate array item.`;
         priceRangeMin: z.number().int().optional().nullable(),
         priceRangeMax: z.number().int().optional().nullable(),
         engagementStatus: z.string().default("actively_seeking"),
+        status: z.enum(["draft", "pending"]).optional(),
       });
 
       const data = schema.parse(req.body);
@@ -9268,11 +9269,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         console.warn("[market/listings] AI summary failed:", aiErr?.message);
       }
 
+      const listingStatus = data.status === "draft" ? "draft" : "pending";
       const listing = await storage.createMarketListing({
         ...data,
         sellerId: userId,
         orgId: org.id,
         aiSummary,
+        status: listingStatus,
       } as any);
 
       res.json(listing);
@@ -9321,6 +9324,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!listing) return res.status(404).json({ error: "Listing not found" });
       if (listing.sellerId !== userId) return res.status(403).json({ error: "Forbidden" });
 
+      // Sellers cannot self-activate from draft/pending — only admins can move a listing to active.
+      // Exception: paused listings can be resumed (paused→active) because they were already admin-approved.
       const allowed = z.object({
         assetName: z.string().optional().nullable(),
         blind: z.boolean().optional(),
@@ -9335,10 +9340,20 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         priceRangeMin: z.number().int().optional().nullable(),
         priceRangeMax: z.number().int().optional().nullable(),
         engagementStatus: z.string().optional(),
-        status: z.enum(["paused", "active", "closed"]).optional(),
+        status: z.enum(["active", "paused", "closed", "pending"]).optional(),
       });
 
       const data = allowed.parse(req.body);
+
+      // Block self-activation from draft or pending (must go through admin review)
+      if (data.status === "active" && listing.status !== "paused") {
+        return res.status(403).json({ error: "Listings can only be activated by admin. Submit for review first." });
+      }
+      // Block setting back to pending unless explicitly re-submitting a draft
+      if (data.status === "pending" && listing.status !== "draft") {
+        return res.status(400).json({ error: "Only draft listings can be submitted for review." });
+      }
+
       const updated = await storage.updateMarketListing(id, userId, data as any);
       res.json(updated);
     } catch (err: any) {
@@ -9414,7 +9429,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         );
       } catch {}
 
-      // Notify seller via their org billing email
+      // Notify seller via their org billing email — do NOT include buyer identity (confidential until mutual reveal)
       try {
         const sellerOrg = await storage.getOrgForUser(listing.sellerId);
         const sellerEmail = sellerOrg?.billingEmail;
@@ -9424,9 +9439,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             sellerEmail,
             `New Expression of Interest received — ${assetLabel}`,
             `<p>A qualified buyer has submitted an Expression of Interest for <strong>${assetLabel}</strong>.</p>
-             <p>Company: ${data.company}<br>Role: ${data.role}</p>
-             <p>Log in to your <a href="${APP_URL}/market/seller">Seller Dashboard</a> to view and respond.</p>
-             <p style="font-size:12px;color:#888">This notification was sent by EdenMarket. To manage your listings, visit ${APP_URL}/market/seller.</p>`
+             <p>Log in to your <a href="${APP_URL}/market/seller">Seller Dashboard</a> to review the EOI details.</p>
+             <p style="font-size:12px;color:#888">Buyer identity is kept confidential until you accept and both parties agree to reveal. This notification was sent by EdenMarket.</p>`
           );
         }
       } catch {}
