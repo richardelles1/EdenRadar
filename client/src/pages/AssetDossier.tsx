@@ -13,7 +13,7 @@ import {
   ArrowLeft, Building2, ExternalLink, FileText, Key,
   Activity, Sparkles, BookOpen, Upload, Swords, GraduationCap,
   Beaker, Tag, FlaskConical, Lightbulb, Mail, Share2, Copy, Check, X,
-  Eye, EyeOff, Loader2, Lock,
+  Eye, EyeOff, Loader2, Lock, ShoppingBag,
 } from "lucide-react";
 import {
   Dialog,
@@ -206,6 +206,17 @@ export default function AssetDossier() {
     enabled: !!fingerprint,
     staleTime: 5 * 60 * 1000,
   });
+
+  const { data: marketListingData } = useQuery<{
+    listing: { id: number; therapeuticArea: string; modality: string; stage: string; assetName: string | null; blind: boolean; engagementStatus: string } | null;
+  }>({
+    queryKey: ["/api/assets", fingerprint, "market-listing"],
+    queryFn: () =>
+      fetch(`/api/assets/${encodeURIComponent(fingerprint)}/market-listing`).then(r => r.json()),
+    enabled: !!fingerprint,
+    staleTime: 5 * 60 * 1000,
+  });
+  const marketListing = marketListingData?.listing ?? null;
 
   useEffect(() => {
     let base: ScoredAsset | null = null;
@@ -411,6 +422,16 @@ export default function AssetDossier() {
                     <Key className="w-3 h-3" />
                     Available for Licensing
                   </span>
+                )}
+                {marketListing && (
+                  <a
+                    href={`/market/listing/${marketListing.id}`}
+                    className="inline-flex items-center gap-1 text-xs text-violet-700 dark:text-violet-400 bg-violet-500/10 border border-violet-500/20 rounded-md px-2.5 py-1 font-semibold hover:bg-violet-500/20 transition-colors"
+                    data-testid="dossier-edenmarket-badge"
+                  >
+                    <ShoppingBag className="w-3 h-3" />
+                    Listed in EdenMarket
+                  </a>
                 )}
               </div>
               <p className={`text-sm font-bold mb-1.5 ${scoreVerdict.color}`} data-testid="score-verdict-label">

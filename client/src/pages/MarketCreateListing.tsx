@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { ChevronLeft, ChevronRight, Check, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, Sparkles, Building2, Link2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ACCENT = "hsl(271 81% 55%)";
@@ -58,6 +58,20 @@ const listingSchema = z.object({
 
 type ListingFormData = z.infer<typeof listingSchema>;
 
+type SuggestedAsset = {
+  id: number;
+  assetName: string;
+  institution: string | null;
+  modality: string | null;
+  developmentStage: string | null;
+  indication: string | null;
+  target: string | null;
+  innovationClaim: string | null;
+  mechanismOfAction: string | null;
+  ipType: string | null;
+  completenessScore: number | null;
+};
+
 const STEPS = [
   { title: "Basic Info", desc: "Therapeutic area, modality & stage" },
   { title: "Asset Details", desc: "Mechanism, milestones & IP" },
@@ -88,12 +102,133 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
   );
 }
 
+function IntelligenceAssist({
+  ta,
+  linkedAsset,
+  onLink,
+  onClear,
+  session,
+}: {
+  ta: string;
+  linkedAsset: SuggestedAsset | null;
+  onLink: (a: SuggestedAsset) => void;
+  onClear: () => void;
+  session: { access_token: string; user: { id: string } } | null;
+}) {
+  const [q, setQ] = useState("");
+  const [debouncedQ, setDebouncedQ] = useState("");
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedQ(q), 500);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  const searchQuery = [debouncedQ, ta].filter(Boolean).join(" ");
+
+  const { data: suggestions = [], isFetching } = useQuery<SuggestedAsset[]>({
+    queryKey: ["/api/market/listings/suggest-asset", searchQuery],
+    queryFn: async () => {
+      if (!searchQuery || searchQuery.trim().length < 2) return [];
+      const params = new URLSearchParams();
+      if (debouncedQ) params.set("q", debouncedQ);
+      if (ta) params.set("ta", ta);
+      const res = await fetch(`/api/market/listings/suggest-asset?${params}`, {
+        headers: {
+          Authorization: `Bearer ${session!.access_token}`,
+          "x-user-id": session!.user.id,
+        },
+      });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!session && searchQuery.trim().length >= 2,
+    staleTime: 30 * 1000,
+  });
+
+  if (linkedAsset) {
+    return (
+      <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-3" data-testid="intel-assist-linked">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex items-start gap-2">
+            <Sparkles className="w-3.5 h-3.5 text-violet-500 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-semibold text-foreground">{linkedAsset.assetName}</p>
+              {linkedAsset.institution && <p className="text-[10px] text-muted-foreground">{linkedAsset.institution}</p>}
+              <p className="text-[10px] text-violet-500/80 mt-0.5">Linked to EdenScout record — intelligence enabled</p>
+            </div>
+          </div>
+          <button onClick={onClear} className="p-1 rounded text-muted-foreground hover:text-foreground" data-testid="intel-assist-unlink">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {linkedAsset.completenessScore != null && (
+          <div className="flex items-center gap-2 mt-2">
+            <div className="flex-1 h-1 rounded-full bg-violet-500/20 overflow-hidden">
+              <div className="h-full rounded-full bg-violet-500" style={{ width: `${linkedAsset.completenessScore}%` }} />
+            </div>
+            <span className="text-[10px] text-muted-foreground shrink-0">{linkedAsset.completenessScore}% data complete</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2" data-testid="intel-assist-panel">
+      <div className="flex items-center gap-2">
+        <Sparkles className="w-3.5 h-3.5 text-violet-500 shrink-0" />
+        <p className="text-xs font-semibold text-foreground">Link to EdenScout</p>
+        <span className="text-[10px] text-muted-foreground">(optional — unlocks Eden Intelligence for buyers)</span>
+      </div>
+      <Input
+        placeholder="Search EdenScout for this asset…"
+        value={q}
+        onChange={e => setQ(e.target.value)}
+        className="h-8 text-xs"
+        data-testid="intel-assist-search"
+      />
+      {isFetching && (
+        <p className="text-[10px] text-muted-foreground pl-1">Searching…</p>
+      )}
+      {suggestions.length > 0 && (
+        <div className="rounded-lg border border-border overflow-hidden divide-y divide-border/50">
+          {suggestions.map(a => (
+            <button
+              key={a.id}
+              type="button"
+              onClick={() => onLink(a)}
+              className="w-full flex items-start gap-2 px-3 py-2.5 text-left hover:bg-accent/50 transition-colors"
+              data-testid={`intel-assist-result-${a.id}`}
+            >
+              <Building2 className="w-3.5 h-3.5 text-violet-500 shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-foreground truncate">{a.assetName}</p>
+                <p className="text-[10px] text-muted-foreground truncate">
+                  {[a.institution, a.developmentStage, a.modality].filter(Boolean).join(" · ")}
+                </p>
+                {a.indication && <p className="text-[10px] text-muted-foreground/70 truncate">{a.indication}</p>}
+              </div>
+              {a.completenessScore != null && (
+                <span className="text-[10px] text-violet-500 font-semibold shrink-0">{a.completenessScore}%</span>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+      {!isFetching && debouncedQ.length >= 2 && suggestions.length === 0 && (
+        <p className="text-[10px] text-muted-foreground pl-1">No EdenScout records found. You can still proceed without linking.</p>
+      )}
+    </div>
+  );
+}
+
 export default function MarketCreateListing() {
   const { session } = useAuth();
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const qc = useQueryClient();
   const [step, setStep] = useState(0);
+  const [linkedAsset, setLinkedAsset] = useState<SuggestedAsset | null>(null);
 
   const form = useForm<ListingFormData>({
     resolver: zodResolver(listingSchema),
@@ -120,6 +255,7 @@ export default function MarketCreateListing() {
         ...data,
         priceRangeMin: data.priceRangeMin ? parseInt(data.priceRangeMin, 10) : undefined,
         priceRangeMax: data.priceRangeMax ? parseInt(data.priceRangeMax, 10) : undefined,
+        ingestedAssetId: linkedAsset?.id ?? undefined,
         ...(asDraft ? { status: "draft" } : {}),
       };
       const res = await fetch("/api/market/listings", {
@@ -162,7 +298,32 @@ export default function MarketCreateListing() {
     else setStep(s => s - 1);
   }
 
+  // Auto-fill form fields from linked EdenScout asset
+  function handleLinkAsset(a: SuggestedAsset) {
+    setLinkedAsset(a);
+    if (a.mechanismOfAction && !form.getValues("mechanism")) {
+      form.setValue("mechanism", a.mechanismOfAction);
+    }
+    if (a.ipType && !form.getValues("ipStatus")) {
+      form.setValue("ipStatus", a.ipType);
+    }
+    if (a.modality && !form.getValues("modality")) {
+      const match = MODALITIES.find(m => m.toLowerCase() === a.modality!.toLowerCase());
+      if (match) form.setValue("modality", match);
+    }
+    if (a.developmentStage && !form.getValues("stage")) {
+      const stageMap: Record<string, string> = {
+        discovery: "Discovery", preclinical: "Preclinical",
+        "phase 1": "Phase 1", "phase 2": "Phase 2", "phase 3": "Phase 3",
+        approved: "Approved",
+      };
+      const mapped = stageMap[a.developmentStage.toLowerCase()];
+      if (mapped) form.setValue("stage", mapped);
+    }
+  }
+
   const blind = form.watch("blind");
+  const ta = form.watch("therapeuticArea");
 
   return (
     <div className="px-4 sm:px-6 py-6 max-w-2xl mx-auto space-y-6">
@@ -219,12 +380,31 @@ export default function MarketCreateListing() {
                   <FormMessage />
                 </FormItem>
               )} />
+
+              {/* Intelligence Assist — appears once TA is selected */}
+              {ta && (
+                <div className="pt-2 border-t border-border/60">
+                  <IntelligenceAssist
+                    ta={ta}
+                    linkedAsset={linkedAsset}
+                    onLink={handleLinkAsset}
+                    onClear={() => setLinkedAsset(null)}
+                    session={session}
+                  />
+                </div>
+              )}
             </div>
           )}
 
           {step === 1 && (
             <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
               <h2 className="text-sm font-bold text-foreground">{STEPS[1].title}</h2>
+              {linkedAsset && (
+                <div className="flex items-center gap-1.5 rounded-md border border-violet-500/20 bg-violet-500/5 px-3 py-1.5">
+                  <Link2 className="w-3 h-3 text-violet-500" />
+                  <span className="text-[10px] text-muted-foreground">Fields pre-filled from EdenScout: <strong className="text-foreground">{linkedAsset.assetName}</strong></span>
+                </div>
+              )}
               <FormField control={form.control} name="mechanism" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Mechanism / Science Behind the Asset</FormLabel>
@@ -346,6 +526,7 @@ export default function MarketCreateListing() {
                 <Sparkles className="w-4 h-4 text-violet-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   An AI-generated one-paragraph summary will be created from your listing details and shown to buyers in the feed. It focuses on strategic value and deal fit.
+                  {linkedAsset && " Because you've linked an EdenScout record, buyers will also see an Eden Intelligence panel with market signals, related trials, and comparable deals."}
                 </p>
               </div>
             </div>

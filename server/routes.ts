@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -1022,6 +1022,46 @@ export async function registerRoutes(
     } catch (err: any) {
       console.error("[intelligence] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to fetch intelligence" });
+    }
+  });
+
+  // GET /api/assets/:fingerprint/market-listing — check if this ingestedAsset has an active EdenMarket listing
+  app.get("/api/assets/:fingerprint/market-listing", async (req, res) => {
+    try {
+      const { fingerprint } = req.params;
+      const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
+
+      let enrichedId: number | null = null;
+      const numericId = parseInt(fingerprintStr, 10);
+      if (!isNaN(numericId)) {
+        enrichedId = numericId;
+      } else {
+        const [rec] = await db.select({ id: ingestedAssets.id })
+          .from(ingestedAssets)
+          .where(eq(ingestedAssets.fingerprint, fingerprintStr))
+          .limit(1);
+        enrichedId = rec?.id ?? null;
+      }
+
+      if (!enrichedId) return res.json({ listing: null });
+
+      const [listing] = await db.select({
+        id: marketListings.id,
+        therapeuticArea: marketListings.therapeuticArea,
+        modality: marketListings.modality,
+        stage: marketListings.stage,
+        assetName: marketListings.assetName,
+        blind: marketListings.blind,
+        status: marketListings.status,
+        engagementStatus: marketListings.engagementStatus,
+      })
+        .from(marketListings)
+        .where(and(eq(marketListings.ingestedAssetId, enrichedId), eq(marketListings.status, "active")))
+        .limit(1);
+
+      res.json({ listing: listing ?? null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
@@ -9249,6 +9289,7 @@ If multiple assets appear, return each as a separate array item.`;
         stage: z.string().min(1),
         assetName: z.string().optional().nullable(),
         blind: z.boolean().default(false),
+        ingestedAssetId: z.number().int().optional().nullable(),
         milestoneHistory: z.string().optional().nullable(),
         mechanism: z.string().optional().nullable(),
         ipStatus: z.string().optional().nullable(),
@@ -9333,6 +9374,118 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
+  // GET /api/market/listings/suggest-asset — fuzzy search ingested_assets for listing creation assist
+  // Must be before /:id to avoid Express routing it as a param
+  app.get("/api/market/listings/suggest-asset", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const q = String(req.query.q ?? "").trim();
+      const ta = String(req.query.ta ?? "").trim();
+      const query = [q, ta].filter(Boolean).join(" ");
+      if (query.length < 2) return res.json([]);
+      const results = await storage.keywordSearchIngestedAssets(query, 5);
+      res.json(results.map(r => ({
+        id: r.id,
+        assetName: r.assetName,
+        institution: r.institution,
+        modality: r.modality,
+        developmentStage: r.developmentStage,
+        indication: r.indication,
+        target: r.target,
+        innovationClaim: r.innovationClaim,
+        mechanismOfAction: r.mechanismOfAction,
+        ipType: r.ipType,
+        completenessScore: r.completenessScore,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // GET /api/market/listings/:id/intelligence — Eden Intelligence panel data
+  app.get("/api/market/listings/:id/intelligence", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const id = parseInt(String(req.params.id), 10);
+      if (isNaN(id)) return res.status(400).json({ error: "Invalid listing id" });
+
+      const listing = await storage.getMarketListing(id);
+      if (!listing) return res.status(404).json({ error: "Listing not found" });
+
+      // Admin bypass
+      const adminPw = (req.query.pw ?? req.headers["x-admin-password"]) as string | undefined;
+      const isAdmin = adminPw === (process.env.ADMIN_PANEL_PASSWORD ?? "eden");
+
+      if (!isAdmin) {
+        const org = await storage.getOrgForUser(userId);
+        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+        const isSeller = listing.sellerId === userId;
+        if (!isSeller && listing.status !== "active") return res.status(404).json({ error: "Not found" });
+      }
+
+      const searchQuery = [listing.therapeuticArea, listing.modality].filter(Boolean).join(" ");
+      const patentQuery = [listing.therapeuticArea, listing.mechanism?.slice(0, 80) ?? ""].filter(Boolean).join(" ");
+
+      const [relatedRaw, linkedRaw, trialsRaw, patentsRaw, compsRaw] = await Promise.allSettled([
+        storage.keywordSearchIngestedAssets(searchQuery, 10),
+        listing.ingestedAssetId
+          ? db.select().from(ingestedAssets).where(eq(ingestedAssets.id, listing.ingestedAssetId)).limit(1)
+          : Promise.resolve([] as typeof ingestedAssets.$inferSelect[]),
+        searchClinicalTrials(listing.therapeuticArea, 5).catch(() => []),
+        searchPatents(patentQuery, 5).catch(() => []),
+        storage.keywordSearchIngestedAssets(listing.therapeuticArea, 15),
+      ]);
+
+      const relatedTtoAssets = relatedRaw.status === "fulfilled"
+        ? relatedRaw.value
+            .filter(a => a.id !== listing.ingestedAssetId)
+            .slice(0, 5)
+            .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, indication: a.indication, completenessScore: a.completenessScore }))
+        : [];
+
+      const linked = linkedRaw.status === "fulfilled" ? (linkedRaw.value[0] ?? null) : null;
+
+      const activeTrials = trialsRaw.status === "fulfilled"
+        ? trialsRaw.value.slice(0, 5).map(s => ({ title: s.title, url: s.url, date: s.date, stage: s.stage_hint, sponsor: s.institution_or_sponsor }))
+        : [];
+
+      const relatedPatents = patentsRaw.status === "fulfilled"
+        ? patentsRaw.value.slice(0, 5).map(s => ({ title: s.title, url: s.url, date: s.date, owner: s.institution_or_sponsor || s.authors_or_owner }))
+        : [];
+
+      const comparableDeals = compsRaw.status === "fulfilled"
+        ? compsRaw.value
+            .filter(a =>
+              a.id !== listing.ingestedAssetId &&
+              a.licensingReadiness &&
+              ["exclusively licensed", "non-exclusively licensed", "startup formed", "optioned"].includes(a.licensingReadiness)
+            )
+            .slice(0, 5)
+            .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, licensingReadiness: a.licensingReadiness }))
+        : [];
+
+      const edenEnrichment = linked ? {
+        assetName: linked.assetName,
+        institution: linked.institution,
+        target: linked.target,
+        mechanismOfAction: linked.mechanismOfAction,
+        innovationClaim: linked.innovationClaim,
+        unmetNeed: linked.unmetNeed,
+        comparableDrugs: linked.comparableDrugs,
+        licensingReadiness: linked.licensingReadiness,
+        completenessScore: linked.completenessScore,
+        ipType: linked.ipType,
+        sourceUrl: linked.sourceUrl,
+      } : null;
+
+      res.json({ relatedTtoAssets, activeTrials, relatedPatents, comparableDeals, edenEnrichment, linkedAssetId: listing.ingestedAssetId ?? null });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // PATCH /api/market/listings/:id — update own listing
   app.patch("/api/market/listings/:id", verifyAnyAuth, async (req, res) => {
     try {
@@ -9349,6 +9502,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const allowed = z.object({
         assetName: z.string().optional().nullable(),
         blind: z.boolean().optional(),
+        ingestedAssetId: z.number().int().optional().nullable(),
         therapeuticArea: z.string().optional(),
         modality: z.string().optional(),
         stage: z.string().optional(),
@@ -9565,7 +9719,40 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         adminNote: z.string().optional(),
       });
       const data = schema.parse(req.body);
+      const prevListing = await storage.getMarketListing(id);
       const updated = await storage.adminUpdateMarketListing(id, data);
+
+      // EdenScout → EdenMarket availability signal:
+      // When a listing goes "active" for the first time and it's linked to an ingestedAsset,
+      // notify all users who have that asset saved in their EdenScout portfolio.
+      if (data.status === "active" && prevListing?.status !== "active" && updated?.ingestedAssetId) {
+        const assetId = updated.ingestedAssetId;
+        try {
+          const saved = await db.select({ userId: savedAssets.userId })
+            .from(savedAssets)
+            .where(eq(savedAssets.ingestedAssetId, assetId))
+            .then(rows => [...new Set(rows.map(r => r.userId).filter((u): u is string => u !== null))]);
+
+          const assetLabel = updated.blind
+            ? `a ${updated.therapeuticArea} ${updated.modality} asset`
+            : (updated.assetName || `a ${updated.therapeuticArea} asset`);
+
+          await Promise.allSettled(saved.map(async uid => {
+            const userOrg = await storage.getOrgForUser(uid);
+            const email = userOrg?.billingEmail;
+            if (email) {
+              await sendEmail(
+                email,
+                `EdenMarket — ${assetLabel} is now listed`,
+                `<p>An asset you've been tracking in EdenScout — <strong>${assetLabel}</strong> — is now available for licensing in <strong>EdenMarket</strong>.</p>
+                 <p><a href="${APP_URL}/market/listing/${updated.id}">View the listing</a></p>
+                 <p style="font-size:12px;color:#888">This alert was triggered because you have this asset in your EdenScout portfolio.</p>`
+              ).catch(() => {});
+            }
+          }));
+        } catch (e) { console.warn("[market] availability signal emails failed", e); }
+      }
+
       res.json(updated);
     } catch (err: any) {
       res.status(400).json({ error: err.message });

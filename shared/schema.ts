@@ -807,6 +807,8 @@ export const marketListings = pgTable("market_listings", {
   id: serial("id").primaryKey(),
   sellerId: text("seller_id").notNull(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  // Optional link to an EdenScout ingested_asset record — enables intelligence sidebar & Eden Signal score
+  ingestedAssetId: integer("ingested_asset_id"),
   assetName: text("asset_name"),
   blind: boolean("blind").notNull().default(false),
   therapeuticArea: text("therapeutic_area").notNull(),

@@ -307,13 +307,25 @@ Confidential biopharma deal marketplace portal at `/market`. Subscription-gated 
 - `market_deal_documents` — uploaded files (Supabase Storage bucket `market-deal-docs`)
 - `market_deal_messages` — threaded messaging (30s polling)
 
+### Eden Intelligence Integration (Task #629)
+
+- **`ingestedAssetId` column** on `market_listings` (startup migration, optional FK to `ingested_assets`)
+- **Eden Signal Score** — computed client-side 0–100 badge on each listing card (green ≥70, amber ≥40, grey otherwise). Factors: EdenScout link (+40), mechanism (+10), IP status (+5), milestone history (+5), price range (+10), AI summary (+10), TA/modality/stage/engagement (+5 each)
+- **Eden Intelligence Sidebar** on `MarketListingDetail` — collapsible panel with 5 sections: EDEN Enrichment (linked ingested_asset fields), Related TTO Assets, Active Clinical Trials, Related Patents, Comparable Deals
+- **Intelligence Assist on listing creation** — step 0 of `MarketCreateListing` shows EdenScout fuzzy search when TA is selected; linking an asset pre-fills mechanism/IP/modality/stage fields
+- **EdenScout → EdenMarket availability signal** — admin PATCH listing to "active" emails all users who have the linked ingested_asset in their EdenScout saved portfolio
+- **Dossier badge** — `AssetDossier` checks `GET /api/assets/:fingerprint/market-listing`; if an active listing is linked, shows "Listed in EdenMarket" badge linking to the listing page
+
 ### API Endpoints
 - `GET /api/market/access` — access check
 - `POST /api/market/checkout` — Stripe checkout
 - `GET /api/market/verify-session` — activate after payment
 - `GET /api/market/listings` — active listings (buyer feed, filtered)
-- `POST /api/market/listings` — create listing (AI summary via gpt-4o-mini)
-- `GET/PATCH/DELETE /api/market/listings/:id` — listing CRUD
+- `GET /api/market/listings/suggest-asset?q=&ta=` — EdenScout fuzzy search for listing creation assist
+- `POST /api/market/listings` — create listing (AI summary via gpt-4o-mini, optional `ingestedAssetId`)
+- `GET/PATCH/DELETE /api/market/listings/:id` — listing CRUD (`PATCH` now accepts `ingestedAssetId`)
+- `GET /api/market/listings/:id/intelligence` — Eden Intelligence panel data (TTO assets, trials, patents, comparable deals, EDEN enrichment)
+- `GET /api/assets/:fingerprint/market-listing` — check if ingested_asset has an active EdenMarket listing (for dossier badge)
 - `GET /api/market/my-listings` — seller's own listings
 - `POST /api/market/eois` — submit EOI
 - `GET /api/market/my-eois` — buyer's EOIs
@@ -329,7 +341,7 @@ Confidential biopharma deal marketplace portal at `/market`. Subscription-gated 
 - `GET/POST /api/market/deals/:id/messages` — message thread
 - `GET /api/admin/market/deals` — admin deal pipeline
 - `POST /api/admin/market/deals/:id/invoice` — generate success fee invoice (Stripe)
-- `GET/PATCH /api/admin/market/*` — admin review, stats, approval
+- `GET/PATCH /api/admin/market/*` — admin review, stats, approval (PATCH to "active" fires EdenScout availability signal emails)
 
 ### Admin Tab
 Admin panel "EdenMarket" section has 4 tabs: Listings (review/approve), EOIs (audit), **Deals (pipeline + success fee invoicing)**, Subscribers.

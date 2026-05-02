@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag } from "lucide-react";
+import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { MarketListing } from "@shared/schema";
 
@@ -32,6 +32,37 @@ function priceLabel(l: ListingWithMeta) {
   if (l.priceRangeMin && l.priceRangeMax) return `$${l.priceRangeMin}M – $${l.priceRangeMax}M`;
   if (l.askingPrice) return l.askingPrice;
   return "Price on request";
+}
+
+function edenSignalScore(l: ListingWithMeta): number {
+  let s = 0;
+  if (l.ingestedAssetId) s += 40;
+  if (l.mechanism) s += 10;
+  if (l.ipStatus) s += 5;
+  if (l.milestoneHistory) s += 5;
+  if (l.priceRangeMin) s += 10;
+  if (l.aiSummary) s += 10;
+  if (l.therapeuticArea) s += 5;
+  if (l.modality) s += 5;
+  if (l.stage) s += 5;
+  if (l.engagementStatus && l.engagementStatus !== "closed") s += 5;
+  return Math.min(100, s);
+}
+
+function EdenSignalBadge({ score }: { score: number }) {
+  const color =
+    score >= 70 ? "text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/8" :
+    score >= 40 ? "text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/8" :
+                  "text-muted-foreground border-border bg-transparent";
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border", color)}
+      title={`Eden Signal Score: ${score}/100`}
+      data-testid="eden-signal-badge"
+    >
+      <Zap className="w-2.5 h-2.5" /> {score}
+    </span>
+  );
 }
 
 function ListingCard({
@@ -84,11 +115,12 @@ function ListingCard({
       )}
 
       <div className="flex items-center justify-between gap-2 mt-auto pt-2 border-t border-border/60">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-foreground">{priceLabel(listing)}</span>
           {listing.eoiCount > 0 && (
             <span className="text-[10px] text-muted-foreground">{listing.eoiCount} EOI{listing.eoiCount !== 1 ? "s" : ""}</span>
           )}
+          <EdenSignalBadge score={edenSignalScore(listing)} />
         </div>
         <div className="flex items-center gap-1.5">
           <button
