@@ -362,9 +362,21 @@ EdenMarket is surfaced across the platform so subscribers can discover it withou
 ### Stripe Subscribe — End-to-End Test Plan
 1. **Setup** — set `STRIPE_PRICE_EDENMARKET` to a recurring Stripe price; restart `Start application` workflow.
 2. **Initiate checkout** — log in as an industry user → `/pricing` → "Subscribe to EdenMarket" → completes Stripe Checkout. Server creates a Checkout Session with `metadata.product=edenmarket` and `subscription_data.metadata.product=edenmarket`.
-3. **Webhook activation** — Stripe fires `customer.subscription.created` (and/or `invoice.payment_succeeded`). Webhook at `/api/stripe/webhook` (`server/routes.ts` ~line 8764) detects `sub.metadata.product === "edenmarket"` and calls `storage.updateOrgEdenMarketAccess(orgId, true)` (idempotent). Safety net in `invoice.payment_succeeded` (~line 8957) re-checks subscription metadata and ensures access is on.
+3. **Webhook activation** — Stripe fires `customer.subscription.created` (and/or `invoice.payment_succeeded`). Webhook at `/api/stripe/webhook` (`server/routes.ts` ~line 8764) detects `sub.metadata.product === "edenmarket"` and calls `storage.updateOrganization(orgId, { edenMarketAccess: true, edenMarketStripeSubId })` (idempotent). Safety net in `invoice.payment_succeeded` (~line 8957) re-checks subscription metadata and ensures access is on.
 4. **Visibility check** — after webhook, `GET /api/market/access` returns `{ access: true }`; `GET /api/market/activity-summary` returns `hasAccess: true`; `MarketGate` lets the user into `/market/*`; dashboard widget shows "Open EdenMarket".
 5. **Cancellation/revoke** — `customer.subscription.deleted` or `customer.subscription.updated` with `status="canceled"|"unpaid"` revokes access.
+
+### Stripe E2E Smoke Test Results (Task #667, May 2026)
+Programmatic end-to-end test executed against the live Stripe **test-mode** API plus signed webhook deliveries to the local server. Confirmed all 5 steps of the plan above:
+- ✅ `STRIPE_PRICE_EDENMARKET` (`price_1TSkU1GalzdvFwc8Kf4TFmqU`) is recurring, $1,000.00 USD/month.
+- ✅ Real `Stripe.subscriptions.create({ metadata.product: "edenmarket" })` followed by `invoices.pay` produces an `active` subscription.
+- ✅ Signed `customer.subscription.created` webhook flips `organizations.eden_market_access = true` and stores `eden_market_stripe_sub_id`.
+- ✅ Replaying the same event leaves state unchanged (idempotent).
+- ✅ `invoice.payment_succeeded` safety net is non-destructive when access is already granted.
+- ✅ `customer.subscription.deleted` revokes access (`eden_market_access = false`, `eden_market_stripe_sub_id = null`).
+- ✅ `GET /api/market/activity-summary` returns the documented shape `{ newListings7d, matchingFilters, hasAccess }`.
+
+**P0 bug found and fixed during the smoke test**: `getStripe()` in `server/routes.ts` used CommonJS `require("stripe")`, which throws `ReferenceError: require is not defined` under tsx ESM. Every Stripe webhook delivery was returning HTTP 500 in dev/prod. Replaced with a top-level `import Stripe from "stripe"` so the helper instantiates the SDK synchronously.
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)

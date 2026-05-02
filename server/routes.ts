@@ -13,6 +13,7 @@ import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { makeFingerprint } from "./lib/ingestion";
 import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
+import Stripe from "stripe";
 import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
 import { searchPatents } from "./lib/sources/patents";
@@ -8296,8 +8297,7 @@ If multiple assets appear, return each as a separate array item.`;
   // Helper: initialise stripe SDK (returns null if key absent)
   function getStripe() {
     if (!STRIPE_SECRET_KEY) return null;
-    const Stripe = require("stripe");
-    return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-01-27.acacia" });
+    return new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2025-01-27.acacia" as any });
   }
 
   // Helper: extract the string ID from a Stripe expandable field (string | { id: string } | null)
@@ -8501,7 +8501,7 @@ If multiple assets appear, return each as a separate array item.`;
       type ExpandedSub = { id: string; status: string; current_period_end: number; trial_end: number | null; items: { data: { price: { id: string } }[] } };
       const sub: ExpandedSub | null =
         session.subscription && typeof session.subscription === "object"
-          ? (session.subscription as ExpandedSub)
+          ? (session.subscription as unknown as ExpandedSub)
           : null;
       const subscriptionId = sub?.id ?? (typeof session.subscription === "string" ? session.subscription : "");
       const stripeStatus = sub?.status ?? "active";
@@ -8629,7 +8629,7 @@ If multiple assets appear, return each as a separate array item.`;
     let event: { type: string; data: { object: Record<string, unknown> } };
     try {
       const rawBody = req.rawBody as Buffer | string;
-      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET);
+      event = stripe.webhooks.constructEvent(rawBody, sig, STRIPE_WEBHOOK_SECRET) as unknown as { type: string; data: { object: Record<string, unknown> } };
     } catch (err: any) {
       console.error("[stripe/webhook] Signature verification failed:", err?.message);
       return res.status(400).json({ error: `Webhook signature error: ${err?.message}` });
@@ -8724,7 +8724,7 @@ If multiple assets appear, return each as a separate array item.`;
                         return stripeInstance ? stripeInstance.subscriptions.retrieve(subC) : null;
                       })();
                       if (stripeSub) {
-                        const periodEnd: number = stripeSub.current_period_end;
+                        const periodEnd: number = (stripeSub as unknown as { current_period_end: number }).current_period_end;
                         nextBillingDate = new Date(periodEnd * 1000).toLocaleDateString("en-US", {
                           year: "numeric", month: "long", day: "numeric",
                         });
