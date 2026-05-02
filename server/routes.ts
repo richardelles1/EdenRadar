@@ -9609,6 +9609,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const eoiId = parseInt(String(req.params.id), 10);
+      if (isNaN(eoiId)) return res.status(400).json({ error: "Invalid EOI ID" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const listingIds = listings.map(l => l.id);
 
@@ -9670,12 +9671,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const eoiId = parseInt(String(req.params.id), 10);
+      if (isNaN(eoiId)) return res.status(400).json({ error: "Invalid EOI ID" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const listingIds = listings.map(l => l.id);
 
       const [eoiRow] = await db.select().from(marketEois).where(eq(marketEois.id, eoiId)).limit(1);
       if (!eoiRow) return res.status(404).json({ error: "EOI not found" });
       if (!listingIds.includes(eoiRow.listingId)) return res.status(403).json({ error: "Not your listing" });
+      if (eoiRow.status === "accepted") return res.status(400).json({ error: "Cannot decline an already accepted EOI" });
 
       await db.update(marketEois).set({ status: "declined" }).where(eq(marketEois.id, eoiId));
       res.json({ ok: true });
@@ -9705,6 +9708,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       if (deal.sellerId !== userId && deal.buyerId !== userId) {
@@ -9713,6 +9717,47 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       const listing = await storage.getMarketListing(deal.listingId);
       const [eoi] = await db.select().from(marketEois).where(eq(marketEois.id, deal.eoiId)).limit(1);
+
+      // Redact sensitive fields until NDA is fully signed by both parties
+      if (!deal.ndaSignedAt) {
+        const redactedListing = listing ? {
+          id: listing.id,
+          therapeuticArea: listing.therapeuticArea,
+          modality: listing.modality,
+          stage: listing.stage,
+          engagementStatus: listing.engagementStatus,
+          blind: listing.blind,
+          status: listing.status,
+          createdAt: listing.createdAt,
+          updatedAt: listing.updatedAt,
+          // Redact everything sensitive
+          assetName: null,
+          mechanism: null,
+          ipStatus: null,
+          ipSummary: null,
+          milestoneHistory: null,
+          askingPrice: null,
+          priceRangeMin: null,
+          priceRangeMax: null,
+          aiSummary: null,
+          adminNote: null,
+          sellerId: listing.sellerId,
+        } : null;
+        const redactedEoi = eoi ? {
+          id: eoi.id,
+          listingId: eoi.listingId,
+          status: eoi.status,
+          createdAt: eoi.createdAt,
+          // Redact buyer identity & details until NDA signed
+          buyerId: null,
+          company: null,
+          role: null,
+          rationale: null,
+          budgetRange: null,
+          timeline: null,
+        } : null;
+        return res.json({ deal, listing: redactedListing, eoi: redactedEoi });
+      }
 
       res.json({ deal, listing, eoi });
     } catch (err: any) {
@@ -9823,9 +9868,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before accessing documents" });
       const docs = await storage.getMarketDealDocuments(dealId);
       res.json(docs);
     } catch (err: any) {
@@ -9928,9 +9975,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const dealId = parseInt(String(req.params.id), 10);
+      if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      if (!deal.ndaSignedAt) return res.status(403).json({ error: "NDA must be signed before accessing messages" });
       const messages = await storage.getMarketDealMessages(dealId);
       res.json(messages);
     } catch (err: any) {

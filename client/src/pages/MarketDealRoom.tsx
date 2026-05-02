@@ -13,11 +13,40 @@ import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
   Send, CheckCircle2, Clock, AlertCircle, Shield, Building2,
 } from "lucide-react";
-import type { MarketDeal, MarketListing, MarketEoi, MarketDealDocument, MarketDealMessage, MARKET_DEAL_STATUSES } from "@shared/schema";
+import type { MarketDeal, MarketDealDocument, MarketDealMessage } from "@shared/schema";
 
-type DealRoomData = { deal: MarketDeal; listing: MarketListing | null; eoi: MarketEoi | null };
+type PartialListing = {
+  id: number;
+  therapeuticArea: string;
+  modality: string;
+  stage: string;
+  blind: boolean;
+  status: string;
+  assetName: string | null;
+  mechanism: string | null;
+  ipStatus: string | null;
+  ipSummary: string | null;
+  milestoneHistory: string | null;
+  askingPrice: string | null;
+  priceRangeMin: number | null;
+  priceRangeMax: number | null;
+  aiSummary: string | null;
+  sellerId: string;
+};
 
-type DealStatus = typeof MARKET_DEAL_STATUSES[number];
+type PartialEoi = {
+  id: number;
+  listingId: number;
+  status: string;
+  buyerId: string | null;
+  company: string | null;
+  role: string | null;
+  rationale: string | null;
+  budgetRange: string | null;
+  timeline: string | null;
+};
+
+type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null };
 
 const ACCENT = "hsl(271 81% 55%)";
 
@@ -41,7 +70,7 @@ const STATUS_COLORS: Record<string, string> = {
   paused: "bg-muted text-muted-foreground border-border",
 };
 
-function NdaTemplate({ deal, listing, eoi }: { deal: MarketDeal; listing: MarketListing | null; eoi: MarketEoi | null }) {
+function NdaTemplate({ deal, listing, eoi }: { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null }) {
   const date = new Date(deal.createdAt).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
   const assetRef = listing?.blind
     ? `a ${listing.therapeuticArea} ${listing.modality} asset (EdenMarket Listing #${deal.listingId})`
