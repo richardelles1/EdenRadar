@@ -573,6 +573,10 @@ export default function Pipeline() {
         return !isPatentSource(sn) && !isTrialSource(sn);
       });
 
+  const ttoAssets = savedAssets.filter((a) => { const sn = a.sourceName ?? ""; return !isPatentSource(sn) && !isTrialSource(sn); });
+  const patentAssets = savedAssets.filter((a) => isPatentSource(a.sourceName ?? ""));
+  const trialAssets = savedAssets.filter((a) => isTrialSource(a.sourceName ?? ""));
+
   const handleExportJson = () => {
     const blob = new Blob([JSON.stringify(savedAssets, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -687,15 +691,15 @@ export default function Pipeline() {
                 <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2">
                   <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0">View:</span>
                   {([
-                    { key: "all",     label: "All" },
-                    { key: "tto",     label: "TTO Assets" },
-                    { key: "patent",  label: "Patents" },
-                    { key: "trial",   label: "Clinical Trials" },
-                  ] as const).map(({ key, label }) => (
+                    { key: "all",     label: "All",             count: totalAssets },
+                    { key: "tto",     label: "TTO Assets",      count: ttoAssets.length },
+                    { key: "patent",  label: "Patents",          count: patentAssets.length },
+                    { key: "trial",   label: "Clinical Trials",  count: trialAssets.length },
+                  ] as const).map(({ key, label, count }) => (
                     <button
                       key={key}
                       onClick={() => setSourceTypeFilter(key)}
-                      className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 flex items-center gap-1.5 ${
                         sourceTypeFilter === key
                           ? "border-primary bg-primary/15 text-primary font-medium"
                           : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
@@ -703,12 +707,21 @@ export default function Pipeline() {
                       data-testid={`filter-source-type-${key}`}
                     >
                       {label}
+                      {count > 0 && (
+                        <span className={`tabular-nums text-[10px] font-semibold rounded-full px-1 min-w-[16px] text-center leading-tight py-px ${
+                          sourceTypeFilter === key
+                            ? "bg-primary/20 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        }`}>
+                          {count}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
               </div>
             )}
-          <div className="flex-1 overflow-x-auto">
+          <div className="flex-1">
             <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 py-6">
               {filteredCount === 0 && totalAssets > 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
@@ -716,62 +729,118 @@ export default function Pipeline() {
                   <p className="text-xs text-muted-foreground">Save {sourceTypeFilter === "patent" ? "patents" : sourceTypeFilter === "trial" ? "clinical trials" : "TTO assets"} from Scout to see them here.</p>
                   <button onClick={() => setSourceTypeFilter("all")} className="text-xs text-primary hover:underline mt-1" data-testid="button-clear-source-filter">Show all assets</button>
                 </div>
-              ) : (
-              <div className="flex gap-4 min-w-max pb-4">
-                {assetsByStage.map((stage) => (
-                  <div
-                    key={stage.key}
-                    className={`flex flex-col w-64 rounded-lg border ${stage.colorClass} shrink-0`}
-                    data-testid={`pipeline-column-${stage.key.replace(" ", "-")}`}
-                  >
-                    <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-2 h-2 rounded-full ${stage.dotClass}`} />
-                        <span className="text-sm font-semibold text-foreground">{stage.label}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">
-                          {stage.assets.length}
+              ) : sourceTypeFilter === "all" ? (
+                <div className="space-y-8">
+                  {[
+                    { label: "TTO Assets", type: "tto" as const, assets: ttoAssets, icon: <FlaskConical className="w-4 h-4 text-emerald-500" /> },
+                    { label: "Patents", type: "patent" as const, assets: patentAssets, icon: <ScrollText className="w-4 h-4 text-amber-500" /> },
+                    { label: "Clinical Trials", type: "trial" as const, assets: trialAssets, icon: <Activity className="w-4 h-4 text-teal-500" /> },
+                  ].filter((s) => s.assets.length > 0).map(({ label, type, assets, icon }) => (
+                    <div key={type} data-testid={`pipeline-section-${type}`}>
+                      <div className="flex items-center gap-2 mb-3">
+                        {icon}
+                        <h3 className="text-sm font-semibold text-foreground">{label}</h3>
+                        <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center" data-testid={`pipeline-section-count-${type}`}>
+                          {assets.length}
                         </span>
-                        {stage.key !== "unknown" && stage.assets.length > 0 && (
-                          <button
-                            onClick={() => handleBrief(stage.key)}
-                            disabled={briefLoading === stage.key}
-                            className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
-                            data-testid={`button-pipeline-brief-${stage.key.replace(" ", "-")}`}
-                            title="Generate pipeline brief"
-                          >
-                            {briefLoading === stage.key ? (
-                              <Loader2 className="w-2.5 h-2.5 animate-spin" />
-                            ) : (
-                              <FileText className="w-2.5 h-2.5" />
-                            )}
-                            Brief
-                          </button>
-                        )}
+                      </div>
+                      <div className="overflow-x-auto">
+                        <div className="flex gap-4 min-w-max pb-4">
+                          {STAGES.map((stage) => {
+                            const stageAssets = assets.filter((a) => (a.developmentStage?.toLowerCase().trim() || "unknown") === stage.key);
+                            return (
+                              <div
+                                key={stage.key}
+                                className={`flex flex-col w-64 rounded-lg border ${stage.colorClass} shrink-0`}
+                                data-testid={`pipeline-section-${type}-col-${stage.key.replace(" ", "-")}`}
+                              >
+                                <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
+                                  <div className="flex items-center gap-2">
+                                    <div className={`w-2 h-2 rounded-full ${stage.dotClass}`} />
+                                    <span className="text-sm font-semibold text-foreground">{stage.label}</span>
+                                  </div>
+                                  <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">
+                                    {stageAssets.length}
+                                  </span>
+                                </div>
+                                <ScrollArea className="flex-1 max-h-[calc(100vh-20rem)]">
+                                  <div className="p-2.5 flex flex-col gap-2">
+                                    {stageAssets.length === 0 ? (
+                                      <div className="py-8 text-center">
+                                        <p className="text-xs text-muted-foreground">No assets</p>
+                                      </div>
+                                    ) : (
+                                      stageAssets.map((asset) => (
+                                        <PipelineCard key={asset.id} asset={asset} onDelete={(id) => deleteMutation.mutate(id)} />
+                                      ))
+                                    )}
+                                  </div>
+                                </ScrollArea>
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     </div>
-
-                    <ScrollArea className="flex-1 max-h-[calc(100vh-16rem)]">
-                      <div className="p-2.5 flex flex-col gap-2">
-                        {stage.assets.length === 0 ? (
-                          <div className="py-8 text-center">
-                            <p className="text-xs text-muted-foreground">No assets</p>
+                  ))}
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <div className="flex gap-4 min-w-max pb-4">
+                    {assetsByStage.map((stage) => (
+                      <div
+                        key={stage.key}
+                        className={`flex flex-col w-64 rounded-lg border ${stage.colorClass} shrink-0`}
+                        data-testid={`pipeline-column-${stage.key.replace(" ", "-")}`}
+                      >
+                        <div className="flex items-center justify-between px-3.5 py-3 border-b border-inherit">
+                          <div className="flex items-center gap-2">
+                            <div className={`w-2 h-2 rounded-full ${stage.dotClass}`} />
+                            <span className="text-sm font-semibold text-foreground">{stage.label}</span>
                           </div>
-                        ) : (
-                          stage.assets.map((asset) => (
-                            <PipelineCard
-                              key={asset.id}
-                              asset={asset}
-                              onDelete={(id) => deleteMutation.mutate(id)}
-                            />
-                          ))
-                        )}
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs font-bold text-muted-foreground tabular-nums w-5 h-5 rounded-full bg-muted/50 flex items-center justify-center">
+                              {stage.assets.length}
+                            </span>
+                            {stage.key !== "unknown" && stage.assets.length > 0 && (
+                              <button
+                                onClick={() => handleBrief(stage.key)}
+                                disabled={briefLoading === stage.key}
+                                className="flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded text-muted-foreground hover:text-primary hover:bg-primary/10 transition-all disabled:opacity-50"
+                                data-testid={`button-pipeline-brief-${stage.key.replace(" ", "-")}`}
+                                title="Generate pipeline brief"
+                              >
+                                {briefLoading === stage.key ? (
+                                  <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                ) : (
+                                  <FileText className="w-2.5 h-2.5" />
+                                )}
+                                Brief
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <ScrollArea className="flex-1 max-h-[calc(100vh-16rem)]">
+                          <div className="p-2.5 flex flex-col gap-2">
+                            {stage.assets.length === 0 ? (
+                              <div className="py-8 text-center">
+                                <p className="text-xs text-muted-foreground">No assets</p>
+                              </div>
+                            ) : (
+                              stage.assets.map((asset) => (
+                                <PipelineCard
+                                  key={asset.id}
+                                  asset={asset}
+                                  onDelete={(id) => deleteMutation.mutate(id)}
+                                />
+                              ))
+                            )}
+                          </div>
+                        </ScrollArea>
                       </div>
-                    </ScrollArea>
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
               )}
             </div>
           </div>

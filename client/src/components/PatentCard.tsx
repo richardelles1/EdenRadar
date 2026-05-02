@@ -2,6 +2,7 @@ import { useState } from "react";
 import { ExternalLink, ScrollText, Calendar, Building2, GraduationCap, Copy, Check, Users, FileText, Bookmark } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
+import { PipelinePicker } from "@/components/PipelinePicker";
 import type { ScoredAsset } from "@/lib/types";
 
 type PatentCardProps = {
@@ -216,16 +217,37 @@ export function PatentCard({ asset, isSaved, onSave, onUnsave }: PatentCardProps
                 Click to expand
               </span>
               <div className="flex items-center gap-2 shrink-0">
-                {(onSave || onUnsave) && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); isSaved ? onUnsave?.() : onSave?.(); }}
-                    className={`flex items-center gap-0.5 text-[10px] font-semibold transition-colors ${isSaved ? "text-amber-600 dark:text-amber-400" : "text-zinc-400 dark:text-zinc-500 hover:text-amber-600 dark:hover:text-amber-400"}`}
-                    data-testid={`button-save-patent-${asset.id}`}
-                    title={isSaved ? "Remove from pipeline" : "Save to pipeline"}
-                  >
-                    <Bookmark className="w-3 h-3" fill={isSaved ? "currentColor" : "none"} />
-                  </button>
-                )}
+                <div onClick={(e) => e.stopPropagation()}>
+                  {isSaved ? (
+                    <button
+                      onClick={() => onUnsave?.()}
+                      className="flex items-center gap-0.5 text-[10px] font-semibold transition-colors text-amber-600 dark:text-amber-400"
+                      data-testid={`button-save-patent-${asset.id}`}
+                      title="Remove from pipeline"
+                    >
+                      <Bookmark className="w-3 h-3" fill="currentColor" />
+                    </button>
+                  ) : (
+                    <PipelinePicker
+                      payload={{
+                        asset_name: asset.asset_name,
+                        target: asset.target,
+                        modality: asset.modality,
+                        development_stage: asset.development_stage,
+                        disease_indication: asset.indication,
+                        summary: asset.summary,
+                        source_title: signal?.title ?? asset.asset_name,
+                        source_journal: asset.institution !== "unknown" ? asset.institution : "Unknown",
+                        publication_year: asset.latest_signal_date?.slice(0, 4) ?? "Unknown",
+                        source_name: "patent",
+                        source_url: asset.source_urls?.[0] ?? null,
+                        pmid: patentId ?? asset.id,
+                      }}
+                      alreadySaved={isSaved}
+                      iconClassName="w-5 h-5 rounded"
+                    />
+                  )}
+                </div>
                 {patentUrl && (
                 <a
                   href={patentUrl}

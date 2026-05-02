@@ -1143,6 +1143,32 @@ async function backfillIndividualOrgNames() {
   }
 }
 
+async function backfillSavedAssetSourceNames() {
+  try {
+    const r1 = await db.execute(sql`
+      UPDATE saved_assets
+      SET source_name = 'clinical_trial'
+      WHERE (source_name IS NULL OR source_name = 'unknown')
+        AND pmid LIKE 'NCT%'
+    `);
+    const r2 = await db.execute(sql`
+      UPDATE saved_assets
+      SET source_name = 'patent'
+      WHERE (source_name IS NULL OR source_name = 'unknown')
+        AND pmid IS NOT NULL
+        AND pmid NOT LIKE 'NCT%'
+        AND pmid ~ '^[0-9]+$'
+    `);
+    type PgResult = { rowCount: number | null };
+    const fixed = ((r1 as unknown as PgResult).rowCount ?? 0) + ((r2 as unknown as PgResult).rowCount ?? 0);
+    if (fixed > 0) {
+      log(`[startup] Backfilled source_name for ${fixed} saved_asset(s) with missing labels`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Source name backfill note: ${err?.message}`, "startup");
+  }
+}
+
 async function migrateAssetStatusValues() {
   try {
     await db.execute(sql`
@@ -1261,6 +1287,8 @@ async function migrateAssetStatusValues() {
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────
       migrateAssetStatusValues().catch(() => {});
+      // ── Backfill source_name for unlabeled patent/trial saved assets ────
+      backfillSavedAssetSourceNames().catch(() => {});
       // ── Backfill individual org names from profile company name ─────────
       backfillIndividualOrgNames().catch(() => {});
       // ── Batch-clean stale staging rows then create indexes ─────────────

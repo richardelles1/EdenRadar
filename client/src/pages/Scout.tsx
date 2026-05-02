@@ -725,10 +725,15 @@ export default function Scout() {
       results = [...results].sort((a, b) => {
         const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
         const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
-        return db - da;
+        if (db !== da) return db - da;
+        return (a.id ?? "").localeCompare(b.id ?? "");
       });
     } else {
-      results = [...results].sort((a, b) => b.score - a.score);
+      results = [...results].sort((a, b) => {
+        const diff = b.score - a.score;
+        if (diff !== 0) return diff;
+        return (a.id ?? "").localeCompare(b.id ?? "");
+      });
     }
     return results;
   }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
@@ -768,13 +773,18 @@ export default function Scout() {
     });
     if (patentSortMode === "best_match") {
       const scored = results.map((a) => ({ asset: a, relevance: scorePatentRelevance(a) }));
-      scored.sort((a, b) => b.relevance - a.relevance);
+      scored.sort((a, b) => {
+        const diff = b.relevance - a.relevance;
+        if (diff !== 0) return diff;
+        return (a.asset.id ?? "").localeCompare(b.asset.id ?? "");
+      });
       results = scored.map((s) => s.asset);
     } else {
       results = [...results].sort((a, b) => {
         const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
         const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
-        return db - da;
+        if (db !== da) return db - da;
+        return (a.id ?? "").localeCompare(b.id ?? "");
       });
     }
     return results;
@@ -809,13 +819,15 @@ export default function Scout() {
       results = [...results].sort((a, b) => {
         const ao = phaseOrder[(a.development_stage ?? "").toLowerCase()] ?? 5;
         const bo = phaseOrder[(b.development_stage ?? "").toLowerCase()] ?? 5;
-        return ao - bo;
+        if (ao !== bo) return ao - bo;
+        return (a.id ?? "").localeCompare(b.id ?? "");
       });
     } else {
       results = [...results].sort((a, b) => {
         const da = parseDateLoose(a.latest_signal_date)?.getTime() ?? 0;
         const db = parseDateLoose(b.latest_signal_date)?.getTime() ?? 0;
-        return db - da;
+        if (db !== da) return db - da;
+        return (a.id ?? "").localeCompare(b.id ?? "");
       });
     }
     return results;
@@ -1377,7 +1389,6 @@ export default function Scout() {
                               key={asset.id + "-patent"}
                               asset={asset}
                               isSaved={savedAssetIds.has(patentKey)}
-                              onSave={() => saveMutation.mutate(asset)}
                               onUnsave={() => handleUnsave(patentKey)}
                             />
                             );
@@ -1657,7 +1668,6 @@ export default function Scout() {
                               key={asset.id + "-trial"}
                               asset={asset}
                               isSaved={savedAssetIds.has(trialKey)}
-                              onSave={() => saveMutation.mutate(asset)}
                               onUnsave={() => handleUnsave(trialKey)}
                             />
                             );
