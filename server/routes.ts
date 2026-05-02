@@ -11,7 +11,7 @@ import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
 import { makeFingerprint } from "./lib/ingestion";
-import { classifyBatch } from "./lib/pipeline/classifyAsset";
+import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
 import multer from "multer";
 import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, type SourceKey } from "./lib/sources/index";
@@ -29,7 +29,6 @@ import { runIngestionPipeline, isIngestionRunning, getEnrichingCount, getScrapin
 import { getSchedulerStatus, startScheduler, pauseScheduler, resetAndStartScheduler, bumpToFront, setDelay, invalidateHealthCacheEntry, startTierOnly, setConcurrency, getMaxHttpConcurrent, getScraperHealthCache, cancelCurrentSync, isTransientDbError } from "./lib/scheduler";
 import { getAllScraperHealth, clearScraperBackoff, updateScraperHealth } from "./lib/scraperState";
 import { ALL_SCRAPERS, getScraperTier } from "./lib/scrapers/index";
-import { reEnrichAsset } from "./lib/scrapers/enrichAsset";
 import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
@@ -2371,24 +2370,39 @@ export async function registerRoutes(
         const asset = assets[idx++];
         if (!asset) continue;
         try {
-          const result = await reEnrichAsset(
+          // Use the type-aware classifyAsset pipeline (gpt-4o-mini, non-deep pass) so that
+          // all new fields (assetClass, deviceAttributes, vocab-normalized target/indication)
+          // are populated consistently with the rest of the pipeline.
+          const classification = await classifyAsset(
             asset.assetName,
             asset.summary,
-            { target: asset.target, modality: asset.modality, indication: asset.indication, developmentStage: asset.developmentStage },
+            undefined,       // no abstract in mini queue assets
+            "gpt-4o-mini",  // cost-efficient model for Step 2
+            false,          // non-deep mode
           );
+          const score = computeCompletenessScore({
+            assetClass: classification.assetClass,
+            target: classification.target,
+            modality: classification.modality,
+            indication: classification.indication,
+            developmentStage: classification.developmentStage,
+            mechanismOfAction: classification.mechanismOfAction,
+            innovationClaim: classification.innovationClaim,
+            unmetNeed: classification.unmetNeed,
+            comparableDrugs: classification.comparableDrugs,
+            licensingReadiness: classification.licensingReadiness,
+            deviceAttributes: classification.deviceAttributes,
+          });
           const improved =
-            (asset.target === "unknown" && result.target !== "unknown") ||
-            (asset.modality === "unknown" && result.modality !== "unknown") ||
-            (asset.indication === "unknown" && result.indication !== "unknown") ||
-            (asset.developmentStage === "unknown" && result.developmentStage !== "unknown");
+            ((!asset.target || asset.target === "unknown") && classification.target !== null) ||
+            ((!asset.modality || asset.modality === "unknown") && classification.modality !== null) ||
+            ((!asset.indication || asset.indication === "unknown") && classification.indication !== null) ||
+            (asset.developmentStage === "unknown" && classification.developmentStage !== "unknown");
 
           if (improved) {
             await storage.updateIngestedAssetEnrichment(asset.id, {
-              target: result.target,
-              modality: result.modality,
-              indication: result.indication,
-              developmentStage: result.developmentStage,
-              biotechRelevant: result.biotechRelevant,
+              ...classification,
+              completenessScore: score,
             });
             liveEnrichment!.improved++;
           }
@@ -3148,7 +3162,7 @@ export async function registerRoutes(
         })),
         20,
         async (batch) => {
-          return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch);
+          return storage.bulkUpdateIngestedAssetsDeepEnrichment(batch, "deep");
         },
         (processed, _total, succeeded, failed) => {
           edenProcessed = processed;

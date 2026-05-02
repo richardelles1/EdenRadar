@@ -139,6 +139,7 @@ export async function deepEnrichBatch(
         );
 
         const completenessScore = computeCompletenessScore({
+          assetClass: classification.assetClass,
           target: classification.target,
           modality: classification.modality,
           indication: classification.indication,
@@ -148,6 +149,7 @@ export async function deepEnrichBatch(
           unmetNeed: classification.unmetNeed,
           comparableDrugs: classification.comparableDrugs,
           licensingReadiness: classification.licensingReadiness,
+          deviceAttributes: classification.deviceAttributes,
           summary: asset.summary,
           abstract: asset.abstract,
           categories: asset.ctx?.categories ?? null,

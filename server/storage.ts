@@ -193,7 +193,7 @@ export interface IStorage {
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
-  }>, source?: "mini" | "gpt4o" | "deep"): Promise<number>;
+  }>, source?: "mini" | "gpt4o" | "deep" | string): Promise<number>;
   createDeepEnrichmentJob(total: number): Promise<EnrichmentJob>;
   getRunningDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
   getLatestDeepEnrichmentJob(): Promise<EnrichmentJob | undefined>;
@@ -806,11 +806,12 @@ export class DatabaseStorage implements IStorage {
       oldStage !== "unknown" && newStage !== "unknown" &&
       oldStage !== newStage;
 
-    const updateData: Record<string, unknown> = {
+    // Build strictly-typed update using Drizzle's inferred insert type (no casting needed).
+    const updateData: Partial<typeof ingestedAssets.$inferInsert> = {
       relevant: data.biotechRelevant,
     };
     if (stageChanged) {
-      updateData.previousStage = oldStage;
+      updateData.previousStage = oldStage ?? undefined;
       updateData.stageChangedAt = new Date();
     }
 
@@ -830,17 +831,11 @@ export class DatabaseStorage implements IStorage {
     if (!hv.licensingReadiness && data.licensingReadiness) { updateData.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "mini"; }
     if (data.completenessScore !== undefined) updateData.completenessScore = data.completenessScore;
     if (data.assetClass) { updateData.assetClass = data.assetClass; newSources.assetClass = "mini"; }
-    if (data.deviceAttributes !== undefined) updateData.deviceAttributes = data.deviceAttributes;
+    if (data.deviceAttributes !== undefined) updateData.deviceAttributes = data.deviceAttributes ?? null;
 
     updateData.enrichmentSources = newSources;
 
-    // Using Record<string, any> for dynamic update with mixed field types — consistent with existing
-    // bulkUpdateIngestedAssetsDeepEnrichment pattern in this file (dynamic fields + SQL expressions).
-    await db
-      .update(ingestedAssets)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .set(updateData as Record<string, any>)
-      .where(eq(ingestedAssets.id, id));
+    await db.update(ingestedAssets).set(updateData).where(eq(ingestedAssets.id, id));
   }
 
   async wipeAllAssets(): Promise<void> {
@@ -1612,20 +1607,26 @@ export class DatabaseStorage implements IStorage {
     ipType: string; unmetNeed: string | null; comparableDrugs: string | null; licensingReadiness: string; completenessScore: number;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
   }): Promise<void> {
-    // Fetch humanVerified + existing enrichmentSources
-    const [cur] = await db.select({ humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
-      .from(ingestedAssets).where(eq(ingestedAssets.id, id));
+    // Pre-fetch humanVerified, enrichmentSources, AND deepEnrichAttempts so we can
+    // increment the counter as a plain integer (no SQL expression → no type cast needed).
+    const [cur] = await db.select({
+      humanVerified: ingestedAssets.humanVerified,
+      enrichmentSources: ingestedAssets.enrichmentSources,
+      deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
+    }).from(ingestedAssets).where(eq(ingestedAssets.id, id));
+
     const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
     const existingSources: Record<string, string> = (cur?.enrichmentSources as Record<string, string>) ?? {};
     const newSources: Record<string, string> = { ...existingSources };
 
-    const update: Record<string, unknown> = {
+    // Build strictly-typed update using Drizzle's inferred insert type (no casting needed).
+    const update: Partial<typeof ingestedAssets.$inferInsert> = {
       relevant: data.biotechRelevant,
       categories: data.categories,
       categoryConfidence: data.categoryConfidence,
       completenessScore: data.completenessScore,
       enrichedAt: new Date(),
-      deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
+      deepEnrichAttempts: (cur?.deepEnrichAttempts ?? 0) + 1,
       dedupeEmbedding: null,
     };
 
@@ -1640,11 +1641,10 @@ export class DatabaseStorage implements IStorage {
     if (!hv.comparableDrugs) { update.comparableDrugs = data.comparableDrugs || null; newSources.comparableDrugs = "deep"; }
     if (!hv.licensingReadiness) { update.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = "deep"; }
     if (data.assetClass) { update.assetClass = data.assetClass; newSources.assetClass = "deep"; }
-    if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes;
+    if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes ?? null;
 
     update.enrichmentSources = newSources;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.update(ingestedAssets).set(update as Record<string, any>).where(eq(ingestedAssets.id, id));
+    await db.update(ingestedAssets).set(update).where(eq(ingestedAssets.id, id));
   }
 
   async bulkUpdateIngestedAssetsDeepEnrichment(batch: Array<{
@@ -1652,7 +1652,7 @@ export class DatabaseStorage implements IStorage {
     categories: string[]; categoryConfidence: number; innovationClaim: string; mechanismOfAction: string;
     ipType: string; unmetNeed: string; comparableDrugs: string; licensingReadiness: string; completenessScore: number;
     assetClass?: string | null; deviceAttributes?: Record<string, unknown> | null;
-  }>, source: "mini" | "gpt4o" = "gpt4o"): Promise<number> {
+  }>, source: string = "gpt4o"): Promise<number> {
     if (batch.length === 0) return 0;
     let written = 0;
     const now = new Date();

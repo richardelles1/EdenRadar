@@ -2607,6 +2607,16 @@ function Enrichment({ pw }: { pw: string }) {
     refetchInterval: polling ? 1500 : false,
   });
 
+  const { data: miniQueue } = useQuery<{ count: number; costEstimate: number }>({
+    queryKey: ["/api/admin/enrichment/mini-queue", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/enrichment/mini-queue", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load mini-queue");
+      return res.json();
+    },
+    staleTime: 60_000,
+  });
+
   const prevStatusRef = useRef<string | undefined>();
   useEffect(() => {
     const prev = prevStatusRef.current;
@@ -2714,7 +2724,7 @@ function Enrichment({ pw }: { pw: string }) {
   const isResumed = status?.resumed === true;
   const unknownCount = stats?.unknownCount ?? 0;
   const totalAssets = stats?.total ?? 0;
-  const costEstimate = unknownCount * 0.0003;
+  const costEstimate = miniQueue?.costEstimate ?? (unknownCount * 0.0003);
   const progressPct = status && status.total > 0 ? Math.round((status.processed / status.total) * 100) : 0;
   const ruleFillProgressPct = ruleFillStatus?.progress && ruleFillStatus.progress.total > 0
     ? Math.round((ruleFillStatus.progress.processed / ruleFillStatus.progress.total) * 100) : 0;
