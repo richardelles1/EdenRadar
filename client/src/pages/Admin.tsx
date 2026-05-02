@@ -1889,6 +1889,17 @@ interface InstitutionRow {
   fill_indication: number | null;
 }
 
+interface ClassRow {
+  asset_class: string;
+  count: number;
+  avg_score: number | null;
+  fill_target: number | null;
+  fill_modality: number | null;
+  fill_indication: number | null;
+  fill_stage: number | null;
+  sparse_count: number;
+}
+
 interface DatasetQualityResponse {
   global: DatasetQualityGlobal;
   institutions: InstitutionRow[];
@@ -2597,6 +2608,18 @@ function Enrichment({ pw }: { pw: string }) {
     enabled: expandedInstitution !== null,
   });
 
+  const [showByClass, setShowByClass] = React.useState(false);
+  const { data: byClass } = useQuery<ClassRow[]>({
+    queryKey: ["/api/admin/dataset-quality/by-class", pw],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/dataset-quality/by-class", { headers: { "x-admin-password": pw } });
+      if (!res.ok) throw new Error("Failed to load class breakdown");
+      return res.json();
+    },
+    enabled: showByClass,
+    staleTime: 120_000,
+  });
+
   const { data: status, refetch: refetchStatus } = useQuery<EnrichmentStatus>({
     queryKey: ["/api/admin/enrichment/status", pw],
     queryFn: async () => {
@@ -2877,6 +2900,59 @@ function Enrichment({ pw }: { pw: string }) {
 
       {/* ── Breakdown by Dimension ── */}
       <DimensionBreakdown pw={pw} onFilterSelect={handleFilterSelect} />
+
+      {/* ── Fill-Rate by Asset Class ── */}
+      {quality && (
+        <div className="border border-border rounded-xl bg-card overflow-hidden">
+          <button
+            className="w-full px-5 py-3 flex items-center justify-between bg-muted/20 hover:bg-muted/40 transition-colors text-left"
+            onClick={() => setShowByClass(v => !v)}
+            data-testid="button-toggle-by-class"
+          >
+            <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <FlaskConical className="h-4 w-4" />
+              Fill-Rate by Asset Class
+            </h3>
+            <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${showByClass ? "rotate-180" : ""}`} />
+          </button>
+          {showByClass && (
+            <div className="overflow-x-auto border-t border-border">
+              {byClass && byClass.length > 0 ? (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/10">
+                      <th className="px-4 py-2 text-left text-xs font-medium text-muted-foreground">Class</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Assets</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Avg Score</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Target %</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Modality %</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Indication %</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Stage %</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-muted-foreground">Sparse</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {byClass.map(row => (
+                      <tr key={row.asset_class} className="border-b border-border last:border-0 hover:bg-muted/20" data-testid={`row-class-${row.asset_class}`}>
+                        <td className="px-4 py-2.5 text-xs font-medium text-foreground capitalize">{row.asset_class}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.count.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.avg_score ?? "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_target != null ? `${row.fill_target}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_modality != null ? `${row.fill_modality}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_indication != null ? `${row.fill_indication}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-foreground">{row.fill_stage != null ? `${row.fill_stage}%` : "—"}</td>
+                        <td className="px-4 py-2.5 text-xs tabular-nums text-right text-amber-600 dark:text-amber-400">{row.sparse_count > 0 ? row.sparse_count : "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="px-5 py-4 text-xs text-muted-foreground">No class data yet — run enrichment first to classify assets.</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Institution Quality Table ── */}
       {quality && (

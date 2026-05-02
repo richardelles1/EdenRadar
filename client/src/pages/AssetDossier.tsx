@@ -71,6 +71,7 @@ type IntelligenceData = {
     institution: string;
     summary: string;
     sourceUrl: string | null;
+    dataSparse: boolean;
   } | null;
   enriched: {
     mechanismOfAction: string | null;
@@ -369,6 +370,23 @@ export default function AssetDossier() {
             Back to Discover
           </Button>
         </div>
+
+        {/* ── dataSparse warning banner ── */}
+        {intelligence?.assetRecord?.dataSparse && (
+          <div
+            className="flex items-start gap-3 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 no-print"
+            style={{ animation: "dash-fade-up 350ms ease both" }}
+            data-testid="banner-data-sparse"
+          >
+            <span className="text-amber-500 mt-0.5 shrink-0 text-base">⚠</span>
+            <div>
+              <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Insufficient source data</p>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                This asset has limited public disclosure. Key fields may be incomplete and AI-generated insights may have lower confidence.
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* ── Header panel ── */}
         <div

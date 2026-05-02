@@ -155,6 +155,7 @@ export interface IStorage {
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
+  getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
 
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt">>): Promise<void>;
@@ -1659,20 +1660,26 @@ export class DatabaseStorage implements IStorage {
     await db.transaction(async (tx) => {
       for (const data of batch) {
         try {
-          // Fetch current humanVerified so we don't overwrite locked fields
-          const [cur] = await tx.select({ humanVerified: ingestedAssets.humanVerified, enrichmentSources: ingestedAssets.enrichmentSources })
-            .from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
+          // Pre-fetch humanVerified, enrichmentSources, AND deepEnrichAttempts so we can
+          // increment the counter as a plain integer — no SQL expression, no type cast needed.
+          const [cur] = await tx.select({
+            humanVerified: ingestedAssets.humanVerified,
+            enrichmentSources: ingestedAssets.enrichmentSources,
+            deepEnrichAttempts: ingestedAssets.deepEnrichAttempts,
+          }).from(ingestedAssets).where(eq(ingestedAssets.id, data.id));
+
           const hv: Record<string, boolean> = (cur?.humanVerified as Record<string, boolean>) ?? {};
           const existingSources: Record<string, string> = (cur?.enrichmentSources as Record<string, string>) ?? {};
 
           const newSources: Record<string, string> = { ...existingSources };
-          const update: Record<string, unknown> = {
+          // Strictly-typed update — no Record<string, unknown> or `as any` needed.
+          const update: Partial<typeof ingestedAssets.$inferInsert> = {
             relevant: data.biotechRelevant,
             categories: data.categories,
             categoryConfidence: data.categoryConfidence,
             completenessScore: data.completenessScore,
             enrichedAt: now,
-            deepEnrichAttempts: sql`${ingestedAssets.deepEnrichAttempts} + 1`,
+            deepEnrichAttempts: (cur?.deepEnrichAttempts ?? 0) + 1,
             dedupeEmbedding: null,
           };
 
@@ -1688,12 +1695,11 @@ export class DatabaseStorage implements IStorage {
           if (!hv.licensingReadiness) { update.licensingReadiness = data.licensingReadiness; newSources.licensingReadiness = source; }
 
           if (data.assetClass) { update.assetClass = data.assetClass; newSources.assetClass = source; }
-          if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes;
+          if (data.deviceAttributes !== undefined) update.deviceAttributes = data.deviceAttributes ?? null;
 
           update.enrichmentSources = newSources;
 
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          await tx.update(ingestedAssets).set(update as any).where(eq(ingestedAssets.id, data.id));
+          await tx.update(ingestedAssets).set(update).where(eq(ingestedAssets.id, data.id));
           written++;
         } catch (e) {
           console.error(`[bulkUpdate] failed for asset ${data.id}:`, e);
@@ -1715,6 +1721,31 @@ export class DatabaseStorage implements IStorage {
     await db.update(ingestedAssets)
       .set({ humanVerified: existing })
       .where(eq(ingestedAssets.id, assetId));
+  }
+
+  async getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>> {
+    // Same criteria as getMiniEnrichQueue: relevant, non-sparse, >150 chars, 3+ unknown key fields.
+    // Capped by `limit` so each run is a bounded, cost-controlled cycle.
+    const rows = await db.execute(sql`
+      SELECT id, asset_name AS "assetName", summary,
+             COALESCE(target, 'unknown') AS target,
+             COALESCE(modality, 'unknown') AS modality,
+             COALESCE(indication, 'unknown') AS indication,
+             COALESCE(development_stage, 'unknown') AS "developmentStage"
+      FROM ingested_assets
+      WHERE relevant = true
+        AND (data_sparse IS NULL OR data_sparse = false)
+        AND char_length(COALESCE(summary, '') || COALESCE(abstract, '')) > 150
+        AND (
+          (CASE WHEN COALESCE(target, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(modality, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN COALESCE(indication, 'unknown') = 'unknown' THEN 1 ELSE 0 END) +
+          (CASE WHEN development_stage = 'unknown' THEN 1 ELSE 0 END)
+        ) >= 3
+      ORDER BY COALESCE(enriched_at, '1970-01-01'::timestamptz) ASC
+      LIMIT ${limit}
+    `);
+    return rows.rows as Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>;
   }
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {
