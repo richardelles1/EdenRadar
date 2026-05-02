@@ -259,6 +259,8 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
               classifiedCount++;
             } else {
               const score = computeCompletenessScore({
+                assetClass: classification.assetClass,
+                deviceAttributes: classification.deviceAttributes,
                 target: classification.target,
                 modality: classification.modality,
                 indication: classification.indication,

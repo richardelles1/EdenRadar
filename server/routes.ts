@@ -2405,11 +2405,13 @@ export async function registerRoutes(
             completenessScore: score,
           });
 
+          const isKnown = (v: string | null | undefined) =>
+            v != null && v !== "" && v !== "unknown";
           const improved =
-            ((!asset.target || asset.target === "unknown") && classification.target !== null) ||
-            ((!asset.modality || asset.modality === "unknown") && classification.modality !== null) ||
-            ((!asset.indication || asset.indication === "unknown") && classification.indication !== null) ||
-            (asset.developmentStage === "unknown" && classification.developmentStage !== "unknown");
+            ((!asset.target || asset.target === "unknown") && isKnown(classification.target)) ||
+            ((!asset.modality || asset.modality === "unknown") && isKnown(classification.modality)) ||
+            ((!asset.indication || asset.indication === "unknown") && isKnown(classification.indication)) ||
+            (asset.developmentStage === "unknown" && isKnown(classification.developmentStage));
 
           if (improved) liveEnrichment!.improved++;
         } catch (e) {
@@ -2955,7 +2957,7 @@ export async function registerRoutes(
       const existingRes = await db.execute(sql`
         SELECT target, indication, modality, development_stage, ip_type, licensing_readiness,
                mechanism_of_action, innovation_claim, unmet_need, comparable_drugs, summary, abstract,
-               categories, inventors, patent_status
+               categories, inventors, patent_status, asset_class, device_attributes
         FROM ingested_assets WHERE id = ${id}
       `);
       if (existingRes.rows.length === 0) return res.status(404).json({ error: "Not found" });
@@ -2972,6 +2974,8 @@ export async function registerRoutes(
       }
 
       const score = computeCompletenessScore({
+        assetClass: existing.asset_class ?? null,
+        deviceAttributes: existing.device_attributes ?? null,
         target: merged.target,
         modality: merged.modality,
         indication: merged.indication,
@@ -7451,6 +7455,8 @@ If multiple assets appear, return each as a separate array item.`;
             const finalIndication = (listing?.indication && listing.indication !== "unknown") ? listing.indication : (classification.indication ?? "unknown");
             const finalStage = (listing?.developmentStage && listing.developmentStage !== "unknown") ? listing.developmentStage : classification.developmentStage;
             const score = computeCompletenessScore({
+              assetClass: classification.assetClass,
+              deviceAttributes: classification.deviceAttributes,
               target: finalTarget,
               modality: finalModality,
               indication: finalIndication,

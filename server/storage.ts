@@ -1791,6 +1791,8 @@ export class DatabaseStorage implements IStorage {
     const rows = await db
       .select({
         id: ingestedAssets.id,
+        assetClass: ingestedAssets.assetClass,
+        deviceAttributes: ingestedAssets.deviceAttributes,
         target: ingestedAssets.target,
         modality: ingestedAssets.modality,
         indication: ingestedAssets.indication,
@@ -1816,6 +1818,8 @@ export class DatabaseStorage implements IStorage {
 
     for (const row of rows) {
       const newScore = computeCompletenessScore({
+        assetClass: row.assetClass,
+        deviceAttributes: row.deviceAttributes as Record<string, unknown> | null,
         target: row.target,
         modality: row.modality,
         indication: row.indication,
