@@ -10016,11 +10016,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         },
       });
 
+      const multerReq = req as typeof req & { file?: Express.Multer.File };
       await new Promise<void>((resolve, reject) => {
-        upload.single("file")(req as any, res as any, (err) => { if (err) reject(err); else resolve(); });
+        upload.single("file")(multerReq, res, (err: unknown) => { if (err) reject(err); else resolve(); });
       });
 
-      const file = (req as any).file;
+      const file = multerReq.file;
       if (!file) return res.status(400).json({ error: "No file uploaded" });
 
       const sbUrl = process.env.VITE_SUPABASE_URL;
@@ -10077,10 +10078,26 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const doc = docs.find(d => d.id === docId);
       if (!doc) return res.status(404).json({ error: "Document not found" });
       if (doc.uploaderId !== userId) return res.status(403).json({ error: "Only the uploader can delete this document" });
+
+      // Physically remove from Supabase Storage before deleting DB row
+      if (!doc.fileUrl.startsWith("http")) {
+        const sbUrl = process.env.VITE_SUPABASE_URL;
+        const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+        if (sbUrl && sbServiceKey) {
+          try {
+            const { createClient: createSbClient } = await import("@supabase/supabase-js");
+            const sbAdmin = createSbClient(sbUrl, sbServiceKey);
+            const { error: storageError } = await sbAdmin.storage.from("market-deal-docs").remove([doc.fileUrl]);
+            if (storageError) console.warn("[market] storage remove failed for doc", docId, storageError.message);
+          } catch (e) { console.warn("[market] storage remove exception for doc", docId, e); }
+        }
+      }
+
       await storage.deleteMarketDealDocument(docId, userId);
       res.json({ ok: true });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: msg });
     }
   });
 
