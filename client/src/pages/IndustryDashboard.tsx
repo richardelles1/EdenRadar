@@ -293,9 +293,14 @@ export default function IndustryDashboard() {
     staleTime: 2 * 60 * 1000,
   });
 
-  const sinceParam = typeof window !== "undefined"
-    ? (localStorage.getItem(STORAGE_KEY) ?? "")
-    : "";
+  // Fetch DB-backed last-viewed timestamp so dashboard count matches sidebar badge.
+  // Falls back to localStorage if the endpoint fails (e.g. not logged in yet).
+  const { data: viewedSinceData } = useQuery<{ since: string | null }>({
+    queryKey: ["/api/alerts/viewed-since"],
+    staleTime: 60 * 1000,
+  });
+  const sinceParam = viewedSinceData?.since
+    ?? (typeof window !== "undefined" ? (localStorage.getItem(STORAGE_KEY) ?? "") : "");
   const deltaUrl = sinceParam
     ? `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`
     : "/api/industry/alerts/delta";

@@ -7119,7 +7119,7 @@ If a field cannot be determined, use "N/A".`
           .orderBy(desc(researchProjects.lastEditedAt))
           .limit(20),
 
-        db.select().from(userAlerts).where(eq(userAlerts.userId, userId)).orderBy(desc(userAlerts.createdAt)),
+        db.select().from(userAlerts).where(and(eq(userAlerts.userId, userId), eq(userAlerts.enabled, true))).orderBy(desc(userAlerts.createdAt)),
       ]);
 
       // Per-asset alert matching delegated to the module-level alertMatchesAsset

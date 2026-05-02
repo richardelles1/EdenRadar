@@ -416,7 +416,7 @@ function NewTtoAssetsSection({
           New TTO Assets
           {hasMatchedAlerts && (
             <Badge variant="secondary" className="text-[11px] tabular-nums bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              +{alertsDelta!.total}
+              +{alertsDelta!.distinctTotal ?? alertsDelta!.total}
             </Badge>
           )}
           {!hasMatchedAlerts && totalUnfiltered > 0 && (
