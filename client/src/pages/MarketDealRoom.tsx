@@ -13,7 +13,7 @@ import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
   Send, CheckCircle2, Clock, AlertCircle, Shield, Building2, Download, History,
 } from "lucide-react";
-import type { MarketDeal, MarketDealDocument, MarketDealMessage } from "@shared/schema";
+import type { MarketDeal, MarketDealDocument, MarketDealMessage, DealStatusHistoryEntry } from "@shared/schema";
 
 type PartialListing = {
   id: number;
@@ -46,7 +46,7 @@ type PartialEoi = {
   timeline: string | null;
 };
 
-type StatusHistoryEntry = { status: string; changedAt: string; changedBy: string };
+type StatusHistoryEntry = DealStatusHistoryEntry;
 type DealRoomData = { deal: MarketDeal; listing: PartialListing | null; eoi: PartialEoi | null; ndaDocumentUrl?: string | null };
 
 const ACCENT = "hsl(271 81% 55%)";
@@ -483,7 +483,7 @@ export default function MarketDealRoom() {
         </div>
 
         {/* Status History Timeline */}
-        {Array.isArray((deal as any).statusHistory) && (deal as any).statusHistory.length > 0 && (
+        {Array.isArray(deal.statusHistory) && deal.statusHistory.length > 0 && (
           <div className="rounded-xl border border-card-border bg-card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <History className="w-4 h-4 text-muted-foreground" />
@@ -491,7 +491,7 @@ export default function MarketDealRoom() {
             </div>
             <div className="relative pl-4 space-y-3">
               <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
-              {((deal as any).statusHistory as StatusHistoryEntry[]).map((entry, i) => (
+              {deal.statusHistory.map((entry, i) => (
                 <div key={i} className="relative flex items-start gap-3" data-testid={`status-history-${i}`}>
                   <div className="absolute -left-3 top-1 w-2 h-2 rounded-full border-2 border-violet-500 bg-background" />
                   <div className="min-w-0">

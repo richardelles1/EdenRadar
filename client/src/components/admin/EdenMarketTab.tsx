@@ -74,6 +74,7 @@ type AdminDeal = {
   createdAt: string;
   assetLabel: string;
   therapeuticArea: string;
+  eoiCreatedAt: string | null;
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -547,8 +548,8 @@ export function EdenMarketTab() {
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Deal</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Asset</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Status</th>
-                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">NDA</th>
-                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Created</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">EOI Date</th>
+                    <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">NDA Signed</th>
                     <th className="text-left px-4 py-2.5 text-muted-foreground font-medium">Fee</th>
                     <th className="text-right px-4 py-2.5 text-muted-foreground font-medium">Action</th>
                   </tr>
@@ -569,10 +570,13 @@ export function EdenMarketTab() {
                           <AlertTriangle className="w-3 h-3 text-amber-500 inline ml-1" />
                         )}
                       </td>
+                      <td className="px-4 py-2.5 text-muted-foreground">
+                        {deal.eoiCreatedAt ? new Date(deal.eoiCreatedAt).toLocaleDateString() : "—"}
+                      </td>
                       <td className="px-4 py-2.5">
                         {deal.ndaSignedAt ? (
                           <span className="text-emerald-600 flex items-center gap-1">
-                            <CheckCircle2 className="w-3 h-3" /> Signed
+                            <CheckCircle2 className="w-3 h-3" /> {new Date(deal.ndaSignedAt).toLocaleDateString()}
                           </span>
                         ) : (
                           <span className="text-muted-foreground flex items-center gap-1">
@@ -580,7 +584,6 @@ export function EdenMarketTab() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{new Date(deal.createdAt).toLocaleDateString()}</td>
                       <td className="px-4 py-2.5">
                         {deal.successFeeAmount ? (
                           <span className="text-emerald-600">${(deal.successFeeAmount / 1000).toFixed(0)}k</span>
@@ -589,7 +592,7 @@ export function EdenMarketTab() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-right">
-                        {!deal.successFeeInvoiceId && (deal.status === "closed" || deal.status === "loi") && (
+                        {!deal.successFeeInvoiceId && deal.status === "closed" && (
                           <Button
                             size="sm"
                             variant="outline"

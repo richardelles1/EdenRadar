@@ -9817,28 +9817,72 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       // If both have signed, unlock the deal room
       if (updatedDeal.sellerSignedAt && updatedDeal.buyerSignedAt && !updatedDeal.ndaSignedAt) {
+        const ndaHistoryEntry: import("@shared/schema").DealStatusHistoryEntry = { status: "nda_signed", changedAt: now.toISOString(), changedBy: "system" };
         updatedDeal = await storage.updateMarketDeal(dealId, {
           ndaSignedAt: now,
           status: "nda_signed",
-          statusHistory: [...(Array.isArray(deal.statusHistory) ? deal.statusHistory : []), { status: "nda_signed", changedAt: now.toISOString(), changedBy: "system" }] as any,
+          statusHistory: [...(Array.isArray(deal.statusHistory) ? deal.statusHistory : []), ndaHistoryEntry],
         }) ?? updatedDeal;
 
-        // Generate and store NDA artifact (HTML → stored in Supabase)
+        // Generate and store NDA artifact as PDF
         const listing = await storage.getMarketListing(deal.listingId);
         const assetRef = listing?.blind
           ? `a ${listing.therapeuticArea} ${listing.modality} asset (EdenMarket Listing #${deal.listingId})`
           : (listing?.assetName || `EdenMarket Listing #${deal.listingId}`);
         const signedDate = new Date(updatedDeal.sellerSignedAt!).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-        const ndaHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Mutual NDA — Deal #${dealId}</title><style>body{font-family:Georgia,serif;max-width:700px;margin:40px auto;padding:0 20px;color:#222;line-height:1.7}h1{text-align:center;font-size:1.2rem;margin-bottom:2rem}p{margin-bottom:1rem}strong{color:#000}.signatures{border-top:1px solid #ddd;margin-top:2rem;padding-top:1.5rem}.sig-block{margin-bottom:1.5rem}</style></head><body><h1>MUTUAL NON-DISCLOSURE AGREEMENT</h1><p>This Mutual Non-Disclosure Agreement ("Agreement") is entered into as of <strong>${signedDate}</strong>, between the Seller party (Deal Party A) and the Buyer party (Deal Party B) in connection with <strong>${assetRef}</strong>, facilitated through EdenMarket by EdenRadar.</p><p><strong>1. CONFIDENTIAL INFORMATION.</strong> Each party ("Disclosing Party") may disclose to the other party ("Receiving Party") certain non-public, proprietary, or confidential information ("Confidential Information") in connection with the evaluation of a potential business transaction regarding the above-referenced asset.</p><p><strong>2. NON-DISCLOSURE.</strong> Each Receiving Party agrees to: (a) hold the Disclosing Party's Confidential Information in strict confidence; (b) not disclose it to any third party without prior written consent; (c) use it solely for evaluating the Potential Transaction; and (d) protect it using at least the same degree of care applied to its own confidential information.</p><p><strong>3. TERM.</strong> This Agreement shall remain in force for three (3) years from the date of execution, unless otherwise terminated by mutual written agreement.</p><p><strong>4. RETURN OF INFORMATION.</strong> Upon request, each party shall promptly return or certifiably destroy all Confidential Information received.</p><p><strong>5. GOVERNING LAW.</strong> This Agreement shall be governed by the laws of the jurisdiction in which the Disclosing Party is incorporated.</p><p><strong>6. ENTIRE AGREEMENT.</strong> This Agreement constitutes the entire agreement between the parties with respect to the subject matter herein.</p><div class="signatures"><div class="sig-block"><strong>Party A (Seller):</strong> ${updatedDeal.sellerSignedName ?? ""}<br>Signed: ${updatedDeal.sellerSignedAt ? new Date(updatedDeal.sellerSignedAt).toLocaleString() : ""}</div><div class="sig-block"><strong>Party B (Buyer):</strong> ${updatedDeal.buyerSignedName ?? ""}<br>Signed: ${updatedDeal.buyerSignedAt ? new Date(updatedDeal.buyerSignedAt).toLocaleString() : ""}</div><p style="font-size:0.8rem;color:#888;margin-top:2rem">Document ID: DEAL-${dealId}-NDA · EdenMarket · Generated: ${new Date().toISOString()}</p></div></body></html>`;
 
         try {
           const sbUrl = process.env.VITE_SUPABASE_URL;
           const sbServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
           if (sbUrl && sbServiceKey) {
+            const PDFDocument = (await import("pdfkit")).default;
+            const ndaPdfBuffer = await new Promise<Buffer>((resolve, reject) => {
+              const doc = new PDFDocument({ margin: 72, size: "LETTER" });
+              const chunks: Buffer[] = [];
+              doc.on("data", (c: Buffer) => chunks.push(c));
+              doc.on("end", () => resolve(Buffer.concat(chunks)));
+              doc.on("error", reject);
+
+              doc.font("Helvetica-Bold").fontSize(14).text("MUTUAL NON-DISCLOSURE AGREEMENT", { align: "center" });
+              doc.moveDown();
+              doc.font("Helvetica").fontSize(10);
+              doc.text(`This Mutual Non-Disclosure Agreement ("Agreement") is entered into as of ${signedDate}, between the Seller party (Deal Party A) and the Buyer party (Deal Party B) in connection with ${assetRef}, facilitated through EdenMarket by EdenRadar.`, { align: "justify" });
+              doc.moveDown();
+              const clauses = [
+                ["1. CONFIDENTIAL INFORMATION.", 'Each party ("Disclosing Party") may disclose to the other party ("Receiving Party") certain non-public, proprietary, or confidential information ("Confidential Information") in connection with the evaluation of a potential business transaction regarding the above-referenced asset.'],
+                ["2. NON-DISCLOSURE.", 'Each Receiving Party agrees to: (a) hold the Disclosing Party\'s Confidential Information in strict confidence; (b) not disclose it to any third party without prior written consent; (c) use it solely for evaluating the Potential Transaction; and (d) protect it using at least the same degree of care applied to its own confidential information.'],
+                ["3. TERM.", "This Agreement shall remain in force for three (3) years from the date of execution, unless otherwise terminated by mutual written agreement."],
+                ["4. RETURN OF INFORMATION.", "Upon request, each party shall promptly return or certifiably destroy all Confidential Information received."],
+                ["5. GOVERNING LAW.", "This Agreement shall be governed by the laws of the jurisdiction in which the Disclosing Party is incorporated."],
+                ["6. ENTIRE AGREEMENT.", "This Agreement constitutes the entire agreement between the parties with respect to the subject matter herein."],
+              ];
+              for (const [title, body] of clauses) {
+                doc.font("Helvetica-Bold").text(title, { continued: true });
+                doc.font("Helvetica").text(` ${body}`, { align: "justify" });
+                doc.moveDown(0.5);
+              }
+              doc.moveDown();
+              doc.moveTo(72, doc.y).lineTo(540, doc.y).stroke();
+              doc.moveDown();
+              const sellerSigName = updatedDeal?.sellerSignedName ?? "";
+              const sellerSigDate = updatedDeal?.sellerSignedAt ? new Date(updatedDeal.sellerSignedAt).toLocaleString() : "";
+              const buyerSigName = updatedDeal?.buyerSignedName ?? "";
+              const buyerSigDate = updatedDeal?.buyerSignedAt ? new Date(updatedDeal.buyerSignedAt).toLocaleString() : "";
+              doc.font("Helvetica-Bold").text("Signatures");
+              doc.moveDown(0.5);
+              doc.font("Helvetica").text(`Party A (Seller): ${sellerSigName}   Signed: ${sellerSigDate}`);
+              doc.moveDown(0.5);
+              doc.text(`Party B (Buyer):  ${buyerSigName}   Signed: ${buyerSigDate}`);
+              doc.moveDown();
+              doc.font("Helvetica").fontSize(8).fillColor("grey")
+                .text(`Document ID: DEAL-${dealId}-NDA · EdenMarket · Generated: ${new Date().toISOString()}`, { align: "center" });
+              doc.end();
+            });
+
             const { createClient: createSbClient } = await import("@supabase/supabase-js");
             const sbAdmin = createSbClient(sbUrl, sbServiceKey);
-            const ndaPath = `deal-${dealId}/nda-executed.html`;
-            await sbAdmin.storage.from("market-deal-docs").upload(ndaPath, Buffer.from(ndaHtml, "utf-8"), { contentType: "text/html", upsert: true });
+            const ndaPath = `deal-${dealId}/nda-executed.pdf`;
+            await sbAdmin.storage.from("market-deal-docs").upload(ndaPath, ndaPdfBuffer, { contentType: "application/pdf", upsert: true });
             await storage.updateMarketDeal(dealId, { ndaDocumentPath: ndaPath });
           }
         } catch {}
@@ -9880,11 +9924,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       }).parse(req.body);
 
       // Append to status history
-      const historyEntry = { status, changedAt: new Date().toISOString(), changedBy: userId };
+      const historyEntry: import("@shared/schema").DealStatusHistoryEntry = { status, changedAt: new Date().toISOString(), changedBy: userId };
       const currentHistory = Array.isArray(deal.statusHistory) ? deal.statusHistory : [];
       const updated = await storage.updateMarketDeal(dealId, {
         status,
-        statusHistory: [...currentHistory, historyEntry] as any,
+        statusHistory: [...currentHistory, historyEntry],
       });
 
       // Alert admin on LOI or Closed
@@ -10024,6 +10068,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       if (deal.sellerId !== userId && deal.buyerId !== userId) return res.status(403).json({ error: "Access denied" });
+      const docs = await storage.getMarketDealDocuments(dealId);
+      const doc = docs.find(d => d.id === docId);
+      if (!doc) return res.status(404).json({ error: "Document not found" });
+      if (doc.uploaderId !== userId) return res.status(403).json({ error: "Only the uploader can delete this document" });
       await storage.deleteMarketDealDocument(docId, userId);
       res.json({ ok: true });
     } catch (err: any) {
@@ -10123,10 +10171,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const deals = await storage.getAllMarketDeals();
       const enriched = await Promise.all(deals.map(async d => {
         const listing = await storage.getMarketListing(d.listingId);
+        const [eoiRow] = await db.select().from(marketEois).where(eq(marketEois.id, d.eoiId)).limit(1);
         return {
           ...d,
           assetLabel: listing?.blind ? `Blind ${listing.therapeuticArea}` : (listing?.assetName ?? `Listing #${d.listingId}`),
           therapeuticArea: listing?.therapeuticArea ?? "",
+          eoiCreatedAt: eoiRow?.createdAt ?? null,
         };
       }));
       res.json(enriched);
@@ -10142,6 +10192,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
+
+      if (deal.status !== "closed") {
+        return res.status(400).json({ error: "Invoice can only be generated when the deal is marked Closed" });
+      }
 
       const { dealSizeM } = z.object({ dealSizeM: z.number().int().positive() }).parse(req.body);
 
@@ -10200,6 +10254,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+      await stripe.invoices.sendInvoice(finalizedInvoice.id);
 
       const updated = await storage.updateMarketDeal(dealId, {
         successFeeDealSizeM: dealSizeM,

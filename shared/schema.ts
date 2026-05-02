@@ -901,6 +901,7 @@ export type SavedReport = typeof savedReports.$inferSelect;
 
 export const MARKET_DEAL_STATUSES = ["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"] as const;
 export type MarketDealStatus = (typeof MARKET_DEAL_STATUSES)[number];
+export type DealStatusHistoryEntry = { status: string; changedAt: string; changedBy: string };
 
 export const marketDeals = pgTable("market_deals", {
   id: serial("id").primaryKey(),
@@ -909,7 +910,7 @@ export const marketDeals = pgTable("market_deals", {
   sellerId: text("seller_id").notNull(),
   buyerId: text("buyer_id").notNull(),
   status: text("status").notNull().default("nda_pending"),
-  statusHistory: jsonb("status_history").default([]).notNull(),
+  statusHistory: jsonb("status_history").$type<DealStatusHistoryEntry[]>().default([]).notNull(),
   sellerSignedAt: timestamp("seller_signed_at"),
   sellerSignedName: text("seller_signed_name"),
   buyerSignedAt: timestamp("buyer_signed_at"),
@@ -923,7 +924,9 @@ export const marketDeals = pgTable("market_deals", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const insertMarketDealSchema = createInsertSchema(marketDeals).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertMarketDealSchema = createInsertSchema(marketDeals)
+  .omit({ id: true, createdAt: true, updatedAt: true })
+  .extend({ statusHistory: z.array(z.object({ status: z.string(), changedAt: z.string(), changedBy: z.string() })).optional() });
 export type InsertMarketDeal = z.infer<typeof insertMarketDealSchema>;
 export type MarketDeal = typeof marketDeals.$inferSelect;
 
