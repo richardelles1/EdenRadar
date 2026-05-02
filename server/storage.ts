@@ -163,7 +163,7 @@ export interface IStorage {
     byField: { target: number; modality: number; indication: number; developmentStage: number };
   }>;
   getIncompleteAssets(since?: Date): Promise<Array<{ id: number; assetName: string; summary: string; target: string | null; modality: string | null; indication: string | null; developmentStage: string }>>;
-  getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>>;
+  getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>>;
 
   createEnrichmentJob(total: number): Promise<EnrichmentJob>;
   updateEnrichmentJob(id: number, data: Partial<Pick<EnrichmentJob, "status" | "processed" | "improved" | "completedAt" | "total">>): Promise<void>;
@@ -1775,15 +1775,23 @@ export class DatabaseStorage implements IStorage {
       .where(eq(ingestedAssets.id, assetId));
   }
 
-  async getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>> {
+  async getMiniEnrichBatch(limit: number): Promise<Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>> {
     // Same criteria as getMiniEnrichQueue: relevant, non-sparse, >150 chars, 3+ unknown key fields.
     // Capped by `limit` so each run is a bounded, cost-controlled cycle.
+    // We also pull abstract + ctx fields (categories/patent/licensing/inventors/sourceUrl)
+    // so the mini classifier has the same context the deep classifier gets — many of
+    // these assets are short on summary but rich in abstract.
     const rows = await db.execute(sql`
-      SELECT id, asset_name AS "assetName", summary,
+      SELECT id, asset_name AS "assetName", summary, abstract,
              COALESCE(target, 'unknown') AS target,
              COALESCE(modality, 'unknown') AS modality,
              COALESCE(indication, 'unknown') AS indication,
-             COALESCE(development_stage, 'unknown') AS "developmentStage"
+             COALESCE(development_stage, 'unknown') AS "developmentStage",
+             categories,
+             patent_status AS "patentStatus",
+             licensing_status AS "licensingStatus",
+             inventors,
+             source_url AS "sourceUrl"
       FROM ingested_assets
       WHERE relevant = true
         AND (data_sparse IS NULL OR data_sparse = false)
@@ -1800,7 +1808,7 @@ export class DatabaseStorage implements IStorage {
       ORDER BY COALESCE(enriched_at, '1970-01-01'::timestamptz) ASC
       LIMIT ${limit}
     `);
-    return rows.rows as Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>;
+    return rows.rows as Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>;
   }
 
   async getMiniEnrichQueue(): Promise<{ count: number; costEstimate: number }> {

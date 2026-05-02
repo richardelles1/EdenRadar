@@ -2368,7 +2368,7 @@ export async function registerRoutes(
 
   async function runEnrichmentWorker(
     jobId: number,
-    assets: Array<{ id: number; assetName: string; summary: string; target: string; modality: string; indication: string; developmentStage: string }>,
+    assets: Array<{ id: number; assetName: string; summary: string; abstract: string | null; target: string; modality: string; indication: string; developmentStage: string; categories: string[] | null; patentStatus: string | null; licensingStatus: string | null; inventors: string[] | null; sourceUrl: string | null }>,
     startProcessed: number,
     startImproved: number,
     resumed: boolean,
@@ -2387,12 +2387,28 @@ export async function registerRoutes(
           // Use the type-aware classifyAsset pipeline (gpt-4o-mini, non-deep pass) so that
           // all new fields (assetClass, deviceAttributes, vocab-normalized target/indication)
           // are populated consistently with the rest of the pipeline.
+          // Pass the asset's abstract + ctx (categories/patent/licensing/inventors/sourceUrl)
+          // and current known field values — the prompt uses these to focus on filling the
+          // unknowns and to preserve already-known values unless the source contradicts them.
           const classification = await classifyAsset(
             asset.assetName,
             asset.summary,
-            undefined,       // no abstract in mini queue assets
+            asset.abstract ?? undefined,
             "gpt-4o-mini",  // cost-efficient model for Step 2
             false,          // non-deep mode
+            {
+              categories: asset.categories,
+              patentStatus: asset.patentStatus,
+              licensingStatus: asset.licensingStatus,
+              inventors: asset.inventors,
+              sourceUrl: asset.sourceUrl,
+              currentValues: {
+                target: asset.target,
+                modality: asset.modality,
+                indication: asset.indication,
+                developmentStage: asset.developmentStage,
+              },
+            },
           );
           const score = computeCompletenessScore({
             assetClass: classification.assetClass,
