@@ -118,23 +118,35 @@ function SourceSelector({
   selected: string[];
   onToggle: (id: string) => void;
 }) {
+  const total = sources.length;
+  const selCount = sources.filter((s) => selected.includes(s.id)).length;
   return (
     <div className="max-w-3xl mx-auto flex flex-wrap items-center gap-2">
-      <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0">Sources:</span>
-      {sources.map((s) => (
-        <button
-          key={s.id}
-          onClick={() => onToggle(s.id)}
-          className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
-            selected.includes(s.id)
-              ? "border-primary bg-primary/15 text-primary font-medium"
-              : "border-card-border bg-card text-muted-foreground hover:text-foreground hover:border-primary/40"
-          }`}
-          data-testid={`source-toggle-${s.id}`}
-        >
-          {s.label}
-        </button>
-      ))}
+      <span
+        className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide shrink-0"
+        data-testid="text-sources-counter"
+      >
+        Sources · {selCount}/{total}:
+      </span>
+      {sources.map((s) => {
+        const isSelected = selected.includes(s.id);
+        return (
+          <button
+            key={s.id}
+            onClick={() => onToggle(s.id)}
+            className={`text-xs px-2.5 py-1 rounded-full border transition-all duration-150 ${
+              isSelected
+                ? "border-primary bg-primary/15 text-primary font-medium"
+                : "border-card-border bg-card text-muted-foreground/60 line-through hover:text-foreground hover:border-primary/40 hover:no-underline"
+            }`}
+            aria-pressed={isSelected}
+            title={isSelected ? `${s.label} — selected (click to exclude)` : `${s.label} — excluded (click to include)`}
+            data-testid={`source-toggle-${s.id}`}
+          >
+            {s.label}
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -91,14 +91,9 @@ export async function searchClinicalTrials(query: string, maxResults = 10): Prom
       };
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    // Downgrade timeouts/aborts to warn — they are caught by the orchestrator's
-    // hard timeout and reported as `status: "timeout"` in sourceDiagnostics.
-    if (/abort|timeout|timed out/i.test(msg)) {
-      console.warn(`[search] ClinicalTrials.gov upstream slow/aborted: ${msg}`);
-    } else {
-      console.error("ClinicalTrials search error:", err);
-    }
-    return [];
+    // Re-throw so the caller can distinguish empty (zero matches) from error
+    // (transport/auth/parse failure) in sourceDiagnostics. The route-level
+    // timedDirect / collectAllSignalsWithDiag wrapper labels accordingly.
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }

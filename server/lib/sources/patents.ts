@@ -84,7 +84,8 @@ export async function searchPatents(
 ): Promise<RawSignal[]> {
   const apiKey = getApiKey();
   if (!apiKey) {
-    console.warn("[search] USPTO_ODP_API_KEY not set — patent search disabled");
+    // No key = source is disabled by configuration, not an error per query.
+    // Startup health summary already logs this once at warn level.
     return [];
   }
 
@@ -135,14 +136,14 @@ export async function searchPatents(
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       // USPTO ODP returns HTTP 404 with body containing "No matching records found"
-      // for legitimate zero-result queries. Treat as empty (silent) — only warn
-      // on real transport/auth failures (5xx, 401/403, or 4xx without that marker).
+      // for legitimate zero-result queries. Treat as empty (silent). Real
+      // transport/auth failures (5xx, 401/403, or other 4xx) THROW so the
+      // caller can surface them as `status: "error"` in sourceDiagnostics
+      // instead of masking them as `status: "empty"`.
       const isLegitimateEmpty =
         res.status === 404 && /no matching records found/i.test(text);
-      if (!isLegitimateEmpty) {
-        console.warn(`[search] USPTO ODP patents error ${res.status}: ${text.slice(0, 120)}`);
-      }
-      return [];
+      if (isLegitimateEmpty) return [];
+      throw new Error(`USPTO ODP ${res.status}: ${text.slice(0, 120)}`);
     }
 
     const data = await res.json();
@@ -204,10 +205,10 @@ export async function searchPatents(
 
     return signals;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (!msg.includes("abort") && !msg.includes("timeout")) {
-      console.warn(`[search] Patents error: ${msg}`);
-    }
-    return [];
+    // Re-throw so the caller (routes.ts timedDirect / collectAllSignalsWithDiag)
+    // can label this as `status: "timeout"` (aborts) or `status: "error"`
+    // (transport/auth) in sourceDiagnostics, instead of returning [] which
+    // would be indistinguishable from a legitimate-empty result.
+    throw err instanceof Error ? err : new Error(String(err));
   }
 }

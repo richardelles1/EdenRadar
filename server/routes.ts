@@ -391,10 +391,13 @@ export async function registerRoutes(
         }
       }
 
-      // Always call searchPatents and searchClinicalTrials directly, bypassing
-      // collectAllSignals entirely. collectAllSignals wraps every source with a
-      // 3,500ms timeout — far too short for USPTO (5–10s) or ClinicalTrials.gov
-      // (up to 12s). Both have their own timeout budgets and are called in parallel.
+      // Call searchPatents and searchClinicalTrials directly, bypassing the
+      // 4s per-source budget in collectAllSignalsWithDiag — both have a 12s
+      // upstream AbortSignal of their own (USPTO/CT.gov can legitimately take
+      // 5-10s on cold queries) and were being prematurely dropped at 4s.
+      // We wrap them at 13s here so the upstream AbortSignal fires first and
+      // the source surfaces its own typed error rather than a generic timeout.
+      const DIRECT_SOURCE_TIMEOUT_MS = 13000;
       const patentInSources = effectiveSources.includes("patents" as SourceKey);
       const trialInSources = effectiveSources.includes("clinicaltrials" as SourceKey);
       const nonDirectSources = effectiveSources.filter(
@@ -408,13 +411,20 @@ export async function registerRoutes(
       ): Promise<RawSignal[]> => {
         const t0 = Date.now();
         try {
-          const out = await withHardTimeout(run(), 4000, key);
+          const out = await withHardTimeout(run(), DIRECT_SOURCE_TIMEOUT_MS, key);
+          // Connectors now THROW on real failures (auth/transport/parse), so a
+          // returned [] here unambiguously means "legitimate zero matches".
           directDiag.push({ source: key, ms: Date.now() - t0, status: out.length === 0 ? "empty" : "ok", count: out.length });
           return out;
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);
-          console.warn(`[search] ${key} dropped:`, msg);
-          directDiag.push({ source: key, ms: Date.now() - t0, status: msg.includes("timed out") ? "timeout" : "error", count: 0, error: msg });
+          const isTimeout = /timed out|abort|timeout/i.test(msg);
+          if (isTimeout) {
+            console.warn(`[search] ${key} dropped (timeout):`, msg);
+          } else {
+            console.error(`[search] ${key} dropped (error):`, msg);
+          }
+          directDiag.push({ source: key, ms: Date.now() - t0, status: isTimeout ? "timeout" : "error", count: 0, error: msg });
           return [];
         }
       };
