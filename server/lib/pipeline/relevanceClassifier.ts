@@ -168,15 +168,22 @@ export function preFilterBatchV2(listings: ScrapedListing[], threshold: number =
  * Falls back to the legacy keyword rule when the flag is off so we
  * keep the existing behaviour intact in production until rollout.
  */
-export function activePreFilterBatch(listings: ScrapedListing[]): {
+export async function activePreFilterBatch(listings: ScrapedListing[]): Promise<{
   passed: ScrapedListing[];
   rejected: ScrapedListing[];
   ambiguous: ScrapedListing[];
   variant: "v1_keyword" | "v2_classifier";
-} {
+  threshold: number;
+}> {
   if (CLASSIFIER_V2_ENABLED) {
-    const r = preFilterBatchV2(listings);
-    return { ...r, variant: "v2_classifier" };
+    // Resolve the live threshold (env > tuned-from-DB > default). The
+    // 5-minute cache in getActiveThreshold means tuning the threshold from
+    // the admin panel takes effect on the next pre-filter call without a
+    // restart. invalidateThresholdCache() (called by /threshold/tune)
+    // makes the switchover immediate.
+    const threshold = await getActiveThreshold();
+    const r = preFilterBatchV2(listings, threshold);
+    return { ...r, variant: "v2_classifier", threshold };
   }
   const passed: ScrapedListing[] = [];
   const rejected: ScrapedListing[] = [];
@@ -187,5 +194,5 @@ export function activePreFilterBatch(listings: ScrapedListing[]): {
     else if (r === "reject") rejected.push(l);
     else ambiguous.push(l);
   }
-  return { passed, rejected, ambiguous, variant: "v1_keyword" };
+  return { passed, rejected, ambiguous, variant: "v1_keyword", threshold: 0 };
 }

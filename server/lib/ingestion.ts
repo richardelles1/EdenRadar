@@ -147,8 +147,8 @@ export async function runIngestionPipeline(): Promise<IngestionResult> {
     });
     console.log(`[ingestion] Scraped ${listings.length} total listings`);
 
-    const { passed, rejected, ambiguous, variant } = activePreFilterBatch(listings);
-    console.log(`[ingestion] Pre-filter (${variant}): ${passed.length} passed, ${rejected.length} rejected, ${ambiguous.length} ambiguous`);
+    const { passed, rejected, ambiguous, variant, threshold } = await activePreFilterBatch(listings);
+    console.log(`[ingestion] Pre-filter (${variant}, threshold=${threshold.toFixed(3)}): ${passed.length} passed, ${rejected.length} rejected, ${ambiguous.length} ambiguous`);
 
     const filteredListings = [...passed, ...ambiguous];
 
