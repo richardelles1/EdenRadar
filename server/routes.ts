@@ -8174,6 +8174,15 @@ If multiple assets appear, return each as a separate array item.`;
     const email = verifyUnsubscribeTokenForEmail(token);
     if (email) {
       try {
+        // Short-circuit repeat clicks: if the email is already in the
+        // suppression list we treat the request as already-unsubscribed and
+        // skip the expensive Supabase user scan below. This keeps the
+        // unauthenticated /unsubscribe endpoint cheap under repeat hits.
+        const already = await db.select({ email: emailUnsubscribes.email })
+          .from(emailUnsubscribes).where(eq(emailUnsubscribes.email, email)).limit(1);
+        if (already.length > 0) {
+          return { ok: true, alreadyUnsubscribed: true };
+        }
         await db.insert(emailUnsubscribes).values({ email }).onConflictDoNothing();
         // Best-effort: if the address belongs to an Eden user, also flip their
         // industry_profiles.subscribed_to_digest so the unsubscribe takes
