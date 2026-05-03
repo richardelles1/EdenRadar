@@ -6,12 +6,12 @@ import {
   seedIndustryProfile,
 } from "../fixtures/db";
 import { signUnsubscribeToken } from "../fixtures/tokens";
-import { bypassSiteGate } from "../fixtures/sitegate";
 
 test.describe("Unsubscribe flow (RFC 8058 + UI)", () => {
-  test.beforeEach(async ({ page }) => {
-    await bypassSiteGate(page);
-  });
+  // Intentionally NOT calling bypassSiteGate — /unsubscribe is on the
+  // SiteGate allowlist (see client/src/components/SiteGate.tsx). If a
+  // future change re-gates it, these specs must fail so we catch the
+  // CAN-SPAM / RFC 8058 regression before it ships.
 
   test.afterAll(async () => {
     await cleanupE2ERows();
@@ -47,6 +47,24 @@ test.describe("Unsubscribe flow (RFC 8058 + UI)", () => {
   test("missing token shows error UI", async ({ page }) => {
     await page.goto(`/unsubscribe`);
     await expect(page.getByTestId("text-unsubscribe-error")).toBeVisible();
+  });
+
+  test("/unsubscribe is reachable without the SiteGate beta password", async ({ page }) => {
+    // Guard against a regression where someone removes /unsubscribe from
+    // SiteGate's PUBLIC_PATHS allowlist. We open a fresh context with a
+    // clean localStorage (no eden-access key) and assert the SiteGate form
+    // never appears, while the unsubscribe page itself does.
+    await page.goto(`/unsubscribe`);
+    await expect(page.getByTestId("page-unsubscribe")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("site-gate-form")).toHaveCount(0);
+  });
+
+  test("/admin/reset-password is reachable without the SiteGate beta password", async ({ page }) => {
+    // Same guard as above for Supabase password-recovery links emailed to
+    // admins. We don't need to drive the form — just assert the gate
+    // doesn't intercept the route.
+    await page.goto(`/admin/reset-password`);
+    await expect(page.getByTestId("site-gate-form")).toHaveCount(0);
   });
 
   test("tampered token shows error UI", async ({ page }) => {
