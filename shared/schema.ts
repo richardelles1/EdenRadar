@@ -922,6 +922,7 @@ export const marketDeals = pgTable("market_deals", {
   successFeeInvoiceId: text("success_fee_invoice_id"),
   successFeeDealSizeM: integer("success_fee_deal_size_m"),
   successFeeAmount: integer("success_fee_amount"),
+  successFeePaidAt: timestamp("success_fee_paid_at"),
   createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });

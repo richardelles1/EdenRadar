@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft, Lock, Unlock, FileSignature, Upload, File, Trash2,
@@ -106,6 +107,8 @@ export default function MarketDealRoom() {
   const [signedName, setSignedName] = useState("");
   const [messageBody, setMessageBody] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [closeModalOpen, setCloseModalOpen] = useState(false);
+  const [closeDealSizeM, setCloseDealSizeM] = useState<string>("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -196,21 +199,57 @@ export default function MarketDealRoom() {
   });
 
   const { mutate: updateStatus, isPending: updatingStatus } = useMutation({
-    mutationFn: async (status: string) => {
+    mutationFn: async (payload: { status: string; dealSizeM?: number }) => {
       const res = await fetch(`/api/market/deals/${dealId}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...authHeaders },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(payload),
       });
-      if (!res.ok) { const e = await res.json(); throw new Error(e.error); }
-      return res.json();
+      const data = await res.json();
+      if (!res.ok && res.status !== 207) { throw new Error(data.error || "Status update failed"); }
+      return { status: res.status, data };
     },
-    onSuccess: () => {
+    onSuccess: ({ status, data }) => {
       qc.invalidateQueries({ queryKey: ["/api/market/deals", dealId] });
-      toast({ title: "Status updated" });
+      const auto = (data as { autoInvoice?: { feeAmount?: number; invoiceId?: string | null; error?: string; note?: string } }).autoInvoice;
+      if (auto?.error) {
+        toast({
+          title: "Closed — invoice generation failed",
+          description: `${auto.error}. Admins have been alerted to issue the invoice manually.`,
+          variant: "destructive",
+        });
+      } else if (auto?.feeAmount) {
+        const feeStr = `$${(auto.feeAmount / 1000).toFixed(0)}k`;
+        toast({
+          title: "Deal closed — invoice issued",
+          description: auto.invoiceId
+            ? `Stripe invoice ${auto.invoiceId.slice(0, 14)}… for ${feeStr} success fee has been emailed to your billing address.`
+            : `${feeStr} success fee recorded${auto.note ? ` (${auto.note})` : ""}.`,
+        });
+      } else {
+        toast({ title: "Status updated" });
+      }
+      setCloseModalOpen(false);
+      setCloseDealSizeM("");
     },
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
+
+  function handleStatusChange(next: string) {
+    if (next === "closed") {
+      setCloseDealSizeM(roomData?.deal?.successFeeDealSizeM ? String(roomData.deal.successFeeDealSizeM) : "");
+      setCloseModalOpen(true);
+      return;
+    }
+    updateStatus({ status: next });
+  }
+
+  function feeForSize(sizeM: number): number | null {
+    if (!Number.isFinite(sizeM) || sizeM <= 0) return null;
+    if (sizeM <= 5) return 10000;
+    if (sizeM <= 50) return 30000;
+    return 50000;
+  }
 
   const { mutate: sendMessage, isPending: sendingMsg } = useMutation({
     mutationFn: async () => {
@@ -319,7 +358,7 @@ export default function MarketDealRoom() {
         {ndaUnlocked && isSeller && (
           <Select
             value={deal.status}
-            onValueChange={(v) => updateStatus(v)}
+            onValueChange={handleStatusChange}
             disabled={updatingStatus}
           >
             <SelectTrigger className="h-7 w-44 text-xs shrink-0" data-testid="deal-status-select">
@@ -683,6 +722,73 @@ export default function MarketDealRoom() {
           )}
         </div>
       </div>
+
+      {/* Close-deal modal: collect final deal size, preview success-fee tier */}
+      <Dialog open={closeModalOpen} onOpenChange={(o) => { if (!updatingStatus) setCloseModalOpen(o); }}>
+        <DialogContent className="sm:max-w-md" data-testid="close-deal-modal">
+          <DialogHeader>
+            <DialogTitle>Close deal & issue success fee</DialogTitle>
+            <DialogDescription>
+              Enter the final deal size in USD millions. Closing the deal automatically generates a Stripe invoice for the corresponding success-fee tier and emails it to your billing address.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <label htmlFor="close-deal-size" className="text-xs font-medium text-foreground">Final deal size (USD millions)</label>
+              <Input
+                id="close-deal-size"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                placeholder="e.g. 25"
+                value={closeDealSizeM}
+                onChange={(e) => setCloseDealSizeM(e.target.value)}
+                data-testid="input-close-deal-size"
+              />
+            </div>
+            <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs space-y-1">
+              <p className="font-medium text-foreground">Success-fee tiers</p>
+              <p className="text-muted-foreground">≤ $5M deal → $10k · ≤ $50M deal → $30k · &gt; $50M deal → $50k</p>
+              {(() => {
+                const n = Number(closeDealSizeM);
+                const fee = feeForSize(n);
+                if (!fee) return <p className="text-muted-foreground italic">Enter a deal size to preview your fee.</p>;
+                return (
+                  <p className="text-foreground" data-testid="text-fee-preview">
+                    You will be invoiced <span className="font-semibold">${(fee / 1000).toFixed(0)}k</span> for a ${n}M deal.
+                  </p>
+                );
+              })()}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCloseModalOpen(false)}
+              disabled={updatingStatus}
+              data-testid="button-close-modal-cancel"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="text-white"
+              style={{ background: ACCENT }}
+              disabled={updatingStatus || !feeForSize(Number(closeDealSizeM))}
+              onClick={() => {
+                const n = Number(closeDealSizeM);
+                if (!feeForSize(n)) return;
+                updateStatus({ status: "closed", dealSizeM: n });
+              }}
+              data-testid="button-close-modal-confirm"
+            >
+              {updatingStatus ? "Closing…" : "Close deal & issue invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

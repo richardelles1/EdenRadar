@@ -9508,6 +9508,14 @@ If multiple assets appear, return each as a separate array item.`;
           const invOk = event.data.object as Record<string, unknown>;
           const invOkCustomerId = String(invOk["customer"] ?? "");
           const invOkSubId = String(invOk["subscription"] ?? "");
+          // EdenMarket success-fee invoices carry metadata.dealId and are NOT
+          // tied to a subscription. They are handled by the invoice.paid case
+          // below — skip them here so we don't pollute org billing history.
+          const invOkMeta = (invOk["metadata"] as Record<string, string> | null | undefined) ?? {};
+          if (invOkMeta["dealId"]) {
+            console.log(`[stripe/webhook] invoice.payment_succeeded: skipping EdenMarket success-fee invoice (dealId=${invOkMeta["dealId"]}) — handled by invoice.paid`);
+            break;
+          }
           // Skip initial trial invoices (amount_paid = 0) — they're not real payments
           const amountPaid = typeof invOk["amount_paid"] === "number" ? invOk["amount_paid"] : -1;
           if (amountPaid === 0) {
@@ -9575,6 +9583,73 @@ If multiple assets appear, return each as a separate array item.`;
             } catch (sendErr: unknown) {
               console.error("[stripe/webhook] Renewal confirmation email delivery failed:", (sendErr as Error)?.message);
             }
+          }
+          break;
+        }
+
+        case "invoice.paid": {
+          // EdenMarket success-fee invoice paid — persist paidAt, email seller a receipt.
+          // Idempotent: if successFeePaidAt is already set, do nothing.
+          const invPaid = event.data.object as Record<string, unknown>;
+          const invPaidMeta = (invPaid["metadata"] as Record<string, string> | null | undefined) ?? {};
+          const dealIdStr = invPaidMeta["dealId"];
+          if (!dealIdStr) {
+            // Not a success-fee invoice (subscription invoices are handled by invoice.payment_succeeded).
+            break;
+          }
+          const dealIdPaid = parseInt(dealIdStr, 10);
+          if (!Number.isFinite(dealIdPaid)) {
+            console.warn(`[stripe/webhook] invoice.paid: malformed dealId metadata=${dealIdStr}`);
+            break;
+          }
+          const dealPaid = await storage.getMarketDeal(dealIdPaid);
+          if (!dealPaid) {
+            console.warn(`[stripe/webhook] invoice.paid: deal ${dealIdPaid} not found`);
+            break;
+          }
+          if (dealPaid.successFeePaidAt) {
+            console.log(`[stripe/webhook] invoice.paid: deal ${dealIdPaid} already marked paid — skipping`);
+            break;
+          }
+          // Defense-in-depth: ensure the paid invoice ID matches the one we
+          // recorded against the deal. Guards against accidental metadata
+          // mismatch (manual Stripe edits, replay of a stale event, etc.).
+          const invPaidId = typeof invPaid["id"] === "string" ? invPaid["id"] : null;
+          if (dealPaid.successFeeInvoiceId && invPaidId && dealPaid.successFeeInvoiceId !== invPaidId) {
+            console.warn(`[stripe/webhook] invoice.paid: invoice id mismatch for deal ${dealIdPaid} — event=${invPaidId} expected=${dealPaid.successFeeInvoiceId}; ignoring`);
+            break;
+          }
+          const paidAt = new Date();
+          await storage.updateMarketDeal(dealIdPaid, { successFeePaidAt: paidAt });
+          console.log(`[stripe/webhook] invoice.paid: deal ${dealIdPaid} success-fee marked paid at ${paidAt.toISOString()}`);
+
+          // Best-effort receipt email to seller's billing email.
+          try {
+            const sellerOrgPaid = await storage.getOrgForUser(dealPaid.sellerId);
+            const billingEmailPaid = sellerOrgPaid?.billingEmail;
+            if (billingEmailPaid) {
+              const listingPaid = await storage.getMarketListing(dealPaid.listingId);
+              const labelPaid = listingPaid?.assetName || `Listing #${dealPaid.listingId}`;
+              const feeDisplay = dealPaid.successFeeAmount
+                ? `$${dealPaid.successFeeAmount.toLocaleString("en-US")}`
+                : "your EdenMarket success fee";
+              const hostedUrl = typeof invPaid["hosted_invoice_url"] === "string" ? invPaid["hosted_invoice_url"] : null;
+              const html = `
+                <p>Thank you — we've received your payment of <strong>${feeDisplay}</strong> for the EdenMarket success fee on Deal #${dealIdPaid} (${labelPaid}).</p>
+                ${hostedUrl ? `<p><a href="${hostedUrl}">View your receipt</a></p>` : ""}
+                <p>The deal record has been updated with the paid timestamp. If you have any questions, just reply to this email.</p>
+              `;
+              await sendEmail(
+                billingEmailPaid,
+                `Payment received — EdenMarket success fee, Deal #${dealIdPaid}`,
+                html,
+              );
+              console.log(`[stripe/webhook] invoice.paid: receipt emailed to ${billingEmailPaid} for deal ${dealIdPaid}`);
+            } else {
+              console.warn(`[stripe/webhook] invoice.paid: deal ${dealIdPaid} — seller org has no billing email, skipping receipt`);
+            }
+          } catch (emailErr: unknown) {
+            console.error("[stripe/webhook] invoice.paid: receipt email failed", (emailErr as Error)?.message);
           }
           break;
         }
@@ -10999,8 +11074,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!deal) return res.status(404).json({ error: "Deal not found" });
       if (deal.sellerId !== userId) return res.status(403).json({ error: "Only seller can update status" });
 
-      const { status } = z.object({
+      const { status, dealSizeM } = z.object({
         status: z.enum(["nda_pending", "nda_signed", "due_diligence", "term_sheet", "loi", "closed", "paused"]),
+        dealSizeM: z.number().int().positive().optional(),
       }).parse(req.body);
 
       // Enforce NDA must be signed before progressing past nda_pending
@@ -11014,13 +11090,38 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         return res.status(400).json({ error: "Cannot revert to NDA pending after NDA has been executed" });
       }
 
+      // Closing requires a deal size — either provided now, or already persisted
+      // from a prior close attempt that failed mid-flight. We need it to compute
+      // the success-fee tier and auto-fire the invoice.
+      const effectiveDealSizeM = dealSizeM ?? deal.successFeeDealSizeM ?? null;
+      if (status === "closed" && !effectiveDealSizeM) {
+        return res.status(400).json({ error: "dealSizeM (final deal size in millions USD) is required when closing a deal" });
+      }
+
+      // Idempotency for re-closing: if the deal is already closed and an
+      // invoice was already issued, do not allow another close+invoice cycle.
+      if (status === "closed" && deal.status === "closed" && deal.successFeeInvoiceId) {
+        return res.status(409).json({
+          error: "Deal already closed and invoiced",
+          invoiceId: deal.successFeeInvoiceId,
+        });
+      }
+
       // Append to status history
       const historyEntry: import("@shared/schema").DealStatusHistoryEntry = { status, changedAt: new Date().toISOString(), changedBy: userId };
       const currentHistory = Array.isArray(deal.statusHistory) ? deal.statusHistory : [];
-      const updated = await storage.updateMarketDeal(dealId, {
+
+      // Persist the deal-size up-front so we have it on record even if invoice
+      // generation fails partway through. The status flips to "closed" in the
+      // same UPDATE so the helper sees a closed deal.
+      const updatePayload: Partial<import("@shared/schema").InsertMarketDeal> = {
         status,
         statusHistory: [...currentHistory, historyEntry],
-      });
+      };
+      if (status === "closed" && dealSizeM) {
+        updatePayload.successFeeDealSizeM = dealSizeM;
+      }
+      const updated = await storage.updateMarketDeal(dealId, updatePayload);
 
       void logDealEvent(dealId, userId, "status_changed", `→ ${status}`);
       broadcastToUsers([deal.sellerId, deal.buyerId], "deal_updated", { dealId });
@@ -11035,6 +11136,56 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             `<p>Deal #${dealId} (${label}) has been moved to <strong>${status}</strong>.</p><p><a href="${APP_URL}/admin">View in admin panel</a></p>`
           );
         } catch (e) { console.warn("[market] admin status-change email failed", e); }
+      }
+
+      // Auto-fire success-fee invoice on close. We do NOT roll back the status
+      // change on invoice failure — the deal really did close. Instead we
+      // surface the error to the seller and alert admins so the manual
+      // fallback endpoint can be used.
+      if (status === "closed" && effectiveDealSizeM) {
+        try {
+          const invoiceResult = await generateSuccessFeeInvoice(dealId, effectiveDealSizeM);
+          if (invoiceResult.ok) {
+            return res.json({
+              ...invoiceResult.deal,
+              autoInvoice: {
+                feeAmount: invoiceResult.feeAmount,
+                invoiceId: invoiceResult.invoiceId,
+                invoiceUrl: invoiceResult.invoiceUrl ?? null,
+                note: invoiceResult.note,
+              },
+            });
+          }
+          // Invoice generation failed — keep the close, alert admins.
+          console.error(`[market/auto-invoice] deal ${dealId} closed but invoice failed: ${invoiceResult.error}`);
+          try {
+            await sendAdminNotificationEmail(
+              `URGENT: Deal #${dealId} closed but auto-invoice FAILED`,
+              `<p>Deal #${dealId} was marked closed by seller but the success-fee invoice could not be generated automatically.</p>
+               <p><strong>Reason:</strong> ${invoiceResult.error}</p>
+               <p>Use the manual invoice button in <a href="${APP_URL}/admin">the admin panel</a>.</p>`
+            );
+          } catch (e) { console.warn("[market] admin auto-invoice failure email failed", e); }
+          return res.status(207).json({
+            ...updated,
+            autoInvoice: { error: invoiceResult.error, invoiceId: invoiceResult.invoiceId ?? null },
+          });
+        } catch (invErr: any) {
+          console.error(`[market/auto-invoice] deal ${dealId} unhandled error`, invErr);
+          sentryCaptureException(invErr);
+          try {
+            await sendAdminNotificationEmail(
+              `URGENT: Deal #${dealId} closed but auto-invoice CRASHED`,
+              `<p>Deal #${dealId} was marked closed by seller. The success-fee invoice generator crashed.</p>
+               <p><strong>Error:</strong> ${invErr?.message ?? String(invErr)}</p>
+               <p>Use the manual invoice button in <a href="${APP_URL}/admin">the admin panel</a>.</p>`
+            );
+          } catch (e) { console.warn("[market] admin auto-invoice crash email failed", e); }
+          return res.status(207).json({
+            ...updated,
+            autoInvoice: { error: invErr?.message ?? "Invoice generation crashed" },
+          });
+        }
       }
 
       res.json(updated);
@@ -11359,88 +11510,107 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     }
   });
 
-  // POST /api/admin/market/deals/:id/invoice — generate success fee invoice
-  app.post("/api/admin/market/deals/:id/invoice", async (req, res) => {
-    try {
-      const dealId = parseInt(String(req.params.id), 10);
-      const deal = await storage.getMarketDeal(dealId);
-      if (!deal) return res.status(404).json({ error: "Deal not found" });
+  // Shared helper — generates a success-fee Stripe invoice for a closed deal.
+  // Used by both the admin manual invoice endpoint and the seller-driven
+  // auto-fire path on deal close. Returns a discriminated result so callers
+  // can map failures to the correct HTTP status.
+  type SuccessFeeResult =
+    | { ok: true; deal: import("@shared/schema").MarketDeal; feeAmount: number; invoiceId: string | null; invoiceUrl?: string | null; note?: string }
+    | { ok: false; status: number; error: string; invoiceId?: string };
 
-      if (deal.status !== "closed") {
-        return res.status(400).json({ error: "Invoice can only be generated when the deal is marked Closed" });
-      }
+  async function computeSuccessFeeAmount(dealSizeM: number): Promise<number> {
+    if (dealSizeM <= 5) return 10000;
+    if (dealSizeM <= 50) return 30000;
+    return 50000;
+  }
 
-      // Idempotency guard — prevent duplicate invoicing
-      if (deal.successFeeInvoiceId) {
-        return res.status(409).json({ error: "Invoice already generated for this deal", invoiceId: deal.successFeeInvoiceId });
-      }
+  async function generateSuccessFeeInvoice(dealId: number, dealSizeM: number): Promise<SuccessFeeResult> {
+    const deal = await storage.getMarketDeal(dealId);
+    if (!deal) return { ok: false, status: 404, error: "Deal not found" };
+    if (deal.status !== "closed") {
+      return { ok: false, status: 400, error: "Invoice can only be generated when the deal is marked Closed" };
+    }
+    if (deal.successFeeInvoiceId) {
+      return { ok: false, status: 409, error: "Invoice already generated for this deal", invoiceId: deal.successFeeInvoiceId };
+    }
+    if (!Number.isInteger(dealSizeM) || dealSizeM <= 0) {
+      return { ok: false, status: 400, error: "dealSizeM must be a positive integer (millions USD)" };
+    }
 
-      const { dealSizeM } = z.object({ dealSizeM: z.number().int().positive() }).parse(req.body);
+    const feeAmount = await computeSuccessFeeAmount(dealSizeM);
 
-      // Success fee tiers
-      let feeAmount: number;
-      if (dealSizeM <= 5) feeAmount = 10000;
-      else if (dealSizeM <= 50) feeAmount = 30000;
-      else feeAmount = 50000;
-
-      const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
-      if (!STRIPE_SECRET_KEY) {
-        // Record locally even without Stripe
-        const updated = await storage.updateMarketDeal(dealId, {
-          successFeeDealSizeM: dealSizeM,
-          successFeeAmount: feeAmount,
-        });
-        return res.json({ deal: updated, feeAmount, invoiceId: null, note: "Stripe not configured — recorded locally" });
-      }
-
-      const Stripe = (await import("stripe")).default;
-      const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2026-03-25.dahlia" });
-
-      // Get seller's org/Stripe customer
-      const sellerOrg = await storage.getOrgForUser(deal.sellerId);
-      let customerId = sellerOrg?.stripeCustomerId;
-
-      if (!customerId && sellerOrg?.billingEmail) {
-        const customer = await stripe.customers.create({
-          email: sellerOrg.billingEmail,
-          name: sellerOrg.name ?? undefined,
-          metadata: { orgId: String(sellerOrg.id), dealId: String(dealId) },
-        });
-        customerId = customer.id;
-      }
-
-      if (!customerId) {
-        return res.status(400).json({ error: "Seller has no Stripe customer — add billing email first" });
-      }
-
-      const listing = await storage.getMarketListing(deal.listingId);
-      const assetLabel = listing?.blind ? `Blind ${listing.therapeuticArea} opportunity` : (listing?.assetName || `Listing #${deal.listingId}`);
-
-      const invoice = await stripe.invoices.create({
-        customer: customerId,
-        auto_advance: false,
-        description: `EdenMarket success fee — ${assetLabel} — Deal #${dealId}`,
-        metadata: { dealId: String(dealId), dealSizeM: String(dealSizeM) },
-      });
-
-      await stripe.invoiceItems.create({
-        customer: customerId,
-        invoice: invoice.id,
-        amount: feeAmount * 100,
-        currency: "usd",
-        description: `EdenMarket success fee ($${dealSizeM}M deal → $${(feeAmount / 1000).toFixed(0)}k tier)`,
-      });
-
-      const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
-      await stripe.invoices.sendInvoice(finalizedInvoice.id);
-
+    const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY;
+    if (!STRIPE_SECRET_KEY) {
       const updated = await storage.updateMarketDeal(dealId, {
         successFeeDealSizeM: dealSizeM,
         successFeeAmount: feeAmount,
-        successFeeInvoiceId: finalizedInvoice.id,
       });
+      return { ok: true, deal: updated!, feeAmount, invoiceId: null, note: "Stripe not configured — recorded locally" };
+    }
 
-      res.json({ deal: updated, feeAmount, invoiceId: finalizedInvoice.id, invoiceUrl: finalizedInvoice.hosted_invoice_url });
+    const Stripe = (await import("stripe")).default;
+    const stripe = new Stripe(STRIPE_SECRET_KEY, { apiVersion: "2026-03-25.dahlia" });
+
+    const sellerOrg = await storage.getOrgForUser(deal.sellerId);
+    let customerId = sellerOrg?.stripeCustomerId;
+    if (!customerId && sellerOrg?.billingEmail) {
+      const customer = await stripe.customers.create({
+        email: sellerOrg.billingEmail,
+        name: sellerOrg.name ?? undefined,
+        metadata: { orgId: String(sellerOrg.id), dealId: String(dealId) },
+      });
+      customerId = customer.id;
+    }
+    if (!customerId) {
+      return { ok: false, status: 400, error: "Seller has no Stripe customer — add billing email first" };
+    }
+
+    const listing = await storage.getMarketListing(deal.listingId);
+    const assetLabel = listing?.blind ? `Blind ${listing.therapeuticArea} opportunity` : (listing?.assetName || `Listing #${deal.listingId}`);
+
+    const invoice = await stripe.invoices.create({
+      customer: customerId,
+      auto_advance: false,
+      description: `EdenMarket success fee — ${assetLabel} — Deal #${dealId}`,
+      metadata: { dealId: String(dealId), dealSizeM: String(dealSizeM) },
+    });
+
+    await stripe.invoiceItems.create({
+      customer: customerId,
+      invoice: invoice.id,
+      amount: feeAmount * 100,
+      currency: "usd",
+      description: `EdenMarket success fee ($${dealSizeM}M deal → $${(feeAmount / 1000).toFixed(0)}k tier)`,
+    });
+
+    const finalizedInvoice = await stripe.invoices.finalizeInvoice(invoice.id);
+    await stripe.invoices.sendInvoice(finalizedInvoice.id);
+
+    const updated = await storage.updateMarketDeal(dealId, {
+      successFeeDealSizeM: dealSizeM,
+      successFeeAmount: feeAmount,
+      successFeeInvoiceId: finalizedInvoice.id,
+    });
+
+    return {
+      ok: true,
+      deal: updated!,
+      feeAmount,
+      invoiceId: finalizedInvoice.id,
+      invoiceUrl: finalizedInvoice.hosted_invoice_url ?? null,
+    };
+  }
+
+  // POST /api/admin/market/deals/:id/invoice — generate success fee invoice (manual fallback)
+  app.post("/api/admin/market/deals/:id/invoice", async (req, res) => {
+    try {
+      const dealId = parseInt(String(req.params.id), 10);
+      const { dealSizeM } = z.object({ dealSizeM: z.number().int().positive() }).parse(req.body);
+      const result = await generateSuccessFeeInvoice(dealId, dealSizeM);
+      if (!result.ok) {
+        return res.status(result.status).json({ error: result.error, ...(result.invoiceId ? { invoiceId: result.invoiceId } : {}) });
+      }
+      res.json({ deal: result.deal, feeAmount: result.feeAmount, invoiceId: result.invoiceId, invoiceUrl: result.invoiceUrl, note: result.note });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }
