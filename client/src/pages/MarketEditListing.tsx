@@ -54,7 +54,26 @@ const editSchema = z.object({
   engagementStatus: z.string().default("actively_seeking"),
   blind: z.boolean().default(false),
   assetName: z.string().optional(),
+  blindFields: z.object({
+    assetName: z.boolean().optional(),
+    institution: z.boolean().optional(),
+    inventorNames: z.boolean().optional(),
+    exactPatentIds: z.boolean().optional(),
+    mechanismDetail: z.boolean().optional(),
+  }).default({}),
 });
+
+const BLIND_FIELD_OPTIONS: Array<{
+  key: "assetName" | "institution" | "inventorNames" | "exactPatentIds" | "mechanismDetail";
+  label: string;
+  desc: string;
+}> = [
+  { key: "assetName", label: "Asset name", desc: "Hide the asset/program name in the marketplace." },
+  { key: "institution", label: "Institution / company", desc: "Hide the institution shown in the Eden Intelligence panel." },
+  { key: "inventorNames", label: "Inventor names", desc: "Hide inventors surfaced from linked EdenScout records." },
+  { key: "exactPatentIds", label: "Exact patent IDs", desc: "Hide IP status & patent numbers from the listing detail." },
+  { key: "mechanismDetail", label: "Mechanism / target detail", desc: "Hide the mechanism narrative and linked target / MoA fields." },
+];
 
 type EditFormData = z.infer<typeof editSchema>;
 
@@ -93,6 +112,7 @@ export default function MarketEditListing() {
       engagementStatus: "actively_seeking",
       blind: false,
       assetName: "",
+      blindFields: {},
     },
   });
 
@@ -112,6 +132,7 @@ export default function MarketEditListing() {
         engagementStatus: listing.engagementStatus ?? "actively_seeking",
         blind: listing.blind ?? false,
         assetName: listing.assetName ?? "",
+        blindFields: (listing as MarketListing & { blindFields?: Record<string, boolean | undefined> }).blindFields ?? {},
       });
     }
   }, [listing]);
@@ -146,7 +167,12 @@ export default function MarketEditListing() {
     },
   });
 
-  const blind = form.watch("blind");
+  const blindFields = form.watch("blindFields") ?? {};
+  const anyBlind = !!(blindFields.assetName || blindFields.institution || blindFields.inventorNames || blindFields.exactPatentIds || blindFields.mechanismDetail);
+  const previewAssetName = form.watch("assetName");
+  const previewMechanism = form.watch("mechanism");
+  const previewIpStatus = form.watch("ipStatus");
+  const previewIpSummary = form.watch("ipSummary");
 
   if (isLoading) {
     return (
@@ -308,32 +334,57 @@ export default function MarketEditListing() {
 
           <div className="rounded-xl border border-card-border bg-card p-6 space-y-4">
             <h2 className="text-sm font-bold text-foreground">Confidentiality</h2>
-            <FormField control={form.control} name="blind" render={({ field }) => (
+            <FormField control={form.control} name="assetName" render={({ field }) => (
               <FormItem>
-                <div className="flex items-center justify-between rounded-lg border border-border p-4">
-                  <div>
-                    <FormLabel className="text-sm font-medium text-foreground cursor-pointer">Blind Listing</FormLabel>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Hide your company identity and asset name from buyers.
-                    </p>
-                  </div>
-                  <FormControl>
-                    <Switch checked={field.value} onCheckedChange={field.onChange} data-testid="edit-listing-blind-toggle" />
-                  </FormControl>
-                </div>
+                <FormLabel>Asset Name <span className="text-muted-foreground text-[10px]">(optional)</span></FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g. Compound X, Program ABC" {...field} data-testid="edit-listing-asset-name" />
+                </FormControl>
+                <FormMessage />
               </FormItem>
             )} />
-            {!blind && (
-              <FormField control={form.control} name="assetName" render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Asset Name <span className="text-muted-foreground text-[10px]">(optional)</span></FormLabel>
-                  <FormControl>
-                    <Input placeholder="e.g. Compound X, Program ABC" {...field} data-testid="edit-listing-asset-name" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )} />
-            )}
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Choose what to hide</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Each field stays hidden in the marketplace until a buyer signs the NDA in the Deal Room.</p>
+              </div>
+              <div className="space-y-2">
+                {BLIND_FIELD_OPTIONS.map(opt => (
+                  <FormField key={opt.key} control={form.control} name={`blindFields.${opt.key}` as const} render={({ field }) => (
+                    <FormItem>
+                      <div className="flex items-center justify-between gap-3 rounded-md border border-border/60 bg-background/40 px-3 py-2">
+                        <div className="min-w-0">
+                          <FormLabel className="text-xs font-medium text-foreground cursor-pointer">{opt.label}</FormLabel>
+                          <p className="text-[11px] text-muted-foreground mt-0.5 leading-snug">{opt.desc}</p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={!!field.value}
+                            onCheckedChange={(v) => field.onChange(v || undefined)}
+                            data-testid={`edit-listing-blind-${opt.key}`}
+                          />
+                        </FormControl>
+                      </div>
+                    </FormItem>
+                  )} />
+                ))}
+              </div>
+            </div>
+            <div className="rounded-lg border border-violet-500/20 bg-violet-500/5 p-4 space-y-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 dark:text-violet-400">Buyer-facing preview</p>
+              {anyBlind ? (
+                <p className="text-xs text-muted-foreground italic">Confidential Listing</p>
+              ) : (
+                <p className="text-sm font-semibold text-foreground">{previewAssetName || "(no asset name set)"}</p>
+              )}
+              <div className="text-[11px] text-muted-foreground space-y-1 pt-1">
+                <p><span className="font-medium text-foreground">Mechanism:</span> {blindFields.mechanismDetail ? <em>Confidential — revealed after NDA</em> : (previewMechanism || "—")}</p>
+                <p><span className="font-medium text-foreground">IP Status:</span> {blindFields.exactPatentIds ? <em>Confidential — revealed after NDA</em> : (previewIpStatus || "—")}</p>
+                {(blindFields.exactPatentIds || previewIpSummary) && (
+                  <p><span className="font-medium text-foreground">IP Summary:</span> {blindFields.exactPatentIds ? <em>Confidential — revealed after NDA</em> : (previewIpSummary || "—")}</p>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="flex gap-3">

@@ -21,7 +21,19 @@ import {
 import { cn } from "@/lib/utils";
 import type { MarketListing, MarketEoi } from "@shared/schema";
 
-type ListingDetail = MarketListing & { eoiCount: number; myEoi: MarketEoi | null; sellerVerified?: boolean };
+type BlindFieldsMap = {
+  assetName?: boolean;
+  institution?: boolean;
+  inventorNames?: boolean;
+  exactPatentIds?: boolean;
+  mechanismDetail?: boolean;
+};
+type ListingDetail = MarketListing & {
+  eoiCount: number;
+  myEoi: MarketEoi | null;
+  sellerVerified?: boolean;
+  blindFields?: BlindFieldsMap;
+};
 
 type IntelligenceData = {
   relatedTtoAssets: Array<{
@@ -549,10 +561,20 @@ export default function MarketListingDetail() {
 
           {/* Detail fields */}
           <div className="space-y-4">
-            <DetailRow icon={Activity} label="Mechanism / Science" value={listing.mechanism} />
+            {!isSeller && listing.blindFields?.mechanismDetail
+              ? <DetailRow icon={Activity} label="Mechanism / Science" value="Confidential — revealed after NDA" />
+              : <DetailRow icon={Activity} label="Mechanism / Science" value={listing.mechanism} />}
             <DetailRow icon={FileText} label="Milestone History" value={listing.milestoneHistory} />
-            <DetailRow icon={Shield} label="IP Status" value={listing.ipStatus} />
-            {listing.ipSummary && <DetailRow icon={Shield} label="IP Summary" value={listing.ipSummary} />}
+            {!isSeller && listing.blindFields?.exactPatentIds
+              ? <>
+                  <DetailRow icon={Shield} label="IP Status" value="Confidential — revealed after NDA" />
+                  <DetailRow icon={Shield} label="IP Summary" value="Confidential — revealed after NDA" />
+                </>
+              : <>
+                  <DetailRow icon={Shield} label="IP Status" value={listing.ipStatus} />
+                  {listing.ipSummary && <DetailRow icon={Shield} label="IP Summary" value={listing.ipSummary} />}
+                </>
+            }
           </div>
 
           {/* EOI section */}

@@ -10038,6 +10038,61 @@ If multiple assets appear, return each as a separate array item.`;
     return Math.min(100, s);
   }
 
+  // ── Per-field blinding helpers ─────────────────────────────────────────────
+  // Sellers and admins always see the full record. For everyone else we mask
+  // each field independently based on the listing's `blindFields` map. The
+  // legacy `blind` boolean is treated as a derived "any field masked" flag.
+  type BlindFields = NonNullable<typeof marketListings.$inferSelect.blindFields>;
+  function normalizeBlindFields(l: { blind?: boolean | null; blindFields?: BlindFields | null }): BlindFields {
+    const bf = (l.blindFields ?? {}) as BlindFields;
+    // Backwards-compat: if a legacy listing has blind=true and no per-field map,
+    // treat it as masking name + institution + inventor names.
+    if (l.blind && !bf.assetName && !bf.institution && !bf.inventorNames && !bf.exactPatentIds && !bf.mechanismDetail) {
+      return { assetName: true, institution: true, inventorNames: true };
+    }
+    return bf;
+  }
+  function anyBlinded(bf: BlindFields): boolean {
+    return !!(bf.assetName || bf.institution || bf.inventorNames || bf.exactPatentIds || bf.mechanismDetail);
+  }
+  function maskListingForViewer<T extends typeof marketListings.$inferSelect>(listing: T, isPrivileged: boolean): T {
+    if (isPrivileged) return listing;
+    const bf = normalizeBlindFields(listing);
+    const out: T = { ...listing };
+    if (bf.assetName) out.assetName = null;
+    if (bf.mechanismDetail) out.mechanism = null;
+    if (bf.exactPatentIds) {
+      out.ipStatus = null;
+      out.ipSummary = null;
+    }
+    // Keep legacy `blind` flag in sync as a derived "any field masked" indicator.
+    out.blind = anyBlinded(bf);
+    return out;
+  }
+  // For the intelligence panel: linked EdenScout enrichment can re-leak fields
+  // the seller has chosen to blind. Mask the corresponding sub-fields.
+  function maskEdenEnrichment<T extends Record<string, unknown> | null>(enrichment: T, bf: BlindFields, isPrivileged: boolean): T {
+    if (isPrivileged || !enrichment) return enrichment;
+    const e = { ...enrichment } as Record<string, unknown>;
+    if (bf.assetName) e.assetName = null;
+    if (bf.institution) {
+      e.institution = null;
+      e.sourceUrl = null; // URL itself can identify the institution
+    }
+    if (bf.inventorNames) {
+      e.inventors = null;
+    }
+    if (bf.mechanismDetail) {
+      e.mechanismOfAction = null;
+      e.target = null;
+      e.innovationClaim = null;
+    }
+    if (bf.exactPatentIds) {
+      e.ipType = null;
+    }
+    return e as T;
+  }
+
   // GET /api/market/listings — buyer feed (active listings)
   app.get("/api/market/listings", verifyAnyAuth, async (req, res) => {
     try {
@@ -10078,14 +10133,17 @@ If multiple assets appear, return each as a separate array item.`;
       const orgVerifiedMap = new Map<number, boolean>();
       orgIds.forEach((oid, i) => orgVerifiedMap.set(oid, !!orgs[i]?.marketSellerVerifiedAt));
 
-      const result = listings.map((l, i) => ({
-        ...l,
-        assetName: l.blind ? null : l.assetName,
-        eoiCount: eoiCounts[i],
-        myEoiStatus: myEoiMap.get(l.id) ?? null,
-        edenSignalScore: edenSignalScore(l, l.ingestedAssetId ? linkedMap.get(l.ingestedAssetId) ?? null : null),
-        sellerVerified: l.orgId != null ? (orgVerifiedMap.get(l.orgId) ?? false) : false,
-      }));
+      const result = listings.map((l, i) => {
+        const isPrivileged = l.sellerId === userId;
+        const masked = maskListingForViewer(l, isPrivileged);
+        return {
+          ...masked,
+          eoiCount: eoiCounts[i],
+          myEoiStatus: myEoiMap.get(l.id) ?? null,
+          edenSignalScore: edenSignalScore(l, l.ingestedAssetId ? linkedMap.get(l.ingestedAssetId) ?? null : null),
+          sellerVerified: l.orgId != null ? (orgVerifiedMap.get(l.orgId) ?? false) : false,
+        };
+      });
 
       res.json(result);
     } catch (err: any) {
@@ -10106,6 +10164,13 @@ If multiple assets appear, return each as a separate array item.`;
         stage: z.string().min(1),
         assetName: z.string().optional().nullable(),
         blind: z.boolean().default(false),
+        blindFields: z.object({
+          assetName: z.boolean().optional(),
+          institution: z.boolean().optional(),
+          inventorNames: z.boolean().optional(),
+          exactPatentIds: z.boolean().optional(),
+          mechanismDetail: z.boolean().optional(),
+        }).optional(),
         ingestedAssetId: z.number().int().optional().nullable(),
         milestoneHistory: z.string().optional().nullable(),
         mechanism: z.string().optional().nullable(),
@@ -10119,6 +10184,10 @@ If multiple assets appear, return each as a separate array item.`;
       });
 
       const data = schema.parse(req.body);
+      // Derive `blind` boolean from per-field map so the legacy badge flag stays correct.
+      const blindFieldsIn = data.blindFields ?? {};
+      data.blindFields = blindFieldsIn;
+      data.blind = !!(blindFieldsIn.assetName || blindFieldsIn.institution || blindFieldsIn.inventorNames || blindFieldsIn.exactPatentIds || blindFieldsIn.mechanismDetail) || data.blind;
 
       // Verify ingestedAssetId exists if provided
       if (data.ingestedAssetId != null) {
@@ -10233,9 +10302,10 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         ? await storage.getOrganization(listing.orgId).catch(() => null)
         : null;
 
+      const masked = maskListingForViewer(listing, isSeller);
       res.json({
-        ...listing,
-        assetName: listing.blind && !isSeller ? null : listing.assetName,
+        ...masked,
+        blindFields: normalizeBlindFields(listing),
         eoiCount,
         myEoi: myEoi ?? null,
         sellerVerified: !!sellerOrg?.marketSellerVerifiedAt,
@@ -10320,7 +10390,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             .map(a => ({ id: a.id, assetName: a.assetName, institution: a.institution, modality: a.modality, developmentStage: a.developmentStage, licensingReadiness: a.licensingReadiness }))
         : [];
 
-      const edenEnrichment = linked ? {
+      const rawEnrichment = linked ? {
         assetName: linked.assetName,
         institution: linked.institution,
         target: linked.target,
@@ -10332,9 +10402,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         completenessScore: linked.completenessScore,
         ipType: linked.ipType,
         sourceUrl: linked.sourceUrl,
+        inventors: linked.inventors,
       } : null;
+      const isPrivilegedView = isAdmin || listing.sellerId === userId;
+      const bf = normalizeBlindFields(listing);
+      const edenEnrichment = maskEdenEnrichment(rawEnrichment, bf, isPrivilegedView);
 
-      res.json({ relatedTtoAssets, activeTrials, relatedPatents, comparableDeals, edenEnrichment, linkedAssetId: listing.ingestedAssetId ?? null });
+      res.json({ relatedTtoAssets, activeTrials, relatedPatents, comparableDeals, edenEnrichment, blindFields: bf, linkedAssetId: listing.ingestedAssetId ?? null });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -10356,6 +10430,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const allowed = z.object({
         assetName: z.string().optional().nullable(),
         blind: z.boolean().optional(),
+        blindFields: z.object({
+          assetName: z.boolean().optional(),
+          institution: z.boolean().optional(),
+          inventorNames: z.boolean().optional(),
+          exactPatentIds: z.boolean().optional(),
+          mechanismDetail: z.boolean().optional(),
+        }).optional(),
         ingestedAssetId: z.number().int().optional().nullable(),
         therapeuticArea: z.string().optional(),
         modality: z.string().optional(),
@@ -10372,6 +10453,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       });
 
       const data = allowed.parse(req.body);
+
+      // Derive `blind` boolean from per-field map when provided.
+      if (data.blindFields !== undefined) {
+        const bf = data.blindFields ?? {};
+        data.blind = !!(bf.assetName || bf.institution || bf.inventorNames || bf.exactPatentIds || bf.mechanismDetail);
+      }
 
       // Verify ingestedAssetId exists if provided
       if (data.ingestedAssetId != null) {
@@ -10925,6 +11012,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       // After EOI acceptance (deal created), identities are mutually revealed.
       // Deep IP/financial data and EOI rationale/budget are gated behind NDA execution.
       if (!deal.ndaSignedAt) {
+        const bf = normalizeBlindFields(listing ?? { blind: false, blindFields: {} });
         const redactedListing = listing ? {
           id: listing.id,
           therapeuticArea: listing.therapeuticArea,
@@ -10932,12 +11020,14 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           stage: listing.stage,
           engagementStatus: listing.engagementStatus,
           blind: listing.blind,
+          blindFields: bf,
           status: listing.status,
           createdAt: listing.createdAt,
           updatedAt: listing.updatedAt,
           sellerId: listing.sellerId,
-          // Identity reveal: asset name is always shared post-accept (blind only hides in marketplace)
-          assetName: listing.assetName,
+          // Per-field blinding: asset name only revealed pre-NDA if seller did not mask it.
+          // Anything masked stays redacted until NDA is fully executed.
+          assetName: bf.assetName ? null : listing.assetName,
           // Gate deep technical/financial data behind NDA
           mechanism: null,
           ipStatus: null,

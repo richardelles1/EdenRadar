@@ -816,6 +816,13 @@ export const marketListings = pgTable("market_listings", {
   ingestedAssetId: integer("ingested_asset_id"),
   assetName: text("asset_name"),
   blind: boolean("blind").notNull().default(false),
+  blindFields: jsonb("blind_fields").$type<{
+    assetName?: boolean;
+    institution?: boolean;
+    inventorNames?: boolean;
+    exactPatentIds?: boolean;
+    mechanismDetail?: boolean;
+  }>().notNull().default({}),
   therapeuticArea: text("therapeutic_area").notNull(),
   modality: text("modality").notNull(),
   stage: text("stage").notNull(),
@@ -834,7 +841,15 @@ export const marketListings = pgTable("market_listings", {
   updatedAt: timestamp("updated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
 });
 
-export const insertMarketListingSchema = createInsertSchema(marketListings).omit({ id: true, createdAt: true, updatedAt: true, aiSummary: true, adminNote: true, status: true });
+export const insertMarketListingSchema = createInsertSchema(marketListings).omit({ id: true, createdAt: true, updatedAt: true, aiSummary: true, adminNote: true, status: true }).extend({
+  blindFields: z.object({
+    assetName: z.boolean().optional(),
+    institution: z.boolean().optional(),
+    inventorNames: z.boolean().optional(),
+    exactPatentIds: z.boolean().optional(),
+    mechanismDetail: z.boolean().optional(),
+  }).optional(),
+});
 export type InsertMarketListing = z.infer<typeof insertMarketListingSchema>;
 export type InsertMarketListingFull = InsertMarketListing & {
   sellerId: string;
