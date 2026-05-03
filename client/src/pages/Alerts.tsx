@@ -51,6 +51,11 @@ import { apiRequest, queryClient, getAuthHeaders } from "@/lib/queryClient";
 import type { UserAlert } from "@shared/schema";
 
 const STORAGE_KEY = "edenLastSeenAlerts";
+// Per-tab session cache for the captured sinceParam. Set on the first mount
+// of the Alerts page in this browser session; subsequent refreshes/navigations
+// within the same tab read from this cache so the "Since last visit" counts
+// stay stable until the tab is closed (or the user clicks "Mark all seen").
+const SESSION_SINCE_KEY = "edenAlertsSessionSince";
 
 function defaultSince(): string {
   return new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
@@ -159,8 +164,17 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
   for (const s of (alert.stages ?? [])) criteriaChips.push({ label: toDisplayStage(s), colorClass: "bg-violet-500/10 text-violet-500 border-violet-500/20" });
   for (const inst of (alert.institutions ?? [])) criteriaChips.push({ label: inst, colorClass: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20" });
 
-  const draftParts = [alert.query, ...(alert.modalities ?? []).map(toDisplayModality), ...(alert.stages ?? []).map(toDisplayStage)].filter(Boolean);
-  const draft = draftParts.join(" ");
+  // Build a structured Scout URL that preserves the alert's actual criteria
+  // (canonical slugs for modalities/stages, full names for institutions, optional
+  // free-text query). Scout reads these params and applies them as filters
+  // instead of dumping a flattened display string into the search box.
+  const exploreParams = new URLSearchParams();
+  if (alert.query?.trim()) exploreParams.set("q", alert.query.trim());
+  if ((alert.modalities ?? []).length > 0) exploreParams.set("modalities", (alert.modalities ?? []).join(","));
+  if ((alert.stages ?? []).length > 0) exploreParams.set("stages", (alert.stages ?? []).join(","));
+  if ((alert.institutions ?? []).length > 0) exploreParams.set("institutions", (alert.institutions ?? []).join(","));
+  const hasExploreCriteria = exploreParams.toString().length > 0;
+  const exploreUrl = `/scout?${exploreParams.toString()}`;
 
   return (
     <div
@@ -198,8 +212,8 @@ function AlertCard({ alert, onDelete, onEdit, onToggleEnabled, isPending, matchC
             )}
           </div>
         ) : null}
-        {!isAllNew && draft && (
-          <Link href={`/scout?draft=${encodeURIComponent(draft)}`}>
+        {!isAllNew && hasExploreCriteria && (
+          <Link href={exploreUrl}>
             <span className="text-[10px] text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer" data-testid={`alert-explore-${alert.id}`}>
               Explore matches →
             </span>
@@ -1132,33 +1146,63 @@ export default function Alerts() {
   // Falls back to localStorage, then to 7-days-ago default.
   const [sinceParam, setSinceParam] = useState<string>(() => {
     if (typeof window !== "undefined") {
-      return localStorage.getItem(STORAGE_KEY) ?? defaultSince();
+      // Per-session cache wins so refreshes within the same tab keep the same
+      // "Since last visit" baseline even after mark-read advances the DB.
+      return sessionStorage.getItem(SESSION_SINCE_KEY)
+        ?? localStorage.getItem(STORAGE_KEY)
+        ?? defaultSince();
     }
     return defaultSince();
   });
 
   const { data: alerts = [] } = useQuery<UserAlert[]>({ queryKey: ["/api/alerts"] });
 
-  // On mount: fetch the DB-side last-viewed timestamp and use it as sinceParam.
-  // Then call mark-read to clear the sidebar badge. The page keeps showing
-  // activity since the pre-mark-read timestamp for the current session.
+  // On the FIRST mount of the Alerts page in this tab session:
+  //   1. Snapshot the DB-side last-viewed timestamp into sinceParam (and cache
+  //      it in sessionStorage) so the page shows deltas relative to the
+  //      *previous* visit.
+  //   2. Then call mark-read to advance the DB timestamp — this clears the
+  //      sidebar badge promptly while the page keeps using the snapshot.
+  // On subsequent mounts within the same session (refresh / navigate away and
+  // back), reuse the cached sinceParam so the "+N" counts stay stable; do NOT
+  // call mark-read again or the badge would rewind. The session cache clears
+  // when the tab closes — the next session will then re-snapshot the new
+  // (now-advanced) DB timestamp, which is exactly "since last visit".
   useEffect(() => {
+    const cached = sessionStorage.getItem(SESSION_SINCE_KEY);
+    if (cached) {
+      // Already initialised this session; don't touch the DB or refetch.
+      return;
+    }
+    let cancelled = false;
     getAuthHeaders().then(async (authHeaders) => {
+      let captured: string | null = null;
       try {
         const r = await fetch("/api/alerts/viewed-since", { credentials: "include", headers: authHeaders });
         if (r.ok) {
           const { since } = await r.json();
-          if (since) {
-            setSinceParam(since);
-            localStorage.setItem(STORAGE_KEY, since);
-          }
+          if (since) captured = since as string;
         }
       } catch { /* ignore */ }
-      // Clear sidebar badge after loading the timestamp we'll use to display alerts
+      if (cancelled) return;
+      // Lock the snapshot in sessionStorage BEFORE calling mark-read so any
+      // re-render during this turn (or a quick remount) reads the captured
+      // value, not the about-to-be-advanced DB value.
+      const lockedSince = captured ?? sinceParam;
+      sessionStorage.setItem(SESSION_SINCE_KEY, lockedSince);
+      if (captured) {
+        setSinceParam(captured);
+        localStorage.setItem(STORAGE_KEY, captured);
+      }
+      // Now advance the DB timestamp so the sidebar badge clears. The page
+      // continues to render deltas against `lockedSince` because sinceParam
+      // is locked above and we don't refetch viewed-since again this session.
       apiRequest("POST", "/api/alerts/mark-read").then(() => {
         queryClient.invalidateQueries({ queryKey: ["/api/alerts/unread-count"] });
       }).catch(() => {});
     });
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const deltaUrl = `/api/industry/alerts/delta?since=${encodeURIComponent(sinceParam)}`;
@@ -1205,6 +1249,11 @@ export default function Alerts() {
   function handleMarkAllSeen() {
     const now = new Date().toISOString();
     localStorage.setItem(STORAGE_KEY, now);
+    // Refresh the per-session snapshot too so the page deltas zero out
+    // immediately on this explicit click (rather than waiting for the next
+    // session). Without this, the locked sessionStorage value would keep the
+    // old "+N" counts visible after the user said "Mark all seen".
+    sessionStorage.setItem(SESSION_SINCE_KEY, now);
     setSinceParam(now);
     window.dispatchEvent(new CustomEvent("eden-alerts-seen"));
     // Sync DB lastViewedAlertsAt so badge stays consistent

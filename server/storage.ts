@@ -2506,9 +2506,20 @@ export class DatabaseStorage implements IStorage {
   async keywordSearchIngestedAssets(
     query: string,
     limit = 40,
-    opts: { modality?: string; stage?: string; indication?: string; institution?: string; since?: Date; before?: Date } = {}
+    opts: {
+      modality?: string;
+      stage?: string;
+      indication?: string;
+      institution?: string;
+      // Multi-value lists — OR within each list, AND across lists.
+      modalities?: string[];
+      stages?: string[];
+      institutions?: string[];
+      since?: Date;
+      before?: Date;
+    } = {}
   ): Promise<RetrievedAsset[]> {
-    const { modality, stage, indication, institution, since, before } = opts;
+    const { modality, stage, indication, institution, modalities, stages, institutions, since, before } = opts;
     const tokens = query
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, " ")
@@ -2516,20 +2527,39 @@ export class DatabaseStorage implements IStorage {
       .filter((t) => t.length >= 3)
       .slice(0, 6);
 
-    if (tokens.length === 0) return [];
+    const hasFilters = !!(modality || stage || indication || institution || since || before
+      || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
+    // Allow filter-only browsing (no text tokens) when at least one structured
+    // filter is supplied — used by the Alerts "Explore matches" link.
+    if (tokens.length === 0 && !hasFilters) return [];
 
-    const termConditions = tokens.map((t) => {
-      const p = `%${t}%`;
-      return sql`(LOWER(asset_name) LIKE ${p} OR LOWER(indication) LIKE ${p} OR LOWER(target) LIKE ${p} OR LOWER(COALESCE(summary,'')) LIKE ${p} OR LOWER(institution) LIKE ${p} OR LOWER(COALESCE(mechanism_of_action,'')) LIKE ${p})`;
-    });
-
-    const textMatch = termConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
-
-    const filterConditions: ReturnType<typeof sql>[] = [sql`relevant = true`, sql`(${textMatch})`];
+    const filterConditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
+    if (tokens.length > 0) {
+      const termConditions = tokens.map((t) => {
+        const p = `%${t}%`;
+        return sql`(LOWER(asset_name) LIKE ${p} OR LOWER(indication) LIKE ${p} OR LOWER(target) LIKE ${p} OR LOWER(COALESCE(summary,'')) LIKE ${p} OR LOWER(institution) LIKE ${p} OR LOWER(COALESCE(mechanism_of_action,'')) LIKE ${p})`;
+      });
+      const textMatch = termConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
+      filterConditions.push(sql`(${textMatch})`);
+    }
     if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    // Multi-value lists: build (col LIKE %v1% OR col LIKE %v2% OR ...) groups.
+    const orLike = (col: ReturnType<typeof sql>, values: string[]) => {
+      const parts = values.map((v) => sql`${col} LIKE ${"%" + v.toLowerCase() + "%"}`);
+      return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
+    };
+    if (modalities && modalities.length) {
+      filterConditions.push(sql`(${orLike(sql`LOWER(modality)`, modalities)})`);
+    }
+    if (stages && stages.length) {
+      filterConditions.push(sql`(${orLike(sql`LOWER(development_stage)`, stages)})`);
+    }
+    if (institutions && institutions.length) {
+      filterConditions.push(sql`(${orLike(sql`LOWER(institution)`, institutions)})`);
+    }
     if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
     if (before) filterConditions.push(sql`first_seen_at < ${before}`);
 

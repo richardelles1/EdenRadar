@@ -574,23 +574,41 @@ export async function registerRoutes(
     try {
       const scoutUserId = await tryGetUserId(req);
       const schema = z.object({
-        query: z.string().min(1).max(500),
+        // Allow empty query when at least one filter is provided (e.g. browsing
+        // by modality/stage/institution from an Alerts "Explore matches" link).
+        query: z.string().max(500).default(""),
         minSimilarity: z.number().min(0.40).max(1).default(0.40),
         modality: z.string().optional(),
         stage: z.string().optional(),
         indication: z.string().optional(),
         institution: z.string().optional(),
+        // Multi-value lists (used by Alerts "Explore matches" links).
+        // Each list is OR'd within itself; lists are AND'd across each other.
+        modalities: z.array(z.string()).optional(),
+        stages: z.array(z.string()).optional(),
+        institutions: z.array(z.string()).optional(),
         limit: z.number().int().min(1).max(200).default(100),
         since: z.string().optional(),
         before: z.string().optional(),
       });
-      const { query, minSimilarity, modality, stage, indication, institution, limit, since, before } = schema.parse(req.body);
+      const { query, minSimilarity, modality, stage, indication, institution, modalities, stages, institutions, limit, since, before } = schema.parse(req.body);
+      const hasAnyFilter = !!(modality || stage || indication || institution || since || before
+        || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
+      if (!query.trim() && !hasAnyFilter) {
+        return res.json({ assets: [], query, assetsFound: 0, sources: ["tech_transfer"], fallback: false });
+      }
       const sinceDate = since && !isNaN(Date.parse(since)) ? new Date(since) : undefined;
       const beforeDate = before && !isNaN(Date.parse(before)) ? new Date(before) : undefined;
 
       let results: import("./storage").RetrievedAsset[] = [];
 
-      const searchOpts = { modality, stage, indication, institution, since: sinceDate, before: beforeDate };
+      const searchOpts = {
+        modality, stage, indication, institution,
+        modalities: modalities && modalities.length ? modalities : undefined,
+        stages: stages && stages.length ? stages : undefined,
+        institutions: institutions && institutions.length ? institutions : undefined,
+        since: sinceDate, before: beforeDate,
+      };
       results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
       // Default policy: ON in non-prod, OFF in prod unless flag explicitly set.

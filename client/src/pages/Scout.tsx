@@ -276,6 +276,13 @@ export default function Scout() {
   const [stageFilter, setStageFilter] = useState<string>("all");
   const [modalityFilter, setModalityFilter] = useState<string>("all");
   const [institutionFilter, setInstitutionFilter] = useState<string>("all");
+  // Multi-value filters populated from URL (e.g. when arriving from an Alerts
+  // "Explore matches" link with multiple stages/modalities/institutions). When
+  // non-empty, these AND with the single-select filters above. Cleared via the
+  // "From alert" chip strip below the filters.
+  const [stagesMulti, setStagesMulti] = useState<string[]>([]);
+  const [modalitiesMulti, setModalitiesMulti] = useState<string[]>([]);
+  const [institutionsMulti, setInstitutionsMulti] = useState<string[]>([]);
   const [sinceFilter, setSinceFilter] = useState<string>("any");
   const [sortMode, setSortMode] = useState<"score" | "recency">("score");
   const [minScore, setMinScore] = useState<number>(0);
@@ -321,8 +328,21 @@ export default function Scout() {
     const params = new URLSearchParams(searchStr);
     const qParam = params.get("q");
     const draftParam = params.get("draft");
-    if (qParam && qParam.trim()) {
-      const q = qParam.trim();
+    const modalitiesParam = params.get("modalities");
+    const stagesParam = params.get("stages");
+    const institutionsParam = params.get("institutions");
+
+    const parseList = (s: string | null) =>
+      s ? s.split(",").map((v) => v.trim()).filter(Boolean) : [];
+    const modalitiesList = parseList(modalitiesParam);
+    const stagesList = parseList(stagesParam);
+    const institutionsList = parseList(institutionsParam);
+    const hasStructuredFilters = modalitiesList.length + stagesList.length + institutionsList.length > 0;
+
+    const q = (qParam ?? "").trim();
+    const shouldRunSearch = !!q || hasStructuredFilters;
+
+    if (shouldRunSearch) {
       setInputQuery(q);
       setCurrentQuery(q);
       setResearchResults([]);
@@ -336,11 +356,25 @@ export default function Scout() {
       setTrialSponsorSearch("");
       setTrialSortMode("newest");
       setResultTab("assets");
-      searchMutation.mutate({ query: q });
-      patentMutation.mutate({ query: q });
-      trialMutation.mutate({ query: q });
-      if (researchSources.length > 0) {
-        researchMutation.mutate({ query: q, sources: researchSources });
+
+      // Apply structured filters from URL (e.g. arriving from Alerts "Explore matches").
+      // Multi-value filters live in *Multi state and are AND-ed with the single-select filters.
+      setStagesMulti(stagesList);
+      setModalitiesMulti(modalitiesList);
+      setInstitutionsMulti(institutionsList);
+
+      searchMutation.mutate({
+        query: q,
+        modalities: modalitiesList,
+        stages: stagesList,
+        institutions: institutionsList,
+      });
+      if (q) {
+        patentMutation.mutate({ query: q });
+        trialMutation.mutate({ query: q });
+        if (researchSources.length > 0) {
+          researchMutation.mutate({ query: q, sources: researchSources });
+        }
       }
       setLocation("/scout", { replace: true });
     } else if (draftParam && draftParam.trim()) {
@@ -417,18 +451,26 @@ export default function Scout() {
   }
 
   const searchMutation = useMutation({
-    mutationFn: async ({ query }: { query: string }) => {
+    mutationFn: async ({ query, modalities, stages, institutions }: { query: string; modalities?: string[]; stages?: string[]; institutions?: string[] }) => {
       const profileModality = buyerProfile.modalities.length === 1 ? buyerProfile.modalities[0] : undefined;
       const profileStage = buyerProfile.preferred_stages.length === 1 ? buyerProfile.preferred_stages[0] : undefined;
       const profileIndication = buyerProfile.indication_keywords.length === 1 ? buyerProfile.indication_keywords[0] : undefined;
       const dateBounds = getDateBounds(sinceFilter);
+      // Alert-derived multi-filter lists are pushed server-side as arrays so the
+      // database, not the client, does the OR-within / AND-across filtering and
+      // we don't truncate matches to the first 100 unfiltered rows.
+      // Single-value buyer-profile narrows still use the singular filter slots.
+      const useMultiModality = (modalities?.length ?? 0) > 0;
+      const useMultiStage = (stages?.length ?? 0) > 0;
+      const useMultiInstitution = (institutions?.length ?? 0) > 0;
       const res = await apiRequest("POST", "/api/scout/search", {
         query,
         minSimilarity: 0.40,
         limit: 100,
-        ...(profileModality ? { modality: profileModality } : {}),
-        ...(profileStage ? { stage: profileStage } : {}),
+        ...(useMultiModality ? { modalities } : profileModality ? { modality: profileModality } : {}),
+        ...(useMultiStage ? { stages } : profileStage ? { stage: profileStage } : {}),
         ...(profileIndication ? { indication: profileIndication } : {}),
+        ...(useMultiInstitution ? { institutions } : {}),
         ...dateBounds,
       });
       if (!res.ok) {
@@ -437,16 +479,21 @@ export default function Scout() {
       }
       return res.json() as Promise<SearchResponse>;
     },
-    onSuccess: (data) => {
+    onSuccess: (data, variables) => {
       setSearchResults(data.assets);
       setHasSearched(true);
+      // Reset single-select filters; multi-value filters from URL are preserved
+      // (they were set in the URL-parsing useEffect above and apply in filteredResults).
+      const camePrePopulated = (variables?.modalities?.length ?? 0) + (variables?.stages?.length ?? 0) + (variables?.institutions?.length ?? 0) > 0;
       setStageFilter("all");
       setModalityFilter("all");
       setInstitutionFilter("all");
       setSortMode("score");
       setMinScore(0);
-      if (data.assets.length === 0) {
+      if (data.assets.length === 0 && !camePrePopulated) {
         toast({ title: "No TTO assets matched", description: "Try broader terms or a different indication." });
+      } else if (data.assets.length === 0 && camePrePopulated) {
+        toast({ title: "No matching assets yet", description: "No assets match this alert's criteria right now." });
       }
     },
     onError: (err: any) => {
@@ -733,8 +780,13 @@ export default function Scout() {
       const stageOk = stageFilter === "all" || asset.development_stage?.toLowerCase() === stageFilter;
       const modalityOk = modalityFilter === "all" || asset.modality?.toLowerCase() === modalityFilter;
       const institutionOk = institutionFilter === "all" || asset.institution === institutionFilter;
+      // Multi-filters from URL (e.g. Alerts "Explore matches"): asset must match
+      // at least one value in each non-empty list (AND across lists, OR within).
+      const stageMultiOk = stagesMulti.length === 0 || stagesMulti.some((s) => (asset.development_stage ?? "").toLowerCase() === s.toLowerCase());
+      const modalityMultiOk = modalitiesMulti.length === 0 || modalitiesMulti.some((m) => (asset.modality ?? "").toLowerCase() === m.toLowerCase());
+      const instMultiOk = institutionsMulti.length === 0 || institutionsMulti.some((i) => (asset.institution ?? "").toLowerCase() === i.toLowerCase());
       const scoreOk = minScore === 0 || asset.score >= minScore;
-      return stageOk && modalityOk && institutionOk && scoreOk;
+      return stageOk && modalityOk && institutionOk && stageMultiOk && modalityMultiOk && instMultiOk && scoreOk;
     });
     if (sortMode === "recency") {
       results = [...results].sort((a, b) => {
@@ -751,7 +803,7 @@ export default function Scout() {
       });
     }
     return results;
-  }, [searchResults, stageFilter, modalityFilter, institutionFilter, sortMode, minScore]);
+  }, [searchResults, stageFilter, modalityFilter, institutionFilter, stagesMulti, modalitiesMulti, institutionsMulti, sortMode, minScore]);
 
   const filteredPatentResults = useMemo(() => {
     const now = Date.now();
@@ -864,6 +916,9 @@ export default function Scout() {
     stageFilter !== "all",
     modalityFilter !== "all",
     institutionFilter !== "all",
+    stagesMulti.length > 0,
+    modalitiesMulti.length > 0,
+    institutionsMulti.length > 0,
     sinceFilter !== "any",
     sortMode !== "score",
     minScore !== 0,
@@ -1152,6 +1207,38 @@ export default function Scout() {
                   <Badge variant="secondary" className="text-[11px] gap-1 cursor-pointer" onClick={() => setInstitutionFilter("all")} data-testid="active-filter-institution">
                     {institutionFilter} ×
                   </Badge>
+                )}
+                {(stagesMulti.length > 0 || modalitiesMulti.length > 0 || institutionsMulti.length > 0) && (
+                  <>
+                    {stagesMulti.map((s) => (
+                      <Badge key={`smul-${s}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-violet-500/10 text-violet-600 dark:text-violet-400 border border-violet-500/20"
+                        onClick={() => setStagesMulti((prev) => prev.filter((v) => v !== s))}
+                        data-testid={`active-filter-stage-multi-${s}`}>
+                        Stage: {s} ×
+                      </Badge>
+                    ))}
+                    {modalitiesMulti.map((m) => (
+                      <Badge key={`mmul-${m}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer capitalize bg-primary/10 text-primary border border-primary/20"
+                        onClick={() => setModalitiesMulti((prev) => prev.filter((v) => v !== m))}
+                        data-testid={`active-filter-modality-multi-${m}`}>
+                        {m} ×
+                      </Badge>
+                    ))}
+                    {institutionsMulti.map((i) => (
+                      <Badge key={`imul-${i}`} variant="secondary" className="text-[11px] gap-1 cursor-pointer bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20"
+                        onClick={() => setInstitutionsMulti((prev) => prev.filter((v) => v !== i))}
+                        data-testid={`active-filter-institution-multi-${i}`}>
+                        {i} ×
+                      </Badge>
+                    ))}
+                    <button
+                      onClick={() => { setStagesMulti([]); setModalitiesMulti([]); setInstitutionsMulti([]); }}
+                      className="text-[11px] text-muted-foreground hover:text-foreground underline"
+                      data-testid="button-clear-alert-filters"
+                    >
+                      Clear alert filters
+                    </button>
+                  </>
                 )}
               </div>
             </div>
@@ -2051,6 +2138,9 @@ export default function Scout() {
                   setStageFilter("all");
                   setModalityFilter("all");
                   setInstitutionFilter("all");
+                  setStagesMulti([]);
+                  setModalitiesMulti([]);
+                  setInstitutionsMulti([]);
                   setSinceFilter("any");
                   setSortMode("score");
                   setMinScore(0);
