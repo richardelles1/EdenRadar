@@ -733,6 +733,7 @@ export async function registerRoutes(
             dimension_basis,
             confidence_factor: Math.round(confidenceFactor * 100) / 100,
             ...(catConf !== undefined ? { category_confidence: catConf } : {}),
+            ...(typeof r.textRelevance === "number" ? { text_relevance: Math.round(r.textRelevance * 1000) / 1000 } : {}),
           },
           latest_signal_date: "",
           matching_tags: [],
@@ -751,14 +752,25 @@ export async function registerRoutes(
         };
       });
 
-      // Re-sort by confidence-weighted score so demoted rows fall down the page.
-      // Exact-name matches (full query found inside asset_name, case + punct
-      // insensitive) are always pinned to the top regardless of score.
+      // Final ordering:
+      //   1. Exact-name matches pinned to the top (carried over from #759).
+      //   2. For queried searches, FTS text_relevance (ts_rank_cd from Tier 1,
+      //      task #760) drives the primary order so the strongest text matches
+      //      come first regardless of completeness/recency. Score is the
+      //      tiebreaker.
+      //   3. For filter-only browsing (no query), text_relevance is 0 for all
+      //      rows so the existing score-first behavior is preserved.
+      const hasQuery = !!query.trim();
       const isExact = (a: ScoredAsset) => exactNameIds.has(Number(a.id));
+      const textRel = (a: ScoredAsset) => a.score_breakdown?.text_relevance ?? 0;
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
         const bx = isExact(b) ? 1 : 0;
         if (ax !== bx) return bx - ax;
+        if (hasQuery) {
+          const dr = textRel(b) - textRel(a);
+          if (Math.abs(dr) > 1e-6) return dr;
+        }
         return b.score - a.score;
       });
 

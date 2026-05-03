@@ -71,6 +71,9 @@ export type RetrievedAsset = {
   dataSparse?: boolean;
   categoryConfidence?: number | null;
   assetClass?: string | null;
+  /** ts_rank_cd from FTS query when available (Tier 1 of search smartness work).
+   *  Null/0 for non-FTS retrieval paths (vector, by-institution) or filter-only browsing. */
+  textRelevance?: number | null;
 };
 
 export interface IStorage {
@@ -2521,53 +2524,85 @@ export class DatabaseStorage implements IStorage {
     } = {}
   ): Promise<RetrievedAsset[]> {
     const { modality, stage, indication, institution, modalities, stages, institutions, since, before } = opts;
-    // Tokenize with a 3-char floor for normal queries, but if the entire query
-    // is short or every token is short (e.g. "NX-1", "PD1"), keep all non-empty
-    // tokens so exact-text searches don't return zero results.
-    const allTokens = query
-      .toLowerCase()
-      .replace(/[^a-z0-9\s-]/g, " ")
-      .split(/\s+/)
-      .filter((t) => t.length > 0);
-    let tokens = allTokens.filter((t) => t.length >= 3).slice(0, 6);
-    if (tokens.length === 0 && allTokens.length > 0) {
-      tokens = allTokens.slice(0, 6);
-    }
+
+    // Tier 1 of search smartness work (task #760).
+    //
+    // Strategy:
+    //   1. Postgres FTS via `websearch_to_tsquery('english', $q)` against a
+    //      pre-built generated `search_tsv` column with field weighting:
+    //        A = asset_name (highest)
+    //        B = target / indication / mechanism_of_action
+    //        C = summary / innovation_claim / unmet_need / comparable_drugs / abstract
+    //        D = institution / categories
+    //      Stemming, phrase quoting, AND/OR/-negation, and stopwords come for free.
+    //   2. Trigram fuzzy match on `LOWER(asset_name)` via the `%` operator
+    //      (pg_trgm) so 1–2 character typos still surface the asset, ranked
+    //      strictly below true FTS hits via `word_similarity` in the ORDER BY.
+    //   3. Exact-name clause carried over from #759 — full normalized query
+    //      contained in normalized `asset_name`. Always pinned to the top so
+    //      a real exact-text hit is never demoted by FTS rank or LIMIT slicing.
+    //
+    // Indexes (created at startup in server/index.ts ensureScoutSearchIndexes):
+    //   - GIN on search_tsv  → FTS uses index, no sequential scan
+    //   - GIN on LOWER(asset_name) gin_trgm_ops → trigram uses index too
+    //
+    // Synonym/alias expansion is NOT in this tier — that's task #761.
+
+    const trimmedQuery = (query ?? "").trim();
 
     // Normalized full-query string for exact-name matching (case + punctuation
-    // insensitive). Guarantees an exact text match on asset_name always
-    // surfaces, regardless of token-length filtering or confidence gates.
-    const normalizedQuery = query
+    // insensitive). Mirrors the SQL-side normalization below so route-level
+    // exact-name pin/exemption is symmetric with the SQL `exact_name_match`.
+    const normalizedQuery = trimmedQuery
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, " ")
       .replace(/\s+/g, " ")
       .trim();
 
+    // Plain text for trigram fuzzy match — strip websearch operators (quotes,
+    // leading minus, +) so trigram similarity is computed against what the
+    // user typed, not against the parsed query syntax.
+    const trigramText = trimmedQuery
+      .toLowerCase()
+      .replace(/["+]/g, " ")
+      .replace(/(^|\s)-+/g, "$1")
+      .replace(/\s+/g, " ")
+      .trim();
+    const trigramEnabled = trigramText.length >= 3;
+
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
-    // Allow filter-only browsing (no text tokens) when at least one structured
-    // filter is supplied — used by the Alerts "Explore matches" link.
-    if (tokens.length === 0 && !normalizedQuery && !hasFilters) return [];
+    // Filter-only browsing path (Alerts "Explore matches" link, etc.) is
+    // preserved — at least one of {query, structured filter} must be present.
+    if (!trimmedQuery && !hasFilters) return [];
 
     const filterConditions: ReturnType<typeof sql>[] = [sql`relevant = true`];
-    if (tokens.length > 0 || normalizedQuery) {
-      const termConditions = tokens.map((t) => {
-        const p = `%${t}%`;
-        return sql`(LOWER(asset_name) LIKE ${p} OR LOWER(indication) LIKE ${p} OR LOWER(target) LIKE ${p} OR LOWER(COALESCE(summary,'')) LIKE ${p} OR LOWER(institution) LIKE ${p} OR LOWER(COALESCE(mechanism_of_action,'')) LIKE ${p})`;
-      });
-      // Exact-name match clause — matches when the normalized query appears
-      // anywhere inside the normalized asset_name. The column-side
-      // normalization mirrors the query-side: lowercase, replace any non
-      // [a-z0-9 -] with a space, then collapse runs of whitespace to a single
-      // space and trim. This handles punctuation (parens, em-dashes, slashes)
-      // as well as titles with double spaces.
+    if (trimmedQuery) {
+      const orClauses: ReturnType<typeof sql>[] = [];
+      // FTS — handles stemming, "phrases", AND/OR, -negation. websearch parser
+      // never errors on user input; if the query is only stopwords the resulting
+      // tsquery is empty and the @@ test is simply false (trigram + exact-name
+      // clauses still apply).
+      orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
+      // Exact-name clause carried over from #759 — never demoted by FTS rank.
       if (normalizedQuery) {
         const exactPat = `%${normalizedQuery}%`;
-        termConditions.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPat})`);
+        orClauses.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPat})`);
       }
-      const textMatch = termConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
+      // Trigram fuzzy clause — `<%` (word_similarity) operator uses the GIN
+      // trgm index and the default `pg_trgm.word_similarity_threshold` (0.6),
+      // which catches single-character typos like "krass"→"kras" or
+      // "olapraib"→"olaparib". The plain `%` (set similarity) operator was
+      // tried first but its threshold (0.3) is computed across the entire
+      // long asset_name string, so a short typo query never clears it.
+      // Skipped for very short inputs where trigram noise outweighs signal.
+      if (trigramEnabled) {
+        orClauses.push(sql`${trigramText} <% LOWER(asset_name)`);
+      }
+      const textMatch = orClauses.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
       filterConditions.push(sql`(${textMatch})`);
     }
+
     if (modality) filterConditions.push(sql`LOWER(modality) LIKE ${"%" + modality.toLowerCase() + "%"}`);
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
@@ -2593,15 +2628,21 @@ export class DatabaseStorage implements IStorage {
 
     const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
 
-    // Compute an exact-name match flag in SQL so true exact-text hits are
-    // guaranteed to survive the LIMIT slice — they sort before everything else
-    // regardless of completeness_score / last_seen_at. Without this, a real
-    // exact-name row could be excluded by LIMIT before the route's pin layer
-    // ever sees it.
+    // SQL-side ranking signals — all computed in one query so they survive LIMIT.
     const exactPattern = normalizedQuery ? `%${normalizedQuery}%` : "";
     const exactMatchExpr = normalizedQuery
       ? sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`
       : sql`FALSE`;
+    const tsRankExpr = trimmedQuery
+      ? sql`ts_rank_cd(search_tsv, websearch_to_tsquery('english', ${trimmedQuery}))`
+      : sql`0::real`;
+    // word_similarity(needle, haystack) — best-matching contiguous word in
+    // haystack against the needle. Mirrors the `<%` operator above and is
+    // used only as a tiebreaker for trigram-only hits (FTS hits dominate via
+    // ts_rank).
+    const trgmSimExpr = trigramEnabled
+      ? sql`word_similarity(${trigramText}, LOWER(asset_name))`
+      : sql`0::real`;
 
     const result = await db.execute(sql`
       SELECT
@@ -2611,10 +2652,17 @@ export class DatabaseStorage implements IStorage {
         summary, categories, technology_id, stage_changed_at, previous_stage,
         data_sparse, category_confidence, asset_class,
         ${exactMatchExpr} AS exact_name_match,
+        ${tsRankExpr}     AS ts_rank,
+        ${trgmSimExpr}    AS trgm_sim,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
-      ORDER BY exact_name_match DESC, completeness_score DESC NULLS LAST, last_seen_at DESC NULLS LAST
+      ORDER BY
+        exact_name_match DESC,
+        ts_rank DESC,
+        trgm_sim DESC,
+        completeness_score DESC NULLS LAST,
+        last_seen_at DESC NULLS LAST
       LIMIT ${limit}
     `);
 
@@ -2644,6 +2692,7 @@ export class DatabaseStorage implements IStorage {
       categoryConfidence: r.category_confidence != null ? parseFloat(String(r.category_confidence)) : null,
       assetClass: typeof r.asset_class === "string" && r.asset_class ? r.asset_class : null,
       similarity: 0,
+      textRelevance: r.ts_rank != null ? parseFloat(String(r.ts_rank)) : 0,
     }));
   }
 

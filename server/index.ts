@@ -1276,6 +1276,53 @@ function schedulePeriodicAlertCheck() {
   }, 30_000);
 }
 
+// ── Scout FTS + trigram indexes (Task #760, Tier 1) ──────────────────────────
+// Replaces the brute-force `LIKE '%token%'` keyword search in
+// keywordSearchIngestedAssets() with Postgres full-text search. Adds:
+//   - pg_trgm extension for fuzzy/typo matching
+//   - search_tsv generated tsvector column with field weighting
+//       A = asset_name, B = target/indication/MoA, C = summary/innovation/etc, D = institution/categories
+//   - GIN index on search_tsv (FTS uses index, no sequential scan)
+//   - GIN trigram index on LOWER(asset_name) for typo tolerance
+// All idempotent — safe to run on every boot.
+async function ensureScoutSearchIndexes() {
+  try {
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
+  } catch (err: any) {
+    log(`[startup] pg_trgm extension skipped: ${err?.message}`, "startup");
+  }
+  try {
+    await db.execute(sql`
+      ALTER TABLE ingested_assets
+      ADD COLUMN IF NOT EXISTS search_tsv tsvector
+      GENERATED ALWAYS AS (
+        setweight(to_tsvector('english', COALESCE(asset_name, '')), 'A') ||
+        setweight(to_tsvector('english', COALESCE(target, '')), 'B') ||
+        setweight(to_tsvector('english', COALESCE(indication, '')), 'B') ||
+        setweight(to_tsvector('english', COALESCE(mechanism_of_action, '')), 'B') ||
+        setweight(to_tsvector('english', COALESCE(summary, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(innovation_claim, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(unmet_need, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(comparable_drugs, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(abstract, '')), 'C') ||
+        setweight(to_tsvector('english', COALESCE(institution, '')), 'D') ||
+        setweight(to_tsvector('english', COALESCE(categories::text, '')), 'D')
+      ) STORED
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS ingested_assets_search_tsv_idx
+      ON ingested_assets USING GIN (search_tsv)
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS ingested_assets_asset_name_trgm_idx
+      ON ingested_assets USING GIN (LOWER(asset_name) gin_trgm_ops)
+    `);
+    log("[startup] scout search FTS + trigram indexes ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] scout search index ensure failed: ${err?.message}`, "startup");
+  }
+}
+
 // ── Index for alert-matching query (Task #687) ───────────────────────────────
 // alertMailer's matchAssetsForAlert filters on (firstSeenAt > since AND relevant = true).
 // At 5-min cadence with growing alert/asset volume, this needs an index to stay fast.
@@ -1692,6 +1739,8 @@ async function migrateAssetStatusValues() {
       scheduleRelevanceMetricsAggregation();
       // ── Index for alertMailer's matchAssetsForAlert query ──────────────
       ensureAlertMatchIndex().catch(() => {});
+      // ── Scout FTS + trigram indexes (Task #760) ─────────────────────────
+      ensureScoutSearchIndexes().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────

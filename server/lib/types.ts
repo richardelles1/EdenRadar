@@ -36,6 +36,11 @@ export interface ScoreBreakdown {
   confidence_factor?: number;
   /** 0-1, classifier confidence forwarded for diagnostics. */
   category_confidence?: number;
+  /** Raw ts_rank_cd value from FTS (Tier 1, task #760). 0 for filter-only
+   *  browsing or non-text retrieval paths. Surfaced for diagnostics; also
+   *  used as the primary sort key (after exact-name pin) when a query is
+   *  present, so the user sees text-relevance-first ordering. */
+  text_relevance?: number;
 }
 
 export interface ScoredAsset {
