@@ -281,6 +281,26 @@ const aiRateLimit = rateLimit({
 // acceptable trade-off given the alternative is a DB write on every send.
 const dealMessageEmailLastSent = new Map<string, number>();
 
+// ── Admin /relevance/eval per-row probability cache ──────────────────────
+// The eval endpoint scores up to 20k holdout rows + sweeps 9 thresholds.
+// All of that is a pure function of (row text, classifier weights), so we
+// memoize the per-row probability + v1 keep-decision. activeThreshold and
+// the threshold sweep are derived from the cached probs in O(N) per call.
+// Invalidated when buildRelevanceHoldout runs (membership change) or when
+// CLASSIFIER_VERSION changes (weights/keywords change).
+type RelevanceEvalCache = {
+  key: string;
+  scored: Array<{ label: boolean; prob: number; v1Kept: boolean }>;
+  holdoutSize: number;
+};
+let relevanceEvalCache: RelevanceEvalCache | null = null;
+function relevanceEvalCacheKey(classifierVersion: string): string {
+  return `cv=${classifierVersion}`;
+}
+function invalidateRelevanceEvalCache(): void {
+  relevanceEvalCache = null;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -1989,6 +2009,9 @@ export async function registerRoutes(
     try {
       const result = await storage.buildRelevanceHoldout();
       const stats = await storage.getRelevanceHoldoutStats();
+      // Holdout membership changed → drop cached per-row scores so the next
+      // /relevance/eval call rescores against the new row set.
+      invalidateRelevanceEvalCache();
       res.json({ ...result, stats });
     } catch (err: any) {
       res.status(500).json({ error: err.message ?? "Failed to build holdout" });
@@ -2000,11 +2023,57 @@ export async function registerRoutes(
       const preFilterMod = await import("./lib/pipeline/relevancePreFilter");
       const classifierMod = await import("./lib/pipeline/relevanceClassifier");
       const { preFilterRelevance } = preFilterMod;
-      const { preFilterRelevanceV2, CLASSIFIER_THRESHOLD, CLASSIFIER_V2_ENABLED, getActiveThreshold } = classifierMod;
-      // Eval split only — train/eval partitioning is enforced by buildRelevanceHoldout.
-      const rows = await storage.listRelevanceHoldout(20000, "eval");
+      const {
+        scoreText,
+        CLASSIFIER_THRESHOLD,
+        CLASSIFIER_V2_ENABLED,
+        CLASSIFIER_VERSION,
+        getActiveThreshold,
+      } = classifierMod;
       const activeThreshold = await getActiveThreshold();
-      if (rows.length === 0) {
+
+      // Production pipeline keeps anything that isn't an explicit reject:
+      // both `pass` and `ambiguous` flow forward into the rest of ingestion.
+      const decisionToKept = (d: "pass" | "reject" | "ambiguous") => d !== "reject";
+
+      // Per-row cache: keyed by (eval row count, classifier version). The
+      // probability vector + v1 decision are both pure functions of the row
+      // text and the classifier weights, so they don't need to be recomputed
+      // on every admin click. Invalidated when buildRelevanceHoldout runs
+      // (route handler above) or when CLASSIFIER_VERSION is bumped (engineers
+      // bump the constant when weights/keywords change).
+      type ScoredRow = { label: boolean; prob: number; v1Kept: boolean };
+      let scored: ScoredRow[];
+      let holdoutSize: number;
+      const cacheKey = relevanceEvalCacheKey(CLASSIFIER_VERSION);
+      if (relevanceEvalCache && relevanceEvalCache.key === cacheKey) {
+        scored = relevanceEvalCache.scored;
+        holdoutSize = relevanceEvalCache.holdoutSize;
+      } else {
+        // Eval split only — train/eval partitioning is enforced by
+        // buildRelevanceHoldout.
+        const rows = await storage.listRelevanceHoldout(20000, "eval");
+        type Listing = Parameters<typeof preFilterRelevance>[0];
+        const buildListing = (r: typeof rows[number]): Listing => ({
+          title: r.text || "",
+          description: "",
+          url: "",
+          institution: r.sourceName || "unknown",
+        });
+        scored = rows.map((r) => {
+          const listing = buildListing(r);
+          const text = `${listing.title} ${listing.description ?? ""}`;
+          return {
+            label: !!r.label,
+            prob: scoreText(text).prob,
+            v1Kept: decisionToKept(preFilterRelevance(listing)),
+          };
+        });
+        holdoutSize = rows.length;
+        relevanceEvalCache = { key: cacheKey, scored, holdoutSize };
+      }
+
+      if (holdoutSize === 0) {
         return res.json({
           holdoutSize: 0,
           threshold: CLASSIFIER_THRESHOLD,
@@ -2017,28 +2086,6 @@ export async function registerRoutes(
           bestThreshold: null,
         });
       }
-
-      // We replay the *exact* production decision functions on each holdout
-      // row — preFilterRelevance for v1, preFilterRelevanceV2 for v2 — so
-      // the reported P/R/F1 reflects what ingestion actually does, including
-      // the "ambiguous → kept" routing rule.
-      type Listing = Parameters<typeof preFilterRelevance>[0];
-      const buildListing = (r: typeof rows[number]): Listing => ({
-        title: r.text || "",
-        description: "",
-        url: "",
-        institution: r.sourceName || "unknown",
-      });
-      // Production pipeline keeps anything that isn't an explicit reject:
-      // both `pass` and `ambiguous` flow forward into the rest of ingestion.
-      const decisionToKept = (d: "pass" | "reject" | "ambiguous") => d !== "reject";
-
-      type Scored = { label: boolean; v1Kept: boolean; listing: Listing };
-      const scored: Scored[] = rows.map((r) => ({
-        label: !!r.label,
-        v1Kept: decisionToKept(preFilterRelevance(buildListing(r))),
-        listing: buildListing(r),
-      }));
 
       const tally = (preds: Array<{ label: boolean; pred: boolean }>) => {
         let tp = 0, fp = 0, tn = 0, fn = 0;
@@ -2054,10 +2101,16 @@ export async function registerRoutes(
         return { tp, fp, tn, fn, precision, recall, f1 };
       };
 
+      // preFilterRelevanceV2 only depends on the cached probability:
+      //   prob >= t + 0.15 → pass, prob <= t - 0.15 → reject, else ambiguous.
+      // We inline that here so the threshold sweep is O(N) over a number[]
+      // instead of re-running scoreText/extractFeatures per row per threshold.
+      const v2KeptAt = (t: number, prob: number) => prob > t - 0.15;
+
       const v1Stats = tally(scored.map((s) => ({ label: s.label, pred: s.v1Kept })));
       const evalV2At = (t: number) => tally(scored.map((s) => ({
         label: s.label,
-        pred: decisionToKept(preFilterRelevanceV2(s.listing, t)),
+        pred: v2KeptAt(t, s.prob),
       })));
       const v2Stats = evalV2At(CLASSIFIER_THRESHOLD);
       const sweep = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7].map((t) => ({
@@ -2072,7 +2125,7 @@ export async function registerRoutes(
       const best = sweep.reduce((acc, s) => (s.f1 > acc.f1 ? s : acc), sweep[0]);
 
       res.json({
-        holdoutSize: rows.length,
+        holdoutSize,
         threshold: CLASSIFIER_THRESHOLD,
         activeThreshold,
         currentVariant: CLASSIFIER_V2_ENABLED ? "v2_classifier" : "v1_keyword",

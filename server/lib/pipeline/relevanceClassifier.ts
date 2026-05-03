@@ -42,6 +42,11 @@ const W_NON_BIOTECH = -1.10;
 const W_LENGTH = 0.25;
 const BIAS = -0.95;
 
+// Bump whenever weights/keywords/feature extraction change so downstream
+// caches (e.g. the admin /relevance/eval per-row probability cache) miss
+// and rescore. Format: yyyymmdd-shortDescriptor.
+export const CLASSIFIER_VERSION = "20260503-v2-w065-wn110-wl025-b095";
+
 const DEFAULT_THRESHOLD = 0.5;
 
 const isProdEnv = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
