@@ -1329,6 +1329,11 @@ export const caltechScraper = createStubScraper("California Institute of Technol
 // RE-PROBE TRIGGER: revisit if Replit egress IPs change.
 export const asuScraper = createWordPressApiScraper("https://skysonginnovations.com", "technology", "Arizona State University");
 
+// ── International: Brazil ────────────────────────────────────────────────
+// Unicamp Inova (University of Campinas) — WordPress REST API, ~1,275 technologies
+// across 13 paginated pages at tecnologias.inova.unicamp.br/wp-json/wp/v2/tecnologia.
+export const unicampScraper = createWordPressApiScraper("https://tecnologias.inova.unicamp.br", "tecnologia", "Unicamp");
+
 // ── International: UK ────────────────────────────────────────────────────
 // Oxford University Innovation — re-probed 2026-04-21:
 //   technology.ox.ac.uk — HTTP 000 (TCP connection refused from Replit egress IPs)
