@@ -2590,6 +2590,16 @@ export class DatabaseStorage implements IStorage {
 
     const where = filterConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
 
+    // Compute an exact-name match flag in SQL so true exact-text hits are
+    // guaranteed to survive the LIMIT slice — they sort before everything else
+    // regardless of completeness_score / last_seen_at. Without this, a real
+    // exact-name row could be excluded by LIMIT before the route's pin layer
+    // ever sees it.
+    const exactPattern = normalizedQuery ? `%${normalizedQuery}%` : "";
+    const exactMatchExpr = normalizedQuery
+      ? sql`(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g') LIKE ${exactPattern})`
+      : sql`FALSE`;
+
     const result = await db.execute(sql`
       SELECT
         id, asset_name, target, modality, indication, development_stage, institution,
@@ -2597,10 +2607,11 @@ export class DatabaseStorage implements IStorage {
         completeness_score, licensing_readiness, ip_type, source_url, source_name,
         summary, categories, technology_id, stage_changed_at, previous_stage,
         data_sparse, category_confidence, asset_class,
+        ${exactMatchExpr} AS exact_name_match,
         0 AS similarity
       FROM ingested_assets
       WHERE ${where}
-      ORDER BY completeness_score DESC NULLS LAST, last_seen_at DESC NULLS LAST
+      ORDER BY exact_name_match DESC, completeness_score DESC NULLS LAST, last_seen_at DESC NULLS LAST
       LIMIT ${limit}
     `);
 
