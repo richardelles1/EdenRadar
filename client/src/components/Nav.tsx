@@ -42,7 +42,7 @@ type PortalEntry = {
 const RESEARCHER_PORTALS: PortalEntry[] = [
   {
     name: "EdenLab",
-    blurb: "Structured project workspace, literature, and grants for academic researchers.",
+    blurb: "Project workspace, literature, and grants.",
     href: "/research",
     Icon: FlaskConical,
     accent: "262 80% 60%",
@@ -55,7 +55,7 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
   },
   {
     name: "EdenDiscovery",
-    blurb: "Submit early-stage concepts and get scored visibility before formal research begins.",
+    blurb: "Score and surface early-stage concepts.",
     href: "/discovery",
     Icon: Lightbulb,
     accent: "38 92% 50%",
@@ -70,7 +70,7 @@ const RESEARCHER_PORTALS: PortalEntry[] = [
 const INDUSTRY_PORTALS: PortalEntry[] = [
   {
     name: "EdenScout",
-    blurb: "AI-enriched signals from 300+ TTOs, patent filings, and academic publications.",
+    blurb: "Licensable signals from 300+ TTOs, patents, and papers.",
     href: "/scout",
     Icon: Radar,
     accent: "142 52% 36%",
@@ -83,7 +83,7 @@ const INDUSTRY_PORTALS: PortalEntry[] = [
   },
   {
     name: "EdenMarket",
-    blurb: "The blind marketplace for licensable biotech assets, with NDA-gated deal rooms.",
+    blurb: "Confidential biotech deal flow.",
     href: "/market/preview",
     Icon: ShoppingBag,
     accent: "234 80% 58%",
@@ -156,50 +156,26 @@ function PortalDropdown({
           <ChevronDown className="w-3.5 h-3.5 opacity-70" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="w-[380px] p-2">
+      <DropdownMenuContent align="start" className="w-[320px] p-1.5">
         {entries.map((e) => (
           <Link key={e.href} href={e.href}>
             <a
-              className="group block p-2.5 rounded-md hover:bg-accent transition-colors"
+              className="group block px-2 py-2 rounded-md hover:bg-accent/60 transition-colors"
               data-testid={`link-portal-${e.name.toLowerCase()}`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-center gap-3">
                 <div
-                  className="w-9 h-9 rounded-md flex items-center justify-center shrink-0 transition-colors"
+                  className="w-8 h-8 rounded-md flex items-center justify-center shrink-0"
                   style={{ background: `hsl(${e.accent} / 0.12)`, color: `hsl(${e.accent})` }}
                 >
                   <e.Icon className="w-4 h-4" />
                 </div>
                 <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold" style={{ color: `hsl(${e.accent})` }}>
+                  <div className="text-sm font-semibold leading-tight" style={{ color: `hsl(${e.accent})` }}>
                     {e.name}
                   </div>
-                  <div className="text-xs text-muted-foreground leading-snug">{e.blurb}</div>
+                  <div className="text-xs text-muted-foreground leading-tight truncate mt-0.5">{e.blurb}</div>
                 </div>
-              </div>
-              <div
-                className="mt-2.5 ml-12 flex items-stretch gap-1.5 rounded-md p-1.5 border border-border/60 group-hover:border-transparent transition-colors"
-                style={{
-                  background: `linear-gradient(135deg, hsl(${e.accent} / 0.06), hsl(${e.accent} / 0.02))`,
-                }}
-                data-testid={`preview-portal-${e.name.toLowerCase()}`}
-              >
-                {e.preview.map((p) => (
-                  <div
-                    key={p.label}
-                    className="flex-1 flex flex-col items-center justify-center gap-1 py-1.5 rounded-sm"
-                    style={{ background: `hsl(${e.accent} / 0.08)` }}
-                    title={p.label}
-                  >
-                    <p.Icon className="w-3.5 h-3.5" style={{ color: `hsl(${e.accent})` }} />
-                    <span
-                      className="text-[9px] font-medium uppercase tracking-wide leading-none"
-                      style={{ color: `hsl(${e.accent})` }}
-                    >
-                      {p.label}
-                    </span>
-                  </div>
-                ))}
               </div>
             </a>
           </Link>

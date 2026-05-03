@@ -1,5 +1,5 @@
 import { Link, useLocation } from "wouter";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { Check, ArrowRight, Building2, FlaskConical, Lightbulb, Mail, Loader2, Users, Settings, ShoppingBag, Lock, Handshake } from "lucide-react";
@@ -453,6 +453,146 @@ export default function Pricing() {
   const isSubscribed = org?.stripeStatus === "active" || org?.stripeStatus === "trialing";
   const isPastDue = org?.stripeStatus === "past_due";
 
+  const [view, setView] = useState<"scout" | "market">(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#market") return "market";
+    return "scout";
+  });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sync = () => {
+      const h = window.location.hash;
+      if (h === "#market") setView("market");
+      else if (h === "#scout") setView("scout");
+    };
+    window.addEventListener("hashchange", sync);
+    return () => window.removeEventListener("hashchange", sync);
+  }, []);
+
+  function selectView(next: "scout" | "market") {
+    setView(next);
+    if (typeof window !== "undefined") {
+      const newHash = `#${next}`;
+      if (window.location.hash !== newHash) {
+        history.replaceState(null, "", `${window.location.pathname}${window.location.search}${newHash}`);
+      }
+    }
+  }
+
+  const SCOUT_INDIGO = "hsl(142 52% 36%)";
+  const MARKET_INDIGO = "hsl(234 80% 58%)";
+
+  const scoutGrid = (
+    <div className="space-y-4" data-testid="pricing-section-scout">
+      <h2 className="text-lg font-semibold text-foreground">EdenScout (Paid)</h2>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {SCOUT_PLANS.map((plan) => {
+          const isCurrentPlan = org?.planTier === plan.id && (isSubscribed || isPastDue);
+          return (
+            <div
+              key={plan.id + plan.seats}
+              className="relative flex flex-col rounded-xl overflow-hidden"
+              style={{
+                border: isCurrentPlan
+                  ? "2px solid hsl(142 52% 36%)"
+                  : plan.highlighted
+                    ? "2px solid hsl(142 52% 36%)"
+                    : "1px solid hsl(var(--border))",
+                boxShadow: isCurrentPlan || plan.highlighted ? "0 0 0 4px hsl(142 52% 36% / 0.08)" : undefined,
+              }}
+              data-testid={`pricing-card-${plan.id}`}
+            >
+              {(isCurrentPlan || plan.highlighted) && (
+                <div
+                  className="absolute top-0 left-0 right-0 h-0.5"
+                  style={{ background: "hsl(142 52% 36%)" }}
+                />
+              )}
+              <div
+                className="px-5 py-5"
+                style={{
+                  background: isCurrentPlan || plan.highlighted
+                    ? "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))"
+                    : "hsl(var(--card))",
+                  borderBottom: "1px solid hsl(var(--border))",
+                }}
+              >
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-3xl font-black text-foreground">{plan.price}</span>
+                  <span className="text-sm text-muted-foreground">{plan.period}</span>
+                  {isCurrentPlan ? (
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                      style={{ background: "hsl(142 52% 36% / 0.15)", color: "hsl(142 52% 36%)" }}
+                      data-testid={`badge-current-plan-${plan.id}`}
+                    >
+                      Your plan
+                    </span>
+                  ) : plan.highlighted ? (
+                    <span
+                      className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
+                      style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
+                    >
+                      Most popular
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
+                    style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
+                  >
+                    {plan.isTeam && <Users className="w-3 h-3" />}
+                    {plan.seats}
+                  </span>
+                  <span className="text-xs font-semibold text-foreground">{plan.name}</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
+                {plan.teamCallout && (
+                  <p
+                    className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
+                    style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
+                  >
+                    {plan.teamCallout}
+                  </p>
+                )}
+              </div>
+              <div className="flex-1 px-5 py-4 bg-card space-y-2.5">
+                {plan.features.map((f) => {
+                  const isEscalator = f.startsWith("Everything in");
+                  return (
+                    <div key={f} className="flex items-start gap-2.5">
+                      <div
+                        className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
+                        style={{
+                          background: isEscalator
+                            ? "hsl(var(--muted))"
+                            : "hsl(142 52% 36% / 0.12)",
+                        }}
+                      >
+                        {isEscalator
+                          ? <ArrowRight className="w-2 h-2 text-muted-foreground" />
+                          : <Check className="w-2.5 h-2.5" style={{ color: "hsl(142 52% 36%)" }} />}
+                      </div>
+                      <span className={`text-xs leading-relaxed ${isEscalator ? "text-muted-foreground italic font-medium" : "text-foreground"}`}>
+                        {f}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="px-5 py-4 bg-card border-t border-border">
+                <PlanCTA plan={plan} session={session} org={org} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const marketBlock = <EdenMarketTier session={session} />;
+
   return (
     <div className="min-h-screen bg-background">
       <Nav />
@@ -461,13 +601,52 @@ export default function Pricing() {
         {/* Header */}
         <div className="space-y-4">
           <div className="space-y-2">
-            <p className="text-xs font-semibold text-emerald-600 uppercase tracking-widest">EdenScout Intelligence Platform</p>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: "hsl(142 52% 36%)" }}>
+              EdenScout + EdenMarket
+            </p>
             <h1 className="text-3xl sm:text-4xl font-bold text-foreground" data-testid="text-pricing-title">
-              Plans for every team
+              Two ways to source your next deal
             </h1>
             <p className="text-base text-muted-foreground max-w-xl leading-relaxed">
-              EdenScout gives industry buyers continuous access to licensable biotech assets from 300+ tech transfer offices, enriched and scored by EDEN. Free tiers for researchers and concept creators are always included.
+              EdenScout surfaces licensable signals from 300+ TTOs, patents, and papers. EdenMarket is the confidential marketplace where biotech deals close. Pick where you want to start — both are available, and free tiers for researchers are always included.
             </p>
+          </div>
+
+          {/* Product pill toggle */}
+          <div
+            className="inline-flex items-center gap-1 p-1 rounded-full border border-border bg-card"
+            role="tablist"
+            aria-label="Product"
+            data-testid="toggle-pricing-product"
+          >
+            <button
+              role="tab"
+              aria-selected={view === "scout"}
+              onClick={() => selectView("scout")}
+              className="px-4 h-8 rounded-full text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+              style={
+                view === "scout"
+                  ? { background: SCOUT_INDIGO, color: "white" }
+                  : { color: "hsl(var(--muted-foreground))" }
+              }
+              data-testid="button-toggle-scout"
+            >
+              EdenScout
+            </button>
+            <button
+              role="tab"
+              aria-selected={view === "market"}
+              onClick={() => selectView("market")}
+              className="px-4 h-8 rounded-full text-xs font-semibold transition-colors inline-flex items-center gap-1.5"
+              style={
+                view === "market"
+                  ? { background: MARKET_INDIGO, color: "white" }
+                  : { color: "hsl(var(--muted-foreground))" }
+              }
+              data-testid="button-toggle-market"
+            >
+              EdenMarket
+            </button>
           </div>
         </div>
 
@@ -538,122 +717,30 @@ export default function Pricing() {
           </div>
         )}
 
-        {/* EdenScout Paid Plans */}
-        <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-foreground">EdenScout (Paid)</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {SCOUT_PLANS.map((plan) => {
-              const isCurrentPlan = org?.planTier === plan.id && (isSubscribed || isPastDue);
-              return (
-                <div
-                  key={plan.id + plan.seats}
-                  className="relative flex flex-col rounded-xl overflow-hidden"
-                  style={{
-                    border: isCurrentPlan
-                      ? "2px solid hsl(142 52% 36%)"
-                      : plan.highlighted
-                        ? "2px solid hsl(142 52% 36%)"
-                        : "1px solid hsl(var(--border))",
-                    boxShadow: isCurrentPlan || plan.highlighted ? "0 0 0 4px hsl(142 52% 36% / 0.08)" : undefined,
-                  }}
-                  data-testid={`pricing-card-${plan.id}`}
-                >
-                  {(isCurrentPlan || plan.highlighted) && (
-                    <div
-                      className="absolute top-0 left-0 right-0 h-0.5"
-                      style={{ background: "hsl(142 52% 36%)" }}
-                    />
-                  )}
+        {/* Primary product (driven by pill toggle) */}
+        {view === "scout" ? scoutGrid : marketBlock}
 
-                  {/* Card header */}
-                  <div
-                    className="px-5 py-5"
-                    style={{
-                      background: isCurrentPlan || plan.highlighted
-                        ? "linear-gradient(135deg, hsl(142 52% 36% / 0.08), hsl(142 52% 36% / 0.03))"
-                        : "hsl(var(--card))",
-                      borderBottom: "1px solid hsl(var(--border))",
-                    }}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-3xl font-black text-foreground">{plan.price}</span>
-                      <span className="text-sm text-muted-foreground">{plan.period}</span>
-                      {isCurrentPlan ? (
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                          style={{ background: "hsl(142 52% 36% / 0.15)", color: "hsl(142 52% 36%)" }}
-                          data-testid={`badge-current-plan-${plan.id}`}
-                        >
-                          Your plan
-                        </span>
-                      ) : plan.highlighted ? (
-                        <span
-                          className="text-[9px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded-full"
-                          style={{ background: "hsl(142 52% 36% / 0.12)", color: "hsl(142 52% 36%)" }}
-                        >
-                          Most popular
-                        </span>
-                      ) : null}
-                    </div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1"
-                        style={{ background: "hsl(142 52% 36% / 0.10)", color: "hsl(142 52% 36%)" }}
-                      >
-                        {plan.isTeam && <Users className="w-3 h-3" />}
-                        {plan.seats}
-                      </span>
-                      <span className="text-xs font-semibold text-foreground">{plan.name}</span>
-                    </div>
-                    <p className="text-xs text-muted-foreground leading-relaxed">{plan.tagline}</p>
-                    {plan.teamCallout && (
-                      <p
-                        className="text-[10px] leading-relaxed mt-2 pt-2 border-t"
-                        style={{ borderColor: "hsl(142 52% 36% / 0.2)", color: "hsl(142 52% 36%)" }}
-                      >
-                        {plan.teamCallout}
-                      </p>
-                    )}
-                  </div>
-
-                  {/* Features */}
-                  <div className="flex-1 px-5 py-4 bg-card space-y-2.5">
-                    {plan.features.map((f) => {
-                      const isEscalator = f.startsWith("Everything in");
-                      return (
-                        <div key={f} className="flex items-start gap-2.5">
-                          <div
-                            className="flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center mt-0.5"
-                            style={{
-                              background: isEscalator
-                                ? "hsl(var(--muted))"
-                                : "hsl(142 52% 36% / 0.12)",
-                            }}
-                          >
-                            {isEscalator
-                              ? <ArrowRight className="w-2 h-2 text-muted-foreground" />
-                              : <Check className="w-2.5 h-2.5" style={{ color: "hsl(142 52% 36%)" }} />}
-                          </div>
-                          <span className={`text-xs leading-relaxed ${isEscalator ? "text-muted-foreground italic font-medium" : "text-foreground"}`}>
-                            {f}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* CTA */}
-                  <div className="px-5 py-4 bg-card border-t border-border">
-                    <PlanCTA plan={plan} session={session} org={org} />
-                  </div>
-                </div>
-              );
-            })}
+        {/* Secondary product */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <p
+              className="text-[10px] font-bold uppercase tracking-widest"
+              style={{ color: view === "scout" ? MARKET_INDIGO : SCOUT_INDIGO }}
+            >
+              Also available
+            </p>
+            <div className="flex-1 h-px bg-border" />
+            <button
+              onClick={() => selectView(view === "scout" ? "market" : "scout")}
+              className="text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+              data-testid="link-toggle-secondary"
+            >
+              View as primary
+              <ArrowRight className="w-3 h-3" />
+            </button>
           </div>
+          {view === "scout" ? marketBlock : scoutGrid}
         </div>
-
-        {/* EdenMarket */}
-        <EdenMarketTier session={session} />
 
         {/* Enterprise */}
         <div
