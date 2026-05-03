@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { OrientationHint } from "@/components/OrientationHint";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation, useSearch } from "wouter";
-import { INSTITUTIONS } from "@/lib/institutions";
+import type { InstitutionsListResponse } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { ResearchCard } from "@/components/ResearchCard";
@@ -44,8 +44,6 @@ type SavedAssetsResponse = {
   assets: SavedAsset[];
 };
 
-
-const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
 
 const STAGES = ["discovery", "preclinical", "phase 1", "phase 2", "phase 3", "approved"];
 const MODALITIES = [
@@ -108,6 +106,8 @@ type InstitutionsResponse = {
   institutions: { institution: string; count: number }[];
   total: number;
 };
+
+type InstitutionsCoverageResponse = InstitutionsListResponse;
 
 const RESEARCH_SOURCE_OPTIONS = [
   { key: "pubmed",           label: "PubMed",              desc: "Biomedical literature" },
@@ -393,7 +393,18 @@ export default function Scout() {
     queryKey: ["/api/scout/institutions"],
     staleTime: 10 * 60 * 1000,
   });
-  const liveInstitutionCount = institutionsData?.total ?? COVERED_INSTITUTIONS.length;
+  const { data: coverageData } = useQuery<InstitutionsCoverageResponse>({
+    queryKey: ["/api/institutions"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const coveredInstitutions = useMemo(
+    () => (coverageData?.institutions ?? []).map((i) => i.name),
+    [coverageData],
+  );
+  // Coverage badge counts every institution we index (curated metadata ∪
+  // ALL_SCRAPERS ∪ ingested), not just those with assets already pulled —
+  // /api/scout/institutions returns the latter and is kept for ranking only.
+  const liveInstitutionCount = coverageData?.total ?? institutionsData?.total ?? 0;
 
 
   function getDateBounds(filter: string): { since?: string; before?: string } {
@@ -949,7 +960,7 @@ export default function Scout() {
                   <TooltipContent side="bottom" className="max-w-[300px] p-3">
                     <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      {COVERED_INSTITUTIONS.slice(0, 20).map((inst) => (
+                      {coveredInstitutions.slice(0, 20).map((inst) => (
                         <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
                       ))}
                     </div>

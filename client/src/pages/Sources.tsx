@@ -8,7 +8,7 @@ import {
   DollarSign, Globe, Building2, CheckCircle2, ShieldOff,
   ArrowUpDown, Search, ExternalLink, MinusCircle,
 } from "lucide-react";
-import { INSTITUTIONS, BLOCKED_SLUGS } from "@/lib/institutions";
+import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 
 const DATA_SOURCES = [
   {
@@ -103,10 +103,10 @@ const STATUS_CONFIG: Record<TtoStatus, { label: string; color: string; priority:
   nofeed:     { label: "No Feed",     color: "bg-muted/50 text-muted-foreground/60 border-border/50",                          priority: 3 },
 };
 
-function getTtoStatus(slug: string, count: number, activeSet: Set<string>, instName: string): TtoStatus {
-  if (BLOCKED_SLUGS.has(slug)) return "restricted";
-  if (count > 0) return "active";
-  if (activeSet.size > 0 && activeSet.has(instName)) return "empty";
+function getTtoStatus(inst: Institution, activeSet: Set<string>): TtoStatus {
+  if (inst.accessRestricted) return "restricted";
+  if (inst.count > 0) return "active";
+  if (activeSet.size > 0 && activeSet.has(inst.name)) return "empty";
   if (activeSet.size > 0) return "nofeed";
   return "empty";
 }
@@ -118,8 +118,8 @@ export default function Sources() {
   const [sortKey, setSortKey] = useState<SortKey>("status");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  const { data: countsData, isLoading: countsLoading } = useQuery<Record<string, number>>({
-    queryKey: ["/api/institutions/counts"],
+  const { data: institutionsData, isLoading: countsLoading } = useQuery<InstitutionsListResponse>({
+    queryKey: ["/api/institutions"],
     staleTime: 5 * 60 * 1000,
   });
 
@@ -135,19 +135,20 @@ export default function Sources() {
     [activeData]
   );
 
+  const allInstitutions = institutionsData?.institutions ?? [];
+
   const ttos = useMemo(() => {
-    const rows = INSTITUTIONS.map((inst) => {
-      const count = countsData?.[inst.name] ?? 0;
-      const status = getTtoStatus(inst.slug, count, activeSet, inst.name);
-      return { ...inst, count, status };
-    });
+    const rows = allInstitutions.map((inst) => ({
+      ...inst,
+      status: getTtoStatus(inst, activeSet),
+    }));
 
     const filtered = ttoSearch.trim()
       ? rows.filter(
           (r) =>
             r.name.toLowerCase().includes(ttoSearch.toLowerCase()) ||
-            r.city.toLowerCase().includes(ttoSearch.toLowerCase()) ||
-            r.ttoName.toLowerCase().includes(ttoSearch.toLowerCase())
+            (r.city ?? "").toLowerCase().includes(ttoSearch.toLowerCase()) ||
+            (r.ttoName ?? "").toLowerCase().includes(ttoSearch.toLowerCase())
         )
       : rows;
 
@@ -163,20 +164,17 @@ export default function Sources() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [countsData, activeSet, ttoSearch, sortKey, sortDir]);
+  }, [allInstitutions, activeSet, ttoSearch, sortKey, sortDir]);
 
   const summary = useMemo(() => {
-    const all = INSTITUTIONS.map((inst) => {
-      const count = countsData?.[inst.name] ?? 0;
-      return getTtoStatus(inst.slug, count, activeSet, inst.name);
-    });
+    const all = allInstitutions.map((inst) => getTtoStatus(inst, activeSet));
     return {
       active:     all.filter((s) => s === "active").length,
       restricted: all.filter((s) => s === "restricted").length,
       empty:      all.filter((s) => s === "empty").length,
       nofeed:     all.filter((s) => s === "nofeed").length,
     };
-  }, [countsData, activeSet]);
+  }, [allInstitutions, activeSet]);
 
   function toggleSort(key: SortKey) {
     if (sortKey === key) {
@@ -341,10 +339,10 @@ export default function Sources() {
                             </Link>
                           </td>
                           <td className="px-4 py-3 hidden md:table-cell text-xs text-muted-foreground">
-                            {tto.city}
+                            {tto.city ?? "—"}
                           </td>
                           <td className="px-4 py-3 hidden lg:table-cell text-xs text-muted-foreground truncate max-w-[200px]">
-                            {tto.ttoName}
+                            {tto.ttoName ?? "—"}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-1.5">

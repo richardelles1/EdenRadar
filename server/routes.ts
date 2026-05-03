@@ -6,7 +6,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, institutionMetadata } from "@shared/schema";
+import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
@@ -1931,6 +1932,69 @@ export async function registerRoutes(
     }
   });
 
+  // ── /api/institutions (Task #729) ────────────────────────────────────────
+  // Live, growing list. Unions:
+  //   1. institution_metadata (curated display data — city, TTO, specialties)
+  //   2. ALL_SCRAPERS (every registered scraper, ~340 today)
+  //   3. ingested_assets distinct names where source_type='tech_transfer'
+  // Slugs are normalized via slugifyInstitutionName so e.g. "Stanford
+  // University" from a scraper merges into the "stanford" metadata row.
+  // Used by Institutions.tsx for the badge/grid, by Sources.tsx for the TTO
+  // index table, and by Scout.tsx + Discover.tsx for coverage tooltips.
+  app.get("/api/institutions", async (_req, res) => {
+    try {
+      const [metadataRows, counts] = await Promise.all([
+        db.select().from(institutionMetadata),
+        storage.getInstitutionAssetCounts(),
+      ]);
+
+      const metaBySlug = new Map(metadataRows.map((m) => [m.slug, m]));
+
+      // Aggregate counts from ingested_assets (keyed by raw institution name)
+      // into our canonical slug space so that name variants fold together.
+      const countBySlug = new Map<string, number>();
+      const nameBySlug = new Map<string, string>();
+      for (const [rawName, n] of Object.entries(counts)) {
+        const slug = slugifyInstitutionName(rawName);
+        countBySlug.set(slug, (countBySlug.get(slug) ?? 0) + n);
+        if (!nameBySlug.has(slug)) nameBySlug.set(slug, rawName);
+      }
+
+      // Seed the slug universe with metadata + every active scraper. Scraper
+      // institution strings supply a fallback display name for any slug that
+      // isn't in the curated metadata table yet.
+      const slugSet = new Set<string>(metadataRows.map((m) => m.slug));
+      for (const s of ALL_SCRAPERS) {
+        const slug = slugifyInstitutionName(s.institution);
+        slugSet.add(slug);
+        if (!nameBySlug.has(slug)) nameBySlug.set(slug, s.institution);
+      }
+      for (const slug of countBySlug.keys()) slugSet.add(slug);
+
+      const institutions = Array.from(slugSet).map((slug) => {
+        const meta = metaBySlug.get(slug);
+        const fallbackName = nameBySlug.get(slug) ?? slug;
+        return {
+          slug,
+          name: meta?.name ?? fallbackName,
+          city: meta?.city ?? null,
+          ttoName: meta?.ttoName ?? null,
+          website: meta?.website ?? null,
+          specialties: meta?.specialties ?? [],
+          continent: meta?.continent ?? null,
+          noPublicPortal: meta?.noPublicPortal ?? false,
+          accessRestricted: meta?.accessRestricted ?? false,
+          count: countBySlug.get(slug) ?? 0,
+        };
+      });
+
+      institutions.sort((a, b) => a.name.localeCompare(b.name));
+      res.json({ institutions, total: institutions.length });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message ?? "Failed to fetch institutions" });
+    }
+  });
+
   app.get("/api/institutions/:slug/assets", async (req, res) => {
     try {
       const SLUG_TO_NAME: Record<string, string> = {
@@ -2130,8 +2194,32 @@ export async function registerRoutes(
         hku: "University of Hong Kong",
         ucm: "Universidad Complutense de Madrid",
       };
-      const name = SLUG_TO_NAME[req.params.slug]
-        ?? req.params.slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      // Resolution order for the slug → canonical institution name:
+      //   1. institution_metadata table (preferred — kept in sync with seed)
+      //   2. legacy SLUG_TO_NAME hardcoded map (kept as a fallback for any
+      //      slugs not yet migrated into the metadata table)
+      //   3. distinct ingested_assets.institution values (catches scraped
+      //      institutions whose name slugifies to this slug)
+      //   4. title-case derivation from the slug itself
+      const slug = req.params.slug;
+      const meta = await db
+        .select({ name: institutionMetadata.name })
+        .from(institutionMetadata)
+        .where(eq(institutionMetadata.slug, slug))
+        .limit(1);
+      let name = meta[0]?.name ?? SLUG_TO_NAME[slug];
+      if (!name) {
+        const counts = await storage.getInstitutionAssetCounts();
+        for (const rawName of Object.keys(counts)) {
+          if (slugifyInstitutionName(rawName) === slug) {
+            name = rawName;
+            break;
+          }
+        }
+      }
+      if (!name) {
+        name = slug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+      }
       const assets = await storage.getIngestedAssetsByInstitution(name);
       res.json({ assets, institution: name });
     } catch (err: any) {

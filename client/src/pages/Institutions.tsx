@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useMemo } from "react";
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
@@ -6,9 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Building2, Search, ShieldOff } from "lucide-react";
-import { INSTITUTIONS, BLOCKED_SLUGS, type Institution } from "@/lib/institutions";
-
-export { INSTITUTIONS };
+import type { Institution, InstitutionsListResponse } from "@/lib/institutions";
 
 type Continent = "All" | "North America" | "Europe" | "Asia-Pacific";
 const CONTINENTS: Continent[] = ["All", "North America", "Europe", "Asia-Pacific"];
@@ -36,12 +34,10 @@ function institutionContinent(inst: Institution): string {
 
 function InstitutionCard({
   inst,
-  count,
-  countsLoading,
+  loading,
 }: {
   inst: Institution;
-  count: number | null;
-  countsLoading: boolean;
+  loading: boolean;
 }) {
   const cardRef = useRef<HTMLDivElement>(null);
   const [tilt, setTilt] = useState({ x: 0, y: 0, active: false });
@@ -49,9 +45,9 @@ function InstitutionCard({
   const [hovered, setHovered] = useState(false);
   const [, setLocation] = useLocation();
 
-  const isBlocked = BLOCKED_SLUGS.has(inst.slug);
-  const showRestricted = !countsLoading && isBlocked && !count;
-  const showNoPortal = !countsLoading && inst.noPublicPortal && !count && !isBlocked;
+  const count = inst.count;
+  const showRestricted = !loading && inst.accessRestricted && !count;
+  const showNoPortal = !loading && inst.noPublicPortal && !count && !inst.accessRestricted;
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!cardRef.current) return;
@@ -100,7 +96,6 @@ function InstitutionCard({
         onMouseDown={() => setPressed(true)}
         onMouseUp={() => setPressed(false)}
       >
-        {/* Bloom — erupts from top-left corner where Building2 lives */}
         <div
           className="absolute pointer-events-none"
           style={{
@@ -118,22 +113,21 @@ function InstitutionCard({
           }}
         />
 
-        {/* Left accent strip */}
         <div
           className="absolute left-0 top-0 bottom-0 w-[3px] z-[3]"
           style={{ background: "#22c55e" }}
         />
 
-        {/* Card content */}
         <div className="relative z-[4] flex flex-col gap-3 pl-5 pr-4 pt-4 pb-4">
-          {/* Header row */}
           <div className="flex items-start gap-3">
             <div className="w-9 h-9 rounded-md bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
               <Building2 className="w-4 h-4 text-primary" />
             </div>
             <div className="min-w-0 flex-1">
               <h3 className="font-semibold text-foreground leading-tight">{inst.name}</h3>
-              <p className="text-xs text-zinc-700 dark:text-zinc-200 font-medium mt-0.5">{inst.city}</p>
+              {inst.city && (
+                <p className="text-xs text-zinc-700 dark:text-zinc-200 font-medium mt-0.5">{inst.city}</p>
+              )}
             </div>
             {showRestricted && (
               <Tooltip>
@@ -163,25 +157,29 @@ function InstitutionCard({
             )}
           </div>
 
-          <p className="text-xs text-muted-foreground">{inst.ttoName}</p>
+          {inst.ttoName && (
+            <p className="text-xs text-muted-foreground">{inst.ttoName}</p>
+          )}
 
-          <div className="flex flex-wrap gap-1.5">
-            {inst.specialties.map((s) => (
-              <Badge
-                key={s}
-                variant="outline"
-                className={`text-[10px] font-medium px-1.5 py-0.5 border ${getSpecialtyClass(s)}`}
-              >
-                {s}
-              </Badge>
-            ))}
-          </div>
+          {inst.specialties.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {inst.specialties.map((s) => (
+                <Badge
+                  key={s}
+                  variant="outline"
+                  className={`text-[10px] font-medium px-1.5 py-0.5 border ${getSpecialtyClass(s)}`}
+                >
+                  {s}
+                </Badge>
+              ))}
+            </div>
+          )}
 
           <div className="flex items-center justify-between pt-1 border-t border-white/20 dark:border-white/10">
             <span className="text-xs text-muted-foreground" data-testid={`text-listings-${inst.slug}`}>
-              {countsLoading ? (
+              {loading ? (
                 <Skeleton className="h-3 w-16 inline-block" />
-              ) : count !== null && count > 0 ? (
+              ) : count > 0 ? (
                 <><span className="font-semibold text-foreground">{count}</span> active listings</>
               ) : showRestricted ? (
                 <span className="italic text-muted-foreground/60">Access restricted</span>
@@ -208,18 +206,22 @@ export default function Institutions() {
   const [search, setSearch] = useState("");
   const [continent, setContinent] = useState<Continent>("All");
 
-  const { data: countsData, isLoading: countsLoading } = useQuery<Record<string, number>>({
-    queryKey: ["/api/institutions/counts"],
+  const { data, isLoading } = useQuery<InstitutionsListResponse>({
+    queryKey: ["/api/institutions"],
     staleTime: 5 * 60 * 1000,
   });
 
-  const noneScanned = !countsLoading && (!countsData || Object.keys(countsData).length === 0);
+  const allInstitutions = data?.institutions ?? [];
+  const totalIndexed = data?.total ?? 0;
+  const noneScanned = !isLoading && allInstitutions.every((i) => i.count === 0);
 
-  const filtered = INSTITUTIONS.filter((i) => {
-    const matchesContinent = continent === "All" || institutionContinent(i) === continent;
-    const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
-    return matchesContinent && matchesSearch;
-  });
+  const filtered = useMemo(() => {
+    return allInstitutions.filter((i) => {
+      const matchesContinent = continent === "All" || institutionContinent(i) === continent;
+      const matchesSearch = i.name.toLowerCase().includes(search.toLowerCase());
+      return matchesContinent && matchesSearch;
+    });
+  }, [allInstitutions, continent, search]);
 
   return (
     <div className="min-h-full">
@@ -235,7 +237,11 @@ export default function Institutions() {
                     className="text-[11px] font-semibold bg-primary/10 text-primary border-0"
                     data-testid="badge-tto-count"
                   >
-                    {filtered.length} TTOs{continent !== "All" ? ` · ${continent}` : " indexed"}
+                    {isLoading
+                      ? "Loading…"
+                      : continent !== "All"
+                        ? `${filtered.length} TTOs · ${continent}`
+                        : `${totalIndexed} TTOs indexed`}
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground mt-1">
@@ -254,7 +260,6 @@ export default function Institutions() {
               </div>
             </div>
 
-            {/* Continent toggle */}
             <div className="flex items-center gap-2 flex-wrap" data-testid="continent-filter">
               {CONTINENTS.map((c) => (
                 <button
@@ -283,7 +288,13 @@ export default function Institutions() {
           </div>
         )}
 
-        {filtered.length === 0 ? (
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <Skeleton key={i} className="h-44 w-full rounded-[14px]" />
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-16 text-muted-foreground">
             No institutions match{search ? ` "${search}"` : ""}{continent !== "All" ? ` in ${continent}` : ""}
           </div>
@@ -293,8 +304,7 @@ export default function Institutions() {
               <InstitutionCard
                 key={inst.slug}
                 inst={inst}
-                count={countsData?.[inst.name] ?? null}
-                countsLoading={countsLoading}
+                loading={isLoading}
               />
             ))}
           </div>

@@ -835,6 +835,53 @@ async function runPostStartupTasks(): Promise<void> {
   }
 }
 
+// ── Ensure institution_metadata table exists + is seeded (Task #729) ─────────
+// Idempotent: runs every boot. Created here (not in runStartupMigrations,
+// which is currently a no-op) so it survives any environment where db:push
+// was not run manually. Seeds from server/lib/institutionSeed only when the
+// table is empty — subsequent boots are a single SELECT count(*).
+async function ensureInstitutionMetadataTable() {
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS institution_metadata (
+        slug text PRIMARY KEY,
+        name text NOT NULL,
+        city text,
+        tto_name text,
+        website text,
+        specialties jsonb NOT NULL DEFAULT '[]'::jsonb,
+        continent text,
+        no_public_portal boolean NOT NULL DEFAULT false,
+        access_restricted boolean NOT NULL DEFAULT false
+      )
+    `);
+    const existing = await db.execute(sql`SELECT count(*)::int AS n FROM institution_metadata`);
+    const existingCount = ((existing as any).rows?.[0] as any)?.n ?? 0;
+    if (existingCount === 0) {
+      const { INSTITUTIONS, BLOCKED_SLUGS } = await import("./lib/institutionSeed");
+      for (const inst of INSTITUTIONS) {
+        await db.execute(sql`
+          INSERT INTO institution_metadata
+            (slug, name, city, tto_name, website, specialties, continent, no_public_portal, access_restricted)
+          VALUES (
+            ${inst.slug}, ${inst.name}, ${inst.city}, ${inst.ttoName}, ${inst.website},
+            ${JSON.stringify(inst.specialties ?? [])}::jsonb,
+            ${inst.continent ?? null},
+            ${inst.noPublicPortal === true},
+            ${BLOCKED_SLUGS.has(inst.slug)}
+          )
+          ON CONFLICT (slug) DO NOTHING
+        `);
+      }
+      log(`[startup] institution_metadata seeded ${INSTITUTIONS.length} rows`, "startup");
+    } else {
+      log(`[startup] institution_metadata table ready (${existingCount} rows)`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] institution_metadata table check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure saved_asset_notes table exists ─────────────────────────────────────
 // Created here (idempotent CREATE TABLE IF NOT EXISTS) so it survives any
 // environment where db:push was not run manually (e.g. fresh deploys).
@@ -1455,6 +1502,8 @@ async function migrateAssetStatusValues() {
       runStartupMigrations().catch(() => {});
       // ── Ensure saved_asset_notes table exists (idempotent) ────────────
       createSavedAssetNotesTable().catch(() => {});
+      // ── Ensure institution_metadata table exists + is seeded (Task #729) ─
+      ensureInstitutionMetadataTable().catch(() => {});
       // ── Ensure shared_links table exists (idempotent) ──────────────────
       createSharedLinksTable().catch(() => {});
       // ── Ensure stripe_billing_events table exists (idempotent) ─────────

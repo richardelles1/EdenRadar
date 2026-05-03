@@ -696,6 +696,26 @@ export const insertOrganizationSchema = createInsertSchema(organizations).omit({
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
 export type Organization = typeof organizations.$inferSelect;
 
+// ── Institution metadata (Task #729) ───────────────────────────────────────
+// Source of truth for institution display data: city, TTO name, website,
+// specialties, continent, and access flags. Created via startup migration
+// and seeded from the historical hand-curated list. Joined to live scraper
+// coverage (ALL_SCRAPERS) and to ingested_assets at /api/institutions
+// request time so newly-added scrapers appear without a code change here.
+export const institutionMetadata = pgTable("institution_metadata", {
+  slug: text("slug").primaryKey(),
+  name: text("name").notNull(),
+  city: text("city"),
+  ttoName: text("tto_name"),
+  website: text("website"),
+  specialties: jsonb("specialties").$type<string[]>().notNull().default([]),
+  continent: text("continent"),
+  noPublicPortal: boolean("no_public_portal").notNull().default(false),
+  accessRestricted: boolean("access_restricted").notNull().default(false),
+});
+export type InstitutionMetadata = typeof institutionMetadata.$inferSelect;
+export type InsertInstitutionMetadata = typeof institutionMetadata.$inferInsert;
+
 export const orgMembers = pgTable("org_members", {
   id: serial("id").primaryKey(),
   orgId: integer("org_id").references(() => organizations.id, { onDelete: "cascade" }).notNull(),

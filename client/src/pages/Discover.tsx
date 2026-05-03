@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { INSTITUTIONS } from "@/lib/institutions";
+import type { InstitutionsListResponse } from "@/lib/institutions";
 import { SearchBar } from "@/components/SearchBar";
 import { SearchResults } from "@/components/SearchResults";
 import { SavedAssetsPanel } from "@/components/SavedAssetsPanel";
@@ -38,8 +38,6 @@ type SavedAssetsResponse = {
 };
 
 const ALL_SOURCE_KEYS = ["pubmed", "biorxiv", "medrxiv", "clinicaltrials", "patents", "techtransfer", "nih_reporter", "openalex"];
-
-const COVERED_INSTITUTIONS = INSTITUTIONS.map((i) => i.name);
 
 const BUYER_PROFILE_KEY = "edenradar:buyer-profile";
 
@@ -183,6 +181,14 @@ export default function Discover() {
 
   const { data: sourcesData } = useQuery<SourcesResponse>({ queryKey: ["/api/sources"] });
   const { data: savedData } = useQuery<SavedAssetsResponse>({ queryKey: ["/api/saved-assets"] });
+  const { data: coverageData } = useQuery<InstitutionsListResponse>({
+    queryKey: ["/api/institutions"],
+    staleTime: 10 * 60 * 1000,
+  });
+  const coveredInstitutions = useMemo(
+    () => (coverageData?.institutions ?? []).map((i) => i.name),
+    [coverageData],
+  );
 
   const searchMutation = useMutation({
     mutationFn: async ({ query }: { query: string }) => {
@@ -421,13 +427,13 @@ export default function Discover() {
                       data-testid="coverage-indicator"
                     >
                       <Globe className="w-3 h-3 shrink-0" />
-                      <span>{COVERED_INSTITUTIONS.length} institutions · {ALL_SOURCE_KEYS.length} sources covered</span>
+                      <span>{coverageData?.total ?? coveredInstitutions.length} institutions · {ALL_SOURCE_KEYS.length} sources covered</span>
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-[300px] p-3">
                     <p className="text-[11px] font-semibold text-foreground mb-2">Coverage includes:</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
-                      {COVERED_INSTITUTIONS.map((inst) => (
+                      {coveredInstitutions.map((inst) => (
                         <p key={inst} className="text-[10px] text-muted-foreground">{inst}</p>
                       ))}
                     </div>

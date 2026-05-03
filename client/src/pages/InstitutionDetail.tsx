@@ -9,15 +9,11 @@ import {
   ShieldOff, ChevronDown, ChevronUp, ArrowUpDown,
 } from "lucide-react";
 import type { IngestedAsset } from "@shared/schema";
-import { INSTITUTIONS } from "@/lib/institutions";
+import type { InstitutionsListResponse } from "@/lib/institutions";
 import {
   detectModality, detectStage, computeCommercialScore, formatRelativeTime,
 } from "@/lib/titleSignals";
 import { PipelinePicker, type PipelinePickerPayload } from "@/components/PipelinePicker";
-
-const BLOCKED_SLUGS = new Set([
-  "ucsf", "duke", "umich", "mayo", "ucolorado", "columbia",
-]);
 
 const STAGE_COLORS: Record<string, string> = {
   "discovery":   "bg-violet-500/10 text-violet-600 dark:text-violet-400",
@@ -186,9 +182,14 @@ type SavedAssetsResponse = { assets: Array<{ ingestedAssetId: number | null }> }
 
 export default function InstitutionDetail() {
   const { slug } = useParams<{ slug: string }>();
-  const inst = INSTITUTIONS.find((i) => i.slug === slug);
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [search, setSearch] = useState("");
+
+  const { data: instListData } = useQuery<InstitutionsListResponse>({
+    queryKey: ["/api/institutions"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const inst = instListData?.institutions.find((i) => i.slug === slug);
 
   const { data, isLoading } = useQuery<{ assets: IngestedAsset[]; institution: string }>({
     queryKey: ["/api/institutions", slug, "assets"],
@@ -210,7 +211,7 @@ export default function InstitutionDetail() {
     : "Unknown Institution";
 
   const rawAssets = data?.assets ?? [];
-  const isBlocked = BLOCKED_SLUGS.has(slug ?? "");
+  const isBlocked = inst?.accessRestricted ?? false;
 
   const filtered = search.trim()
     ? rawAssets.filter((a) => a.assetName.toLowerCase().includes(search.toLowerCase()))
