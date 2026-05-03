@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { FileBarChart2, Loader2, Globe, Building2, FlaskConical, GraduationCap } from "lucide-react";
+import { FileBarChart2, Loader2, Globe, Building2, FlaskConical, GraduationCap, CheckCircle2, Circle, Clock, AlertCircle } from "lucide-react";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
@@ -21,12 +21,21 @@ import type { SavedAsset } from "@shared/schema";
 import type { ScoredAsset, BuyerProfile, ReportPayload } from "@/lib/types";
 import { DEFAULT_BUYER_PROFILE } from "@/lib/types";
 
+type SourceDiag = {
+  source: string;
+  ms: number;
+  status: "ok" | "empty" | "timeout" | "error";
+  count: number;
+  error?: string;
+};
+
 type SearchResponse = {
   assets: ScoredAsset[];
   query: string;
   sources: string[];
   signalsFound: number;
   assetsFound: number;
+  sourceDiagnostics?: SourceDiag[];
 };
 
 type SourcesResponse = {
@@ -111,6 +120,79 @@ function RadarOverlay({ sources }: { sources: string[] }) {
   );
 }
 
+function SourceDiagnosticsBar({ diagnostics }: { diagnostics: SourceDiag[] }) {
+  const counts = diagnostics.reduce(
+    (a, d) => { a[d.status]++; return a; },
+    { ok: 0, empty: 0, timeout: 0, error: 0 } as Record<SourceDiag["status"], number>,
+  );
+  const sorted = [...diagnostics].sort((a, b) => {
+    const order: Record<SourceDiag["status"], number> = { error: 0, timeout: 1, ok: 2, empty: 3 };
+    return order[a.status] - order[b.status] || a.source.localeCompare(b.source);
+  });
+  const statusIcon = (s: SourceDiag["status"]) => {
+    if (s === "ok") return <CheckCircle2 className="w-3 h-3 text-primary" />;
+    if (s === "empty") return <Circle className="w-3 h-3 text-muted-foreground/60" />;
+    if (s === "timeout") return <Clock className="w-3 h-3 text-amber-500" />;
+    return <AlertCircle className="w-3 h-3 text-destructive" />;
+  };
+  const statusLabel = (s: SourceDiag["status"]) => {
+    if (s === "ok") return "returned results";
+    if (s === "empty") return "no matches (source healthy)";
+    if (s === "timeout") return "timed out — source slow";
+    return "failed — source error";
+  };
+  return (
+    <div className="px-4 sm:px-6 pb-3">
+      <div className="max-w-3xl mx-auto rounded-md border border-card-border bg-card/50 px-3 py-2" data-testid="search-diagnostics">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+          <span className="font-semibold uppercase tracking-wide">
+            {diagnostics.length} source{diagnostics.length === 1 ? "" : "s"} searched:
+          </span>
+          <span className="inline-flex items-center gap-1" data-testid="diag-count-ok">
+            <CheckCircle2 className="w-3 h-3 text-primary" /> {counts.ok} returned
+          </span>
+          <span className="inline-flex items-center gap-1" data-testid="diag-count-empty">
+            <Circle className="w-3 h-3 text-muted-foreground/60" /> {counts.empty} empty
+          </span>
+          <span className="inline-flex items-center gap-1" data-testid="diag-count-timeout">
+            <Clock className="w-3 h-3 text-amber-500" /> {counts.timeout} slow
+          </span>
+          <span className="inline-flex items-center gap-1" data-testid="diag-count-error">
+            <AlertCircle className="w-3 h-3 text-destructive" /> {counts.error} failed
+          </span>
+        </div>
+        <details className="mt-1.5">
+          <summary className="text-[11px] text-primary cursor-pointer hover:underline">Per-source breakdown</summary>
+          <TooltipProvider>
+            <div className="mt-1.5 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-x-3 gap-y-1">
+              {sorted.map((d) => (
+                <Tooltip key={d.source}>
+                  <TooltipTrigger asChild>
+                    <div
+                      className="inline-flex items-center gap-1 text-[11px] text-muted-foreground"
+                      data-testid={`diag-source-${d.source}`}
+                    >
+                      {statusIcon(d.status)}
+                      <span className="truncate">{d.source}</span>
+                      <span className="text-muted-foreground/60 shrink-0">
+                        {d.count > 0 ? `${d.count} · ` : ""}{d.ms}ms
+                      </span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-[260px] text-[11px]">
+                    <p className="font-medium">{d.source}: {statusLabel(d.status)}</p>
+                    {d.error && <p className="mt-1 text-muted-foreground">{d.error.slice(0, 200)}</p>}
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          </TooltipProvider>
+        </details>
+      </div>
+    </div>
+  );
+}
+
 function SourceSelector({
   sources, selected, onToggle,
 }: {
@@ -157,6 +239,7 @@ export default function Discover() {
   const [, setLocation] = useLocation();
 
   const [searchResults, setSearchResults] = useState<ScoredAsset[]>([]);
+  const [searchDiagnostics, setSearchDiagnostics] = useState<SourceDiag[]>([]);
   const [hasSearched, setHasSearched] = useState(false);
   const [currentQuery, setCurrentQuery] = useState("");
   const [inputQuery, setInputQuery] = useState("");
@@ -218,6 +301,7 @@ export default function Discover() {
     },
     onSuccess: (data) => {
       setSearchResults(data.assets);
+      setSearchDiagnostics(data.sourceDiagnostics ?? []);
       setHasSearched(true);
       setStageFilter("all");
       setModalityFilter("all");
@@ -493,6 +577,10 @@ export default function Discover() {
             <div className="px-4 sm:px-6">
               <RadarOverlay sources={selectedSources} />
             </div>
+          )}
+
+          {hasSearched && !searchMutation.isPending && searchDiagnostics.length > 0 && (
+            <SourceDiagnosticsBar diagnostics={searchDiagnostics} />
           )}
 
           {showControls && (
