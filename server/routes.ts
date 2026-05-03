@@ -4950,7 +4950,9 @@ export async function registerRoutes(
     const parsed = insertResearchProjectSchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
     try {
-      const project = await storage.createResearchProject(parsed.data);
+      // New projects start as "draft" — they only enter the admin queue after the
+      // researcher explicitly toggles "Publish to industry" in §11.
+      const project = await storage.createResearchProject({ ...parsed.data, adminStatus: "draft" });
       res.json({ project });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -5094,7 +5096,16 @@ export async function registerRoutes(
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
     }
     if (validated.openForCollaboration !== undefined) updates.openForCollaboration = validated.openForCollaboration;
-    if (validated.publishToIndustry !== undefined) updates.publishToIndustry = validated.publishToIndustry;
+    if (validated.publishToIndustry !== undefined) {
+      updates.publishToIndustry = validated.publishToIndustry;
+      // When the researcher requests publishing, queue it for admin review.
+      // When they unpublish, reset to draft so it disappears from the admin queue.
+      if (validated.publishToIndustry === true) {
+        (updates as any).adminStatus = "pending";
+      } else if (validated.publishToIndustry === false) {
+        (updates as any).adminStatus = "draft";
+      }
+    }
     if (validated.estimatedBudget !== undefined) updates.estimatedBudget = validated.estimatedBudget;
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: "No valid fields to update" });
     try {
@@ -5938,6 +5949,10 @@ If a field cannot be determined, use "N/A".`
           developmentStage: researchProjects.developmentStage,
         })
         .from(researchProjects)
+        .where(
+          // Exclude drafts — only show projects researchers have explicitly submitted.
+          sql`${researchProjects.adminStatus} IN ('pending', 'published', 'rejected')`,
+        )
         .orderBy(
           sql`CASE WHEN ${researchProjects.adminStatus} = 'pending' THEN 0 WHEN ${researchProjects.adminStatus} = 'published' THEN 1 ELSE 2 END`,
           desc(researchProjects.lastEditedAt),
@@ -5951,14 +5966,71 @@ If a field cannot be determined, use "N/A".`
   app.patch("/api/admin/industry-projects/:id/status", async (req, res) => {
     try {
       const { id } = req.params;
+      const projectId = Number(id);
       const schema = z.object({ adminStatus: z.enum(["pending", "published", "rejected"]) });
       const { adminStatus } = schema.parse(req.body);
       const publishToIndustry = adminStatus === "published" ? true : adminStatus === "rejected" ? false : null;
       await db
         .update(researchProjects)
         .set({ adminStatus, ...(publishToIndustry !== null ? { publishToIndustry } : {}) })
-        .where(eq(researchProjects.id, Number(id)));
-      res.json({ ok: true, id: Number(id), adminStatus, publishToIndustry });
+        .where(eq(researchProjects.id, projectId));
+
+      // Bridge into ingested_assets so approved researcher submissions surface in
+      // EdenScout/Institutions alongside scraped tech-transfer assets.
+      const fingerprint = `researcher-project-${projectId}`;
+      if (adminStatus === "published") {
+        const [project] = await db.select().from(researchProjects).where(eq(researchProjects.id, projectId)).limit(1);
+        if (project) {
+          const contributors = (project.projectContributors ?? []) as Array<{ name: string; institution: string; role: string; email: string }>;
+          const institution = contributors.find((c) => c.institution)?.institution || "Researcher Submission";
+          const assetName = project.discoveryTitle || project.title || `Research Project #${projectId}`;
+          const summary = project.discoverySummary || project.description || project.hypothesis || "";
+          const stage = (project.developmentStage || "unknown").toLowerCase();
+          const inventors = contributors.map((c) => c.name).filter(Boolean);
+
+          const [existing] = await db.select({ id: ingestedAssets.id })
+            .from(ingestedAssets)
+            .where(eq(ingestedAssets.fingerprint, fingerprint))
+            .limit(1);
+
+          if (existing) {
+            await db.update(ingestedAssets)
+              .set({
+                assetName,
+                institution,
+                summary,
+                developmentStage: stage,
+                sourceUrl: project.projectUrl ?? null,
+                relevant: true,
+                lastSeenAt: new Date(),
+                inventors: inventors.length > 0 ? inventors : null,
+              })
+              .where(eq(ingestedAssets.id, existing.id));
+          } else {
+            await db.insert(ingestedAssets).values({
+              fingerprint,
+              assetName,
+              institution,
+              summary,
+              sourceType: "researcher",
+              sourceName: "EdenLab Research Project",
+              developmentStage: stage,
+              sourceUrl: project.projectUrl ?? null,
+              relevant: true,
+              runId: 0,
+              inventors: inventors.length > 0 ? inventors : null,
+            });
+          }
+        }
+      } else {
+        // Unpublish or reject: hide from Scout but keep the row so re-publishing
+        // does not need re-enrichment.
+        await db.update(ingestedAssets)
+          .set({ relevant: false })
+          .where(eq(ingestedAssets.fingerprint, fingerprint));
+      }
+
+      res.json({ ok: true, id: projectId, adminStatus, publishToIndustry });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }

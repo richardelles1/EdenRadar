@@ -986,7 +986,7 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(ingestedAssets)
-      .where(and(ilike(ingestedAssets.institution, `%${institution}%`), eq(ingestedAssets.sourceType, "tech_transfer")))
+      .where(and(ilike(ingestedAssets.institution, `%${institution}%`), inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"])))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
@@ -998,7 +998,7 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(ingestedAssets)
-      .where(and(inArray(ingestedAssets.institution, names), eq(ingestedAssets.sourceType, "tech_transfer")))
+      .where(and(inArray(ingestedAssets.institution, names), inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"])))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
@@ -1038,7 +1038,7 @@ export class DatabaseStorage implements IStorage {
         count: sql<number>`count(*)::int`,
       })
       .from(ingestedAssets)
-      .where(eq(ingestedAssets.sourceType, "tech_transfer"))
+      .where(inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"]))
       .groupBy(ingestedAssets.institution);
 
     const result: Record<string, number> = {};
@@ -2582,7 +2582,7 @@ export class DatabaseStorage implements IStorage {
         summary, categories, technology_id,
         0.85 AS similarity
       FROM ingested_assets
-      WHERE relevant = true AND source_type = 'tech_transfer' AND LOWER(institution) LIKE ${pattern}
+      WHERE relevant = true AND source_type IN ('tech_transfer', 'researcher') AND LOWER(institution) LIKE ${pattern}
       ORDER BY last_seen_at DESC
       LIMIT ${limit}
     `);

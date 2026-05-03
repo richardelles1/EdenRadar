@@ -329,6 +329,24 @@ export function ProjectCard({
             {project.researchArea}
           </Badge>
         )}
+        {(() => {
+          const s = (project.adminStatus ?? "draft") as string;
+          const published = project.publishToIndustry === true && s === "published";
+          const pending = project.publishToIndustry === true && s === "pending";
+          const rejected = s === "rejected";
+          if (!published && !pending && !rejected) return null;
+          const cls = published
+            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+            : pending
+              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30";
+          const label = published ? "Published" : pending ? "Pending review" : "Rejected";
+          return (
+            <Badge className={`text-[11px] ${cls}`} data-testid={`badge-publish-${project.id}`}>
+              {label}
+            </Badge>
+          );
+        })()}
       </div>
       {project.hypothesis && !compact && (
         <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">{project.hypothesis}</p>

@@ -238,6 +238,25 @@ export default function ProjectDetail() {
         </div>
         <Badge className={`text-xs shrink-0 ${getStatusColor(local.status)}`}>{local.status.replace("_"," ")}</Badge>
         {(() => {
+          const s = (local.adminStatus ?? "draft") as string;
+          const published = local.publishToIndustry === true && s === "published";
+          const pending = local.publishToIndustry === true && s === "pending";
+          const rejected = s === "rejected";
+          const cls = published
+            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+            : pending
+              ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+              : rejected
+                ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
+                : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30";
+          const label = published ? "Published" : pending ? "Pending review" : rejected ? "Rejected" : "Draft";
+          return (
+            <Badge className={`text-xs shrink-0 hidden sm:inline-flex ${cls}`} data-testid="badge-publish-status">
+              {label}
+            </Badge>
+          );
+        })()}
+        {(() => {
           const r = computeReadinessScore(local);
           return (
             <span
@@ -600,8 +619,45 @@ export default function ProjectDetail() {
           {/* §11 — Discovery Card */}
           <SectionCard id="discovery" num={11} title="Discovery Card Preparation" collapsed={collapsed["discovery"]} onToggle={() => toggleCollapse("discovery")} sectionRef={(el) => { sectionRefs.current["discovery"] = el; }}>
             <div className="mb-3 p-3 rounded-lg bg-violet-500/5 border border-violet-500/20 text-xs text-violet-700 dark:text-violet-300">
-              Complete this section to prepare your research for the EdenRadar industry feed. Use "Push to Discovery Card" to pre-fill the submission form.
+              Complete this section to prepare your research for the EdenRadar industry feed. Toggle "Publish to industry" below to send this project to the admin review queue, or use "Push to Discovery Card" to pre-fill a separate one-page Discovery Card.
             </div>
+            <FieldGroup label="Publish to industry">
+              <div className="flex items-center gap-3 flex-wrap">
+                <Switch
+                  checked={local.publishToIndustry === true}
+                  onCheckedChange={(v) => {
+                    setField("publishToIndustry", v);
+                    saveSection(v ? "Publish request" : "Unpublish", { publishToIndustry: v });
+                  }}
+                  data-testid="switch-publish-industry"
+                />
+                <span className="text-sm text-muted-foreground">
+                  {local.publishToIndustry === true ? "Submitted for industry visibility" : "Off — project is private"}
+                </span>
+                {(() => {
+                  const s = (local.adminStatus ?? "draft") as string;
+                  const published = local.publishToIndustry === true && s === "published";
+                  const pending = local.publishToIndustry === true && s === "pending";
+                  const rejected = s === "rejected";
+                  const cls = published
+                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                    : pending
+                      ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                      : rejected
+                        ? "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
+                        : "bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/30";
+                  const label = published ? "Published to industry" : pending ? "Pending admin review" : rejected ? "Rejected by admin" : "Draft (not submitted)";
+                  return (
+                    <Badge className={`text-[11px] ${cls}`} data-testid="badge-publish-status-section">
+                      {label}
+                    </Badge>
+                  );
+                })()}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                When enabled, an admin reviews your project. Once approved, it appears on the Industry EdenLab tab and surfaces in Scout/Institutions as a researcher-sourced asset.
+              </p>
+            </FieldGroup>
             <FieldGroup label="Discovery Title">
               <Input value={local.discoveryTitle ?? ""} onChange={(e) => setField("discoveryTitle", e.target.value)} data-testid="input-discovery-title" />
             </FieldGroup>

@@ -10155,7 +10155,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
               data-testid="nav-research-queue"
             >
               <Microscope className="h-4 w-4" />
-              <span>Research Review</span>
+              <span>Discovery Cards Review</span>
               {pendingCount > 0 && (
                 <span className="ml-auto text-[10px] font-bold bg-amber-500 text-white rounded-full px-1.5 py-0.5 min-w-[18px] text-center" data-testid="badge-pending-count">
                   {pendingCount}
@@ -10180,7 +10180,7 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
               data-testid="nav-edenlab-review"
             >
               <FlaskConical className="h-4 w-4" />
-              EdenLab Review
+              Research Projects Review
             </button>
             <button
               onClick={() => setActiveTab("eden")}
@@ -10327,8 +10327,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
           {activeTab === "research-queue" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Research Review</h2>
-                <p className="text-sm text-muted-foreground mt-1">Review researcher-submitted Discovery Cards. Approved cards enter Scout as the "Lab Discoveries" source.</p>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Discovery Cards Review</h2>
+                <p className="text-sm text-muted-foreground mt-1">Review one-page Discovery Cards submitted via EdenDiscovery. Approved cards become the "Lab Discoveries" source in Scout. (Full research projects are reviewed under "Research Projects Review" below.)</p>
               </div>
               <ResearchQueue pw={pw} />
             </>
@@ -10347,8 +10347,8 @@ function AdminPanel({ pw, setAuthed, theme, setTheme, activeTab, setActiveTab, o
           {activeTab === "edenlab-review" && (
             <>
               <div className="mb-6">
-                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">EdenLab Review</h2>
-                <p className="text-sm text-muted-foreground mt-1">Approve community research projects for the industry EdenLab tab. Published projects are immediately visible to industry buyers.</p>
+                <h2 className="text-2xl font-semibold text-foreground" data-testid="text-section-title">Research Projects Review</h2>
+                <p className="text-sm text-muted-foreground mt-1">Approve full research projects from EdenLab for industry visibility. Published projects appear on the Industry EdenLab tab and as researcher-sourced assets in Scout/Institutions.</p>
               </div>
               <IndustryProjectsQueue pw={pw} />
             </>
