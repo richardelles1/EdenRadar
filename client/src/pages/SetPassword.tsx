@@ -62,8 +62,12 @@ export default function SetPassword() {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
-      await fetch("/api/industry/activate-invite", { method: "POST", headers });
-    } catch {
+      const activateRes = await fetch("/api/industry/activate-invite", { method: "POST", headers });
+      if (!activateRes.ok) {
+        console.warn("[set-password] activate-invite responded", activateRes.status);
+      }
+    } catch (activateErr) {
+      console.warn("[set-password] activate-invite network error:", activateErr);
     }
 
     setSubmitting(false);

@@ -65,13 +65,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
       if (event === "PASSWORD_RECOVERY") {
         setIsPasswordRecovery(true);
-        // Route to the correct password-set page regardless of what redirect_to
-        // Supabase resolved to (it strips path components unless explicitly allowed).
-        const isAdmin = s?.user?.user_metadata?.is_admin === true;
-        const dest = isAdmin ? "/admin/reset-password" : "/set-password";
-        if (!window.location.pathname.startsWith(dest)) {
-          window.location.replace(dest);
+        // Route to the correct password-set page regardless of what Supabase resolved
+        // redirect_to to (it strips path components unless the exact URL is allowlisted).
+        // Scope: only redirect roles we own. Researchers/concept users are left on
+        // whatever page the link dropped them on (typically the landing page).
+        const meta = s?.user?.user_metadata;
+        const isAdminUser = meta?.is_admin === true;
+        const userRole = meta?.role as string | undefined;
+        if (isAdminUser) {
+          if (!window.location.pathname.startsWith("/admin/reset-password")) {
+            window.location.replace("/admin/reset-password");
+          }
+        } else if (userRole === "industry") {
+          if (!window.location.pathname.startsWith("/set-password")) {
+            window.location.replace("/set-password");
+          }
         }
+        // researcher / concept / unknown: no forced redirect
       }
       setSession(s);
       setUser(s?.user ?? null);

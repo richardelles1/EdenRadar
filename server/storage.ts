@@ -3534,6 +3534,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getOrgPlanByMembership(userId: string): Promise<{ plan: string; orgName: string; stripeStatus: string | null; stripeCurrentPeriodEnd: Date | null } | null> {
+    // Primary lookup: org_members → organizations.
+    // invite_status is intentionally not filtered — pending members of a paid org
+    // must be granted access so the invite onboarding lands on the dashboard, not
+    // the subscription gate.
     const [row] = await db
       .select({
         plan: organizations.planTier,
@@ -3545,7 +3549,23 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(organizations, eq(orgMembers.orgId, organizations.id))
       .where(eq(orgMembers.userId, userId))
       .limit(1);
-    return row ?? null;
+    if (row) return row;
+
+    // Fallback: industry_profiles.org_id → organizations.
+    // Handles the edge case where a UUID mismatch leaves the user in
+    // industry_profiles but not in org_members (e.g. multiple failed invites).
+    const [profileRow] = await db
+      .select({
+        plan: organizations.planTier,
+        orgName: organizations.name,
+        stripeStatus: organizations.stripeStatus,
+        stripeCurrentPeriodEnd: organizations.stripeCurrentPeriodEnd,
+      })
+      .from(industryProfiles)
+      .innerJoin(organizations, eq(industryProfiles.orgId, organizations.id))
+      .where(eq(industryProfiles.userId, userId))
+      .limit(1);
+    return profileRow ?? null;
   }
 
   async createSharedLink(data: { type: string; entityId?: string; payload: Record<string, unknown>; createdBy?: string; expiresAt: Date; passwordHash?: string }): Promise<SharedLink> {
