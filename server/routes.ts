@@ -10722,12 +10722,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       if (!org) return res.status(404).json({ error: "Organization not found" });
 
       const adminUser = await getAdminUser(req);
-      const adminLabel = adminUser?.email ?? adminUser?.id ?? "admin";
+      const adminUserId = adminUser?.id ?? "admin";
+      const adminEmail = adminUser?.email ?? null;
 
       const updated = await storage.updateOrganization(orgId, verified
         ? {
             marketSellerVerifiedAt: new Date(),
-            marketSellerVerifiedBy: adminLabel,
+            marketSellerVerifiedBy: adminUserId, // immutable admin user id for audit
             marketSellerVerificationNote: note ?? null,
           }
         : {
@@ -10736,7 +10737,17 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             marketSellerVerificationNote: null,
           });
 
-      console.log(`[admin/market-seller-verification] org=${orgId} verified=${verified} by=${adminLabel}`);
+      // Durable audit log — survives server restarts and is queryable from admin tools.
+      logAppEvent(verified ? "market_seller_verified" : "market_seller_unverified", {
+        orgId,
+        orgName: org.name,
+        actorId: adminUserId,
+        actorEmail: adminEmail,
+        note: verified ? (note ?? null) : null,
+        previouslyVerifiedAt: org.marketSellerVerifiedAt ?? null,
+        previouslyVerifiedBy: org.marketSellerVerifiedBy ?? null,
+      });
+
       res.json(updated);
     } catch (err: any) {
       if (err?.name === "ZodError") return res.status(400).json({ error: "Invalid payload", details: err.errors });

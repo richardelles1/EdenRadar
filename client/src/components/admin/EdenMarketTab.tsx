@@ -846,11 +846,22 @@ export function EdenMarketTab() {
                           {org.edenMarketStripeSubId ? org.edenMarketStripeSubId.slice(0, 14) + "…" : "—"}
                         </td>
                         <td className="px-4 py-2.5 text-muted-foreground">{new Date(org.createdAt).toLocaleDateString()}</td>
-                        <td className="px-4 py-2.5">
+                        <td className="px-4 py-2.5 align-top">
                           {isVerified ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-400" data-testid={`admin-seller-verified-${org.id}`}>
-                              <BadgeCheck className="w-3 h-3" /> {new Date(org.marketSellerVerifiedAt!).toLocaleDateString()}
-                            </span>
+                            <div className="space-y-0.5" data-testid={`admin-seller-verified-${org.id}`}>
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-violet-700 dark:text-violet-400">
+                                <BadgeCheck className="w-3 h-3" />
+                                Verified by {org.marketSellerVerifiedBy ?? "admin"}
+                              </span>
+                              <p className="text-[10px] text-muted-foreground">
+                                on {new Date(org.marketSellerVerifiedAt!).toLocaleDateString()}
+                              </p>
+                              {org.marketSellerVerificationNote && (
+                                <p className="text-[10px] text-muted-foreground/80 italic max-w-xs truncate" title={org.marketSellerVerificationNote}>
+                                  “{org.marketSellerVerificationNote}”
+                                </p>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-muted-foreground/60 text-[11px]">Not verified</span>
                           )}
