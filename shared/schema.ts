@@ -1029,6 +1029,48 @@ export const marketAvailabilityNotifications = pgTable("market_availability_noti
 }));
 export type MarketAvailabilityNotification = typeof marketAvailabilityNotifications.$inferSelect;
 
+// ── Saved Searches — EdenMarket Browse alerts (Task #713) ────────────────────
+// A buyer can save the current EdenMarket browse filter set + keyword as a
+// named saved search. When a listing flips to `active`, every saved search
+// whose filters/keyword match the new listing produces an in-app notification
+// + email to the saving buyer (deduped per-listing in the route).
+export type MarketSavedSearchFilters = {
+  therapeuticArea?: string;
+  modality?: string;
+  stage?: string;
+  engagementStatus?: string;
+  priceRangeMinM?: number;
+  priceRangeMaxM?: number;
+};
+
+export const marketSavedSearches = pgTable("market_saved_searches", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  name: text("name").notNull(),
+  keyword: text("keyword"),
+  filters: jsonb("filters").$type<MarketSavedSearchFilters>().notNull().default({}),
+  createdAt: timestamp("created_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+}, t => ({
+  userNameUnique: uniqueIndex("market_saved_searches_user_name_unique").on(t.userId, t.name),
+}));
+
+export const insertMarketSavedSearchSchema = createInsertSchema(marketSavedSearches)
+  .omit({ id: true, createdAt: true })
+  .extend({
+    name: z.string().min(1).max(120),
+    keyword: z.string().max(240).optional().nullable(),
+    filters: z.object({
+      therapeuticArea: z.string().optional(),
+      modality: z.string().optional(),
+      stage: z.string().optional(),
+      engagementStatus: z.string().optional(),
+      priceRangeMinM: z.number().int().nonnegative().optional(),
+      priceRangeMaxM: z.number().int().nonnegative().optional(),
+    }).optional().default({}),
+  });
+export type InsertMarketSavedSearch = z.infer<typeof insertMarketSavedSearchSchema>;
+export type MarketSavedSearch = typeof marketSavedSearches.$inferSelect;
+
 // ── Feedback-driven Relevance (Task #694) ────────────────────────────────────
 
 export const FEEDBACK_ACTIONS = ["save", "dismiss", "view", "nda_request"] as const;

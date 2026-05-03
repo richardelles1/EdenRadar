@@ -1,13 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap, BadgeCheck } from "lucide-react";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { EyeOff, Send, SlidersHorizontal, X, GitCompareArrows, ShoppingBag, Zap, BadgeCheck, BellPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import type { MarketListing } from "@shared/schema";
 
 type ListingWithMeta = MarketListing & { eoiCount: number; myEoiStatus: string | null; edenSignalScore?: number; sellerVerified?: boolean };
@@ -231,14 +235,81 @@ function ComparisonTable({ listings, onClose }: { listings: ListingWithMeta[]; o
 
 export default function MarketBrowse() {
   const { session } = useAuth();
-  const [taFilter, setTaFilter] = useState("");
-  const [modalityFilter, setModalityFilter] = useState("all");
-  const [stageFilter, setStageFilter] = useState("all");
-  const [engagementFilter, setEngagementFilter] = useState("all");
-  const [minPriceFilter, setMinPriceFilter] = useState("");
-  const [maxPriceFilter, setMaxPriceFilter] = useState("");
+  const { toast } = useToast();
+  const [location] = useLocation();
+  // Read initial filter values from URL query string (used by "Run now" from
+  // the saved-searches panel on My EOIs).
+  const initialFromUrl = useMemo(() => {
+    const qs = typeof window !== "undefined" ? window.location.search : "";
+    const params = new URLSearchParams(qs);
+    return {
+      ta: params.get("ta") ?? "",
+      modality: params.get("modality") ?? "all",
+      stage: params.get("stage") ?? "all",
+      engagement: params.get("engagement") ?? "all",
+      min: params.get("min") ?? "",
+      max: params.get("max") ?? "",
+      keyword: params.get("keyword") ?? "",
+    };
+  }, [location]);
+  const [taFilter, setTaFilter] = useState(initialFromUrl.ta);
+  const [modalityFilter, setModalityFilter] = useState(initialFromUrl.modality);
+  const [stageFilter, setStageFilter] = useState(initialFromUrl.stage);
+  const [engagementFilter, setEngagementFilter] = useState(initialFromUrl.engagement);
+  const [minPriceFilter, setMinPriceFilter] = useState(initialFromUrl.min);
+  const [maxPriceFilter, setMaxPriceFilter] = useState(initialFromUrl.max);
+  const [keywordFilter, setKeywordFilter] = useState(initialFromUrl.keyword);
   const [compareIds, setCompareIds] = useState<number[]>([]);
   const [showComparison, setShowComparison] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [savePending, setSavePending] = useState(false);
+
+  // Sync URL → state when "Run now" navigates here with new params.
+  useEffect(() => {
+    setTaFilter(initialFromUrl.ta);
+    setModalityFilter(initialFromUrl.modality);
+    setStageFilter(initialFromUrl.stage);
+    setEngagementFilter(initialFromUrl.engagement);
+    setMinPriceFilter(initialFromUrl.min);
+    setMaxPriceFilter(initialFromUrl.max);
+    setKeywordFilter(initialFromUrl.keyword);
+  }, [initialFromUrl]);
+
+  async function handleSaveSearch() {
+    if (!saveName.trim()) return;
+    setSavePending(true);
+    try {
+      const filters: Record<string, unknown> = {};
+      if (taFilter.trim()) filters.therapeuticArea = taFilter.trim();
+      if (modalityFilter !== "all") filters.modality = modalityFilter;
+      if (stageFilter !== "all") filters.stage = stageFilter;
+      if (engagementFilter !== "all") filters.engagementStatus = engagementFilter;
+      if (minPriceFilter) {
+        const m = parseInt(minPriceFilter, 10);
+        if (!isNaN(m)) filters.priceRangeMinM = m;
+      }
+      if (maxPriceFilter) {
+        const m = parseInt(maxPriceFilter, 10);
+        if (!isNaN(m)) filters.priceRangeMaxM = m;
+      }
+      await apiRequest("POST", "/api/market/saved-searches", {
+        name: saveName.trim(),
+        keyword: keywordFilter.trim() || null,
+        filters,
+      });
+      await queryClient.invalidateQueries({ queryKey: ["/api/market/saved-searches"] });
+      toast({ title: "Saved", description: `Search "${saveName.trim()}" will alert you on matching listings.` });
+      setSaveDialogOpen(false);
+      setSaveName("");
+    } catch (e: any) {
+      toast({ title: "Couldn't save search", description: e?.message ?? "Unknown error", variant: "destructive" });
+    } finally {
+      setSavePending(false);
+    }
+  }
+
+  const hasAnyFilter = !!(taFilter || keywordFilter || modalityFilter !== "all" || stageFilter !== "all" || engagementFilter !== "all" || minPriceFilter || maxPriceFilter);
 
   const { data: listings = [], isLoading } = useQuery<ListingWithMeta[]>({
     queryKey: ["/api/market/listings"],
@@ -265,8 +336,18 @@ export default function MarketBrowse() {
       const max = parseInt(maxPriceFilter, 10);
       if (!isNaN(max) && l.priceRangeMin != null && l.priceRangeMin > max) return false;
     }
+    if (keywordFilter.trim()) {
+      const k = keywordFilter.trim().toLowerCase();
+      const blindFields = l.blindFields || {};
+      const haystacks: string[] = [];
+      if (l.assetName && !(l.blind && blindFields.assetName)) haystacks.push(l.assetName);
+      if (l.mechanism && !(l.blind && blindFields.mechanismDetail)) haystacks.push(l.mechanism);
+      if (l.aiSummary) haystacks.push(l.aiSummary);
+      if (l.therapeuticArea) haystacks.push(l.therapeuticArea);
+      if (!haystacks.some(h => h.toLowerCase().includes(k))) return false;
+    }
     return true;
-  }), [listings, taFilter, modalityFilter, stageFilter, engagementFilter, minPriceFilter, maxPriceFilter]);
+  }), [listings, taFilter, modalityFilter, stageFilter, engagementFilter, minPriceFilter, maxPriceFilter, keywordFilter]);
 
   const compareListings = listings.filter(l => compareIds.includes(l.id));
   const modalities = [...new Set(listings.map(l => l.modality))];
@@ -311,6 +392,13 @@ export default function MarketBrowse() {
             data-testid="market-filter-ta"
           />
         </div>
+        <Input
+          placeholder="Keyword…"
+          value={keywordFilter}
+          onChange={e => setKeywordFilter(e.target.value)}
+          className="h-8 text-xs w-40"
+          data-testid="market-filter-keyword"
+        />
         <Select value={modalityFilter} onValueChange={setModalityFilter}>
           <SelectTrigger className="h-8 text-xs w-36" data-testid="market-filter-modality">
             <SelectValue placeholder="Modality" />
@@ -354,16 +442,72 @@ export default function MarketBrowse() {
           className="h-8 text-xs w-24"
           data-testid="market-filter-max-price"
         />
-        {(taFilter || modalityFilter !== "all" || stageFilter !== "all" || engagementFilter !== "all" || minPriceFilter || maxPriceFilter) && (
+        {hasAnyFilter && (
           <button
-            onClick={() => { setTaFilter(""); setModalityFilter("all"); setStageFilter("all"); setEngagementFilter("all"); setMinPriceFilter(""); setMaxPriceFilter(""); }}
+            onClick={() => { setTaFilter(""); setKeywordFilter(""); setModalityFilter("all"); setStageFilter("all"); setEngagementFilter("all"); setMinPriceFilter(""); setMaxPriceFilter(""); }}
             className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
             data-testid="market-filter-clear"
           >
             <X className="w-3.5 h-3.5" /> Clear
           </button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 text-xs gap-1 ml-auto"
+          onClick={() => setSaveDialogOpen(true)}
+          disabled={!hasAnyFilter}
+          title={hasAnyFilter ? "Save these filters and get notified on matching listings" : "Set at least one filter or keyword to save"}
+          data-testid="market-save-search-btn"
+        >
+          <BellPlus className="w-3.5 h-3.5" /> Save this search
+        </Button>
       </div>
+
+      <Dialog open={saveDialogOpen} onOpenChange={setSaveDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Save this search</DialogTitle>
+            <DialogDescription>
+              We'll send you an in-app notification and email the moment a new listing matches these filters.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="saved-search-name" className="text-xs">Name</Label>
+              <Input
+                id="saved-search-name"
+                placeholder='e.g. "Oncology small molecule"'
+                value={saveName}
+                onChange={e => setSaveName(e.target.value)}
+                maxLength={120}
+                data-testid="market-save-search-name"
+              />
+            </div>
+            <div className="text-xs text-muted-foreground space-y-0.5 rounded-md border border-border bg-muted/30 p-3">
+              <p className="font-medium text-foreground">Filters captured</p>
+              {keywordFilter && <p>Keyword: <span className="text-foreground">{keywordFilter}</span></p>}
+              {taFilter && <p>Therapeutic area: <span className="text-foreground">{taFilter}</span></p>}
+              {modalityFilter !== "all" && <p>Modality: <span className="text-foreground">{modalityFilter}</span></p>}
+              {stageFilter !== "all" && <p>Stage: <span className="text-foreground">{stageFilter}</span></p>}
+              {engagementFilter !== "all" && <p>Engagement: <span className="text-foreground">{ENGAGEMENT_LABELS[engagementFilter] ?? engagementFilter}</span></p>}
+              {maxPriceFilter && <p>Max price: <span className="text-foreground">${maxPriceFilter}M</span></p>}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSaveDialogOpen(false)} data-testid="market-save-search-cancel">Cancel</Button>
+            <Button
+              onClick={handleSaveSearch}
+              disabled={!saveName.trim() || savePending}
+              className="text-white"
+              style={{ background: ACCENT }}
+              data-testid="market-save-search-confirm"
+            >
+              {savePending ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {isLoading ? (
         <div className="flex items-center justify-center py-20">

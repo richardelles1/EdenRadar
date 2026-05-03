@@ -6,7 +6,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import mammoth from "mammoth";
 import { storage } from "./storage";
-import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, institutionMetadata } from "@shared/schema";
+import { insertDiscoveryCardSchema, insertResearchProjectSchema, insertSavedReferenceSchema, insertSavedGrantSchema, insertConceptCardSchema, conceptCards, conceptInterests, researchProjects, userAlerts, type UserAlert, type InsertResearchProject, type IngestedAsset, ingestedAssets, pipelineLists, savedAssets, insertManualInstitutionSchema, SAVED_ASSET_STATUSES, sharedLinks, industryProfiles, appEvents, marketEois, marketListings, marketAvailabilityNotifications, marketSavedSearches, insertMarketSavedSearchSchema, institutionMetadata } from "@shared/schema";
 import { slugifyInstitutionName } from "./lib/institutionSeed";
 import { db } from "./db";
 import { eq, and, sql, desc, or, ilike, inArray, gte, gt, count as drizzleCount, isNull } from "drizzle-orm";
@@ -10657,7 +10657,110 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         } catch (e) { console.warn("[market] availability signal emails failed", e); }
       }
 
+      // Saved-search fan-out (Task #713): on first activation, evaluate every
+      // saved search against this listing and notify matching buyers — once
+      // per (user, listing) regardless of how many of their searches matched
+      // and on top of the EdenScout-link path above.
+      if (data.status === "active" && prevListing?.status !== "active" && updated) {
+        try {
+          const { fanOutSavedSearchesForListing } = await import("./lib/marketSavedSearchMatcher");
+          const { enqueueListingAvailable } = await import("./lib/marketEmailCoalescer");
+          const newlyNotified = await fanOutSavedSearchesForListing(updated);
+          const assetLabel = updated.blind
+            ? `a ${updated.therapeuticArea} ${updated.modality} listing`
+            : (updated.assetName || `a ${updated.therapeuticArea} listing`);
+          await Promise.allSettled(newlyNotified.map(async ({ userId: uid }) => {
+            const userOrg = await storage.getOrgForUser(uid);
+            const email = userOrg?.billingEmail;
+            if (email) enqueueListingAvailable(email, updated.id, assetLabel);
+          }));
+        } catch (e) { console.warn("[market] saved-search fan-out failed", e); }
+      }
+
       res.json(updated);
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  // ── Saved Searches (Task #713) ───────────────────────────────────────────
+  app.get("/api/market/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const rows = await db.select()
+        .from(marketSavedSearches)
+        .where(eq(marketSavedSearches.userId, userId))
+        .orderBy(desc(marketSavedSearches.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post("/api/market/saved-searches", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const data = insertMarketSavedSearchSchema.parse({ ...req.body, userId });
+      try {
+        const [row] = await db.insert(marketSavedSearches).values({
+          userId,
+          name: data.name,
+          keyword: data.keyword ?? null,
+          filters: data.filters ?? {},
+        }).returning();
+        res.json(row);
+      } catch (e: any) {
+        if (String(e?.message || "").toLowerCase().includes("unique")) {
+          return res.status(409).json({ error: "A saved search with that name already exists" });
+        }
+        throw e;
+      }
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.patch("/api/market/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const id = parseInt(String(req.params.id), 10);
+      const schema = z.object({ name: z.string().min(1).max(120) });
+      const { name } = schema.parse(req.body);
+      try {
+        const [row] = await db.update(marketSavedSearches)
+          .set({ name })
+          .where(and(eq(marketSavedSearches.id, id), eq(marketSavedSearches.userId, userId)))
+          .returning();
+        if (!row) return res.status(404).json({ error: "Saved search not found" });
+        res.json(row);
+      } catch (e: any) {
+        if (String(e?.message || "").toLowerCase().includes("unique")) {
+          return res.status(409).json({ error: "A saved search with that name already exists" });
+        }
+        throw e;
+      }
+    } catch (err: any) {
+      res.status(400).json({ error: err.message });
+    }
+  });
+
+  app.delete("/api/market/saved-searches/:id", verifyAnyAuth, async (req, res) => {
+    try {
+      const userId = req.headers["x-user-id"] as string;
+      const org = await storage.getOrgForUser(userId);
+      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      const id = parseInt(String(req.params.id), 10);
+      const [row] = await db.delete(marketSavedSearches)
+        .where(and(eq(marketSavedSearches.id, id), eq(marketSavedSearches.userId, userId)))
+        .returning();
+      if (!row) return res.status(404).json({ error: "Saved search not found" });
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(400).json({ error: err.message });
     }

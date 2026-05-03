@@ -1303,6 +1303,18 @@ async function createMarketDealsTables() {
     `);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS man_user_unread ON market_availability_notifications(user_id) WHERE read_at IS NULL`);
     await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS man_user_listing_unique ON market_availability_notifications(user_id, listing_id)`);
+    // Saved searches — EdenMarket Browse alerts (Task #713)
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS market_saved_searches (
+        id          SERIAL PRIMARY KEY,
+        user_id     TEXT NOT NULL,
+        name        TEXT NOT NULL,
+        keyword     TEXT,
+        filters     JSONB NOT NULL DEFAULT '{}'::jsonb,
+        created_at  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS market_saved_searches_user_name_unique ON market_saved_searches(user_id, name)`);
     await db.execute(sql`
       CREATE TABLE IF NOT EXISTS market_deal_documents (
         id           SERIAL PRIMARY KEY,
