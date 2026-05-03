@@ -1333,6 +1333,21 @@ export const asuScraper = createWordPressApiScraper("https://skysonginnovations.
 // Unicamp Inova (University of Campinas) — WordPress REST API, ~1,275 technologies
 // across 13 paginated pages at tecnologias.inova.unicamp.br/wp-json/wp/v2/tecnologia.
 export const unicampScraper = createWordPressApiScraper("https://tecnologias.inova.unicamp.br", "tecnologia", "Unicamp");
+// Inova USP / AUSPIN (University of São Paulo) — TechPublisher / Inteum platform.
+// inovacao.usp.br → 301 to auspin.usp.br (institutional site without a tech catalog).
+// The real patent catalog lives at patentes.usp.br which is a thin wrapper over
+// usp.technologypublisher.com. Probed 2026-05-03:
+//   - https://usp.technologypublisher.com/SearchResults.aspx?type=Tech&q= → HTTP 200
+//     (~9–10 listings per page, paginates via ?page=N)
+//   - https://usp.technologypublisher.com/sitemap.xml → 792 locs incl. 68 /tech/ URLs
+//     (rooted on www.patentes.usp.br)
+//   - https://usp.technologypublisher.com/RSS.aspx → 201 items
+// Detail link forms found on listing pages: `/tech/<SLUG>` and `/tech?title=<SLUG>`.
+// We override the default selector to capture both shapes.
+export const uspScraper = createTechPublisherScraper("usp", "Inova USP (University of São Paulo)", {
+  selector: "a[href*='/tech/'],a[href*='/tech?']",
+  maxPg: 300,
+});
 
 // ── International: UK ────────────────────────────────────────────────────
 // Oxford University Innovation — re-probed 2026-04-21:

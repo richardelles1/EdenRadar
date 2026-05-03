@@ -155,6 +155,7 @@ import {
   // Misc custom scrapers
   asuScraper,
   unicampScraper,
+  uspScraper,
   ndsuScraper,
   montanaStateScraper,
   mountsinaiScraper,
@@ -736,6 +737,7 @@ export const ALL_SCRAPERS: InstitutionScraper[] = [
   // ── Misc custom scrapers (real scraping logic) ────────────────────────────
   asuScraper,
   unicampScraper,
+  uspScraper,
   ndsuScraper,
   montanaStateScraper,
   mountsinaiScraper,
