@@ -5983,14 +5983,16 @@ If a field cannot be determined, use "N/A".`
         adminNote: z.string().nullable().optional(),
       });
       const { adminStatus, adminNote } = schema.parse(req.body);
-      const publishToIndustry = adminStatus === "published" ? true : adminStatus === "rejected" ? false : null;
+      // Admin actions normalise the publish flag so the researcher-facing status
+      // badge stays in sync (pending = awaiting review, so publish flag stays true).
+      const publishToIndustry = adminStatus === "rejected" ? false : true;
       // Reset the rejection note unless the admin is rejecting now.
       const noteUpdate = adminStatus === "rejected"
         ? { adminNote: adminNote ?? null }
         : { adminNote: null };
       await db
         .update(researchProjects)
-        .set({ adminStatus, ...(publishToIndustry !== null ? { publishToIndustry } : {}), ...noteUpdate })
+        .set({ adminStatus, publishToIndustry, ...noteUpdate })
         .where(eq(researchProjects.id, projectId));
 
       // Bridge into ingested_assets so approved researcher submissions surface in
