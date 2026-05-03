@@ -641,7 +641,145 @@ export async function registerRoutes(
         institutions: institutions && institutions.length ? institutions : undefined,
         since: sinceDate, before: beforeDate,
       };
-      results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
+
+      // ── Hybrid keyword + vector retrieval (Task #762) ─────────────────────
+      // Run keyword (FTS) and vector retrieval in parallel for queried
+      // searches, then fuse with Reciprocal Rank Fusion (RRF). Empty-query +
+      // filter-only browsing path is unchanged — vector search needs a
+      // query to embed.
+      //
+      // Safety net: hybrid path is bypassed entirely (route falls back to
+      // pure keyword) when EDEN_HYBRID_SEARCH=false. Default ON in non-prod,
+      // OFF in prod unless explicitly enabled.
+      const _hybridFlag = (process.env.EDEN_HYBRID_SEARCH ?? "").toLowerCase();
+      const _isProdHybrid = (process.env.NODE_ENV ?? "").toLowerCase() === "production";
+      const HYBRID_ENABLED =
+        _hybridFlag === "true" ? true : _hybridFlag === "false" ? false : !_isProdHybrid;
+      // RRF constant — standard default from the original RRF paper. Larger
+      // values flatten the contribution of high-ranked items; 60 is the
+      // canonical compromise.
+      const RRF_K = 60;
+      // Pull a slightly larger candidate set from each retrieval path so
+      // fusion has enough material to mix; result is sliced back to `limit`
+      // after RRF + sorting.
+      const RETRIEVAL_OVERSAMPLE = Math.max(limit, 100);
+      // Vector similarity floor for confidence-gate exemption (#762 step 4).
+      // Strong vector hits are exempt from being demoted by the top-5
+      // confidence gate, the same way exact-name hits are exempt today.
+      const STRONG_VECTOR_THRESHOLD = 0.75;
+      // Minimum cosine similarity to consider a vector candidate at all —
+      // intentionally permissive so RRF can still surface mid-similarity
+      // semantic matches that share no tokens with the query.
+      const VECTOR_MIN_SIMILARITY = 0.35;
+
+      type RetrievedAssetT = import("./storage").RetrievedAsset;
+      const trimmedQuery = query.trim();
+      const runHybrid = HYBRID_ENABLED && !!trimmedQuery;
+
+      const hybridSearchOpts = { ...searchOpts, limit: RETRIEVAL_OVERSAMPLE } as const;
+      const keywordPromise = storage.keywordSearchIngestedAssets(
+        query,
+        runHybrid ? RETRIEVAL_OVERSAMPLE : limit,
+        searchOpts,
+      );
+
+      let embedLatencyMs = 0;
+      let embedFallbackReason: string | null = null;
+      const vectorPromise: Promise<RetrievedAssetT[]> = runHybrid
+        ? (async () => {
+            const { getQueryEmbedding } = await import("./lib/queryEmbedding");
+            const embed = await getQueryEmbedding(trimmedQuery);
+            embedLatencyMs = embed.latencyMs;
+            if (!embed.ok) {
+              embedFallbackReason = embed.reason + (embed.error ? `:${embed.error}` : "");
+              return [];
+            }
+            try {
+              return await storage.scoutVectorSearch(embed.vec, {
+                ...hybridSearchOpts,
+                minSimilarity: VECTOR_MIN_SIMILARITY,
+              });
+            } catch (e) {
+              embedFallbackReason = "vector_search_error:" + (e instanceof Error ? e.message : String(e));
+              return [];
+            }
+          })()
+        : Promise.resolve([] as RetrievedAssetT[]);
+
+      const hybridStart = Date.now();
+      const [keywordResults, vectorResults] = await Promise.all([keywordPromise, vectorPromise]);
+
+      // RRF fusion — score(a) = Σ 1/(K + rank_i(a)) over the lists where
+      // `a` appears (rank is 0-indexed). Dedupe by asset id; carry forward
+      // textRelevance from the keyword path and similarity from the vector
+      // path so the score breakdown has both signals.
+      type FusedEntry = {
+        asset: RetrievedAssetT;
+        rrfScore: number;
+        textRank: number | null;
+        vectorSimilarity: number | null;
+      };
+      const fusedById = new Map<number, FusedEntry>();
+      const upsert = (asset: RetrievedAssetT, rank: number, isVector: boolean) => {
+        const contribution = 1 / (RRF_K + rank + 1);
+        const existing = fusedById.get(asset.id);
+        if (existing) {
+          existing.rrfScore += contribution;
+          if (isVector) {
+            existing.vectorSimilarity = asset.similarity;
+          } else if (asset.textRelevance != null) {
+            existing.textRank = asset.textRelevance;
+          }
+          return;
+        }
+        fusedById.set(asset.id, {
+          asset,
+          rrfScore: contribution,
+          textRank: !isVector && asset.textRelevance != null ? asset.textRelevance : null,
+          vectorSimilarity: isVector ? asset.similarity : null,
+        });
+      };
+      keywordResults.forEach((a, i) => upsert(a, i, false));
+      vectorResults.forEach((a, i) => upsert(a, i, true));
+
+      if (runHybrid) {
+        // Order by fused RRF score, then slice to the requested limit. Final
+        // top-of-list ordering (exact-name pin, confidence gate) is applied
+        // below over this slice.
+        const fused = [...fusedById.values()].sort((a, b) => b.rrfScore - a.rrfScore).slice(0, limit);
+        results = fused.map((f) => ({
+          ...f.asset,
+          textRelevance: f.textRank ?? f.asset.textRelevance ?? 0,
+          similarity: f.vectorSimilarity ?? f.asset.similarity ?? 0,
+        }));
+      } else {
+        results = keywordResults;
+      }
+
+      // Telemetry — keyword/vector/fused counts, embedding latency, total
+      // hybrid latency. Logged on every request so we can spot regressions
+      // without enabling the per-request debug header.
+      const hybridLatencyMs = Date.now() - hybridStart;
+      console.info(
+        `[scout/search] hybrid q="${trimmedQuery.slice(0, 80)}" kw=${keywordResults.length} vec=${vectorResults.length} fused=${runHybrid ? results.length : keywordResults.length} embed=${embedLatencyMs}ms total=${hybridLatencyMs}ms${embedFallbackReason ? ` fallback=${embedFallbackReason}` : ""}${runHybrid ? "" : " (hybrid_disabled)"}`,
+      );
+
+      // Build per-asset hybrid score map for downstream score_breakdown
+      // plumbing (#762 step 5) and confidence-gate exemption (#762 step 4).
+      const hybridScoreById = new Map<number, { textRank: number; vectorSimilarity: number; rrfScore: number }>();
+      const strongVectorIds = new Set<number>();
+      if (runHybrid) {
+        for (const f of fusedById.values()) {
+          hybridScoreById.set(f.asset.id, {
+            textRank: f.textRank ?? 0,
+            vectorSimilarity: f.vectorSimilarity ?? 0,
+            rrfScore: f.rrfScore,
+          });
+          if ((f.vectorSimilarity ?? 0) >= STRONG_VECTOR_THRESHOLD) {
+            strongVectorIds.add(f.asset.id);
+          }
+        }
+      }
 
       // Debug surface (#761 step 5): when an internal flag/header is set,
       // surface the synonym expansion so we can verify which groups fired.
@@ -651,6 +789,15 @@ export async function registerRoutes(
         expanded_terms: { source: string; members: string[]; negated: boolean }[];
         stripped_stopwords: string[];
         original_query: string;
+        hybrid?: {
+          enabled: boolean;
+          keyword_count: number;
+          vector_count: number;
+          fused_count: number;
+          embed_latency_ms: number;
+          embed_fallback_reason: string | null;
+          strong_vector_count: number;
+        };
       } | undefined;
       if (debugRequested && query.trim()) {
         const { expandQuery } = await import("./lib/biotechSynonyms");
@@ -659,6 +806,15 @@ export async function registerRoutes(
           expanded_terms: exp.groups.map((g) => ({ source: g.source, members: g.members, negated: g.negated })),
           stripped_stopwords: exp.strippedStopwords,
           original_query: exp.original,
+          hybrid: {
+            enabled: runHybrid,
+            keyword_count: keywordResults.length,
+            vector_count: vectorResults.length,
+            fused_count: results.length,
+            embed_latency_ms: embedLatencyMs,
+            embed_fallback_reason: embedFallbackReason,
+            strong_vector_count: strongVectorIds.size,
+          },
         };
       }
 
@@ -760,6 +916,16 @@ export async function registerRoutes(
             confidence_factor: Math.round(confidenceFactor * 100) / 100,
             ...(catConf !== undefined ? { category_confidence: catConf } : {}),
             ...(typeof r.textRelevance === "number" ? { text_relevance: Math.round(r.textRelevance * 1000) / 1000 } : {}),
+            ...(hybridScoreById.has(r.id)
+              ? (() => {
+                  const h = hybridScoreById.get(r.id)!;
+                  return {
+                    text_rank: Math.round(h.textRank * 1000) / 1000,
+                    vector_similarity: Math.round(h.vectorSimilarity * 1000) / 1000,
+                    rrf_score: Math.round(h.rrfScore * 100000) / 100000,
+                  };
+                })()
+              : {}),
           },
           latest_signal_date: "",
           matching_tags: [],
@@ -789,13 +955,21 @@ export async function registerRoutes(
       const hasQuery = !!query.trim();
       const isExact = (a: ScoredAsset) => exactNameIds.has(Number(a.id));
       const textRel = (a: ScoredAsset) => a.score_breakdown?.text_relevance ?? 0;
+      // When hybrid is on, RRF score drives primary order so semantic-only
+      // matches can surface above token-only matches and vice versa. Without
+      // hybrid we fall back to the previous text_relevance-first behavior.
+      const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
         const bx = isExact(b) ? 1 : 0;
         if (ax !== bx) return bx - ax;
         if (hasQuery) {
-          const dr = textRel(b) - textRel(a);
-          if (Math.abs(dr) > 1e-6) return dr;
+          if (runHybrid) {
+            const dr = rrfOf(b) - rrfOf(a);
+            if (Math.abs(dr) > 1e-9) return dr;
+          }
+          const dt = textRel(b) - textRel(a);
+          if (Math.abs(dt) > 1e-6) return dt;
         }
         return b.score - a.score;
       });
@@ -805,8 +979,14 @@ export async function registerRoutes(
       // matches are exempt — they stay in the high bucket so a real text hit
       // is never demoted below unrelated higher-confidence rows.
       if (CONFIDENCE_AWARE && assets.length > 5) {
+        // Strong vector hits are exempt from the confidence gate (#762
+        // step 4) — same treatment as exact-name matches. A high-similarity
+        // semantic match should not be demoted just because its category
+        // confidence is low, since the vector signal is itself a strong
+        // independent confidence indicator.
         const isLow = (a: ScoredAsset) =>
-          !isExact(a) && (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONF;
+          !isExact(a) && !strongVectorIds.has(Number(a.id))
+          && (a.score_breakdown?.confidence_factor ?? 1) < LOW_CONF;
         const highCount = assets.reduce((n, a) => n + (isLow(a) ? 0 : 1), 0);
         if (highCount >= 5) {
           const high: ScoredAsset[] = [];

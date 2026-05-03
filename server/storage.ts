@@ -2480,9 +2480,28 @@ export class DatabaseStorage implements IStorage {
 
   async scoutVectorSearch(
     queryEmbedding: number[],
-    opts: { modality?: string; stage?: string; indication?: string; institution?: string; limit?: number; minSimilarity?: number; since?: Date; before?: Date } = {}
+    opts: {
+      modality?: string;
+      stage?: string;
+      indication?: string;
+      institution?: string;
+      // Multi-value lists — OR within each list, AND across lists. Mirror
+      // keywordSearchIngestedAssets so hybrid retrieval (#762) can apply the
+      // same structured filters to both retrieval paths.
+      modalities?: string[];
+      stages?: string[];
+      institutions?: string[];
+      limit?: number;
+      minSimilarity?: number;
+      since?: Date;
+      before?: Date;
+    } = {}
   ): Promise<RetrievedAsset[]> {
-    const { modality, stage, indication, institution, limit = 40, minSimilarity = 0.35, since, before } = opts;
+    const {
+      modality, stage, indication, institution,
+      modalities, stages, institutions,
+      limit = 40, minSimilarity = 0.35, since, before,
+    } = opts;
     const vectorStr = `[${queryEmbedding.join(",")}]`;
     const filterConditions: ReturnType<typeof sql>[] = [
       sql`embedding IS NOT NULL AND relevant = true`,
@@ -2492,6 +2511,13 @@ export class DatabaseStorage implements IStorage {
     if (stage) filterConditions.push(sql`LOWER(development_stage) LIKE ${"%" + stage.toLowerCase() + "%"}`);
     if (indication) filterConditions.push(sql`LOWER(indication) LIKE ${"%" + indication.toLowerCase() + "%"}`);
     if (institution) filterConditions.push(sql`LOWER(institution) LIKE ${"%" + institution.toLowerCase() + "%"}`);
+    const orEqLower = (col: ReturnType<typeof sql>, values: string[]) => {
+      const parts = values.map((v) => sql`${col} = ${v.toLowerCase()}`);
+      return parts.reduce((acc, c, i) => i === 0 ? c : sql`${acc} OR ${c}`);
+    };
+    if (modalities && modalities.length) filterConditions.push(sql`(${orEqLower(sql`LOWER(modality)`, modalities)})`);
+    if (stages && stages.length) filterConditions.push(sql`(${orEqLower(sql`LOWER(development_stage)`, stages)})`);
+    if (institutions && institutions.length) filterConditions.push(sql`(${orEqLower(sql`LOWER(institution)`, institutions)})`);
     if (since) filterConditions.push(sql`first_seen_at >= ${since}`);
     if (before) filterConditions.push(sql`first_seen_at < ${before}`);
 
