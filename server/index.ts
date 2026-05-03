@@ -748,6 +748,7 @@ async function runStartupMigrations() {
         created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
       )
     `);
+    await mdb.execute(sql`ALTER TABLE research_projects ADD COLUMN IF NOT EXISTS admin_note TEXT`);
     log("[startup] research_projects + saved_grants + saved_references tables ready", "startup");
   } catch (err: any) {
     log(`[startup] research_projects migration failed: ${err?.message}`, "startup");

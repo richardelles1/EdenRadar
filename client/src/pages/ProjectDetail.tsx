@@ -657,6 +657,12 @@ export default function ProjectDetail() {
               <p className="text-[11px] text-muted-foreground mt-2">
                 When enabled, an admin reviews your project. Once approved, it appears on the Industry EdenLab tab and surfaces in Scout/Institutions as a researcher-sourced asset.
               </p>
+              {local.adminStatus === "rejected" && local.adminNote && (
+                <div className="mt-2 p-2 rounded-md bg-red-500/5 border border-red-500/20" data-testid="admin-rejection-note">
+                  <p className="text-[11px] font-semibold text-red-600 dark:text-red-400 mb-0.5">Admin rejection note</p>
+                  <p className="text-xs text-foreground whitespace-pre-wrap">{local.adminNote}</p>
+                </div>
+              )}
             </FieldGroup>
             <FieldGroup label="Discovery Title">
               <Input value={local.discoveryTitle ?? ""} onChange={(e) => setField("discoveryTitle", e.target.value)} data-testid="input-discovery-title" />

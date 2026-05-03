@@ -5096,14 +5096,18 @@ export async function registerRoutes(
       if (validated[f] !== undefined) (updates as any)[f] = validated[f];
     }
     if (validated.openForCollaboration !== undefined) updates.openForCollaboration = validated.openForCollaboration;
+    let unpublishRequested = false;
     if (validated.publishToIndustry !== undefined) {
       updates.publishToIndustry = validated.publishToIndustry;
       // When the researcher requests publishing, queue it for admin review.
       // When they unpublish, reset to draft so it disappears from the admin queue.
       if (validated.publishToIndustry === true) {
         (updates as any).adminStatus = "pending";
+        // Clear any previous rejection note when resubmitting.
+        (updates as any).adminNote = null;
       } else if (validated.publishToIndustry === false) {
         (updates as any).adminStatus = "draft";
+        unpublishRequested = true;
       }
     }
     if (validated.estimatedBudget !== undefined) updates.estimatedBudget = validated.estimatedBudget;
@@ -5111,6 +5115,12 @@ export async function registerRoutes(
     try {
       const project = await storage.updateResearchProject(id, researcherId, updates);
       if (!project) return res.status(404).json({ error: "Project not found" });
+      // Researcher unpublish must also hide the bridged Scout/Institutions row.
+      if (unpublishRequested) {
+        await db.update(ingestedAssets)
+          .set({ relevant: false })
+          .where(eq(ingestedAssets.fingerprint, `researcher-project-${id}`));
+      }
       res.json({ project });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -5947,6 +5957,7 @@ If a field cannot be determined, use "N/A".`
           lastEditedAt: researchProjects.lastEditedAt,
           openForCollaboration: researchProjects.openForCollaboration,
           developmentStage: researchProjects.developmentStage,
+          adminNote: researchProjects.adminNote,
         })
         .from(researchProjects)
         .where(
@@ -5967,12 +5978,19 @@ If a field cannot be determined, use "N/A".`
     try {
       const { id } = req.params;
       const projectId = Number(id);
-      const schema = z.object({ adminStatus: z.enum(["pending", "published", "rejected"]) });
-      const { adminStatus } = schema.parse(req.body);
+      const schema = z.object({
+        adminStatus: z.enum(["pending", "published", "rejected"]),
+        adminNote: z.string().nullable().optional(),
+      });
+      const { adminStatus, adminNote } = schema.parse(req.body);
       const publishToIndustry = adminStatus === "published" ? true : adminStatus === "rejected" ? false : null;
+      // Reset the rejection note unless the admin is rejecting now.
+      const noteUpdate = adminStatus === "rejected"
+        ? { adminNote: adminNote ?? null }
+        : { adminNote: null };
       await db
         .update(researchProjects)
-        .set({ adminStatus, ...(publishToIndustry !== null ? { publishToIndustry } : {}) })
+        .set({ adminStatus, ...(publishToIndustry !== null ? { publishToIndustry } : {}), ...noteUpdate })
         .where(eq(researchProjects.id, projectId));
 
       // Bridge into ingested_assets so approved researcher submissions surface in

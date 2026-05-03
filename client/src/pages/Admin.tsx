@@ -3591,6 +3591,7 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
     researchArea: string | null;
     status: string;
     adminStatus: string;
+    adminNote: string | null;
     publishToIndustry: boolean | null;
     discoverySummary: string | null;
     projectUrl: string | null;
@@ -3612,11 +3613,11 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
   });
 
   const updateStatus = useMutation({
-    mutationFn: async ({ id, adminStatus }: { id: number; adminStatus: string }) => {
+    mutationFn: async ({ id, adminStatus, adminNote }: { id: number; adminStatus: string; adminNote?: string | null }) => {
       const res = await fetch(`/api/admin/industry-projects/${id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
-        body: JSON.stringify({ adminStatus }),
+        body: JSON.stringify({ adminStatus, ...(adminNote !== undefined ? { adminNote } : {}) }),
       });
       if (!res.ok) throw new Error("Failed to update");
       return res.json();
@@ -3679,6 +3680,11 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
             {project.discoverySummary && (
               <p className="text-xs text-muted-foreground line-clamp-2 mb-1">{project.discoverySummary}</p>
             )}
+            {project.adminStatus === "rejected" && project.adminNote && (
+              <p className="text-[11px] text-red-600 dark:text-red-400 mb-1" data-testid={`text-admin-note-${project.id}`}>
+                <span className="font-semibold">Rejection note:</span> {project.adminNote}
+              </p>
+            )}
             <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
               <span className="capitalize">{project.status}</span>
               <span>·</span>
@@ -3707,7 +3713,11 @@ function IndustryProjectsQueue({ pw }: { pw: string }) {
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs text-red-600 border-red-200 hover:bg-red-50 dark:hover:bg-red-950/30"
-                  onClick={() => updateStatus.mutate({ id: project.id, adminStatus: "rejected" })}
+                  onClick={() => {
+                    const note = window.prompt("Reason for rejection (shown to the researcher):", "");
+                    if (note === null) return;
+                    updateStatus.mutate({ id: project.id, adminStatus: "rejected", adminNote: note.trim() || null });
+                  }}
                   disabled={updateStatus.isPending}
                   data-testid={`button-reject-project-${project.id}`}
                 >

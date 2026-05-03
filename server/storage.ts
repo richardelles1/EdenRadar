@@ -986,7 +986,10 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(ingestedAssets)
-      .where(and(ilike(ingestedAssets.institution, `%${institution}%`), inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"])))
+      .where(and(
+        ilike(ingestedAssets.institution, `%${institution}%`),
+        sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`,
+      ))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
@@ -998,7 +1001,10 @@ export class DatabaseStorage implements IStorage {
     return db
       .select()
       .from(ingestedAssets)
-      .where(and(inArray(ingestedAssets.institution, names), inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"])))
+      .where(and(
+        inArray(ingestedAssets.institution, names),
+        sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`,
+      ))
       .orderBy(desc(ingestedAssets.lastSeenAt));
   }
 
@@ -1038,7 +1044,7 @@ export class DatabaseStorage implements IStorage {
         count: sql<number>`count(*)::int`,
       })
       .from(ingestedAssets)
-      .where(inArray(ingestedAssets.sourceType, ["tech_transfer", "researcher"]))
+      .where(sql`(${ingestedAssets.sourceType} = 'tech_transfer' OR (${ingestedAssets.sourceType} = 'researcher' AND ${ingestedAssets.relevant} = true))`)
       .groupBy(ingestedAssets.institution);
 
     const result: Record<string, number> = {};

@@ -372,6 +372,7 @@ export const researchProjects = pgTable("research_projects", {
   projectSeeking: jsonb("project_seeking").$type<string[]>(),
   publishToIndustry: boolean("publish_to_industry"),
   adminStatus: text("admin_status").default("pending").notNull(),
+  adminNote: text("admin_note"),
   projectUrl: text("project_url"),
   evidenceTables: jsonb("evidence_tables").$type<Array<{
     id: string;
