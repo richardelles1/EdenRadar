@@ -2127,7 +2127,11 @@ export async function registerRoutes(
         label: s.label,
         pred: v2KeptAt(t, s.prob),
       })));
-      const v2Stats = evalV2At(CLASSIFIER_THRESHOLD);
+      // v2 stats are evaluated at the *active* threshold (env > tuned > default),
+      // not the bare CLASSIFIER_THRESHOLD constant. That way the v2 card and
+      // the "Current pipeline" card always tell the same story after a tune,
+      // and the head-to-head with v1 reflects what production actually runs.
+      const v2Stats = evalV2At(activeThreshold);
       const sweep = [0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7].map((t) => ({
         threshold: t,
         ...evalV2At(t),
