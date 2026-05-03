@@ -724,9 +724,6 @@ export default function IndustryDashboard() {
           )}
         </div>
 
-        {/* ── EDENMARKET TEASER ── */}
-        <EdenMarketTeaser />
-
         {/* ── SECTION 2: SIGNAL ROW ── */}
         <div
           className="rounded-xl border border-primary/15 p-5 space-y-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25"
@@ -1024,6 +1021,9 @@ export default function IndustryDashboard() {
             </div>
           )}
         </div>
+
+        {/* ── EDENMARKET TEASER (grouped with Team Activity as ambient cards) ── */}
+        <EdenMarketTeaser />
 
         {/* ── SECTION 4: TEAM ACTIVITY FEED (org members only) ── */}
         {isOrgMember && (
