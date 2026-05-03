@@ -846,6 +846,15 @@ export async function registerRoutes(
       const CONF_FLOOR = 0.4;
       const LOW_CONF = 0.5;
 
+      // Tie-break metadata for final ordering (#762 step 3): completeness desc,
+      // then recency desc. Keyed by id so we don't have to extend ScoredAsset.
+      const tieBreakById = new Map<number, { completeness: number; recencyMs: number }>();
+      for (const r of results) {
+        const completeness = typeof r.completenessScore === "number" ? r.completenessScore : 0;
+        const recencyMs = r.stageChangedAt instanceof Date ? r.stageChangedAt.getTime() : 0;
+        tieBreakById.set(r.id, { completeness, recencyMs });
+      }
+
       const assets: ScoredAsset[] = results.map((r) => {
         const partialAsset: Partial<ScoredAsset> = {
           development_stage: r.developmentStage,
@@ -959,6 +968,8 @@ export async function registerRoutes(
       // matches can surface above token-only matches and vice versa. Without
       // hybrid we fall back to the previous text_relevance-first behavior.
       const rrfOf = (a: ScoredAsset) => hybridScoreById.get(Number(a.id))?.rrfScore ?? 0;
+      const completenessOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.completeness ?? 0;
+      const recencyOf = (a: ScoredAsset) => tieBreakById.get(Number(a.id))?.recencyMs ?? 0;
       assets.sort((a, b) => {
         const ax = isExact(a) ? 1 : 0;
         const bx = isExact(b) ? 1 : 0;
@@ -971,7 +982,14 @@ export async function registerRoutes(
           const dt = textRel(b) - textRel(a);
           if (Math.abs(dt) > 1e-6) return dt;
         }
-        return b.score - a.score;
+        // Existing scoring pipeline
+        const ds = b.score - a.score;
+        if (ds !== 0) return ds;
+        // Tie-break #1: completeness desc (#762 step 3)
+        const dc = completenessOf(b) - completenessOf(a);
+        if (dc !== 0) return dc;
+        // Tie-break #2: recency desc (stageChangedAt)
+        return recencyOf(b) - recencyOf(a);
       });
 
       // Top-5 confidence gate: push low-confidence assets out of the top 5
@@ -1007,9 +1025,10 @@ export async function registerRoutes(
         fallback: false,
         ...(searchDebug ? { debug: searchDebug } : {}),
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("[scout/search] Error:", err);
-      return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: err.message ?? "Search failed" });
+      const message = err instanceof Error ? err.message : "Search failed";
+      return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: message });
     }
   });
 
