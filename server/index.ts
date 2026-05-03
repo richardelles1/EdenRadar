@@ -1276,16 +1276,10 @@ async function addTeamActivityFingerprintColumn() {
         ALTER COLUMN org_id DROP NOT NULL
     `);
     log("[startup] team_activities.asset_fingerprint column ensured (org_id nullable)", "startup");
-    // Backfill via direct ingested_assets join (asset_id may already point at
-    // the ingested asset). Bounded UPDATE; safe to re-run.
-    await db.execute(sql`
-      UPDATE team_activities ta
-      SET asset_fingerprint = ia.fingerprint
-      FROM ingested_assets ia
-      WHERE ta.asset_fingerprint IS NULL
-        AND ta.asset_id = ia.id
-    `);
-    // Fallback path: legacy rows where asset_id pointed at saved_assets.id.
+    // Backfill is done in two passes, both gated on asset_name matching to
+    // avoid false ID-collision matches between saved_assets.id and
+    // ingested_assets.id (overlapping serial PK spaces).
+    // Pass 1: saved_assets path (legacy callsites passed saved_assets.id).
     await db.execute(sql`
       UPDATE team_activities ta
       SET asset_fingerprint = ia.fingerprint
@@ -1293,6 +1287,17 @@ async function addTeamActivityFingerprintColumn() {
       JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
       WHERE ta.asset_fingerprint IS NULL
         AND ta.asset_id = sa.id
+        AND LOWER(TRIM(ia.asset_name)) = LOWER(TRIM(ta.asset_name))
+    `);
+    // Pass 2: direct ingested_assets path (current callsites pass
+    // saved_assets.ingestedAssetId, i.e. ingested_assets.id).
+    await db.execute(sql`
+      UPDATE team_activities ta
+      SET asset_fingerprint = ia.fingerprint
+      FROM ingested_assets ia
+      WHERE ta.asset_fingerprint IS NULL
+        AND ta.asset_id = ia.id
+        AND LOWER(TRIM(ia.asset_name)) = LOWER(TRIM(ta.asset_name))
     `);
   } catch (err: any) {
     log(`[startup] team_activities.asset_fingerprint check: ${err?.message}`, "startup");

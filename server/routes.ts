@@ -1497,10 +1497,8 @@ export async function registerRoutes(
 
   // ── Log a team activity (fire-and-forget) ──────────────────────────────────
   // Logs to team_activities for both org members and individual-account users.
-  // For individual users we still need a non-null orgId because of the schema's
-  // FK; we look up (or fall back to) the user's own record. Practically, the
-  // /api/team/activity endpoint scopes by user for the no-org branch, so the
-  // orgId on the row is not load-bearing for individual feeds.
+  // orgId is nullable on the row: for users without an org it is stored as
+  // null, and /api/team/activity scopes by userId for the no-org branch.
   async function logTeamActivity(
     userId: string | null,
     action: string,
