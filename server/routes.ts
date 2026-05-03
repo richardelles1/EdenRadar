@@ -8404,6 +8404,10 @@ If multiple assets appear, return each as a separate array item.`;
         : [];
       const suppressed = new Set(suppressedRows.map(r => r.email.toLowerCase()));
       const toList = rawToList.filter(addr => !suppressed.has(addr.trim().toLowerCase()));
+      const suppressedCount = rawToList.length - toList.length;
+      if (suppressedCount > 0) {
+        console.log(`[dispatch/send] suppressed ${suppressedCount}/${rawToList.length} recipient(s) via email_unsubscribes`);
+      }
       if (toList.length === 0) {
         return res.json({ ok: true, sentTo: 0, isTest, skipped: rawToList.length, reason: "all recipients unsubscribed" });
       }
