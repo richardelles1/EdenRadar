@@ -2021,20 +2021,14 @@ export async function registerRoutes(
     }
   });
 
-  // ── /api/institutions (Task #729) ────────────────────────────────────────
-  // Live, growing list. Unions:
-  //   1. institution_metadata (curated display data — city, TTO, specialties)
-  //   2. ALL_SCRAPERS (every registered scraper, ~340 today)
-  //   3. ingested_assets distinct names where source_type='tech_transfer'
-  // Slugs are normalized via slugifyInstitutionName so e.g. "Stanford
-  // University" from a scraper merges into the "stanford" metadata row.
-  // Used by Institutions.tsx for the badge/grid, by Sources.tsx for the TTO
-  // index table, and by Scout.tsx + Discover.tsx for coverage tooltips.
-  // Canonical membership = ALL_SCRAPERS ∪ DISTINCT ingested_assets.institution.
-  // institution_metadata is an *overlay* (display name, city, TTO, website,
-  // specialties, continent, restriction flags) — it never adds members on its
-  // own, so the badge cannot drift toward the legacy "marketing shelf".
-  const INSTITUTIONS_CACHE_KEY = "institutions:all:v2";
+  // ── /api/institutions (Task #729, refined #740) ──────────────────────────
+  // Canonical membership = ALL_SCRAPERS where scraperType !== "stub" (mirrors
+  // Admin → Data Health). institution_metadata is a display overlay (city,
+  // TTO, specialties, continent, restriction flags) and never adds members.
+  // Stub scrapers (no real portal) and orphaned ingested_assets rows are
+  // excluded so the public Institutions grid matches Data Health (~330–340).
+  // ingested_assets is still LEFT-joined for per-card "active listings".
+  const INSTITUTIONS_CACHE_KEY = "institutions:all:v3";
   const INSTITUTIONS_CACHE_TTL_MS = 5 * 60 * 1000;
   app.get("/api/institutions", async (_req, res) => {
     try {
@@ -2058,15 +2052,14 @@ export async function registerRoutes(
         if (!nameBySlug.has(slug)) nameBySlug.set(slug, rawName);
       }
 
-      // Membership comes ONLY from scrapers + ingested data. Metadata
-      // contributes display fields, not slugs.
+      // Membership: only non-stub scrapers (mirrors Admin Data Health).
+      // Stub scrapers and orphaned ingested_assets rows are excluded.
       const slugSet = new Set<string>();
-      for (const s of ALL_SCRAPERS) {
+      for (const s of ALL_SCRAPERS.filter((x) => x.scraperType !== "stub")) {
         const slug = slugifyInstitutionName(s.institution);
         slugSet.add(slug);
         if (!nameBySlug.has(slug)) nameBySlug.set(slug, s.institution);
       }
-      for (const slug of countBySlug.keys()) slugSet.add(slug);
 
       const institutions = Array.from(slugSet).map((slug) => {
         const meta = metaBySlug.get(slug);
