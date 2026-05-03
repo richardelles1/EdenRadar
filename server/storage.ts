@@ -3381,23 +3381,45 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getTeamActivities(orgId: number, limit = 20): Promise<TeamActivity[]> {
-    return db
+    const rows = await db
       .select()
       .from(teamActivities)
       .where(eq(teamActivities.orgId, orgId))
       .orderBy(desc(teamActivities.createdAt))
       .limit(limit);
+    return this.stripDeletedAssetFingerprints(rows);
   }
 
   // Per-user activity feed for individual / non-org accounts. Mirrors
   // getTeamActivities but scopes by userId rather than orgId.
   async getUserActivities(userId: string, limit = 20): Promise<TeamActivity[]> {
-    return db
+    const rows = await db
       .select()
       .from(teamActivities)
       .where(eq(teamActivities.userId, userId))
       .orderBy(desc(teamActivities.createdAt))
       .limit(limit);
+    return this.stripDeletedAssetFingerprints(rows);
+  }
+
+  // Null out asset_fingerprint for activity rows whose underlying ingested_asset
+  // no longer exists, so the client renders them as plain (non-clickable) text
+  // instead of producing a broken /asset/<fp> link.
+  private async stripDeletedAssetFingerprints(rows: TeamActivity[]): Promise<TeamActivity[]> {
+    const fps = Array.from(
+      new Set(rows.map((r) => r.assetFingerprint).filter((f): f is string => !!f)),
+    );
+    if (!fps.length) return rows;
+    const existing = await db
+      .select({ fingerprint: ingestedAssets.fingerprint })
+      .from(ingestedAssets)
+      .where(inArray(ingestedAssets.fingerprint, fps));
+    const alive = new Set(existing.map((r) => r.fingerprint));
+    return rows.map((r) =>
+      r.assetFingerprint && !alive.has(r.assetFingerprint)
+        ? { ...r, assetFingerprint: null }
+        : r,
+    );
   }
 
   async createSavedReport(data: InsertSavedReport): Promise<SavedReport> {

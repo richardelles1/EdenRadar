@@ -1084,7 +1084,9 @@ export default function IndustryDashboard() {
             ) : !teamActivityData?.activities.length ? (
               <div className="py-6 text-center">
                 <Users className="w-8 h-8 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-xs text-muted-foreground">No activity yet.</p>
+                <p className="text-xs text-muted-foreground">
+                  {activityHeadline === "Team Activity" ? "No team activity yet." : "No recent activity yet."}
+                </p>
                 <p className="text-[11px] text-muted-foreground/60 mt-1">
                   {activityHeadline === "Team Activity"
                     ? "Actions by org members will appear here."
