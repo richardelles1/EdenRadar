@@ -10,8 +10,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
 
 export default function AdminResetPassword() {
-  useDocumentMeta({ title: "Admin Password Reset | EdenRadar", noindex: true });
-  const { session, loading, updatePassword } = useAuth();
+  useDocumentMeta({ title: "Set Your Password | EdenRadar", noindex: true });
+  const { session, loading, updatePassword, role } = useAuth();
   const { isAdmin } = useIsAdmin();
   const { toast } = useToast();
   const [, navigate] = useLocation();
@@ -55,19 +55,21 @@ export default function AdminResetPassword() {
       toast({ title: "Could not update password", description: error, variant: "destructive" });
       return;
     }
-    toast({ title: "Password updated", description: "You can now sign in with your new password." });
-    // Admins land in the admin panel; everyone else returns to the login page
-    // so they don't hit the admin Forbidden screen unnecessarily.
-    navigate(isAdmin ? "/admin" : "/login", { replace: true });
+    toast({ title: "Password updated", description: "Welcome to EdenRadar!" });
+    const dest = isAdmin ? "/admin"
+      : role === "industry" ? "/industry/dashboard"
+      : role === "researcher" ? "/research"
+      : "/discovery";
+    navigate(dest, { replace: true });
   }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 bg-background">
       <Card className="w-full max-w-md" data-testid="card-admin-reset-password">
         <CardHeader>
-          <CardTitle>Set a new admin password</CardTitle>
+          <CardTitle>Set your password</CardTitle>
           <CardDescription>
-            Enter a new password for your EdenRadar admin account.
+            Choose a password to activate your EdenRadar account.
           </CardDescription>
         </CardHeader>
         <CardContent>
