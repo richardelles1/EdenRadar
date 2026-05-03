@@ -2570,10 +2570,16 @@ export class DatabaseStorage implements IStorage {
       .trim();
     // Gate trigram on (a) min input length to avoid noisy 1-2 char queries,
     // and (b) startup-probed availability of pg_trgm operators (`<%`,
-    // word_similarity). On managed DBs that disallow the extension this stays
-    // false and the storage layer never emits trigram SQL that would error.
-    const trgmAvailable = (globalThis as any).__pgTrgmAvailable !== false;
+    // word_similarity). The flag is initialized to `false` at startup and
+    // only flipped to `true` after a successful probe, so requests racing the
+    // probe never emit trigram SQL that would error.
+    const trgmAvailable = (globalThis as any).__pgTrgmAvailable === true;
     const trigramEnabled = trigramText.length >= 3 && trgmAvailable;
+    // Same conservative gating for the FTS column. If the startup migration
+    // hasn't (yet) created `search_tsv` — managed DB permission failure or
+    // boot race — fall back silently and rely on the exact-name clause +
+    // structured filters rather than emitting SQL that would 500 the route.
+    const tsvAvailable = (globalThis as any).__searchTsvAvailable === true;
 
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
@@ -2595,7 +2601,7 @@ export class DatabaseStorage implements IStorage {
     const exactMatchExpr = normalizedQuery
       ? sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`
       : sql`FALSE`;
-    const tsRankExpr = trimmedQuery
+    const tsRankExpr = trimmedQuery && tsvAvailable
       ? sql`ts_rank_cd(search_tsv, websearch_to_tsquery('english', ${trimmedQuery}))`
       : sql`0::real`;
     // word_similarity(needle, haystack) — best-matching contiguous word in
@@ -2634,8 +2640,11 @@ export class DatabaseStorage implements IStorage {
         const orClauses: ReturnType<typeof sql>[] = [];
         // FTS — stemming, "phrases", AND/OR, -negation. websearch parser
         // never errors on user input; only-stopwords queries produce an empty
-        // tsquery whose @@ test is simply false.
-        orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
+        // tsquery whose @@ test is simply false. Suppressed entirely when
+        // search_tsv didn't get created at startup.
+        if (tsvAvailable) {
+          orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
+        }
         // Exact-name clause carried over from #759 — never demoted.
         if (normalizedQuery) {
           orClauses.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`);
@@ -2646,8 +2655,15 @@ export class DatabaseStorage implements IStorage {
         if (includeTrigram && trigramEnabled) {
           orClauses.push(sql`${trigramText} <% LOWER(asset_name)`);
         }
-        const textMatch = orClauses.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
-        conditions.push(sql`(${textMatch})`);
+        // If no text-match clause is available (FTS column missing, no
+        // exact-name pattern, no trigram) and the caller has no structured
+        // filters either, return [] rather than scanning the whole table.
+        if (orClauses.length === 0) {
+          if (!hasFilters) return { rows: [] as Record<string, unknown>[] };
+        } else {
+          const textMatch = orClauses.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
+          conditions.push(sql`(${textMatch})`);
+        }
       }
       const where = conditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} AND ${cond}`);
       return db.execute(sql`

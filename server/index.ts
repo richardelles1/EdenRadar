@@ -1286,6 +1286,11 @@ function schedulePeriodicAlertCheck() {
 //   - GIN trigram index on LOWER(asset_name) for typo tolerance
 // All idempotent — safe to run on every boot.
 async function ensureScoutSearchIndexes() {
+  // Initialize capability flags conservatively to false. Search requests that
+  // race ahead of this probe will skip FTS/trigram SQL and degrade gracefully
+  // to the structured-filter path rather than emit failing operators.
+  (globalThis as any).__pgTrgmAvailable = false;
+  (globalThis as any).__searchTsvAvailable = false;
   try {
     await db.execute(sql`CREATE EXTENSION IF NOT EXISTS pg_trgm`);
   } catch (err: any) {
@@ -1293,13 +1298,12 @@ async function ensureScoutSearchIndexes() {
   }
   // Probe trigram availability so storage layer can suppress `<%` /
   // word_similarity SQL when running against a managed DB that disallows
-  // pg_trgm. Sets a process-level flag consumed by keywordSearchIngestedAssets.
+  // pg_trgm. Consumed by keywordSearchIngestedAssets.
   try {
     await db.execute(sql`SELECT 'a' <% 'abc'`);
     (globalThis as any).__pgTrgmAvailable = true;
     log("[startup] pg_trgm operators available", "startup");
   } catch (err: any) {
-    (globalThis as any).__pgTrgmAvailable = false;
     log(`[startup] pg_trgm operators unavailable — fuzzy fallback disabled: ${err?.message}`, "startup");
   }
   try {
@@ -1328,9 +1332,10 @@ async function ensureScoutSearchIndexes() {
       CREATE INDEX IF NOT EXISTS ingested_assets_asset_name_trgm_idx
       ON ingested_assets USING GIN (LOWER(asset_name) gin_trgm_ops)
     `);
+    (globalThis as any).__searchTsvAvailable = true;
     log("[startup] scout search FTS + trigram indexes ensured", "startup");
   } catch (err: any) {
-    log(`[startup] scout search index ensure failed: ${err?.message}`, "startup");
+    log(`[startup] scout search index ensure failed — FTS path disabled, falling back to structured filters: ${err?.message}`, "startup");
   }
 }
 
