@@ -778,6 +778,25 @@ export const insertTeamActivitySchema = createInsertSchema(teamActivities).omit(
 export type InsertTeamActivity = z.infer<typeof insertTeamActivitySchema>;
 export type TeamActivity = typeof teamActivities.$inferSelect;
 
+// ── Weekly Recap (Task #738) ───────────────────────────────────────────────
+// One row per (orgId, weekStartDate). weekStartDate is the Monday (00:00 UTC)
+// of the Mon–Sun week the recap covers. `payload` is the assembled recap
+// snapshot (see WeeklyRecapPayload in shared/types). `frozen` flips to true
+// once the Monday job seals the prior week — live previews of the in-progress
+// week are written with frozen=false so they get refreshed on each request.
+export const weeklyRecaps = pgTable("weekly_recaps", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+  weekStartDate: timestamp("week_start_date").notNull(),
+  payload: jsonb("payload").$type<Record<string, unknown>>().notNull(),
+  frozen: boolean("frozen").notNull().default(false),
+  generatedAt: timestamp("generated_at").default(sql`CURRENT_TIMESTAMP`).notNull(),
+});
+
+export const insertWeeklyRecapSchema = createInsertSchema(weeklyRecaps).omit({ id: true, generatedAt: true });
+export type InsertWeeklyRecap = z.infer<typeof insertWeeklyRecapSchema>;
+export type WeeklyRecap = typeof weeklyRecaps.$inferSelect;
+
 export const sharedLinks = pgTable("shared_links", {
   id: serial("id").primaryKey(),
   token: uuid("token").notNull().unique().default(sql`gen_random_uuid()`),

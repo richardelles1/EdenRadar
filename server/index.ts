@@ -15,6 +15,7 @@ import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
 import { reapExpiredMarketAccess, startMarketAccessReaper } from "./lib/marketAccess";
+import { startWeeklyRecapScheduler, backfillLatestRecaps } from "./lib/weeklyRecap";
 import { sendTrialEndingEmail } from "./email";
 import { checkAndSendAlerts } from "./lib/alertMailer";
 import pg from "pg";
@@ -823,6 +824,42 @@ async function runPostStartupTasks(): Promise<void> {
     startMarketAccessReaper();
   } catch (err: any) {
     log(`[startup] EdenMarket reaper interval failed to start: ${err?.message}`, "startup");
+  }
+
+  // ── Weekly Recap (Task #738) ─────────────────────────────────────────────
+  // Idempotent CREATE TABLE so the recap routes work on fresh deploys before
+  // db:push has run. Then backfill the last completed week for every org so
+  // the dashboard button is immediately useful, and start the hourly tick
+  // that fires the freeze job on Mondays.
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS weekly_recaps (
+        id              SERIAL PRIMARY KEY,
+        org_id          INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        week_start_date TIMESTAMP NOT NULL,
+        payload         JSONB NOT NULL,
+        frozen          BOOLEAN NOT NULL DEFAULT FALSE,
+        generated_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (org_id, week_start_date)
+      )
+    `);
+    await db.execute(sql`CREATE INDEX IF NOT EXISTS weekly_recaps_org_idx ON weekly_recaps (org_id, week_start_date DESC)`);
+    log("[startup] weekly_recaps table ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] weekly_recaps table check: ${err?.message}`, "startup");
+  }
+  try {
+    const result = await backfillLatestRecaps();
+    if (result.created > 0) {
+      log(`[startup] Weekly Recap backfill wrote ${result.created} recap(s) across ${result.orgsProcessed} org(s)`, "startup");
+    }
+  } catch (err: any) {
+    log(`[startup] Weekly Recap backfill failed: ${err?.message}`, "startup");
+  }
+  try {
+    startWeeklyRecapScheduler();
+  } catch (err: any) {
+    log(`[startup] Weekly Recap scheduler failed to start: ${err?.message}`, "startup");
   }
 
   // ── Clear orphaned ingestion runs ─────────────────────────────────────────

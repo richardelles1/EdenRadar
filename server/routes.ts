@@ -12421,5 +12421,108 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   // route above is intentionally retained: it powers the audit trail for
   // pitch-deck / one-pager / dossier exports triggered elsewhere in the app.
 
+  // ── Weekly Recap (Task #738) ─────────────────────────────────────────────
+  // Org-scoped read endpoints + admin regenerate. The Monday job and backfill
+  // live in server/lib/weeklyRecap.ts; routes are thin reads + a write hook.
+  {
+    const {
+      assembleRecap,
+      getStoredRecap,
+      upsertRecap,
+      listRecaps,
+      startOfWeek,
+      previousWeekStart,
+      runWeeklyRecapJob,
+      resolveRequestOrgId,
+    } = await import("./lib/weeklyRecap");
+
+    function parseWeekStart(input: string): Date | null {
+      const d = new Date(input);
+      if (isNaN(d.getTime())) return null;
+      const norm = startOfWeek(d);
+      if (norm.getTime() !== d.getTime() && norm.toISOString().slice(0, 10) !== input.slice(0, 10)) {
+        // Snap any submitted date to its week's Monday (UTC).
+      }
+      return norm;
+    }
+
+    // GET /api/recap/current — live preview of in-progress week
+    app.get("/api/recap/current", async (req, res) => {
+      try {
+        const userId = await tryGetUserId(req);
+        const orgId = await resolveRequestOrgId(userId ?? undefined);
+        if (!orgId) return res.status(404).json({ error: "No organization for this user" });
+        const weekStart = startOfWeek(new Date());
+        const payload = await assembleRecap(orgId, weekStart);
+        // Persist as a non-frozen live snapshot for fast subsequent reads.
+        await upsertRecap(orgId, weekStart, payload, false);
+        res.json({ weekStart: weekStart.toISOString(), frozen: false, payload });
+      } catch (err: any) {
+        console.error("[recap/current] Error:", err);
+        res.status(500).json({ error: err?.message ?? "Failed to assemble recap" });
+      }
+    });
+
+    // GET /api/recap/list — recent weeks for the navigator
+    app.get("/api/recap/list", async (req, res) => {
+      try {
+        const userId = await tryGetUserId(req);
+        const orgId = await resolveRequestOrgId(userId ?? undefined);
+        if (!orgId) return res.status(404).json({ error: "No organization for this user" });
+        const weeks = await listRecaps(orgId, 12);
+        res.json({ weeks });
+      } catch (err: any) {
+        res.status(500).json({ error: err?.message ?? "Failed to list recaps" });
+      }
+    });
+
+    // GET /api/recap/:weekStart — stored recap (frozen or live snapshot)
+    app.get("/api/recap/:weekStart", async (req, res) => {
+      try {
+        const userId = await tryGetUserId(req);
+        const orgId = await resolveRequestOrgId(userId ?? undefined);
+        if (!orgId) return res.status(404).json({ error: "No organization for this user" });
+        const weekStart = parseWeekStart(req.params.weekStart);
+        if (!weekStart) return res.status(400).json({ error: "Invalid weekStart date" });
+        const stored = await getStoredRecap(orgId, weekStart);
+        if (stored) {
+          return res.json({
+            weekStart: stored.weekStartDate.toISOString(),
+            frozen: stored.frozen,
+            payload: stored.payload,
+          });
+        }
+        // No stored recap — assemble on demand. If it's a past week, freeze it.
+        const thisWeek = startOfWeek(new Date());
+        const payload = await assembleRecap(orgId, weekStart);
+        const isPast = weekStart.getTime() < thisWeek.getTime();
+        await upsertRecap(orgId, weekStart, payload, isPast);
+        res.json({ weekStart: weekStart.toISOString(), frozen: isPast, payload });
+      } catch (err: any) {
+        console.error("[recap/:weekStart] Error:", err);
+        res.status(500).json({ error: err?.message ?? "Failed to load recap" });
+      }
+    });
+
+    // POST /api/admin/recap/regenerate — admin-only, re-run the freeze job.
+    // Body: { weekStart?: ISO date } — defaults to most recent completed week.
+    app.post("/api/admin/recap/regenerate", requireAdmin, async (req, res) => {
+      try {
+        const body = req.body as { weekStart?: string; orgId?: number } | undefined;
+        if (body?.weekStart && body?.orgId) {
+          const weekStart = parseWeekStart(body.weekStart);
+          if (!weekStart) return res.status(400).json({ error: "Invalid weekStart" });
+          const payload = await assembleRecap(body.orgId, weekStart);
+          await upsertRecap(body.orgId, weekStart, payload, true);
+          return res.json({ ok: true, orgId: body.orgId, weekStart: weekStart.toISOString() });
+        }
+        const result = await runWeeklyRecapJob({ force: true });
+        res.json({ ok: true, ...result });
+      } catch (err: any) {
+        res.status(500).json({ error: err?.message ?? "Regenerate failed" });
+      }
+    });
+  }
+
   return httpServer;
 }

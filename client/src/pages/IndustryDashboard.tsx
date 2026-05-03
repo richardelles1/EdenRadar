@@ -26,6 +26,8 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CalendarDays } from "lucide-react";
+import { WeeklyRecapModal } from "@/components/WeeklyRecapModal";
 import { getIndustryProfile } from "@/hooks/use-industry";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -306,6 +308,40 @@ function EdenMarketTeaser() {
         </div>
       </div>
     </div>
+  );
+}
+
+function WeeklyRecapButton() {
+  const [open, setOpen] = useState(false);
+  const { data } = useQuery<{ weekStart: string; frozen: boolean; payload: { weekLabel: string; counts: { newAssets: number } } }>({
+    queryKey: ["/api/recap/current"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const newCount = data?.payload?.counts?.newAssets ?? 0;
+  const label = data?.payload?.weekLabel ?? "Weekly Recap";
+  return (
+    <>
+      <Button
+        size="sm"
+        variant="outline"
+        className="h-8 gap-1.5 px-2.5 text-xs border-card-border relative"
+        onClick={() => setOpen(true)}
+        data-testid="button-dashboard-weekly-recap"
+        title={label}
+      >
+        <CalendarDays className="w-3.5 h-3.5" />
+        <span className="hidden sm:inline">Weekly Recap</span>
+        {newCount > 0 && (
+          <span
+            className="ml-1 inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold"
+            data-testid="badge-recap-new-count"
+          >
+            {newCount > 99 ? "99+" : newCount}
+          </span>
+        )}
+      </Button>
+      <WeeklyRecapModal open={open} onOpenChange={setOpen} />
+    </>
   );
 }
 
@@ -663,6 +699,7 @@ export default function IndustryDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <WeeklyRecapButton />
             <Button
               size="sm"
               variant="ghost"
