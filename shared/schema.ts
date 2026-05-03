@@ -685,6 +685,14 @@ export const organizations = pgTable("organizations", {
   // EdenMarket access — granted when org completes EdenMarket Stripe checkout
   edenMarketAccess: boolean("eden_market_access").notNull().default(false),
   edenMarketStripeSubId: text("eden_market_stripe_sub_id"),
+  // EdenMarket grace period (Task #714) — set on subscription cancellation to
+  // (now + 30 days). While in grace, edenMarketAccess remains true so reads
+  // continue, but write endpoints (listing/EOI/doc/message) reject. Cleared
+  // back to null on reactivation.
+  marketAccessExpiresAt: timestamp("market_access_expires_at"),
+  // Idempotency guard — set when the grace-period notice email is sent so
+  // repeated webhook deliveries don't spam the seller.
+  marketGraceEmailSentAt: timestamp("market_grace_email_sent_at"),
   // EdenMarket seller verification — granted by admin (ADMIN_EMAILS allowlist).
   // When set, the org's listings show a "Verified Seller" badge on browse + detail.
   marketSellerVerifiedAt: timestamp("market_seller_verified_at"),

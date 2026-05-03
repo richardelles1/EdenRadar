@@ -684,6 +684,44 @@ export function sendMarketAdHocEmail(
   });
 }
 
+// Task #714 — EdenMarket grace-period notice. Sent once when a subscription
+// is cancelled. The org keeps read-only access for 30 days; reactivating
+// before the grace expires restores full write access.
+export function sendMarketGraceNoticeEmail(
+  to: string,
+  orgName: string,
+  graceEndsAt: Date,
+): Promise<void> {
+  const greeting = orgName?.trim() ? `Hi ${orgName},` : "Hi,";
+  const dateStr = graceEndsAt.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const reactivateUrl = `${APP_URL}/market`;
+  const html = baseHtml(`
+    <h1 style="margin:0 0 16px;font-size:22px;font-weight:700;color:#111827;">Your EdenMarket subscription has been cancelled</h1>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      ${greeting} your EdenMarket subscription has been cancelled. To make sure your in-flight
+      conversations and deal rooms aren't disrupted, you have a <strong>30-day grace period</strong>
+      ending <strong>${dateStr}</strong>.
+    </p>
+    <p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">
+      During the grace period you can still <strong>browse listings and review existing deal rooms</strong>,
+      but you will not be able to create new listings, submit or accept Expressions of Interest,
+      upload documents, or send messages. After ${dateStr}, all EdenMarket access will be revoked.
+    </p>
+    <a href="${reactivateUrl}"
+       style="display:inline-block;background:#7c3aed;color:#ffffff;text-decoration:none;font-size:15px;font-weight:600;padding:12px 28px;border-radius:6px;">
+      Reactivate EdenMarket
+    </a>
+    <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
+      Questions? Reply to this email or reach us at
+      <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
+    </p>
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, "Your EdenMarket subscription cancelled — 30-day grace period started", html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
 export function sendAdminNotificationEmail(
   subject: string,
   bodyHtml: string,

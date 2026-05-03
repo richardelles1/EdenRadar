@@ -35,10 +35,11 @@ import { deepEnrichBatch } from "./lib/pipeline/deepEnrichBatch";
 import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
+import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
 import { registerClient, unregisterClient, broadcastToOrg, registerUserClient, unregisterUserClient, broadcastToUsers } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, sendDealRoomMessageEmail, sendDealRoomDocumentEmail, sendMarketGraceNoticeEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -1291,7 +1292,7 @@ export async function registerRoutes(
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const { fingerprint } = req.params;
       const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
@@ -9345,11 +9346,52 @@ If multiple assets appear, return each as a separate array item.`;
             }
             const subStatusCU = String(sub["status"] ?? "");
             const isActive = subStatusCU === "active" || subStatusCU === "trialing";
-            await storage.updateOrganization(orgEMCU.id, {
-              edenMarketAccess: isActive,
-              edenMarketStripeSubId: isActive ? stripeSubscriptionId : null,
-            });
-            console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} access=${isActive}, status=${subStatusCU}, sub=${stripeSubscriptionId}`);
+            const isCanceled = subStatusCU === "canceled";
+            // Task #714 — three transitions:
+            //   active|trialing  → clear grace, ensure access true (reactivation
+            //                      after a previous cancel rearms idempotency).
+            //   canceled         → start a 30-day grace window (mirrors the
+            //                      subscription.deleted branch). Reads continue,
+            //                      writes are blocked by requireFullMarketAccess,
+            //                      and after 30d getMarketAccessState rejects.
+            //   anything else    → past_due / unpaid / incomplete: leave the
+            //                      org's access state untouched. Stripe will
+            //                      eventually fire either a reactivation
+            //                      (active) or a cancellation, which then drives
+            //                      the real state transition.
+            if (isActive) {
+              await storage.updateOrganization(orgEMCU.id, {
+                edenMarketAccess: true,
+                edenMarketStripeSubId: stripeSubscriptionId,
+                marketAccessExpiresAt: null,
+                marketGraceEmailSentAt: null,
+              });
+              console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} reactivated, status=${subStatusCU}, sub=${stripeSubscriptionId}`);
+            } else if (isCanceled) {
+              const alreadyInGrace = orgEMCU.marketAccessExpiresAt && orgEMCU.marketAccessExpiresAt > new Date();
+              const graceEndsAt = alreadyInGrace
+                ? orgEMCU.marketAccessExpiresAt!
+                : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+              await storage.updateOrganization(orgEMCU.id, {
+                edenMarketAccess: true,
+                edenMarketStripeSubId: null,
+                marketAccessExpiresAt: graceEndsAt,
+              });
+              console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} entered/extended 30-day grace, expires ${graceEndsAt.toISOString()}`);
+              // One-time grace-notice email, idempotent on marketGraceEmailSentAt
+              const graceEmailTo = orgEMCU.billingEmail ?? undefined;
+              if (graceEmailTo && !orgEMCU.marketGraceEmailSentAt && !alreadyInGrace) {
+                try {
+                  await sendMarketGraceNoticeEmail(graceEmailTo, orgEMCU.name ?? "", graceEndsAt);
+                  await storage.updateOrganization(orgEMCU.id, { marketGraceEmailSentAt: new Date() });
+                  console.log(`[stripe/webhook] EdenMarket grace notice sent to ${graceEmailTo} (via subscription.updated)`);
+                } catch (graceEmailErr) {
+                  console.warn("[stripe/webhook] EdenMarket grace notice email failed (subscription.updated):", (graceEmailErr as Error)?.message);
+                }
+              }
+            } else {
+              console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} non-terminal status=${subStatusCU} — leaving access state unchanged`);
+            }
             break;
           }
 
@@ -9397,11 +9439,32 @@ If multiple assets appear, return each as a separate array item.`;
           const subMetaDel = sub["metadata"] as Record<string, string> | undefined;
           const subProductDel = subMetaDel?.["product"] ?? "";
           if (subProductDel === "edenmarket") {
-            // Resolve org by stripeCustomerId or by edenMarketStripeSubId
+            // Task #714 — keep access on but start a 30-day grace period.
+            // Reads (browse, deal rooms) continue; writes are blocked by
+            // requireFullMarketAccess. After 30d the access naturally
+            // expires (getMarketAccessState treats stale grace as no access).
             const orgEMDel = stripeCustomerId ? await storage.getOrgByStripeCustomer(stripeCustomerId) : null;
             if (orgEMDel) {
-              await storage.updateOrganization(orgEMDel.id, { edenMarketAccess: false, edenMarketStripeSubId: null });
-              console.log(`[stripe/webhook] EdenMarket subscription canceled — org ${orgEMDel.id} access revoked`);
+              const graceEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+              await storage.updateOrganization(orgEMDel.id, {
+                edenMarketAccess: true,
+                edenMarketStripeSubId: null,
+                marketAccessExpiresAt: graceEndsAt,
+              });
+              console.log(`[stripe/webhook] EdenMarket subscription canceled — org ${orgEMDel.id} entered 30-day grace, expires ${graceEndsAt.toISOString()}`);
+
+              // Send the one-time grace-notice email. Idempotent on
+              // marketGraceEmailSentAt so retries don't double-send.
+              const graceEmailTo = orgEMDel.billingEmail ?? undefined;
+              if (graceEmailTo && !orgEMDel.marketGraceEmailSentAt) {
+                try {
+                  await sendMarketGraceNoticeEmail(graceEmailTo, orgEMDel.name ?? "", graceEndsAt);
+                  await storage.updateOrganization(orgEMDel.id, { marketGraceEmailSentAt: new Date() });
+                  console.log(`[stripe/webhook] EdenMarket grace notice sent to ${graceEmailTo}`);
+                } catch (graceEmailErr) {
+                  console.warn("[stripe/webhook] EdenMarket grace notice email failed:", (graceEmailErr as Error)?.message);
+                }
+              }
             } else {
               console.warn(`[stripe/webhook] subscription.deleted (edenmarket): no org for customer ${stripeCustomerId}`);
             }
@@ -9539,12 +9602,15 @@ If multiple assets appear, return each as a separate array item.`;
                 if (fetchedSub.metadata?.product === "edenmarket") {
                   const orgEMInv = invOkCustomerId ? await storage.getOrgByStripeCustomer(invOkCustomerId) : null;
                   if (orgEMInv) {
-                    if (!orgEMInv.edenMarketAccess || orgEMInv.edenMarketStripeSubId !== invOkSubId) {
+                    if (!orgEMInv.edenMarketAccess || orgEMInv.edenMarketStripeSubId !== invOkSubId || orgEMInv.marketAccessExpiresAt) {
+                      // Task #714 — clear any grace on successful renewal/payment.
                       await storage.updateOrganization(orgEMInv.id, {
                         edenMarketAccess: true,
                         edenMarketStripeSubId: invOkSubId,
+                        marketAccessExpiresAt: null,
+                        marketGraceEmailSentAt: null,
                       });
-                      console.log(`[stripe/webhook] invoice.payment_succeeded (edenmarket): org ${orgEMInv.id} access ensured, sub=${invOkSubId}`);
+                      console.log(`[stripe/webhook] invoice.payment_succeeded (edenmarket): org ${orgEMInv.id} access ensured + grace cleared, sub=${invOkSubId}`);
                     }
                   } else {
                     console.warn(`[stripe/webhook] invoice.payment_succeeded (edenmarket): no org for customer ${invOkCustomerId}`);
@@ -9880,7 +9946,18 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      res.json({ access: org?.edenMarketAccess ?? false, orgId: org?.id ?? null });
+      // Task #714 — return grace state so the client can show the read-only
+      // banner + Reactivate CTA. `access` retains its original semantic
+      // (any read access, including grace) so the existing MarketGate
+      // paywall logic doesn't flip on for grace-period users.
+      const state = getMarketAccessState(org);
+      res.json({
+        access: state.hasRead,
+        orgId: org?.id ?? null,
+        fullAccess: state.hasFullAccess,
+        inGrace: state.inGrace,
+        marketAccessExpiresAt: state.expiresAt,
+      });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
@@ -9909,7 +9986,9 @@ If multiple assets appear, return each as a separate array item.`;
         await storage.setIndustryProfileOrg(userId, org.id);
       }
 
-      if (org.edenMarketAccess) {
+      // Only block when org has full active access (not in grace). Grace orgs
+      // must be able to reactivate via this endpoint — that's the banner CTA.
+      if (getMarketAccessState(org).hasFullAccess) {
         return res.status(409).json({ error: "Your organization already has EdenMarket access." });
       }
 
@@ -9992,6 +10071,9 @@ If multiple assets appear, return each as a separate array item.`;
       await storage.updateOrganization(orgId, {
         edenMarketAccess: true,
         edenMarketStripeSubId: subId || undefined,
+        // Task #714 — explicit reactivation clears any prior grace state.
+        marketAccessExpiresAt: null,
+        marketGraceEmailSentAt: null,
       });
 
       if (subId) {
@@ -10104,7 +10186,7 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const { therapeuticArea, modality, stage, engagementStatus } = req.query as Record<string, string | undefined>;
       const listings = await storage.getMarketListings({ status: "active", therapeuticArea, modality, stage, engagementStatus });
@@ -10162,7 +10244,13 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      // Task #714 — strict gate: writes blocked during 30-day grace period.
+      const accessState = getMarketAccessState(org);
+      if (!accessState.hasFullAccess || !org) {
+        return res.status(403).json(accessState.inGrace
+          ? { error: "EdenMarket is read-only during your grace period — reactivate your subscription to create listings.", marketGrace: true, marketAccessExpiresAt: accessState.expiresAt }
+          : { error: "EdenMarket subscription required" });
+      }
 
       const schema = z.object({
         therapeuticArea: z.string().min(1),
@@ -10248,7 +10336,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const q = String(req.query.q ?? "").trim();
       const ta = String(req.query.ta ?? "").trim();
       const query = [q, ta].filter(Boolean).join(" ");
@@ -10289,7 +10377,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
@@ -10336,7 +10424,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
-        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+        if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
         const isSeller = listing.sellerId === userId;
         if (!isSeller && listing.status !== "active") return res.status(404).json({ error: "Not found" });
       }
@@ -10425,7 +10513,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -10493,7 +10581,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -10510,7 +10598,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
@@ -10524,7 +10612,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      // Task #714 — strict gate: writes blocked during 30-day grace period.
+      const eoiAccessState = getMarketAccessState(org);
+      if (!eoiAccessState.hasFullAccess) {
+        return res.status(403).json(eoiAccessState.inGrace
+          ? { error: "EdenMarket is read-only during your grace period — reactivate your subscription to submit EOIs.", marketGrace: true, marketAccessExpiresAt: eoiAccessState.expiresAt }
+          : { error: "EdenMarket subscription required" });
+      }
 
       const schema = z.object({
         listingId: z.number().int(),
@@ -10584,7 +10678,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const eois = await storage.getMarketEoisByBuyer(userId);
       res.json(eois);
     } catch (err: any) {
@@ -10597,7 +10691,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const listingIds = listings.map(l => l.id);
       if (!listingIds.length) return res.json([]);
@@ -10780,7 +10874,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const rows = await db.select()
         .from(marketSavedSearches)
         .where(eq(marketSavedSearches.userId, userId))
@@ -10795,7 +10889,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const data = insertMarketSavedSearchSchema.parse({ ...req.body, userId });
       try {
         const [row] = await db.insert(marketSavedSearches).values({
@@ -10820,7 +10914,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const schema = z.object({ name: z.string().min(1).max(120) });
       const { name } = schema.parse(req.body);
@@ -10846,7 +10940,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const [row] = await db.delete(marketSavedSearches)
         .where(and(eq(marketSavedSearches.id, id), eq(marketSavedSearches.userId, userId)))
@@ -10966,7 +11060,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      // Task #714 — strict gate: writes blocked during 30-day grace period.
+      const acceptAccessState = getMarketAccessState(org);
+      if (!acceptAccessState.hasFullAccess) {
+        return res.status(403).json(acceptAccessState.inGrace
+          ? { error: "EdenMarket is read-only during your grace period — reactivate your subscription to accept EOIs.", marketGrace: true, marketAccessExpiresAt: acceptAccessState.expiresAt }
+          : { error: "EdenMarket subscription required" });
+      }
 
       const eoiId = parseInt(String(req.params.id), 10);
       if (isNaN(eoiId)) return res.status(400).json({ error: "Invalid EOI ID" });
@@ -11028,7 +11128,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const eoiId = parseInt(String(req.params.id), 10);
       if (isNaN(eoiId)) return res.status(400).json({ error: "Invalid EOI ID" });
@@ -11080,7 +11180,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const deals = await storage.getMarketDealsForUser(userId);
       res.json(deals);
     } catch (err: any) {
@@ -11096,7 +11196,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
-        if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+        if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
       }
 
       const dealId = parseInt(String(req.params.id), 10);
@@ -11198,7 +11298,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -11335,7 +11435,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!org?.edenMarketAccess) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -11470,6 +11570,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/deals/:id/documents", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
+      const docReadOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(docReadOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
@@ -11540,6 +11643,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.post("/api/market/deals/:dealId/documents/:docId/track-view", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
+      const trackOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(trackOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.dealId), 10);
       const docId = parseInt(String(req.params.docId), 10);
       if (isNaN(dealId) || isNaN(docId)) return res.status(400).json({ error: "Invalid id" });
@@ -11565,6 +11671,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.post("/api/market/deals/:id/documents", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: in-flight deal-room document exchange is
+      // allowed during the 30-day grace period so paid users can complete
+      // existing diligence. Only revoke once grace has fully expired.
+      const docOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(docOrg)) {
+        return res.status(403).json({ error: "EdenMarket subscription required" });
+      }
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });
@@ -11646,6 +11759,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.delete("/api/market/deals/:dealId/documents/:docId", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
+      const delDocOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(delDocOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.dealId), 10);
       const docId = parseInt(String(req.params.docId), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -11684,6 +11800,9 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.get("/api/market/deals/:id/messages", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
+      const msgReadOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(msgReadOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
@@ -11701,6 +11820,13 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
   app.post("/api/market/deals/:id/messages", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
+      // Task #714 — lenient gate: messaging in existing deal rooms is
+      // explicitly allowed during the 30-day grace period (per acceptance
+      // criteria). Only revoke once grace has fully expired.
+      const msgOrg = await storage.getOrgForUser(userId);
+      if (!hasMarketRead(msgOrg)) {
+        return res.status(403).json({ error: "EdenMarket subscription required" });
+      }
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
       if (!deal) return res.status(404).json({ error: "Deal not found" });

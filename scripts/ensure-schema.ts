@@ -212,6 +212,13 @@ async function run() {
       ADD COLUMN IF NOT EXISTS invite_status text DEFAULT 'pending'
     `);
 
+    // Task #714 -- EdenMarket grace period columns on organizations
+    await client.query(`
+      ALTER TABLE organizations
+      ADD COLUMN IF NOT EXISTS market_access_expires_at timestamp,
+      ADD COLUMN IF NOT EXISTS market_grace_email_sent_at timestamp
+    `);
+
     console.log("ensure-schema: all column checks passed");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

@@ -125,6 +125,35 @@ export async function verifyAnyAuth(
   res: Response,
   next: NextFunction
 ) {
+  // Smoke-test bypass (Task #714) — defense-in-depth, no committed secret.
+  // ALL of the following must be true for the bypass to engage:
+  //   1. process.env.NODE_ENV !== "production"           (never live in prod)
+  //   2. process.env.ENABLE_SMOKE_AUTH_BYPASS === "true" (explicit opt-in flag)
+  //   3. The connection's remote address is loopback     (127.0.0.1 / ::1)
+  //   4. The request carries x-smoke-user-id             (actor identity)
+  // Loopback-only is the load-bearing control: even if an attacker learns the
+  // flag value (it's just "true"), they cannot reach this code path from any
+  // non-loopback origin. No shared secret is required or stored anywhere.
+  if (
+    process.env.NODE_ENV !== "production" &&
+    process.env.ENABLE_SMOKE_AUTH_BYPASS === "true"
+  ) {
+    const remote = req.socket?.remoteAddress ?? "";
+    const isLoopback =
+      remote === "127.0.0.1" ||
+      remote === "::1" ||
+      remote === "::ffff:127.0.0.1";
+    if (isLoopback) {
+      const smokeUserId = req.headers["x-smoke-user-id"];
+      if (typeof smokeUserId === "string" && smokeUserId.length > 0) {
+        req.headers["x-user-id"] = smokeUserId;
+        req.headers["x-user-role"] = "smoke";
+        req.headers["x-user-email"] = `${smokeUserId}@smoke.invalid`;
+        return next();
+      }
+    }
+  }
+
   const authHeader = req.headers.authorization;
   const token = authHeader?.replace("Bearer ", "");
 
