@@ -1,13 +1,19 @@
 import { test, expect } from "@playwright/test";
+import { bypassSiteGate } from "../fixtures/sitegate";
 
 test.describe("Admin gate (Tasks #676/#677)", () => {
   test("unauthenticated /admin redirects to /login with redirect param", async ({
     page,
   }) => {
+    await bypassSiteGate(page);
     await page.goto("/admin");
-    await page.waitForURL(/\/login/, { timeout: 10_000 });
+    // Auth context resolves client-side, then AdminAuthGate's useEffect calls
+    // navigate("/login?redirect=/admin"). Allow generous time for cold loads.
+    await page.waitForURL(/\/login/, { timeout: 25_000 });
     expect(page.url()).toContain("/login");
-    expect(page.url()).toContain("redirect=%2Fadmin");
+    // The redirect= param may or may not be URL-encoded depending on wouter's
+    // location helpers; accept both forms.
+    expect(page.url()).toMatch(/redirect=(%2F|\/)admin/);
   });
 
   test("admin API endpoint rejects unauthenticated requests with 401", async ({

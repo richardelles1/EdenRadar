@@ -9,13 +9,15 @@ import crypto from "node:crypto";
  * its signing algorithm, update this file too.
  */
 function unsubscribeSecret(): string {
+  // MUST match server/email.ts `unsubscribeSecret()` precedence exactly,
+  // otherwise the HMAC signatures won't verify.
   const secret =
-    process.env.UNSUBSCRIBE_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "";
+    process.env.UNSUBSCRIBE_TOKEN_SECRET ??
+    process.env.SUPABASE_JWT_SECRET ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!secret) {
     throw new Error(
-      "E2E: UNSUBSCRIBE_SECRET or SUPABASE_SERVICE_ROLE_KEY must be set to sign tokens",
+      "E2E: UNSUBSCRIBE_TOKEN_SECRET (or SUPABASE_JWT_SECRET / SUPABASE_SERVICE_ROLE_KEY) must be set to sign tokens",
     );
   }
   return secret;

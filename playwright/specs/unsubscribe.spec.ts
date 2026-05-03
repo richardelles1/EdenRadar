@@ -6,8 +6,13 @@ import {
   seedIndustryProfile,
 } from "../fixtures/db";
 import { signUnsubscribeToken } from "../fixtures/tokens";
+import { bypassSiteGate } from "../fixtures/sitegate";
 
 test.describe("Unsubscribe flow (RFC 8058 + UI)", () => {
+  test.beforeEach(async ({ page }) => {
+    await bypassSiteGate(page);
+  });
+
   test.afterAll(async () => {
     await cleanupE2ERows();
     await closePool();

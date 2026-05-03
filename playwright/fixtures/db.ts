@@ -11,6 +11,19 @@ export function getPool(): pg.Pool {
   if (!cs) {
     throw new Error("E2E: SUPABASE_DATABASE_URL must be set to run DB-backed specs");
   }
+  // ── Hard safety guard ─────────────────────────────────────────────────────
+  // The E2E DB fixtures INSERT and DELETE rows matching `company_name LIKE
+  // 'e2e-test-%'`. If this connection string ever points at a shared/prod
+  // database, a stray prefix collision could mutate real customer data.
+  // Require an explicit opt-in env flag so CI/dev must consciously confirm
+  // the target DB is safe for write/delete operations.
+  if (process.env.E2E_ALLOW_DB_WRITES !== "true") {
+    throw new Error(
+      "E2E: refusing to open DB pool. Set E2E_ALLOW_DB_WRITES=true to confirm " +
+        "SUPABASE_DATABASE_URL points at a NON-PRODUCTION database. " +
+        "These specs INSERT and DELETE rows matching company_name LIKE 'e2e-test-%'.",
+    );
+  }
   _pool = new Pool({
     connectionString: cs,
     ssl: { rejectUnauthorized: false },

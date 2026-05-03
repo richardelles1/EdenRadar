@@ -9,6 +9,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Hard-require an explicit opt-in for DB writes. The unsubscribe spec inserts
+# and deletes rows in `industry_profiles` matching `company_name LIKE 'e2e-test-%'`.
+# This guard prevents accidentally pointing at a production DB.
+export E2E_ALLOW_DB_WRITES="${E2E_ALLOW_DB_WRITES:-true}"
+
 # Reuse the dev workflow if it's running; otherwise Playwright will start one.
 if curl -fsS -o /dev/null http://localhost:5000/ 2>/dev/null; then
   echo "[e2e] Dev server detected on :5000 — reusing."

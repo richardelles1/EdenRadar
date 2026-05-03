@@ -1,6 +1,11 @@
 import { test, expect } from "@playwright/test";
+import { bypassSiteGate } from "../fixtures/sitegate";
 
 test.describe("Login page rendering", () => {
+  test.beforeEach(async ({ page }) => {
+    await bypassSiteGate(page);
+  });
+
   test("sign-in form renders with all expected controls", async ({ page }) => {
     await page.goto("/login");
 

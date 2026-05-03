@@ -4,19 +4,17 @@ End-to-end tests for the 9 critical user journeys identified in Task #688.
 
 ## Status
 
-| # | Journey                                               | Status        |
-|---|-------------------------------------------------------|---------------|
-| 1 | Signup → trial active                                 | skeleton      |
-| 2 | Digest opt-in → admin trigger → email logged          | skeleton      |
-| 3 | Realtime alert latency                                | skeleton      |
-| 4 | EdenScout search → save asset                         | skeleton      |
-| 5 | EdenMarket EOI → mutual interest                      | skeleton      |
-| 6 | NDA sign → deal room unlocked                         | skeleton      |
-| 7 | Admin password reset / non-admin denial               | partial ✅    |
-| 8 | Unsubscribe (RFC 8058 + UI)                           | full ✅       |
-| 9 | Team invite → accept → org membership                 | skeleton      |
+Last verified run: **20 passing, 8 skipped (skeletons)**.
 
-Plus: `login-page` (rendering smoke), `public-pages` (landing/market/pricing/tos).
+| Spec file               | Tests   | Coverage                                                          |
+|-------------------------|---------|-------------------------------------------------------------------|
+| `public-pages.spec.ts`  | 6 / 6   | `/`, `/market/preview`, `/what-we-do`, `/pricing`, `/tos`, `/privacy` render without auth (SiteGate-bypassed paths and SSR'd marketing routes). |
+| `unsubscribe.spec.ts`   | 6 / 6   | Journey 8 — signed token unsubscribes user, double-unsubscribe shows already-state, missing/tampered tokens render error UI, RFC 8058 one-click POST `/unsubscribe`, JSON `/api/digest/unsubscribe` rejects bad tokens with 400. DB state asserted via `fixtures/db.ts`. |
+| `admin-gate.spec.ts`    | 3 / 3   | Journey 7 (partial) — unauth `/admin` redirects to `/login?redirect=/admin`, admin API endpoints return 401, `/login` page renders for redirect target. |
+| `login-page.spec.ts`    | 5 / 5   | Login form rendering smoke: email/password inputs, submit button, "Forgot password" link, error toast on bad creds. |
+| `_skeletons.spec.ts`    | 0 / 8   | Journeys 1, 2, 3, 4, 5, 6, 9 — `test.fixme` placeholders with detailed TODO blocks naming the exact infrastructure each needs (test-only Supabase project, network mocks, ingestion fixtures, etc.). |
+
+Total: **28 tests across 5 spec files.** Active specs cover Journey 7 (partial) and Journey 8 (full); the other 7 journeys are scaffolded as `test.fixme` skeletons with implementation notes.
 
 ## Running
 
@@ -51,6 +49,9 @@ bash scripts/test-e2e.sh
 - **DB writes** go through `playwright/fixtures/db.ts`, which uses the same
   `SUPABASE_DATABASE_URL` the app uses. All E2E rows have `company_name`
   prefixed with `e2e-test-` and are deleted in `afterAll`.
+  ⚠️ The fixture **refuses to open the pool** unless `E2E_ALLOW_DB_WRITES=true`
+  is set — an explicit opt-in confirming the target DB is non-production.
+  `scripts/test-e2e.sh` sets it automatically; CI must export it manually.
 - **Token signing** (e.g. unsubscribe HMAC) is mirrored in
   `playwright/fixtures/tokens.ts` so specs do not import server-only modules.
   ⚠️ If `server/email.ts` changes its signing algorithm, update tokens.ts too.
