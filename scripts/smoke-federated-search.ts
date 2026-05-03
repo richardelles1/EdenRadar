@@ -21,6 +21,19 @@
 const BASE_URL = process.argv[2] ?? "http://localhost:5000";
 const COLD_BUDGET_MS = 12000;
 const MIN_CATEGORIES_WITH_RESULTS = 3;
+// Categories that MUST contribute on every query (>=1 hit). These map to
+// sources that should never silently zero out across our query panel:
+// - paper: pubmed/openalex/europepmc — broad biomedical literature
+// - tech_transfer: techtransfer DB — university licensing offices
+// All test queries are biomedical, so these two must always fire.
+const REQUIRED_CATEGORIES = ["paper", "tech_transfer"];
+// Sources whose latency must be observed in sourceDiagnostics on every query —
+// proves they were dispatched (not silently skipped) and lets us see real ms.
+const REQUIRED_SOURCES_OBSERVED = ["pubmed", "openalex", "europepmc", "biorxiv", "medrxiv", "patents", "clinicaltrials", "techtransfer"];
+// Cold-run heuristic: anything below this is suspected cache hit and ignored
+// for SLA. Federated search has a 45-min TTL; bust by varying the query string
+// or restart the server before running this script.
+const COLD_FLOOR_MS = 1000;
 
 const QUERIES = [
   "GLP-1 obesity",
@@ -169,19 +182,31 @@ function pad(s: string, n: number): string {
   }
 
   let failed = 0;
+  let suspectedCacheHits = 0;
   console.log("\nChecks:");
   for (const r of results) {
-    const overBudget = r.ms > COLD_BUDGET_MS;
+    const cacheSuspect = r.ms < COLD_FLOOR_MS;
+    if (cacheSuspect) suspectedCacheHits++;
+    const overBudget = !cacheSuspect && r.ms > COLD_BUDGET_MS;
     const catsWithHits = CATEGORIES.filter((c) => r.byCategory[c] > 0).length;
     const tooFewCats = catsWithHits < MIN_CATEGORIES_WITH_RESULTS;
+    const missingRequired = REQUIRED_CATEGORIES.filter((c) => (r.byCategory[c] ?? 0) === 0);
+    const observed = new Set(r.diagnostics.map((d) => d.source));
+    const missingSources = cacheSuspect ? [] : REQUIRED_SOURCES_OBSERVED.filter((s) => !observed.has(s));
     const errored = !!r.error;
-    const ok = !overBudget && !tooFewCats && !errored;
+    const ok = !overBudget && !tooFewCats && !missingRequired.length && !missingSources.length && !errored;
     if (!ok) failed++;
     const flags: string[] = [];
+    if (cacheSuspect) flags.push(`SUSPECTED_CACHE_HIT(${r.ms}ms < ${COLD_FLOOR_MS}ms — restart server for true cold)`);
     if (overBudget) flags.push(`OVER_BUDGET(${r.ms}ms > ${COLD_BUDGET_MS}ms)`);
     if (tooFewCats) flags.push(`TOO_FEW_CATEGORIES(${catsWithHits}/${MIN_CATEGORIES_WITH_RESULTS})`);
+    if (missingRequired.length) flags.push(`MISSING_REQUIRED_CATEGORY(${missingRequired.join(",")})`);
+    if (missingSources.length) flags.push(`SOURCE_NOT_DISPATCHED(${missingSources.join(",")})`);
     if (errored) flags.push(`ERROR(${r.error})`);
     console.log(`  ${ok ? "OK " : "FAIL"} · ${r.query} · ${flags.length ? flags.join(", ") : "all checks pass"}`);
+  }
+  if (suspectedCacheHits > 0) {
+    console.log(`\n  WARN: ${suspectedCacheHits}/${results.length} queries appear to be cache hits (latency < ${COLD_FLOOR_MS}ms). Restart server before re-running for a true cold validation.`);
   }
 
   const avg = Math.round(results.reduce((s, r) => s + r.ms, 0) / results.length);

@@ -40,7 +40,7 @@ export async function searchMedrxiv(query: string, maxResults = 10): Promise<Raw
       return pub.includes("medrxiv");
     });
 
-    const finalResults = medrxivResults.length > 0 ? medrxivResults : results.slice(maxResults);
+    const finalResults = medrxivResults.length > 0 ? medrxivResults : results;
     return finalResults.slice(0, maxResults).map(toRawSignal);
   } catch (err) {
     console.error("medRxiv (Europe PMC) search error:", err);

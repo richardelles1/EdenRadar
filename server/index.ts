@@ -1398,6 +1398,14 @@ async function migrateAssetStatusValues() {
   // ── Register API routes ───────────────────────────────────────────────────
   await registerRoutes(httpServer, app);
 
+  // ── Federated search source health summary ───────────────────────────────
+  try {
+    const { logSourceHealthSummary } = await import("./lib/sources/index");
+    logSourceHealthSummary();
+  } catch (e) {
+    log(`[startup] source health summary failed: ${(e as Error)?.message}`, "startup");
+  }
+
   // ── Sentry Express error handler (must come before our own error handler) ──
   if (process.env.SENTRY_DSN) {
     Sentry.setupExpressErrorHandler(app);

@@ -399,7 +399,24 @@ export function withHardTimeout<T>(promise: Promise<T>, ms: number, label: strin
   });
 }
 
-const CONCURRENCY_LIMIT = 16;
+const CONCURRENCY_LIMIT = 40;
+
+const KNOWN_FLAKY_SOURCES: ReadonlyArray<{ id: SourceKey; reason: string }> = [
+  { id: "biostudies", reason: "EBI BioStudies API frequently 500s/times out at upstream" },
+  { id: "semantic_scholar", reason: "Semantic Scholar rate-limits aggressively (429)" },
+  { id: "harvard_dataverse", reason: "Harvard rate-limits (429)" },
+  { id: "harvard_librarycloud", reason: "Harvard rate-limits (429)" },
+  { id: "pdb", reason: "PDB JSON parse intermittent" },
+  { id: "lens", reason: "Requires LENS_API_KEY (no-op when unset)" },
+  { id: "ieee", reason: "Requires IEEE_API_KEY (no-op when unset)" },
+];
+
+export function logSourceHealthSummary(): void {
+  console.log(`[search/sources] ${ALL_SOURCE_KEYS.length} sources registered; per-source hard timeout = ${SOURCE_TIMEOUT_MS}ms; concurrency = ${CONCURRENCY_LIMIT}`);
+  for (const flaky of KNOWN_FLAKY_SOURCES) {
+    console.log(`[search/sources] flaky-upstream: ${flaky.id} — ${flaky.reason} (kept enabled, contained by hard timeout)`);
+  }
+}
 
 export type SourceDiag = {
   source: SourceKey;
@@ -428,36 +445,41 @@ export async function collectAllSignalsWithDiag(
 
   for (let i = 0; i < selectedSources.length; i += CONCURRENCY_LIMIT) {
     const batch = selectedSources.slice(i, i + CONCURRENCY_LIMIT);
-    const startTimes = batch.map(() => Date.now());
-    const results = await Promise.allSettled(
-      batch.map((s, idx) => {
-        startTimes[idx] = Date.now();
-        return withHardTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id);
-      })
+    // Wrap each source in a self-timing promise so latency reflects the time
+    // from kickoff to settlement of THAT source — not the time until the
+    // slowest sibling settled.
+    type Outcome = { id: SourceKey; ms: number; ok: boolean; value?: RawSignal[]; error?: unknown };
+    const settled: Outcome[] = await Promise.all(
+      batch.map((s) => {
+        const t0 = Date.now();
+        return withHardTimeout(s.search(query, maxPerSource), SOURCE_TIMEOUT_MS, s.id).then(
+          (value): Outcome => ({ id: s.id, ms: Date.now() - t0, ok: true, value }),
+          (error): Outcome => ({ id: s.id, ms: Date.now() - t0, ok: false, error }),
+        );
+      }),
     );
 
-    results.forEach((r, j) => {
-      const elapsed = Date.now() - startTimes[j];
-      const id = batch[j].id;
-      if (r.status === "fulfilled") {
-        if (r.value.length === 0) {
-          console.warn(`[search] ${id} returned 0 results in ${elapsed}ms`);
-          diagnostics.push({ source: id, ms: elapsed, status: "empty", count: 0 });
+    for (const o of settled) {
+      if (o.ok) {
+        const value = o.value ?? [];
+        if (value.length === 0) {
+          console.warn(`[search] ${o.id} returned 0 results in ${o.ms}ms`);
+          diagnostics.push({ source: o.id, ms: o.ms, status: "empty", count: 0 });
         } else {
-          diagnostics.push({ source: id, ms: elapsed, status: "ok", count: r.value.length });
+          diagnostics.push({ source: o.id, ms: o.ms, status: "ok", count: value.length });
         }
-        signals.push(...r.value);
+        signals.push(...value);
       } else {
-        const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
+        const msg = o.error instanceof Error ? o.error.message : String(o.error);
         if (msg.includes("timed out")) {
-          console.warn(`[search] ${id} hit hard ${SOURCE_TIMEOUT_MS}ms budget, dropping.`);
-          diagnostics.push({ source: id, ms: elapsed, status: "timeout", count: 0, error: msg });
+          console.warn(`[search] ${o.id} hit hard ${SOURCE_TIMEOUT_MS}ms budget, dropping.`);
+          diagnostics.push({ source: o.id, ms: o.ms, status: "timeout", count: 0, error: msg });
         } else {
-          console.error(`[search] ${id} failed in ${elapsed}ms:`, msg);
-          diagnostics.push({ source: id, ms: elapsed, status: "error", count: 0, error: msg });
+          console.error(`[search] ${o.id} failed in ${o.ms}ms:`, msg);
+          diagnostics.push({ source: o.id, ms: o.ms, status: "error", count: 0, error: msg });
         }
       }
-    });
+    }
   }
 
   return { signals, diagnostics };
