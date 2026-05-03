@@ -9,6 +9,7 @@ export type Institution = {
   noPublicPortal: boolean;
   accessRestricted: boolean;
   count: number;
+  activeListings: number;
 };
 
 export type InstitutionsListResponse = {

@@ -1992,7 +1992,11 @@ export async function registerRoutes(
           continent: meta?.continent ?? null,
           noPublicPortal: meta?.noPublicPortal ?? false,
           accessRestricted: meta?.accessRestricted ?? false,
+          // `count` is the legacy field name used across Sources/Dashboard/etc;
+          // `activeListings` is the spec-named alias for new consumers. Keep
+          // both until migration completes.
           count: countBySlug.get(slug) ?? 0,
+          activeListings: countBySlug.get(slug) ?? 0,
         };
       });
 

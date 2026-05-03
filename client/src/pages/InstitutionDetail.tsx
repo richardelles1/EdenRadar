@@ -264,7 +264,10 @@ export default function InstitutionDetail() {
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {inst ? `${inst.city} · ${inst.ttoName}` : "Institution not in curated directory"}
+                  {inst
+                    ? [inst.city, inst.ttoName].filter(Boolean).join(" · ") ||
+                      "Indexed by EdenRadar"
+                    : "Institution not in curated directory"}
                 </p>
               </div>
             </div>
