@@ -33,7 +33,7 @@ export function AppSwitcher({ active }: { active: AppKey }) {
 
   const { data: marketAccess } = useQuery<{ access: boolean }>({
     queryKey: ["/api/market/access"],
-    enabled: !!session?.access_token && role === "industry",
+    enabled: !!session?.access_token,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -48,7 +48,8 @@ export function AppSwitcher({ active }: { active: AppKey }) {
         if (role === "industry") return { allowed: true };
         return { allowed: false, reason: "EdenScout is for industry accounts." };
       case "market":
-        if (role !== "industry") return { allowed: false, reason: "EdenMarket is for industry accounts." };
+        // Task #752 — any user with a Market entitlement (per-user grant or
+        // org subscription) can enter EdenMarket regardless of portal role.
         if (marketAccess?.access) return { allowed: true };
         return { allowed: true, reason: "Subscribe to EdenMarket to unlock listings." };
     }

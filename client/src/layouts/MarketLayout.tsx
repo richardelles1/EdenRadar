@@ -1,5 +1,3 @@
-import { useEffect } from "react";
-import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { MarketSidebar } from "@/components/MarketSidebar";
 import { AppSwitcher } from "@/components/AppSwitcher";
@@ -75,17 +73,15 @@ type MarketLayoutProps = {
 
 export function MarketLayout({ children }: MarketLayoutProps) {
   useDocumentMeta({ title: "EdenMarket | EdenRadar", noindex: true });
-  const [, navigate] = useLocation();
   const { session, loading } = useAuth();
   const { data: org } = useOrg();
   const orgColor = org?.primaryColor ?? null;
 
-  useEffect(() => {
-    if (!loading && !session) {
-      navigate("/login", { replace: true });
-    }
-  }, [session, loading, navigate]);
-
+  // Task #752 — /market is now a public front door. Unauthenticated users
+  // see the MarketGate paywall (with sign-in / sign-up CTAs) rendered as
+  // children; only the chrome is hidden so the page reads as a marketing
+  // landing rather than an empty app shell. MarketLogin/MarketSignup are
+  // still the dedicated entry points and are linked from the paywall.
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -94,8 +90,16 @@ export function MarketLayout({ children }: MarketLayoutProps) {
     );
   }
 
-  if (!session) return null;
-
+  if (!session) {
+    return (
+      <div className="min-h-screen bg-background relative">
+        <PortalBackground variant="market" />
+        <main className="relative z-10">
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </main>
+      </div>
+    );
+  }
   return (
     <div
       className="flex min-h-screen bg-background relative"

@@ -26,7 +26,7 @@ interface AuthContextValue {
   isPasswordRecovery: boolean;
   clearPasswordRecovery: () => void;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
-  signUp: (email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) => Promise<{ error: string | null }>;
+  signUp: (email: string, password: string, role: "industry" | "researcher" | "concept" | null, metadata?: Record<string, string>) => Promise<{ error: string | null }>;
   signInWithGoogle: () => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<{ error: string | null }>;
@@ -158,11 +158,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: error?.message ?? null };
   }
 
-  async function signUp(email: string, password: string, role: "industry" | "researcher" | "concept", metadata?: Record<string, string>) {
+  async function signUp(email: string, password: string, role: "industry" | "researcher" | "concept" | null, metadata?: Record<string, string>) {
     const { error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { role, ...metadata } },
+      options: { data: { ...(role ? { role } : {}), ...metadata } },
     });
     return { error: error?.message ?? null };
   }

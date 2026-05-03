@@ -8,7 +8,7 @@ const SITE_KEY = "eden-access";
 export function SiteGate({ children }: { children: React.ReactNode }) {
   const PUBLIC_PATHS = [
     "/pitch", "/tos", "/privacy", "/pricing", "/one-pager",
-    "/market/preview", "/market/list",
+    "/market", "/market/preview", "/market/list", "/market/login", "/market/signup",
     // Transactional flows reached from emails MUST bypass the beta gate,
     // otherwise we silently break CAN-SPAM / RFC 8058 unsubscribe and
     // Supabase password-recovery links for real recipients.

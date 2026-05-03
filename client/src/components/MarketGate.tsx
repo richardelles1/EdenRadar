@@ -83,11 +83,12 @@ export function MarketGate({ children }: { children: React.ReactNode }) {
 
   if (data?.access) return <>{children}</>;
 
-  return <MarketPaywall />;
+  return <MarketPaywall isAuthed={!!session} />;
 }
 
-function MarketPaywall() {
+function MarketPaywall({ isAuthed = true }: { isAuthed?: boolean }) {
   const { subscribe, isLoading } = useMarketSubscribe();
+  const [, navigate] = useLocation();
 
   return (
     <div className="min-h-full bg-gradient-to-b from-background via-background to-muted/20">
@@ -142,7 +143,7 @@ function MarketPaywall() {
               <Button
                 className="w-full gap-2 text-white"
                 style={{ background: "hsl(234 80% 58%)" }}
-                onClick={() => subscribe()}
+                onClick={() => (isAuthed ? subscribe() : navigate("/market/signup"))}
                 disabled={isLoading}
                 data-testid="market-gate-subscribe"
               >
@@ -153,11 +154,21 @@ function MarketPaywall() {
                   </>
                 ) : (
                   <>
-                    Subscribe to EdenMarket
+                    {isAuthed ? "Subscribe to EdenMarket" : "Get access"}
                     <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </Button>
+              {!isAuthed && (
+                <Button
+                  variant="outline"
+                  className="w-full gap-2 border-indigo-500/30 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-500/10"
+                  onClick={() => navigate("/market/login")}
+                  data-testid="market-gate-signin"
+                >
+                  Sign in to EdenMarket
+                </Button>
+              )}
               <p className="text-[10px] text-muted-foreground text-center">
                 <a href="/pricing" className="text-indigo-500 hover:underline" data-testid="market-gate-see-pricing">
                   See full pricing →

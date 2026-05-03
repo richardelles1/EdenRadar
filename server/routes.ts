@@ -36,6 +36,13 @@ import { embedAssets } from "./lib/pipeline/embedAssets";
 import { embedQuery, ragQuery, directQuery, aggregationQuery, isConversational, isAggregationQuery, resolveAggregationQuery, fetchPortfolioStats, parseQueryFilters, hasMeaningfulFilters, getOrUpdateSessionFocus, GEO_INSTITUTION_REGEX, detectInstitutionName, detectAllInstitutionNames, isDefinitionalQuery, detectBackReference, extractBackRefPosition, extractBackRefInstitution, rerankAssets, persistSessionFocus, seedSessionFocusFromDb, conceptQuery, deriveEngagementSignals, markEngagementReset, isEngagementResetMessage, isComparativeQuery, compareQuery, type UserContext, type SessionFocusContext } from "./lib/eden/rag";
 import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, requireAdmin, getAdminUser } from "./lib/supabaseAuth";
 import { hasMarketRead, getMarketAccessState } from "./lib/marketAccess";
+import {
+  getEffectiveMarketAccess,
+  getUserMarketEntitlement,
+  setUserMarketEntitlement,
+  syncOrgMembersMarketEntitlement,
+  userHasMarketRead,
+} from "./lib/marketEntitlement";
 import { registerClient, unregisterClient, broadcastToOrg, registerUserClient, unregisterUserClient, broadcastToUsers } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
@@ -1401,7 +1408,7 @@ export async function registerRoutes(
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const { fingerprint } = req.params;
       const fingerprintStr = Array.isArray(fingerprint) ? fingerprint[0] : fingerprint;
@@ -6481,6 +6488,14 @@ If a field cannot be determined, use "N/A".`
           (typeof meta.fullName === "string" && meta.fullName) ||
           (typeof meta.display_name === "string" && meta.display_name) ||
           null;
+        const rawEnt = meta.marketEntitlement as Record<string, unknown> | undefined;
+        const marketEntitlement = rawEnt && typeof rawEnt.active === "boolean"
+          ? {
+              active: rawEnt.active as boolean,
+              source: (rawEnt.source === "admin" || rawEnt.source === "stripe") ? rawEnt.source as "admin" | "stripe" : null,
+              grantedAt: typeof rawEnt.grantedAt === "string" ? rawEnt.grantedAt : null,
+            }
+          : null;
         return {
           id: u.id,
           email: u.email ?? "",
@@ -6488,6 +6503,7 @@ If a field cannot be determined, use "N/A".`
           contactEmail: (typeof meta.contactEmail === "string" ? meta.contactEmail : null),
           role: (typeof meta.role === "string" ? meta.role : null),
           subscribedToDigest: meta.subscribedToDigest === true,
+          marketEntitlement,
           createdAt: u.created_at,
           lastSignInAt: u.last_sign_in_at ?? null,
         };
@@ -6575,6 +6591,27 @@ If a field cannot be determined, use "N/A".`
       });
     } catch (err: any) {
       if (err.name === "ZodError") return res.status(400).json({ error: "Invalid role" });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // PATCH /api/admin/users/:id/market-access — Task #752: grant or revoke
+  // EdenMarket access for an individual user (independent of org subscription).
+  // Source is recorded as "admin" so subsequent Stripe-driven syncs do not
+  // silently revoke admin grants — only the same source can flip it off via
+  // the webhook path (admin always wins via this endpoint).
+  app.patch("/api/admin/users/:id/market-access", async (req, res) => {
+    try {
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "SUPABASE_SERVICE_ROLE_KEY not configured" });
+      }
+      const { id } = req.params;
+      const schema = z.object({ active: z.boolean() });
+      const { active } = schema.parse(req.body);
+      const ent = await setUserMarketEntitlement(id, { active, source: "admin" });
+      res.json({ id, marketEntitlement: ent });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Invalid body" });
       res.status(500).json({ error: err.message });
     }
   });
@@ -9570,6 +9607,8 @@ If multiple assets appear, return each as a separate array item.`;
               edenMarketStripeSubId: subEM || undefined,
               ...(customerEM ? { stripeCustomerId: customerEM } : {}),
             });
+            // Task #752 — sync per-user entitlement.
+            await syncOrgMembersMarketEntitlement(orgId, true);
             console.log(`[stripe/webhook] checkout.session.completed (edenmarket): org ${orgId} access activated, sub=${subEM}`);
             break;
           }
@@ -9709,6 +9748,7 @@ If multiple assets appear, return each as a separate array item.`;
                 marketAccessExpiresAt: null,
                 marketGraceEmailSentAt: null,
               });
+              await syncOrgMembersMarketEntitlement(orgEMCU.id, true);
               console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} reactivated, status=${subStatusCU}, sub=${stripeSubscriptionId}`);
             } else if (isCanceled) {
               const alreadyInGrace = orgEMCU.marketAccessExpiresAt && orgEMCU.marketAccessExpiresAt > new Date();
@@ -9720,6 +9760,10 @@ If multiple assets appear, return each as a separate array item.`;
                 edenMarketStripeSubId: null,
                 marketAccessExpiresAt: graceEndsAt,
               });
+              // Task #752 — revoke stripe-sourced per-user entitlements so
+              // canceled buyers immediately drop to org-only read access
+              // (and lose write access). Admin grants are preserved.
+              await syncOrgMembersMarketEntitlement(orgEMCU.id, false);
               console.log(`[stripe/webhook] ${eventType} (edenmarket): org ${orgEMCU.id} entered/extended 30-day grace, expires ${graceEndsAt.toISOString()}`);
               // One-time grace-notice email, idempotent on marketGraceEmailSentAt
               const graceEmailTo = orgEMCU.billingEmail ?? undefined;
@@ -9794,6 +9838,9 @@ If multiple assets appear, return each as a separate array item.`;
                 edenMarketStripeSubId: null,
                 marketAccessExpiresAt: graceEndsAt,
               });
+              // Task #752 — revoke stripe-sourced per-user entitlements
+              // immediately on cancel; admin grants are preserved.
+              await syncOrgMembersMarketEntitlement(orgEMDel.id, false);
               console.log(`[stripe/webhook] EdenMarket subscription canceled — org ${orgEMDel.id} entered 30-day grace, expires ${graceEndsAt.toISOString()}`);
 
               // Send the one-time grace-notice email. Idempotent on
@@ -9953,6 +10000,7 @@ If multiple assets appear, return each as a separate array item.`;
                         marketAccessExpiresAt: null,
                         marketGraceEmailSentAt: null,
                       });
+                      await syncOrgMembersMarketEntitlement(orgEMInv.id, true);
                       console.log(`[stripe/webhook] invoice.payment_succeeded (edenmarket): org ${orgEMInv.id} access ensured + grace cleared, sub=${invOkSubId}`);
                     }
                   } else {
@@ -10255,8 +10303,11 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const userId = await tryGetUserId(req);
       if (userId) {
-        const org = await storage.getOrgForUser(userId);
-        hasAccess = Boolean(org?.edenMarketAccess);
+        // Task #752 — use effective entitlement (admin / stripe / org)
+        // so per-user grants and admin revokes are reflected in the
+        // upsell widget instead of relying on org.edenMarketAccess only.
+        const eff = await getEffectiveMarketAccess(userId);
+        hasAccess = eff.access;
 
         const profile = await storage.getIndustryProfileByUserId(userId);
         if (profile) {
@@ -10284,22 +10335,22 @@ If multiple assets appear, return each as a separate array item.`;
     res.json({ newListings7d, matchingFilters, hasAccess });
   });
 
-  // GET /api/market/access — check if current user's org has EdenMarket access
+  // GET /api/market/access — check whether the current user has EdenMarket
+  // access. Task #752: combines per-user entitlement (admin- or Stripe-granted
+  // marketEntitlement on supabase user_metadata) with the legacy org-level
+  // edenMarketAccess flag. Either grant route enables access.
   app.get("/api/market/access", verifyAnyAuth, async (req, res) => {
     try {
       const userId = req.headers["x-user-id"] as string;
-      const org = await storage.getOrgForUser(userId);
-      // Task #714 — return grace state so the client can show the read-only
-      // banner + Reactivate CTA. `access` retains its original semantic
-      // (any read access, including grace) so the existing MarketGate
-      // paywall logic doesn't flip on for grace-period users.
-      const state = getMarketAccessState(org);
+      const eff = await getEffectiveMarketAccess(userId);
       res.json({
-        access: state.hasRead,
-        orgId: org?.id ?? null,
-        fullAccess: state.hasFullAccess,
-        inGrace: state.inGrace,
-        marketAccessExpiresAt: state.expiresAt,
+        access: eff.access,
+        orgId: eff.orgState ? (await storage.getOrgForUser(userId))?.id ?? null : null,
+        fullAccess: eff.fullAccess,
+        inGrace: eff.inGrace,
+        marketAccessExpiresAt: eff.marketAccessExpiresAt,
+        source: eff.source,
+        entitlement: eff.entitlement,
       });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -10423,6 +10474,11 @@ If multiple assets appear, return each as a separate array item.`;
         await storage.createMarketSubscription({ orgId, stripeSubscriptionId: subId, status: "active" });
       }
 
+      // Task #752 — mirror the org's new active state to each member's
+      // per-user entitlement so admin-granted and Stripe-granted access
+      // share a single source of truth on the client.
+      await syncOrgMembersMarketEntitlement(orgId, true);
+
       res.json({ access: true });
     } catch (err: any) {
       console.error("[market/verify-session]", err?.message);
@@ -10529,7 +10585,7 @@ If multiple assets appear, return each as a separate array item.`;
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const { therapeuticArea, modality, stage, engagementStatus } = req.query as Record<string, string | undefined>;
       const listings = await storage.getMarketListings({ status: "active", therapeuticArea, modality, stage, engagementStatus });
@@ -10679,7 +10735,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const q = String(req.query.q ?? "").trim();
       const ta = String(req.query.ta ?? "").trim();
       const query = [q, ta].filter(Boolean).join(" ");
@@ -10720,7 +10776,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
@@ -10767,7 +10823,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
-        if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+        if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
         const isSeller = listing.sellerId === userId;
         if (!isSeller && listing.status !== "active") return res.status(404).json({ error: "Not found" });
       }
@@ -10856,7 +10912,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -10924,7 +10980,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const listing = await storage.getMarketListing(id);
       if (!listing) return res.status(404).json({ error: "Listing not found" });
@@ -10941,7 +10997,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const eoiCounts = await Promise.all(listings.map(l => storage.getMarketEoiCount(l.id)));
       res.json(listings.map((l, i) => ({ ...l, eoiCount: eoiCounts[i] })));
@@ -11021,7 +11077,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const eois = await storage.getMarketEoisByBuyer(userId);
       res.json(eois);
     } catch (err: any) {
@@ -11034,7 +11090,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const listings = await storage.getMarketListingsBySeller(userId);
       const listingIds = listings.map(l => l.id);
       if (!listingIds.length) return res.json([]);
@@ -11217,7 +11273,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const rows = await db.select()
         .from(marketSavedSearches)
         .where(eq(marketSavedSearches.userId, userId))
@@ -11232,7 +11288,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const data = insertMarketSavedSearchSchema.parse({ ...req.body, userId });
       try {
         const [row] = await db.insert(marketSavedSearches).values({
@@ -11257,7 +11313,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const schema = z.object({ name: z.string().min(1).max(120) });
       const { name } = schema.parse(req.body);
@@ -11283,7 +11339,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const id = parseInt(String(req.params.id), 10);
       const [row] = await db.delete(marketSavedSearches)
         .where(and(eq(marketSavedSearches.id, id), eq(marketSavedSearches.userId, userId)))
@@ -11397,6 +11453,8 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
           edenMarketAccess: false,
           marketAccessExpiresAt: null,
         });
+        // Task #752 — also clear stripe-sourced per-user entitlements.
+        await syncOrgMembersMarketEntitlement(orgId, false);
         logAppEvent("market_access_revoked", {
           orgId, orgName: org.name,
           actorId: adminUserId, actorEmail: adminEmail,
@@ -11538,7 +11596,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const eoiId = parseInt(String(req.params.id), 10);
       if (isNaN(eoiId)) return res.status(400).json({ error: "Invalid EOI ID" });
@@ -11590,7 +11648,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const deals = await storage.getMarketDealsForUser(userId);
       res.json(deals);
     } catch (err: any) {
@@ -11606,7 +11664,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       if (!isAdmin) {
         const org = await storage.getOrgForUser(userId);
-        if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+        if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
       }
 
       const dealId = parseInt(String(req.params.id), 10);
@@ -11708,7 +11766,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -11845,7 +11903,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
     try {
       const userId = req.headers["x-user-id"] as string;
       const org = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(org)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, org))) return res.status(403).json({ error: "EdenMarket subscription required" });
 
       const dealId = parseInt(String(req.params.id), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -11982,7 +12040,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const userId = req.headers["x-user-id"] as string;
       // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
       const docReadOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(docReadOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, docReadOrg))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
@@ -12055,7 +12113,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const userId = req.headers["x-user-id"] as string;
       // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
       const trackOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(trackOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, trackOrg))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.dealId), 10);
       const docId = parseInt(String(req.params.docId), 10);
       if (isNaN(dealId) || isNaN(docId)) return res.status(400).json({ error: "Invalid id" });
@@ -12085,7 +12143,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       // allowed during the 30-day grace period so paid users can complete
       // existing diligence. Only revoke once grace has fully expired.
       const docOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(docOrg)) {
+      if (!(await userHasMarketRead(userId, docOrg))) {
         return res.status(403).json({ error: "EdenMarket subscription required" });
       }
       const dealId = parseInt(String(req.params.id), 10);
@@ -12171,7 +12229,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const userId = req.headers["x-user-id"] as string;
       // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
       const delDocOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(delDocOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, delDocOrg))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.dealId), 10);
       const docId = parseInt(String(req.params.docId), 10);
       const deal = await storage.getMarketDeal(dealId);
@@ -12212,7 +12270,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       const userId = req.headers["x-user-id"] as string;
       // Task #714 — lenient gate: allowed during 30d grace, blocked once expired.
       const msgReadOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(msgReadOrg)) return res.status(403).json({ error: "EdenMarket subscription required" });
+      if (!(await userHasMarketRead(userId, msgReadOrg))) return res.status(403).json({ error: "EdenMarket subscription required" });
       const dealId = parseInt(String(req.params.id), 10);
       if (isNaN(dealId)) return res.status(400).json({ error: "Invalid deal ID" });
       const deal = await storage.getMarketDeal(dealId);
@@ -12234,7 +12292,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
       // explicitly allowed during the 30-day grace period (per acceptance
       // criteria). Only revoke once grace has fully expired.
       const msgOrg = await storage.getOrgForUser(userId);
-      if (!hasMarketRead(msgOrg)) {
+      if (!(await userHasMarketRead(userId, msgOrg))) {
         return res.status(403).json({ error: "EdenMarket subscription required" });
       }
       const dealId = parseInt(String(req.params.id), 10);

@@ -35,7 +35,7 @@ type View = "auth" | "forgot" | "forgot-sent" | "set-password" | "pick-role";
 export default function Login() {
   const {
     signIn, signUp, signInWithGoogle, sendPasswordReset, updatePassword, updateRole,
-    session, role, loading: authLoading,
+    session, user, role, loading: authLoading,
     isPasswordRecovery, clearPasswordRecovery,
   } = useAuth();
   const { theme } = useTheme();
@@ -98,20 +98,29 @@ export default function Login() {
     }
   }, [isPasswordRecovery, view]);
 
-  useEffect(() => {
-    if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
-      const dest = (view === "auth" && _redirectParam)
-        ? _redirectParam
-        : (
-          role === "industry" ? "/industry/dashboard" :
-          role === "researcher" ? "/research" :
-          "/discovery"
-        );
-      navigate(dest, { replace: true });
-    }
-  }, [authLoading, session, role, isPasswordRecovery, navigate, view]);
+  // Task #752 — market-only users (per-user entitlement, no portal role)
+  // should land on /market instead of being treated as "no role" errors.
+  const _marketEnt = (user?.user_metadata as Record<string, unknown> | undefined)?.marketEntitlement as { active?: boolean } | undefined;
+  const _marketOnly = !role && _marketEnt?.active === true;
 
-  if (!authLoading && session && role && !isPasswordRecovery && (view === "auth" || view === "pick-role")) return null;
+  useEffect(() => {
+    if (!authLoading && session && !isPasswordRecovery && (view === "auth" || view === "pick-role")) {
+      if (role) {
+        const dest = (view === "auth" && _redirectParam)
+          ? _redirectParam
+          : (
+            role === "industry" ? "/industry/dashboard" :
+            role === "researcher" ? "/research" :
+            "/discovery"
+          );
+        navigate(dest, { replace: true });
+      } else if (_marketOnly) {
+        navigate(_redirectParam || "/market", { replace: true });
+      }
+    }
+  }, [authLoading, session, role, _marketOnly, isPasswordRecovery, navigate, view]);
+
+  if (!authLoading && session && (role || _marketOnly) && !isPasswordRecovery && (view === "auth" || view === "pick-role")) return null;
 
   function redirectByRole(r: "industry" | "researcher" | "concept") {
     navigate(
@@ -139,8 +148,34 @@ export default function Login() {
       if (err) { setError(err); setLoading(false); return; }
       const { data } = await supabase.auth.getUser();
       const r = data.user?.user_metadata?.role;
-      if (r === "industry" || r === "researcher" || r === "concept") redirectAfterSignIn(r);
-      else { setError("Account has no role assigned"); setLoading(false); }
+      if (r === "industry" || r === "researcher" || r === "concept") {
+        redirectAfterSignIn(r);
+      } else {
+        // Task #752 — market-only users have no PortalRole. If they
+        // either have an active per-user Market entitlement OR an
+        // org-level grant, treat sign-in as a success and route them
+        // to /market instead of showing "Account has no role assigned".
+        try {
+          const { data: sess } = await supabase.auth.getSession();
+          const token = sess.session?.access_token;
+          if (token) {
+            const accessRes = await fetch("/api/market/access", {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (accessRes.ok) {
+              const access = (await accessRes.json()) as { access?: boolean };
+              if (access.access) {
+                navigate("/market", { replace: true });
+                return;
+              }
+            }
+          }
+        } catch {
+          // fall through to error state
+        }
+        setError("Account has no role assigned");
+        setLoading(false);
+      }
     } else {
       const { error: err } = await signUp(email, password, selectedRole);
       if (err) { setError(err); setLoading(false); return; }

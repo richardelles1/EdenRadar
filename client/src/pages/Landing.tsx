@@ -627,7 +627,7 @@ export default function Landing() {
                   </div>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 pt-3">
-                  <Link href="/market/preview">
+                  <Link href="/market">
                     <Button
                       className="h-10 px-5 font-semibold gap-2 w-full sm:w-auto"
                       style={{ background: "hsl(234 80% 58%)", color: "white", border: "none" }}
@@ -650,6 +650,12 @@ export default function Landing() {
                     </Button>
                   </Link>
                 </div>
+                <p className="text-[11px] text-muted-foreground pt-1">
+                  Already a buyer?{" "}
+                  <Link href="/market/login" className="font-medium hover:underline" style={{ color: "hsl(234 80% 58%)" }} data-testid="link-landing-market-signin">
+                    Sign in to EdenMarket
+                  </Link>
+                </p>
               </div>
 
               <div className="rounded-2xl p-6 sm:p-8 space-y-4" style={{ background: "linear-gradient(135deg, hsl(234 80% 58% / 0.08), hsl(234 80% 58% / 0.02))", border: "1px solid hsl(234 80% 58% / 0.20)" }}>
@@ -717,7 +723,7 @@ export default function Landing() {
                   </Link>
                 </li>
                 <li>
-                  <Link href="/market/preview" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenmarket">
+                  <Link href="/market" className="text-xs text-foreground hover:text-primary transition-colors" data-testid="footer-link-edenmarket">
                     EdenMarket
                   </Link>
                 </li>

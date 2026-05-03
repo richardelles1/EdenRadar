@@ -164,6 +164,14 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
     refetchInterval: 5 * 60 * 1000,
   });
 
+  // Task #752 — show a "Get access" upsell pill on the EdenMarket nav
+  // entry whenever the current user/org has no Market access yet.
+  const { data: marketAccess } = useQuery<{ access: boolean }>({
+    queryKey: ["/api/market/access"],
+    staleTime: 5 * 60 * 1000,
+  });
+  const showMarketUpsell = marketAccess && !marketAccess.access;
+
   const totalAlerts = unreadData?.count ?? 0;
 
   function navigate(href: string) {
@@ -216,19 +224,32 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           <div key={groupLabel}>
             <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
             <div className="space-y-0.5">
-              {items.map((item) => (
-                <SidebarNavButton
-                  key={item.href}
-                  label={item.label}
-                  icon={item.icon}
-                  isActive={isItemActive(item)}
-                  onClick={() => navigate(item.href)}
-                  accent={ACCENT}
-                  testId={`industry-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
-                  badgeCount={item.alertsBadge ? totalAlerts : undefined}
-                  showDot={item.alertsBadge && totalAlerts > 0}
-                />
-              ))}
+              {items.map((item) => {
+                const isMarket = item.href === "/market";
+                return (
+                  <div key={item.href} className={isMarket ? "relative" : undefined}>
+                    <SidebarNavButton
+                      label={item.label}
+                      icon={item.icon}
+                      isActive={isItemActive(item)}
+                      onClick={() => navigate(item.href)}
+                      accent={isMarket ? "hsl(234 80% 58%)" : ACCENT}
+                      testId={`industry-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                      badgeCount={item.alertsBadge ? totalAlerts : undefined}
+                      showDot={item.alertsBadge && totalAlerts > 0}
+                    />
+                    {isMarket && showMarketUpsell && (
+                      <span
+                        className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full"
+                        style={{ background: "hsl(234 80% 58% / 0.18)", color: "hsl(234 80% 58%)" }}
+                        data-testid="badge-market-upsell"
+                      >
+                        Get access
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         ))}

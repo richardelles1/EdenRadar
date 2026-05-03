@@ -4700,6 +4700,7 @@ interface AdminUser {
   contactEmail: string | null;
   role: PortalRole | null;
   subscribedToDigest: boolean;
+  marketEntitlement?: { active: boolean; source: "admin" | "stripe" | null; grantedAt: string | null } | null;
   createdAt: string;
   lastSignInAt: string | null;
 }
@@ -4832,6 +4833,44 @@ function AccountCenter({ pw }: { pw: string }) {
     onSuccess: (_data, { subscribedToDigest }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: subscribedToDigest ? "Subscribed to digest" : "Unsubscribed from digest" });
+    },
+    onError: (err: Error, _vars, context) => {
+      if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
+      toast({ title: "Update failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateMarketAccess = useMutation({
+    mutationFn: async ({ userId, active }: { userId: string; active: boolean }) => {
+      const res = await fetch(`/api/admin/users/${userId}/market-access`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(pw ? { Authorization: `Bearer ${pw}` } : {}) },
+        body: JSON.stringify({ active }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        throw new Error(d.error || "Failed to update market access");
+      }
+      return res.json();
+    },
+    onMutate: async ({ userId, active }) => {
+      await queryClient.cancelQueries({ queryKey: ["/api/admin/users"] });
+      const prev = queryClient.getQueryData<{ users: AdminUser[] }>(["/api/admin/users"]);
+      queryClient.setQueryData<{ users: AdminUser[] }>(["/api/admin/users"], (old) => {
+        if (!old) return old;
+        return {
+          users: old.users.map((u) =>
+            u.id === userId
+              ? { ...u, marketEntitlement: { active, source: "admin", grantedAt: new Date().toISOString() } }
+              : u,
+          ),
+        };
+      });
+      return { prev };
+    },
+    onSuccess: (_d, { active }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: active ? "Market access granted" : "Market access revoked" });
     },
     onError: (err: Error, _vars, context) => {
       if (context?.prev) queryClient.setQueryData(["/api/admin/users"], context.prev);
@@ -5031,6 +5070,7 @@ function AccountCenter({ pw }: { pw: string }) {
                 <th className="text-left py-3 px-4 font-semibold text-foreground">Contact Email</th>
                 <th className="text-left py-3 px-4 font-semibold text-foreground min-w-[160px]">Portal</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Digest</th>
+                <th className="text-center py-3 px-4 font-semibold text-foreground">Market</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Joined</th>
                 <th className="text-center py-3 px-4 font-semibold text-foreground">Last Seen</th>
                 <th className="w-10 py-3 px-4"></th>
@@ -5147,6 +5187,40 @@ function AccountCenter({ pw }: { pw: string }) {
                         title={user.subscribedToDigest ? "Unsubscribe from digest" : "Subscribe to digest"}
                         data-testid={`toggle-digest-${user.id}`}
                       />
+                    </td>
+                    <td className="text-center py-2.5 px-4">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <input
+                          type="checkbox"
+                          checked={user.marketEntitlement?.active === true}
+                          onChange={(e) => {
+                            // Task #752 — confirm before revoking a Stripe-paying
+                            // user's access to avoid accidental clobber while a
+                            // subscription is still active.
+                            const isRevoke = !e.target.checked;
+                            const isStripeSourced = user.marketEntitlement?.source === "stripe";
+                            if (isRevoke && isStripeSourced) {
+                              const ok = window.confirm(
+                                `${user.email ?? "This user"} currently has EdenMarket access via an active Stripe subscription. Revoking here will record an admin override that blocks them immediately, even though Stripe may still be billing. Continue?`,
+                              );
+                              if (!ok) {
+                                e.target.checked = true;
+                                return;
+                              }
+                            }
+                            updateMarketAccess.mutate({ userId: user.id, active: e.target.checked });
+                          }}
+                          className="w-4 h-4 cursor-pointer"
+                          style={{ accentColor: "hsl(234 80% 58%)" }}
+                          title={user.marketEntitlement?.active ? "Revoke EdenMarket access" : "Grant EdenMarket access"}
+                          data-testid={`toggle-market-${user.id}`}
+                        />
+                        {user.marketEntitlement?.active && user.marketEntitlement.source && (
+                          <span className="text-[9px] uppercase tracking-wide text-muted-foreground" data-testid={`text-market-source-${user.id}`}>
+                            {user.marketEntitlement.source}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="text-center py-2.5 px-4 text-xs text-muted-foreground">
                       {formatDate(user.createdAt)}

@@ -111,9 +111,12 @@ function NotificationBell() {
 
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
   const [location, setLocation] = useLocation();
   const { isAdmin } = useIsAdmin();
+  // Task #752 — Scout cross-portal jump is only meaningful for industry
+  // (Scout-eligible) users. Market-only users see no Scout link.
+  const showScoutLink = role === "industry";
 
   function navigate(href: string) {
     setLocation(href);
@@ -176,21 +179,24 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
           </div>
         ))}
 
-        {/* Cross-portal jump back to EdenScout — uses Scout accent */}
-        <div>
-          <SidebarGroupHeader>EdenScout</SidebarGroupHeader>
-          <div className="space-y-0.5">
-            <SidebarNavButton
-              label="Scout"
-              icon={Radar}
-              isActive={false}
-              onClick={() => navigate("/industry/dashboard")}
-              accent={SCOUT_ACCENT}
-              tintInactive
-              testId="market-sidebar-link-scout"
-            />
+        {/* Cross-portal jump back to EdenScout — uses Scout accent.
+            Hidden for market-only (non-industry) users. */}
+        {showScoutLink && (
+          <div>
+            <SidebarGroupHeader>EdenScout</SidebarGroupHeader>
+            <div className="space-y-0.5">
+              <SidebarNavButton
+                label="Scout"
+                icon={Radar}
+                isActive={false}
+                onClick={() => navigate("/industry/dashboard")}
+                accent={SCOUT_ACCENT}
+                tintInactive
+                testId="market-sidebar-link-scout"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {isAdmin && (
           <div>

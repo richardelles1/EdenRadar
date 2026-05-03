@@ -74,6 +74,8 @@ import { SiteGate } from "@/components/SiteGate";
 import { ImpersonationBanner } from "@/components/ImpersonationBanner";
 import { ScoutGate } from "@/components/ScoutGate";
 import Login from "@/pages/Login";
+import MarketLogin from "@/pages/MarketLogin";
+import MarketSignup from "@/pages/MarketSignup";
 import Unsubscribe from "@/pages/Unsubscribe";
 import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
@@ -124,6 +126,8 @@ function Router() {
     <Switch>
       <Route path="/" component={Landing} />
       <Route path="/login" component={Login} />
+      <Route path="/market/login" component={MarketLogin} />
+      <Route path="/market/signup" component={MarketSignup} />
 
       <Route path="/register">
         {() => <Redirect to={`/login${window.location.search}`} />}
