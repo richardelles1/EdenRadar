@@ -43,7 +43,36 @@ import {
 import { db } from "./db";
 import { eq, desc, sql, gte, gt, lte, and, inArray, lt, isNull, isNotNull, or, ilike, type SQL } from "drizzle-orm";
 import { computeCompletenessScore } from "./lib/pipeline/contentHash";
+import { expandQuery, type QueryExpansion, type ExpandedGroup } from "./lib/biotechSynonyms";
 import { alias } from "drizzle-orm/pg-core";
+
+/**
+ * Build a Postgres tsquery SQL fragment from an expanded query (#761).
+ *
+ * For each group: `(phraseto_tsquery('english', $alt1) || phraseto_tsquery('english', $alt2) || ...)`
+ * Groups joined with `&&`. Negated groups prefixed with `!!`.
+ *
+ * Returns `null` when the expansion is empty so callers know to skip the
+ * FTS clause entirely instead of emitting a no-op tsquery.
+ */
+function buildTsqueryExpr(groups: ExpandedGroup[]): ReturnType<typeof sql> | null {
+  if (groups.length === 0) return null;
+  const parts: ReturnType<typeof sql>[] = [];
+  for (const g of groups) {
+    if (g.members.length === 0) continue;
+    let groupExpr = sql`phraseto_tsquery('english', ${g.members[0]})`;
+    for (let i = 1; i < g.members.length; i++) {
+      groupExpr = sql`(${groupExpr} || phraseto_tsquery('english', ${g.members[i]}))`;
+    }
+    parts.push(g.negated ? sql`(!!(${groupExpr}))` : sql`(${groupExpr})`);
+  }
+  if (parts.length === 0) return null;
+  // Outer parens are critical — `search_tsv @@ a && b` parses as
+  // `(search_tsv @@ a) && b` (boolean && tsquery → type error). Wrap the
+  // whole expression so `@@` always sees one tsquery operand.
+  const combined = parts.reduce((acc, p, i) => i === 0 ? p : sql`(${acc}) && ${p}`);
+  return sql`(${combined})`;
+}
 
 export type RetrievedAsset = {
   id: number;
@@ -2525,28 +2554,34 @@ export class DatabaseStorage implements IStorage {
   ): Promise<RetrievedAsset[]> {
     const { modality, stage, indication, institution, modalities, stages, institutions, since, before } = opts;
 
-    // Tier 1 of search smartness work (task #760).
+    // Scout keyword search — Tier 1 (#760) FTS + Tier 2 (#761) synonym expansion.
     //
     // Strategy:
-    //   1. Postgres FTS via `websearch_to_tsquery('english', $q)` against a
-    //      pre-built generated `search_tsv` column with field weighting:
-    //        A = asset_name (highest)
-    //        B = target / indication / mechanism_of_action
-    //        C = summary / innovation_claim / unmet_need / comparable_drugs / abstract
-    //        D = institution / categories
-    //      Stemming, phrase quoting, AND/OR/-negation, and stopwords come for free.
-    //   2. Trigram fuzzy match on `LOWER(asset_name)` via the `%` operator
+    //   1. Postgres FTS against a pre-built generated `search_tsv` column.
+    //      Field weights: A=asset_name, B=target/indication/MoA,
+    //      C=summary/innovation/unmet_need/comparable_drugs/abstract,
+    //      D=institution/categories. Stemming + standard English stopwords
+    //      come from the dictionary.
+    //   2. Synonym expansion (Task #761): the user query is parsed via
+    //      expandQuery() which strips corpus-noise words, expands each token
+    //      into its bidirectional synonym group, and preserves quoted
+    //      phrases / `-negations`. We build the tsquery on the SQL side
+    //      using `phraseto_tsquery('english', $alt)` per alternative and
+    //      combine with `||` (OR within group) and `&&` (AND across groups),
+    //      with `!!` for negations. This avoids any tsquery-syntax escaping
+    //      of awkward terms like `PD-1` or `CAR-T`.
+    //   3. ts_rank_cd uses tuned weights {D:0.05, C:0.15, B:0.30, A:1.0} so
+    //      asset_name hits dominate summary/institution hits per #761 step 4.
+    //   4. Trigram fuzzy match on `LOWER(asset_name)` via the `<%` operator
     //      (pg_trgm) so 1–2 character typos still surface the asset, ranked
     //      strictly below true FTS hits via `word_similarity` in the ORDER BY.
-    //   3. Exact-name clause carried over from #759 — full normalized query
+    //   5. Exact-name clause carried over from #759 — full normalized query
     //      contained in normalized `asset_name`. Always pinned to the top so
     //      a real exact-text hit is never demoted by FTS rank or LIMIT slicing.
     //
     // Indexes (created at startup in server/index.ts ensureScoutSearchIndexes):
     //   - GIN on search_tsv  → FTS uses index, no sequential scan
     //   - GIN on LOWER(asset_name) gin_trgm_ops → trigram uses index too
-    //
-    // Synonym/alias expansion is NOT in this tier — that's task #761.
 
     const trimmedQuery = (query ?? "").trim();
 
@@ -2581,6 +2616,17 @@ export class DatabaseStorage implements IStorage {
     // structured filters rather than emitting SQL that would 500 the route.
     const tsvAvailable = globalThis.__searchTsvAvailable === true;
 
+    // Expand the query through the biotech synonym table (#761). Returns
+    // ordered "groups" of alternative phrases plus any corpus-noise
+    // stopwords that were stripped. Empty / pure-stopword input yields no
+    // groups → FTS clause is skipped.
+    const expansion: QueryExpansion = expandQuery(trimmedQuery);
+    const tsqueryExpr = buildTsqueryExpr(expansion.groups);
+    // Tuned ts_rank_cd weights (D, C, B, A) — push asset_name (A) above
+    // target/MoA (B) above summary (C) above institution/categories (D).
+    // Default is {0.1, 0.2, 0.4, 1.0}.
+    const RANK_WEIGHTS = sql`'{0.05,0.15,0.30,1.0}'::float4[]`;
+
     const hasFilters = !!(modality || stage || indication || institution || since || before
       || (modalities && modalities.length) || (stages && stages.length) || (institutions && institutions.length));
     // Filter-only browsing path (Alerts "Explore matches" link, etc.) is
@@ -2601,8 +2647,8 @@ export class DatabaseStorage implements IStorage {
     const exactMatchExpr = normalizedQuery
       ? sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`
       : sql`FALSE`;
-    const tsRankExpr = trimmedQuery && tsvAvailable
-      ? sql`ts_rank_cd(search_tsv, websearch_to_tsquery('english', ${trimmedQuery}))`
+    const tsRankExpr = trimmedQuery && tsvAvailable && tsqueryExpr
+      ? sql`ts_rank_cd(${RANK_WEIGHTS}, search_tsv, ${tsqueryExpr})`
       : sql`0::real`;
     // word_similarity(needle, haystack) — best-matching contiguous word in
     // haystack. Used only as a tiebreaker for trigram-only hits (FTS hits
@@ -2638,12 +2684,14 @@ export class DatabaseStorage implements IStorage {
       const conditions = [...baseFilters];
       if (trimmedQuery) {
         const orClauses: ReturnType<typeof sql>[] = [];
-        // FTS — stemming, "phrases", AND/OR, -negation. websearch parser
-        // never errors on user input; only-stopwords queries produce an empty
-        // tsquery whose @@ test is simply false. Suppressed entirely when
-        // search_tsv didn't get created at startup.
-        if (tsvAvailable) {
-          orClauses.push(sql`search_tsv @@ websearch_to_tsquery('english', ${trimmedQuery})`);
+        // FTS — stemming + phrase semantics come from phraseto_tsquery on
+        // each expanded alternative; OR within a synonym group, AND across
+        // groups, !! for negations (#761). Suppressed when search_tsv is
+        // unavailable or when the expanded query has no positive groups
+        // (pure stopword input or only -negations, which would otherwise
+        // match every row).
+        if (tsvAvailable && tsqueryExpr && expansion.groups.some((g) => !g.negated)) {
+          orClauses.push(sql`search_tsv @@ ${tsqueryExpr}`);
         }
         // Exact-name clause carried over from #759 — never demoted.
         if (normalizedQuery) {

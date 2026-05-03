@@ -643,6 +643,25 @@ export async function registerRoutes(
       };
       results = await storage.keywordSearchIngestedAssets(query, limit, searchOpts);
 
+      // Debug surface (#761 step 5): when an internal flag/header is set,
+      // surface the synonym expansion so we can verify which groups fired.
+      // Off by default so the production payload is unchanged.
+      const debugRequested = req.header("x-eden-search-debug") === "1";
+      let searchDebug: {
+        expanded_terms: { source: string; members: string[]; negated: boolean }[];
+        stripped_stopwords: string[];
+        original_query: string;
+      } | undefined;
+      if (debugRequested && query.trim()) {
+        const { expandQuery } = await import("./lib/biotechSynonyms");
+        const exp = expandQuery(query);
+        searchDebug = {
+          expanded_terms: exp.groups.map((g) => ({ source: g.source, members: g.members, negated: g.negated })),
+          stripped_stopwords: exp.strippedStopwords,
+          original_query: exp.original,
+        };
+      }
+
       // Exact-name guarantee: compute a normalized form of both the query and
       // each result's asset_name so we can pin/boost rows whose name contains
       // the full query string (case + punctuation insensitive). This protects
@@ -800,7 +819,14 @@ export async function registerRoutes(
 
       await storage.createSearchHistory({ query, source: "scout_tto", resultCount: assets.length, userId: scoutUserId ?? null }).catch(() => {});
 
-      return res.json({ assets, query, assetsFound: assets.length, sources: ["tech_transfer"], fallback: false });
+      return res.json({
+        assets,
+        query,
+        assetsFound: assets.length,
+        sources: ["tech_transfer"],
+        fallback: false,
+        ...(searchDebug ? { debug: searchDebug } : {}),
+      });
     } catch (err: any) {
       console.error("[scout/search] Error:", err);
       return res.status(200).json({ assets: [], query: String(req.body?.query ?? ""), assetsFound: 0, sources: ["tech_transfer"], fallback: false, error: err.message ?? "Search failed" });
