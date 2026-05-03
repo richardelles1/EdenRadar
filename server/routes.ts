@@ -8351,6 +8351,7 @@ If multiple assets appear, return each as a separate array item.`;
         await sendEmail(toList, finalSubject, htmlBody, {
           from: FROM_DIGEST,
           replyTo: "support@edenradar.com",
+          unsubscribeMailto: "support@edenradar.com",
         });
       } catch (sendErr: any) {
         console.error("[dispatch/send] Resend error:", sendErr);

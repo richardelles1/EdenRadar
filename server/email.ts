@@ -175,6 +175,10 @@ export interface SendEmailOptions {
   from?: string;
   replyTo?: string;
   unsubscribeUrl?: string; // sets RFC 8058 List-Unsubscribe + List-Unsubscribe-Post headers
+  // Mailto-only List-Unsubscribe header (no one-click POST). Use when the
+  // recipient is a free-form address with no signed userId available — still
+  // satisfies Gmail/Yahoo bulk-sender requirement for a List-Unsubscribe header.
+  unsubscribeMailto?: string;
 }
 
 export async function sendEmail(
@@ -194,6 +198,8 @@ export async function sendEmail(
   if (opts.unsubscribeUrl) {
     headers["List-Unsubscribe"] = `<${opts.unsubscribeUrl}>, <mailto:${SUPPORT_EMAIL}?subject=unsubscribe>`;
     headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  } else if (opts.unsubscribeMailto) {
+    headers["List-Unsubscribe"] = `<mailto:${opts.unsubscribeMailto}?subject=unsubscribe>`;
   }
 
   const payload: Record<string, unknown> = {
