@@ -1,0 +1,172 @@
+/* LinkedIn light-mode ads — shared stylesheet (2026-05).
+   White surface, near-black type, portal color used only as a thin accent:
+   top hairline rule, eyebrow text, one underline highlight, a small accent
+   slab, and the footer URL. Body copy stays near-black for WCAG AA contrast.
+
+   Portal hex values are computed from the HSL tokens in
+   client/src/index.css so the ads visually match the in-product portals:
+     --portal-scout  : hsl(142 52% 36%) -> #2c8c4f
+     --portal-market : hsl(234 80% 58%) -> #3e4fea
+*/
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0b0f14;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+:root {
+  --ink:        #0b0f14;
+  --ink-strong: #050709;
+  --ink-muted: #3a4452;
+  /* Brand accent — used for non-text decoration (hairline, underline,
+     accent slab). Sourced from --portal-* HSL tokens in client/src/index.css. */
+  --accent-scout:       #2c8c4f;
+  --accent-market:      #3e4fea;
+  /* Text-safe variants — guaranteed >=4.5:1 against pure white.
+     Scout #2c8c4f sits at ~4.2:1 on white, so the eyebrow / URL switch
+     to a deeper emerald (#1a6a38, hsl(142 60% 26%), ~6.7:1).
+     Market #3e4fea is already ~5.9:1 on white, used directly. */
+  --accent-scout-text:  #1a6a38;
+  --accent-market-text: #3e4fea;
+}
+
+body.scout  { --accent: var(--accent-scout);  --accent-text: var(--accent-scout-text); }
+body.market { --accent: var(--accent-market); --accent-text: var(--accent-market-text); }
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+/* Top hairline rule (portal accent) */
+.hairline {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 0.6vh;
+  background: var(--accent);
+  z-index: 5;
+}
+
+/* Logo top-left at consistent 5vh size across every ad */
+.logo {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 1.6vh;
+  height: 5vh;
+}
+.logo .mark {
+  height: 5vh;
+  width: 5vh;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.logo .wordmark {
+  display: flex;
+  flex-direction: column;
+  line-height: 1;
+}
+.logo .word {
+  font-weight: 800;
+  font-size: 3vh;
+  letter-spacing: -0.015em;
+  color: var(--ink-strong);
+}
+.logo .product {
+  margin-top: 0.7vh;
+  font-weight: 700;
+  font-size: 1.15vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: var(--ink-muted);
+}
+
+/* Content block — left aligned, mid-frame */
+.content {
+  position: absolute;
+  left: 5vw;
+  right: 5vw;
+  bottom: 11vh;
+  z-index: 4;
+  display: flex;
+  flex-direction: column;
+  gap: 2.2vh;
+}
+
+.eyebrow {
+  font-weight: 700;
+  font-size: 1.55vh;
+  text-transform: uppercase;
+  letter-spacing: 0.34em;
+  color: var(--accent-text);
+}
+
+.headline {
+  font-weight: 900;
+  font-size: 8.4vmin;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  color: var(--ink-strong);
+  max-width: 96%;
+  text-wrap: balance;
+}
+
+/* Single underline highlight on a key word (portal accent) */
+.headline .underline-accent {
+  color: var(--ink-strong);
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 0.18em;
+  text-underline-offset: 0.12em;
+  text-decoration-skip-ink: none;
+}
+
+.subline {
+  font-weight: 400;
+  font-size: 2.85vmin;
+  line-height: 1.45;
+  color: var(--ink);
+  max-width: 78%;
+}
+
+/* Small accent slab — sits just above the URL, far thinner than r5 */
+.accent-slab {
+  position: absolute;
+  left: 5vw;
+  bottom: 7.6vh;
+  width: 7vw;
+  height: 0.7vh;
+  background: var(--accent);
+  z-index: 4;
+}
+
+/* Footer URL */
+.url {
+  position: absolute;
+  bottom: 4vh;
+  left: 5vw;
+  z-index: 6;
+  font-weight: 700;
+  font-size: 1.9vh;
+  letter-spacing: 0.06em;
+  color: var(--accent-text);
+}
+
+@media (orientation: portrait) {
+  .headline { font-size: 9.5vmin; }
+  .subline  { font-size: 3.1vmin; }
+  .content  { bottom: 13vh; }
+  .accent-slab { bottom: 9.5vh; }
+}
