@@ -1,4 +1,4 @@
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -17,22 +17,63 @@ import {
   BadgeDollarSign,
   ShoppingBag,
 } from "lucide-react";
+import { motion } from "framer-motion";
 import { useTheme } from "@/hooks/use-theme";
 import { useAuth } from "@/hooks/use-auth";
 import { useState } from "react";
 import { getResearcherProfile } from "@/hooks/use-researcher";
+import {
+  AceternitySidebar,
+  AceternitySidebarBody,
+  useSidebar,
+} from "@/components/ui/aceternity-sidebar";
+import {
+  AnimatedLabel,
+  SidebarGroupHeader,
+  SidebarNavButton,
+  SidebarBottomButton,
+  PORTAL_ACCENT,
+  accentMix,
+} from "@/components/sidebar-primitives";
 
-const NAV_ITEMS = [
-  { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
-  { href: "/research/data-sources", label: "Database Search", icon: Search },
-  { href: "/research/projects", label: "Projects", icon: FolderOpen },
-  { href: "/research/my-discoveries", label: "Discoveries", icon: FlaskConical },
-  { href: "/research/grants", label: "Grants", icon: BadgeDollarSign },
-  { href: "/research/alerts", label: "Alerts", icon: Bell },
-  { href: "/research/library", label: "Saved Literature", icon: Library },
-  { href: "/research/profile", label: "Profile", icon: User },
-  { href: "/market/list", label: "List your assets", icon: ShoppingBag },
+const ACCENT = PORTAL_ACCENT.lab;
+
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  exact?: boolean;
+};
+
+const NAV_GROUPS: { groupLabel: string; items: NavItem[] }[] = [
+  {
+    groupLabel: "Workflow",
+    items: [
+      { href: "/research", label: "Dashboard", icon: LayoutDashboard, exact: true },
+      { href: "/research/data-sources", label: "Database Search", icon: Search },
+      { href: "/research/projects", label: "Projects", icon: FolderOpen },
+    ],
+  },
+  {
+    groupLabel: "Workspace",
+    items: [
+      { href: "/research/my-discoveries", label: "Discoveries", icon: FlaskConical },
+      { href: "/research/grants", label: "Grants", icon: BadgeDollarSign },
+      { href: "/research/library", label: "Saved Literature", icon: Library },
+      { href: "/research/alerts", label: "Alerts", icon: Bell },
+    ],
+  },
+  {
+    groupLabel: "EdenMarket",
+    items: [
+      { href: "/market/list", label: "List your assets", icon: ShoppingBag },
+    ],
+  },
 ];
+
+function isItemActive(loc: string, item: NavItem): boolean {
+  return item.exact ? loc === item.href : loc === item.href || loc.startsWith(item.href + "/");
+}
 
 function getInitials(name: string): string {
   if (!name.trim()) return "";
@@ -41,123 +82,137 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function SidebarContent({ onClose }: { onClose?: () => void }) {
+function ResearcherIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
+  const { open, animate } = useSidebar();
+  const profile = getResearcherProfile();
+  if (!profile.name && !profile.photoUrl) return null;
+  const initials = getInitials(profile.name || "");
+
+  return (
+    <button
+      onClick={() => navigate("/research/profile")}
+      className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-accent/60 cursor-pointer transition-colors w-full text-left"
+      style={{ background: accentMix(ACCENT, 6) }}
+      data-testid="sidebar-avatar-link"
+    >
+      <div
+        className="w-8 h-8 rounded-md flex items-center justify-center overflow-hidden shrink-0 border"
+        style={{ borderColor: accentMix(ACCENT, 40) }}
+      >
+        {profile.photoUrl ? (
+          <img src={profile.photoUrl} alt="" className="w-full h-full object-cover rounded-md" />
+        ) : (
+          <span className="text-[11px] font-bold" style={{ color: ACCENT }}>
+            {initials}
+          </span>
+        )}
+      </div>
+      <motion.div
+        animate={{
+          opacity: animate ? (open ? 1 : 0) : 1,
+          width: animate ? (open ? "auto" : 0) : "auto",
+        }}
+        transition={{ duration: 0.15, ease: "easeOut" }}
+        className="whitespace-pre overflow-hidden flex flex-col min-w-0"
+      >
+        <span className="text-xs font-semibold truncate leading-tight" style={{ color: ACCENT }}>
+          {profile.name || "Researcher"}
+        </span>
+        <span className="text-[10px] text-muted-foreground leading-tight">EdenLab</span>
+      </motion.div>
+    </button>
+  );
+}
+
+function SidebarNavContent({ onClose }: { onClose?: () => void }) {
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
-  const [location] = useLocation();
-  const profile = getResearcherProfile();
+  const [location, setLocation] = useLocation();
+
+  function navigate(href: string) {
+    setLocation(href);
+    onClose?.();
+  }
 
   async function handleSignOut() {
     await signOut();
     window.location.href = "/login";
   }
 
+  const profileActive = location === "/research/profile";
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="h-14 flex items-center px-4 border-b border-border shrink-0">
-        <Link href="/research">
-          <div
-            className="flex items-center gap-2.5 cursor-pointer select-none"
-            data-testid="research-sidebar-logo"
-            onClick={onClose}
-          >
-            <div className="relative w-7 h-7 rounded-md bg-violet-600 flex items-center justify-center">
-              <Microscope className="w-4 h-4 text-white" />
-            </div>
+    <div className="flex flex-col h-full overflow-hidden">
+      {/* Logo header */}
+      <div className="h-12 flex items-center px-3.5 border-b border-border shrink-0">
+        <button
+          className="flex items-center gap-2.5 cursor-pointer select-none flex-1 min-w-0"
+          onClick={() => navigate("/research")}
+          data-testid="research-sidebar-logo"
+        >
+          <div className="relative w-7 h-7 rounded-md bg-violet-600 flex items-center justify-center shrink-0">
+            <Microscope className="w-4 h-4 text-white" />
+          </div>
+          <AnimatedLabel>
             <span className="font-bold text-foreground text-base tracking-tight">
               Eden<span className="text-violet-500">Lab</span>
             </span>
-          </div>
-        </Link>
+          </AnimatedLabel>
+        </button>
         {onClose && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="ml-auto w-7 h-7"
-            onClick={onClose}
-          >
+          <Button variant="ghost" size="icon" className="w-7 h-7 shrink-0 ml-1" onClick={onClose}>
             <X className="w-4 h-4" />
           </Button>
         )}
       </div>
 
-      <div className="px-3 pt-3 pb-1 shrink-0">
-        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3">
-          Researcher Portal
-        </p>
-      </div>
-
-      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {NAV_ITEMS.map(({ href, label, icon: Icon, exact }) => {
-          const isActive = exact
-            ? location === href
-            : location === href || location.startsWith(href + "/");
-          return (
-            <Link key={href} href={href}>
-              <div
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium cursor-pointer transition-all duration-150 ${
-                  isActive
-                    ? "bg-violet-500/10 text-violet-600 dark:text-violet-400"
-                    : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                }`}
-                data-testid={`research-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
-                onClick={onClose}
-              >
-                <Icon className="w-4 h-4 shrink-0" />
-                <span>{label}</span>
-              </div>
-            </Link>
-          );
-        })}
+      {/* Nav groups */}
+      <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
+        {NAV_GROUPS.map(({ groupLabel, items }) => (
+          <div key={groupLabel}>
+            <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
+            <div className="space-y-0.5">
+              {items.map((item) => (
+                <SidebarNavButton
+                  key={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                  isActive={isItemActive(location, item)}
+                  onClick={() => navigate(item.href)}
+                  accent={ACCENT}
+                  testId={`research-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                />
+              ))}
+            </div>
+          </div>
+        ))}
       </nav>
 
-      <div className="px-3 pb-4 pt-2 border-t border-border space-y-0.5 shrink-0">
-        {(profile.name || profile.photoUrl) && (
-          <Link href="/research/profile">
-            <div
-              className="flex items-center gap-2.5 px-3 py-2 mb-1 rounded-md hover:bg-accent/60 cursor-pointer transition-colors"
-              data-testid="sidebar-avatar-link"
-              onClick={onClose}
-            >
-              <div className="w-7 h-7 rounded-full bg-violet-600/20 border border-violet-500/30 flex items-center justify-center overflow-hidden shrink-0">
-                {profile.photoUrl ? (
-                  <img src={profile.photoUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-[10px] font-bold text-violet-600 dark:text-violet-400">
-                    {getInitials(profile.name)}
-                  </span>
-                )}
-              </div>
-              <span className="text-xs font-medium text-foreground truncate">{profile.name}</span>
-            </div>
-          </Link>
-        )}
+      {/* Bottom: identity + account + controls */}
+      <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0 overflow-x-hidden">
+        <ResearcherIdentityBlock navigate={navigate} />
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-3 px-3 h-9 text-sm font-medium text-muted-foreground hover:text-foreground"
+        <SidebarBottomButton
+          label="Profile"
+          icon={User}
+          onClick={() => navigate("/research/profile")}
+          isActive={profileActive}
+          accent={ACCENT}
+          testId="research-sidebar-link-profile"
+        />
+        <SidebarBottomButton
+          label={theme === "dark" ? "Light mode" : "Dark mode"}
+          icon={theme === "dark" ? Sun : Moon}
           onClick={toggleTheme}
-          data-testid="research-sidebar-toggle-theme"
-        >
-          {theme === "dark" ? (
-            <Sun className="w-4 h-4 shrink-0" />
-          ) : (
-            <Moon className="w-4 h-4 shrink-0" />
-          )}
-          {theme === "dark" ? "Light mode" : "Dark mode"}
-        </Button>
-
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start gap-3 px-3 h-9 text-sm font-medium text-muted-foreground hover:text-foreground hover:text-red-500 dark:hover:text-red-400"
+          testId="research-sidebar-toggle-theme"
+        />
+        <SidebarBottomButton
+          label="Sign Out"
+          icon={LogOut}
           onClick={handleSignOut}
-          data-testid="research-sidebar-sign-out"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          Sign Out
-        </Button>
+          danger
+          testId="research-sidebar-sign-out"
+        />
       </div>
     </div>
   );
@@ -183,15 +238,20 @@ export function ResearchSidebar() {
           onClick={() => setMobileOpen(false)}
         />
       )}
+
       {mobileOpen && (
         <div className="fixed top-0 left-0 z-50 w-64 h-full bg-background border-r border-border shadow-xl md:hidden">
-          <SidebarContent onClose={() => setMobileOpen(false)} />
+          <AceternitySidebar animate={false}>
+            <SidebarNavContent onClose={() => setMobileOpen(false)} />
+          </AceternitySidebar>
         </div>
       )}
 
-      <aside className="hidden md:flex flex-col w-[220px] shrink-0 border-r border-border bg-background h-screen sticky top-0">
-        <SidebarContent />
-      </aside>
+      <AceternitySidebar animate={true}>
+        <AceternitySidebarBody>
+          <SidebarNavContent />
+        </AceternitySidebarBody>
+      </AceternitySidebar>
     </>
   );
 }

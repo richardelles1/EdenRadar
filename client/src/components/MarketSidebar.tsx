@@ -15,7 +15,16 @@ import {
   Moon, Sun, LogOut, Menu, X, Settings, Shield, Lock, Bell, Radar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import {
+  AnimatedLabel,
+  SidebarGroupHeader,
+  SidebarNavButton,
+  SidebarBottomButton,
+  PORTAL_ACCENT,
+} from "@/components/sidebar-primitives";
+
+const ACCENT = PORTAL_ACCENT.market;
+const SCOUT_ACCENT = PORTAL_ACCENT.scout;
 
 type NavItem = {
   href: string;
@@ -24,7 +33,7 @@ type NavItem = {
   exact?: boolean;
 };
 
-const NAV_GROUPS = [
+const NAV_GROUPS: { groupLabel: string; items: NavItem[] }[] = [
   {
     groupLabel: "Market",
     items: [
@@ -42,61 +51,8 @@ const NAV_GROUPS = [
   },
 ];
 
-const ACCENT = "hsl(234 80% 58%)";
-const ACCENT_MIX = "color-mix(in srgb, hsl(234 80% 58%) 12%, transparent)";
-const SCOUT_ACCENT = "var(--org-accent, hsl(142 52% 36%))";
-const SCOUT_ACCENT_MIX = "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 10%, transparent)";
-
-function AnimatedLabel({ children }: { children: React.ReactNode }) {
-  const { open, animate } = useSidebar();
-  return (
-    <motion.span
-      animate={{
-        opacity: animate ? (open ? 1 : 0) : 1,
-        width: animate ? (open ? "auto" : 0) : "auto",
-      }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className="whitespace-pre overflow-hidden block"
-    >
-      {children}
-    </motion.span>
-  );
-}
-
-function NavButton({ href, label, icon: Icon, exact, location, navigate, accent }: NavItem & { location: string; navigate: (h: string) => void; accent?: "market" | "scout" }) {
-  const { open, animate } = useSidebar();
-  const isActive = exact ? location === href : location.startsWith(href);
-  const useScoutAccent = accent === "scout";
-  const accentColor = useScoutAccent ? SCOUT_ACCENT : ACCENT;
-  const accentMix = useScoutAccent ? SCOUT_ACCENT_MIX : ACCENT_MIX;
-
-  return (
-    <button
-      onClick={() => navigate(href)}
-      className={cn(
-        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-        "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        isActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-      )}
-      style={
-        useScoutAccent && !isActive
-          ? { color: accentColor }
-          : isActive
-            ? { backgroundColor: accentMix, color: accentColor }
-            : {}
-      }
-      data-testid={`market-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
-    >
-      <Icon className="w-4 h-4 shrink-0" />
-      <motion.span
-        animate={{ opacity: animate ? (open ? 1 : 0) : 1, width: animate ? (open ? "auto" : 0) : "auto" }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
-        className="whitespace-pre overflow-hidden"
-      >
-        {label}
-      </motion.span>
-    </button>
-  );
+function isActive(loc: string, item: NavItem): boolean {
+  return item.exact ? loc === item.href : loc.startsWith(item.href);
 }
 
 function NotificationBell() {
@@ -154,7 +110,6 @@ function NotificationBell() {
 }
 
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
-  const { open, animate } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
@@ -169,6 +124,8 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
     await signOut();
     window.location.href = "/login";
   }
+
+  const settingsActive = location === "/industry/settings";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -202,58 +159,49 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
         {NAV_GROUPS.map(({ groupLabel, items }) => (
           <div key={groupLabel}>
-            <motion.p
-              animate={{ opacity: animate ? (open ? 1 : 0) : 1, height: animate ? (open ? "auto" : 0) : "auto" }}
-              transition={{ duration: 0.12, ease: "easeOut" }}
-              className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
-            >
-              {groupLabel}
-            </motion.p>
+            <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
             <div className="space-y-0.5">
               {items.map(item => (
-                <NavButton key={item.href} {...item} location={location} navigate={navigate} />
+                <SidebarNavButton
+                  key={item.href}
+                  label={item.label}
+                  icon={item.icon}
+                  isActive={isActive(location, item)}
+                  onClick={() => navigate(item.href)}
+                  accent={ACCENT}
+                  testId={`market-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                />
               ))}
             </div>
           </div>
         ))}
-        {/* Cross-app jump back to EdenScout — mirrors the EdenMarket
-            entry's position at the bottom of the Scout sidebar. */}
+
+        {/* Cross-portal jump back to EdenScout — uses Scout accent */}
         <div>
-          <motion.p
-            animate={{ opacity: animate ? (open ? 1 : 0) : 1, height: animate ? (open ? "auto" : 0) : "auto" }}
-            transition={{ duration: 0.12, ease: "easeOut" }}
-            className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
-          >
-            EdenScout
-          </motion.p>
+          <SidebarGroupHeader>EdenScout</SidebarGroupHeader>
           <div className="space-y-0.5">
-            <NavButton
-              href="/industry/dashboard"
+            <SidebarNavButton
               label="Scout"
               icon={Radar}
-              exact
-              location={location}
-              navigate={navigate}
-              accent="scout"
+              isActive={false}
+              onClick={() => navigate("/industry/dashboard")}
+              accent={SCOUT_ACCENT}
+              testId="market-sidebar-link-scout"
             />
           </div>
         </div>
+
         {isAdmin && (
           <div>
-            <motion.p
-              animate={{ opacity: animate ? (open ? 1 : 0) : 1, height: animate ? (open ? "auto" : 0) : "auto" }}
-              transition={{ duration: 0.12, ease: "easeOut" }}
-              className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
-            >
-              Admin
-            </motion.p>
+            <SidebarGroupHeader>Admin</SidebarGroupHeader>
             <div className="space-y-0.5">
-              <NavButton
-                href="/admin"
+              <SidebarNavButton
                 label="Admin Panel"
                 icon={Shield}
-                location={location}
-                navigate={navigate}
+                isActive={location.startsWith("/admin")}
+                onClick={() => navigate("/admin")}
+                accent={ACCENT}
+                testId="market-sidebar-link-admin-panel"
               />
             </div>
           </div>
@@ -262,33 +210,27 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
 
       {/* Bottom controls */}
       <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0">
-        <button
+        <SidebarBottomButton
+          label="Settings"
+          icon={Settings}
           onClick={() => navigate("/industry/settings")}
-          className={cn(
-            "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors w-full text-left"
-          )}
-          data-testid="market-sidebar-link-settings"
-        >
-          <Settings className="w-4 h-4 shrink-0" />
-          <AnimatedLabel>Settings</AnimatedLabel>
-        </button>
-
-        <button
+          isActive={settingsActive}
+          accent={ACCENT}
+          testId="market-sidebar-link-settings"
+        />
+        <SidebarBottomButton
+          label={theme === "dark" ? "Light mode" : "Dark mode"}
+          icon={theme === "dark" ? Sun : Moon}
           onClick={toggleTheme}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors w-full text-left"
-        >
-          {theme === "dark" ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
-          <AnimatedLabel>{theme === "dark" ? "Light mode" : "Dark mode"}</AnimatedLabel>
-        </button>
-
-        <button
+          testId="market-sidebar-toggle-theme"
+        />
+        <SidebarBottomButton
+          label="Sign Out"
+          icon={LogOut}
           onClick={handleSignOut}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-accent/60 transition-colors w-full text-left"
-          data-testid="market-sidebar-sign-out"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <AnimatedLabel>Sign Out</AnimatedLabel>
-        </button>
+          danger
+          testId="market-sidebar-sign-out"
+        />
       </div>
     </div>
   );

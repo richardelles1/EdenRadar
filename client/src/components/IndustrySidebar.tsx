@@ -17,7 +17,16 @@ import {
   AceternitySidebarBody,
   useSidebar,
 } from "@/components/ui/aceternity-sidebar";
-import { cn } from "@/lib/utils";
+import {
+  AnimatedLabel,
+  SidebarGroupHeader,
+  SidebarNavButton,
+  SidebarBottomButton,
+  PORTAL_ACCENT,
+  accentMix,
+} from "@/components/sidebar-primitives";
+
+const ACCENT = PORTAL_ACCENT.scout;
 
 type NavItem = {
   href: string;
@@ -71,99 +80,6 @@ function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-function AnimatedLabel({ children }: { children: React.ReactNode }) {
-  const { open, animate } = useSidebar();
-  return (
-    <motion.span
-      animate={{
-        opacity: animate ? (open ? 1 : 0) : 1,
-        width: animate ? (open ? "auto" : 0) : "auto",
-      }}
-      transition={{ duration: 0.15, ease: "easeOut" }}
-      className="whitespace-pre overflow-hidden block"
-    >
-      {children}
-    </motion.span>
-  );
-}
-
-function NavButton({
-  href,
-  label,
-  icon: Icon,
-  exact,
-  alertsBadge,
-  totalAlerts,
-  location,
-  navigate,
-}: {
-  href: string;
-  label: string;
-  icon: React.ComponentType<{ className?: string }>;
-  exact?: boolean;
-  alertsBadge?: boolean;
-  totalAlerts: number;
-  location: string;
-  navigate: (href: string) => void;
-}) {
-  const { open, animate } = useSidebar();
-  const isActive = exact
-    ? location === href
-    : location === href || location.startsWith(href + "/");
-  const showDot = alertsBadge && totalAlerts > 0 && !isActive;
-
-  const orgAccent = "var(--org-accent, hsl(142 52% 36%))";
-
-  return (
-    <button
-      onClick={() => navigate(href)}
-      className={cn(
-        "flex items-center gap-2.5 px-3 py-2 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-        isActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-      )}
-      style={isActive ? {
-        backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
-        color: orgAccent,
-      } : {}}
-      data-testid={`industry-sidebar-link-${label.toLowerCase().replace(/\s+/g, "-")}`}
-    >
-      <div
-        className="relative shrink-0"
-        style={showDot ? { color: orgAccent } : {}}
-      >
-        <Icon className="w-4 h-4" />
-        {showDot && (
-          <span
-            className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full border-2 border-background"
-            style={{ backgroundColor: orgAccent }}
-            data-testid="alerts-dot"
-          />
-        )}
-      </div>
-      <motion.span
-        animate={{
-          opacity: animate ? (open ? 1 : 0) : 1,
-          width: animate ? (open ? "auto" : 0) : "auto",
-        }}
-        transition={{ duration: 0.15, ease: "easeOut" }}
-        className="whitespace-pre overflow-hidden flex items-center justify-between flex-1"
-        style={{ display: "flex" }}
-      >
-        <span>{label}</span>
-        {showDot && (
-          <span
-            className="text-[10px] font-semibold tabular-nums"
-            style={{ color: orgAccent }}
-            data-testid="alerts-count"
-          >
-            {totalAlerts > 9 ? "9+" : totalAlerts}
-          </span>
-        )}
-      </motion.span>
-    </button>
-  );
-}
-
 function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
   const { open, animate } = useSidebar();
   const { data: org } = useOrg();
@@ -175,27 +91,23 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
         ? profile.companyName
         : org.name;
     const initials = getInitials(displayName) || displayName.trim().slice(0, 2).toUpperCase();
-    const accentColor = "var(--org-accent, hsl(142 52% 36%))";
     const tierLabel = planTierLabel(org.planTier);
 
     return (
       <button
         onClick={() => navigate("/industry/settings")}
         className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-accent/60 cursor-pointer transition-colors w-full text-left"
-        style={{ background: "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 6%, transparent)" }}
+        style={{ background: accentMix(ACCENT, 6) }}
         data-testid="industry-sidebar-org-block"
       >
         <div
           className="w-8 h-8 rounded-md flex items-center justify-center overflow-hidden shrink-0 border"
-          style={{ borderColor: "color-mix(in srgb, var(--org-accent, hsl(142 52% 36%)) 40%, transparent)" }}
+          style={{ borderColor: accentMix(ACCENT, 40) }}
         >
           {org.logoUrl ? (
             <img src={org.logoUrl} alt={displayName} className="w-full h-full object-cover rounded-md" />
           ) : (
-            <span
-              className="text-[11px] font-bold"
-              style={{ color: accentColor }}
-            >
+            <span className="text-[11px] font-bold" style={{ color: ACCENT }}>
               {initials}
             </span>
           )}
@@ -208,10 +120,7 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
           transition={{ duration: 0.15, ease: "easeOut" }}
           className="whitespace-pre overflow-hidden flex flex-col min-w-0"
         >
-          <span
-            className="text-xs font-semibold truncate leading-tight"
-            style={{ color: accentColor }}
-          >
+          <span className="text-xs font-semibold truncate leading-tight" style={{ color: ACCENT }}>
             {displayName}
           </span>
           <span className="text-[10px] text-muted-foreground leading-tight">{tierLabel}</span>
@@ -245,7 +154,6 @@ function OrgIdentityBlock({ navigate }: { navigate: (href: string) => void }) {
 }
 
 function SidebarNavContent({ onClose }: { onClose?: () => void }) {
-  const { open, animate } = useSidebar();
   const { theme, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const [location, setLocation] = useLocation();
@@ -267,6 +175,15 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
     await signOut();
     window.location.href = "/login";
   }
+
+  function isItemActive(item: NavItem): boolean {
+    return item.exact
+      ? location === item.href
+      : location === item.href || location.startsWith(item.href + "/");
+  }
+
+  const profileActive = location === "/industry/profile";
+  const settingsActive = location === "/settings" || location === "/industry/settings";
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -293,29 +210,23 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
         )}
       </div>
 
-      {/* Nav groups — no scroll */}
+      {/* Nav groups — primary workflow → workspace → cross-portal */}
       <nav className="flex-1 px-2 pt-2 pb-1 overflow-hidden space-y-3">
         {NAV_GROUPS.map(({ groupLabel, items }) => (
           <div key={groupLabel}>
-            <motion.p
-              animate={{
-                opacity: animate ? (open ? 1 : 0) : 1,
-                height: animate ? (open ? "auto" : 0) : "auto",
-              }}
-              transition={{ duration: 0.12, ease: "easeOut" }}
-              className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-0.5 overflow-hidden whitespace-pre"
-            >
-              {groupLabel}
-            </motion.p>
-
+            <SidebarGroupHeader>{groupLabel}</SidebarGroupHeader>
             <div className="space-y-0.5">
               {items.map((item) => (
-                <NavButton
+                <SidebarNavButton
                   key={item.href}
-                  {...item}
-                  totalAlerts={totalAlerts}
-                  location={location}
-                  navigate={navigate}
+                  label={item.label}
+                  icon={item.icon}
+                  isActive={isItemActive(item)}
+                  onClick={() => navigate(item.href)}
+                  accent={ACCENT}
+                  testId={`industry-sidebar-link-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                  badgeCount={item.alertsBadge ? totalAlerts : undefined}
+                  showDot={item.alertsBadge && totalAlerts > 0}
                 />
               ))}
             </div>
@@ -327,64 +238,35 @@ function SidebarNavContent({ onClose }: { onClose?: () => void }) {
       <div className="px-2 pb-3 pt-2 border-t border-border space-y-0.5 shrink-0 overflow-x-hidden">
         <OrgIdentityBlock navigate={navigate} />
 
-        {(() => {
-          const orgAccent = "var(--org-accent, hsl(142 52% 36%))";
-          const profileActive = location === "/industry/profile";
-          const settingsActive = location === "/settings" || location === "/industry/settings";
-          return (
-            <>
-              <button
-                onClick={() => navigate("/industry/profile")}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-                  profileActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                )}
-                style={profileActive ? {
-                  backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
-                  color: orgAccent,
-                } : {}}
-                data-testid="industry-sidebar-link-profile"
-              >
-                <User className="w-4 h-4 shrink-0" />
-                <AnimatedLabel>Profile</AnimatedLabel>
-              </button>
-
-              <button
-                onClick={() => navigate("/settings")}
-                className={cn(
-                  "flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium cursor-pointer transition-colors duration-150 w-full text-left",
-                  settingsActive ? "" : "text-muted-foreground hover:text-foreground hover:bg-accent/60"
-                )}
-                style={settingsActive ? {
-                  backgroundColor: `color-mix(in srgb, ${orgAccent} 10%, transparent)`,
-                  color: orgAccent,
-                } : {}}
-                data-testid="industry-sidebar-link-settings"
-              >
-                <Settings className="w-4 h-4 shrink-0" />
-                <AnimatedLabel>Settings</AnimatedLabel>
-              </button>
-            </>
-          );
-        })()}
-
-        <button
+        <SidebarBottomButton
+          label="Profile"
+          icon={User}
+          onClick={() => navigate("/industry/profile")}
+          isActive={profileActive}
+          accent={ACCENT}
+          testId="industry-sidebar-link-profile"
+        />
+        <SidebarBottomButton
+          label="Settings"
+          icon={Settings}
+          onClick={() => navigate("/settings")}
+          isActive={settingsActive}
+          accent={ACCENT}
+          testId="industry-sidebar-link-settings"
+        />
+        <SidebarBottomButton
+          label={theme === "dark" ? "Light mode" : "Dark mode"}
+          icon={theme === "dark" ? Sun : Moon}
           onClick={toggleTheme}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-accent/60 transition-colors w-full text-left"
-          data-testid="industry-sidebar-toggle-theme"
-        >
-          {theme === "dark" ? <Sun className="w-4 h-4 shrink-0" /> : <Moon className="w-4 h-4 shrink-0" />}
-          <AnimatedLabel>{theme === "dark" ? "Light mode" : "Dark mode"}</AnimatedLabel>
-        </button>
-
-        <button
+          testId="industry-sidebar-toggle-theme"
+        />
+        <SidebarBottomButton
+          label="Sign Out"
+          icon={LogOut}
           onClick={handleSignOut}
-          className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm font-medium text-muted-foreground hover:text-red-500 dark:hover:text-red-400 hover:bg-accent/60 transition-colors w-full text-left"
-          data-testid="industry-sidebar-sign-out"
-        >
-          <LogOut className="w-4 h-4 shrink-0" />
-          <AnimatedLabel>Sign Out</AnimatedLabel>
-        </button>
+          danger
+          testId="industry-sidebar-sign-out"
+        />
       </div>
     </div>
   );
@@ -405,7 +287,6 @@ export function IndustrySidebar() {
         <Menu className="w-4 h-4" />
       </button>
 
-      {/* Mobile overlay backdrop */}
       {mobileOpen && (
         <div
           className="fixed inset-0 z-40 bg-black/50 md:hidden"
@@ -413,7 +294,6 @@ export function IndustrySidebar() {
         />
       )}
 
-      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed top-0 left-0 z-50 w-64 h-full bg-background border-r border-border shadow-xl md:hidden">
           <AceternitySidebar animate={false}>
@@ -422,7 +302,6 @@ export function IndustrySidebar() {
         </div>
       )}
 
-      {/* Desktop collapsible sidebar */}
       <AceternitySidebar animate={true}>
         <AceternitySidebarBody>
           <SidebarNavContent />
