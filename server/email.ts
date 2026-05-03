@@ -90,8 +90,10 @@ export function signUnsubscribeToken(userId: string): string {
 }
 
 export function verifyUnsubscribeToken(token: string): string | null {
-  if (!token || typeof token !== "string" || !token.includes(".")) return null;
-  const [idPart, sigPart] = token.split(".");
+  if (!token || typeof token !== "string") return null;
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [idPart, sigPart] = parts;
   let userId: string;
   let providedSig: Buffer;
   try {
@@ -131,8 +133,9 @@ export function signUnsubscribeTokenForEmail(email: string): string {
 export function verifyUnsubscribeTokenForEmail(token: string): string | null {
   if (!token || typeof token !== "string" || !token.startsWith(EMAIL_TOKEN_PREFIX)) return null;
   const body = token.slice(EMAIL_TOKEN_PREFIX.length);
-  if (!body.includes(".")) return null;
-  const [emailPart, sigPart] = body.split(".");
+  const parts = body.split(".");
+  if (parts.length !== 2) return null;
+  const [emailPart, sigPart] = parts;
   let email: string;
   let providedSig: Buffer;
   try {
