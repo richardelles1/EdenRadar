@@ -3,8 +3,10 @@ import { storage } from "../storage";
 import { userAlerts, ingestedAssets, industryProfiles } from "../../shared/schema";
 import { eq, gt, and, ilike, or, inArray, desc, isNotNull } from "drizzle-orm";
 import { renderDispatchEmail, type DispatchAsset } from "./emailTemplate";
+import { sendEmail, FROM_DIGEST, unsubscribeUrlFor } from "../email";
 
 const DIGEST_SAMPLE_LIMIT = 3;
+const SUPPORT_EMAIL = "support@edenradar.com";
 
 function frequencyWindowHours(frequency: string): number {
   if (frequency === "weekly") return 168;
@@ -19,13 +21,56 @@ function shouldSendNow(lastSentAt: Date | null, windowHours: number): boolean {
 
 /**
  * Guards against concurrent evaluations (e.g., manual admin trigger races with
- * cycle completion). Node.js is single-threaded so a simple boolean is sufficient.
+ * cycle completion, or the periodic 5-min timer races with a cycle finishing).
+ * Node.js is single-threaded so a simple boolean is sufficient.
  */
 let isEvaluating = false;
 
+// ── User email cache ─────────────────────────────────────────────────────────
+// At a 5-minute evaluation cadence (Task #687) the Supabase auth.admin.listUsers
+// fan-out happens ~288 times/day. Cache the resolved map to a 10-minute TTL so
+// most evaluations skip the network round-trip entirely.
+let cachedUserEmailMap: Map<string, string> | null = null;
+let cachedUserEmailMapAt = 0;
+const USER_EMAIL_CACHE_TTL_MS = 10 * 60 * 1000;
+
+async function loadUserEmailMap(supabaseUrl: string, supabaseServiceRoleKey: string): Promise<Map<string, string> | null> {
+  const now = Date.now();
+  if (cachedUserEmailMap && now - cachedUserEmailMapAt < USER_EMAIL_CACHE_TTL_MS) {
+    return cachedUserEmailMap;
+  }
+  const { createClient } = await import("@supabase/supabase-js");
+  const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+  const map = new Map<string, string>();
+  let page = 1;
+  while (true) {
+    const { data: pageData, error: pageError } =
+      await adminSupabase.auth.admin.listUsers({ perPage: 1000, page });
+    if (pageError) {
+      console.error("[alertMailer] Failed to fetch user emails:", pageError.message);
+      return null;
+    }
+    const users = pageData?.users ?? [];
+    for (const u of users) {
+      const email: string | undefined =
+        (u.user_metadata?.contactEmail as string | undefined) || u.email;
+      if (email) map.set(u.id, email);
+    }
+    if (users.length < 1000) break;
+    page++;
+  }
+  cachedUserEmailMap = map;
+  cachedUserEmailMapAt = now;
+  return map;
+}
+
 /**
  * Find new relevant assets that match a saved alert's criteria.
- * Uses idiomatic Drizzle: undefined conditions are silently ignored by `and()`.
+ *
+ * Field-agnostic alerts (`criteriaType === "all_new"` and alerts without
+ * modality/stage/query filters) match purely on `firstSeenAt + relevant`,
+ * so they fire as soon as the row is ingested — no enrichment dependency.
+ * Filtered alerts wait for enrichment to populate the relevant column.
  */
 async function matchAssetsForAlert(
   alert: typeof userAlerts.$inferSelect,
@@ -96,9 +141,9 @@ async function matchAssetsForAlert(
 
 /**
  * Evaluate all saved user alerts and send one email per alert that has new matches.
- * Called once per scheduler cycle (after all institutions complete) to avoid race
- * conditions on the lastAlertSentAt watermark that would arise from per-institution
- * concurrent evaluations.
+ * Called both at scheduler-cycle completion and on a periodic timer (Task #687)
+ * so realtime subscribers get assets within ~5 minutes of `firstSeenAt`. The
+ * `lastAlertSentAt` watermark prevents double-sends across overlapping triggers.
  */
 export async function checkAndSendAlerts(): Promise<void> {
   if (isEvaluating) {
@@ -153,6 +198,10 @@ async function evaluateAlerts(): Promise<void> {
   // to this timestamp so assets ingested during the send loop are deferred to the
   // next cycle rather than silently skipped.
   const evaluationStartedAt = new Date();
+  // First-run caps: realtime alerts use 6h so a brand-new realtime subscriber
+  // doesn't get a 48h flood on first send. Daily/weekly keep 48h so they have
+  // useful first content.
+  const sixHoursAgo = new Date(evaluationStartedAt.getTime() - 6 * 60 * 60 * 1000);
   const fortyEightHoursAgo = new Date(evaluationStartedAt.getTime() - 48 * 60 * 60 * 1000);
 
   // Batch-fetch industry profiles for all unique user IDs so we can check
@@ -163,32 +212,9 @@ async function evaluateAlerts(): Promise<void> {
     : [];
   const profileMap = new Map(profileRows.map((p) => [p.userId, p]));
 
-  // Resolve user emails via Supabase admin API — fully paginated so every user
-  // is covered regardless of team size.
-  const { createClient } = await import("@supabase/supabase-js");
-  const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-
-  const userEmailMap = new Map<string, string>();
-  let page = 1;
-  while (true) {
-    const { data: pageData, error: pageError } =
-      await adminSupabase.auth.admin.listUsers({ perPage: 1000, page });
-    if (pageError) {
-      console.error("[alertMailer] Failed to fetch user emails:", pageError.message);
-      return;
-    }
-    const users = pageData?.users ?? [];
-    for (const u of users) {
-      const email: string | undefined =
-        (u.user_metadata?.contactEmail as string | undefined) || u.email;
-      if (email) userEmailMap.set(u.id, email);
-    }
-    if (users.length < 1000) break;
-    page++;
-  }
-
-  const { Resend } = await import("resend");
-  const resend = new Resend(apiKey);
+  // Resolve user emails via Supabase admin API (cached, see loadUserEmailMap).
+  const userEmailMap = await loadUserEmailMap(supabaseUrl, supabaseServiceRoleKey);
+  if (!userEmailMap) return;
 
   let sentCount = 0;
   let skippedCount = 0;
@@ -232,9 +258,9 @@ async function evaluateAlerts(): Promise<void> {
       }
     }
 
-    // Use lastAlertSentAt watermark; fall back to 48h ago for first-run alerts
-    // to avoid flooding users with historical data.
-    const since = alert.lastAlertSentAt ?? fortyEightHoursAgo;
+    // First-run cap: 6h for realtime, 48h for daily/weekly.
+    const firstRunFloor = frequency === "realtime" ? sixHoursAgo : fortyEightHoursAgo;
+    const since = alert.lastAlertSentAt ?? firstRunFloor;
     let matched: DispatchAsset[];
 
     try {
@@ -264,6 +290,8 @@ async function evaluateAlerts(): Promise<void> {
     const sampleAssets = matched.slice(0, DIGEST_SAMPLE_LIMIT);
     const subject = `EdenRadar Alert: ${totalCount} new match${totalCount !== 1 ? "es" : ""} — ${alertName}`;
     const windowLabel = `Alert: ${alertName} · ${totalCount} new asset${totalCount !== 1 ? "s" : ""}`;
+    const appBaseUrl = process.env.APP_BASE_URL ?? process.env.APP_URL ?? "https://edenradar.com";
+    const unsubscribeUrl = unsubscribeUrlFor(alert.userId);
 
     const html = renderDispatchEmail({
       subject,
@@ -272,24 +300,16 @@ async function evaluateAlerts(): Promise<void> {
       isTest: false,
       colorMode: "light",
       totalCount,
-      appBaseUrl: process.env.APP_BASE_URL ?? "https://edenradar.com",
+      appBaseUrl,
+      unsubscribeUrl,
     });
 
     try {
-      const { error: sendError } = await resend.emails.send({
-        from: "EdenRadar Alerts <digest@edenradar.com>",
-        to: [email],
-        subject,
-        html,
+      await sendEmail(email, subject, html, {
+        from: FROM_DIGEST,
+        replyTo: SUPPORT_EMAIL,
+        unsubscribeUrl,
       });
-
-      if (sendError) {
-        console.error(
-          `[alertMailer] Alert ${alert.id} — send error → ${email}:`,
-          sendError.message,
-        );
-        continue;
-      }
 
       console.log(
         `[alertMailer] Sent alert "${alertName}" → ${email} | ${matched.length} asset(s) matched`,
@@ -318,7 +338,7 @@ async function evaluateAlerts(): Promise<void> {
         .set({ lastAlertSentAt: evaluationStartedAt })
         .where(eq(userAlerts.id, alert.id));
     } catch (err: any) {
-      console.error(`[alertMailer] Alert ${alert.id} — unexpected error:`, err?.message);
+      console.error(`[alertMailer] Alert ${alert.id} — send/log error:`, err?.message);
     }
   }
 

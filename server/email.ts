@@ -1,7 +1,30 @@
+import crypto from "crypto";
+
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const FROM_ADDRESS = process.env.RESEND_FROM_ADDRESS ?? "EdenRadar <noreply@edenradar.com>";
 export const APP_URL = process.env.APP_URL ?? "https://edenradar.com";
 const LOGIN_URL = `${APP_URL}/login`;
+
+const SUPPORT_EMAIL = "support@edenradar.com";
+const BILLING_EMAIL = "billing@edenradar.com";
+const MARKET_EMAIL = "market@edenradar.com";
+
+const FROM_NOREPLY = "EdenRadar <noreply@edenradar.com>";
+const FROM_ONBOARDING = "EdenScout <onboarding@edenradar.com>";
+const FROM_BILLING = "EdenScout <billing@edenradar.com>";
+const FROM_MARKET = "EdenMarket <market@edenradar.com>";
+export const FROM_DIGEST = "EdenRadar Alerts <digest@edenradar.com>";
+
+const ADMIN_NOTIFICATION_EMAILS = (
+  process.env.ADMIN_NOTIFICATION_EMAILS ?? "admin@edenradar.com"
+)
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+export function getAdminNotificationRecipients(): string[] {
+  return [...ADMIN_NOTIFICATION_EMAILS];
+}
 
 if (!process.env.RESEND_FROM_ADDRESS) {
   console.warn(
@@ -21,7 +44,90 @@ function planLabel(tier: string): string {
   return PLAN_LABELS[tier] ?? tier;
 }
 
-function baseHtml(bodyContent: string): string {
+// ── Unsubscribe tokens ───────────────────────────────────────────────────────
+// Token format: base64url(userId).base64url(hmac-sha256(userId, secret))
+// No expiry — unsubscribe links should remain valid indefinitely so a user
+// who finds an old email can still opt out. Compromise of the secret would
+// only let an attacker forge unsubscribe URLs, not access any data.
+
+function unsubscribeSecret(): string {
+  // No hardcoded fallback: an attacker who knows the source could otherwise
+  // mint valid unsubscribe tokens for arbitrary users. We do allow falling
+  // back to SUPABASE_SERVICE_ROLE_KEY because it is a server-only,
+  // cryptographically-strong secret already required by the app — this lets
+  // us avoid a separate env var while remaining secure-by-default.
+  const secret =
+    process.env.UNSUBSCRIBE_TOKEN_SECRET ??
+    process.env.SUPABASE_JWT_SECRET ??
+    process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!secret) {
+    throw new Error(
+      "[email] No unsubscribe-token secret available. Set UNSUBSCRIBE_TOKEN_SECRET " +
+        "(or ensure SUPABASE_SERVICE_ROLE_KEY is configured).",
+    );
+  }
+  return secret;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function b64url(buf: Buffer | string): string {
+  return Buffer.from(buf).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function b64urlDecode(s: string): Buffer {
+  const pad = s.length % 4 === 0 ? "" : "=".repeat(4 - (s.length % 4));
+  return Buffer.from(s.replace(/-/g, "+").replace(/_/g, "/") + pad, "base64");
+}
+
+export function signUnsubscribeToken(userId: string): string {
+  const sig = crypto.createHmac("sha256", unsubscribeSecret()).update(userId).digest();
+  return `${b64url(userId)}.${b64url(sig)}`;
+}
+
+export function verifyUnsubscribeToken(token: string): string | null {
+  if (!token || typeof token !== "string" || !token.includes(".")) return null;
+  const [idPart, sigPart] = token.split(".");
+  let userId: string;
+  let providedSig: Buffer;
+  try {
+    userId = b64urlDecode(idPart).toString("utf8");
+    providedSig = b64urlDecode(sigPart);
+  } catch {
+    return null;
+  }
+  // Defence-in-depth: only accept properly-formatted Supabase user UUIDs so
+  // a malformed token can never reach the DB layer with arbitrary content.
+  if (!UUID_RE.test(userId)) return null;
+  let expectedSig: Buffer;
+  try {
+    expectedSig = crypto.createHmac("sha256", unsubscribeSecret()).update(userId).digest();
+  } catch {
+    return null;
+  }
+  if (providedSig.length !== expectedSig.length) return null;
+  if (!crypto.timingSafeEqual(providedSig, expectedSig)) return null;
+  return userId;
+}
+
+export function unsubscribeUrlFor(userId: string): string {
+  return `${APP_URL}/unsubscribe?t=${signUnsubscribeToken(userId)}`;
+}
+
+// ── HTML wrapper ─────────────────────────────────────────────────────────────
+
+interface BaseHtmlOpts {
+  unsubscribeUrl?: string;
+  replyToHint?: string;
+}
+
+function baseHtml(bodyContent: string, opts: BaseHtmlOpts = {}): string {
+  const contactLine = opts.replyToHint
+    ? `Questions? Reply to this email or contact <a href="mailto:${opts.replyToHint}" style="color:#059669;text-decoration:none;">${opts.replyToHint}</a>.`
+    : `Questions? Contact <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.`;
+  const unsubLine = opts.unsubscribeUrl
+    ? `<br /><a href="${opts.unsubscribeUrl}" style="color:#9ca3af;text-decoration:underline;">Unsubscribe from these notifications</a>.`
+    : "";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -51,7 +157,7 @@ function baseHtml(bodyContent: string): string {
             <td style="padding:20px 40px 28px;border-top:1px solid #f3f4f6;">
               <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
                 EdenRadar &mdash; Biotech intelligence for industry buyers.<br />
-                Questions? Reply to this email or contact <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+                ${contactLine}${unsubLine}
               </p>
             </td>
           </tr>
@@ -63,11 +169,42 @@ function baseHtml(bodyContent: string): string {
 </html>`;
 }
 
-export async function sendEmail(to: string, subject: string, html: string, from?: string): Promise<void> {
+// ── Core sender ──────────────────────────────────────────────────────────────
+
+export interface SendEmailOptions {
+  from?: string;
+  replyTo?: string;
+  unsubscribeUrl?: string; // sets RFC 8058 List-Unsubscribe + List-Unsubscribe-Post headers
+}
+
+export async function sendEmail(
+  to: string | string[],
+  subject: string,
+  html: string,
+  optsOrFrom?: SendEmailOptions | string,
+): Promise<void> {
   if (!RESEND_API_KEY) {
-    console.warn("[email] RESEND_API_KEY not configured — skipping email to", to);
+    console.warn("[email] RESEND_API_KEY not configured — skipping email to", Array.isArray(to) ? to.join(",") : to);
     return;
   }
+  const opts: SendEmailOptions =
+    typeof optsOrFrom === "string" ? { from: optsOrFrom } : (optsOrFrom ?? {});
+
+  const headers: Record<string, string> = {};
+  if (opts.unsubscribeUrl) {
+    headers["List-Unsubscribe"] = `<${opts.unsubscribeUrl}>, <mailto:${SUPPORT_EMAIL}?subject=unsubscribe>`;
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
+  const payload: Record<string, unknown> = {
+    from: opts.from ?? FROM_ADDRESS,
+    to: Array.isArray(to) ? to : [to],
+    subject,
+    html,
+  };
+  if (opts.replyTo) payload.reply_to = opts.replyTo;
+  if (Object.keys(headers).length > 0) payload.headers = headers;
+
   try {
     const res = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -75,18 +212,20 @@ export async function sendEmail(to: string, subject: string, html: string, from?
         Authorization: `Bearer ${RESEND_API_KEY}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ from: from ?? FROM_ADDRESS, to, subject, html }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "(unreadable)");
       throw new Error(`[email] Resend rejected (${res.status}): ${text}`);
     }
-    console.log("[email] Sent:", subject, "->", to);
+    console.log("[email] Sent:", subject, "->", Array.isArray(to) ? to.join(",") : to);
   } catch (err) {
     console.error("[email] Failed to send to", to, err);
     throw err;
   }
 }
+
+// ── Templated senders ────────────────────────────────────────────────────────
 
 export function sendWelcomeEmail(to: string, name: string): Promise<void> {
   const displayName = name?.trim() || "there";
@@ -105,10 +244,10 @@ export function sendWelcomeEmail(to: string, name: string): Promise<void> {
     </a>
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       If you did not create this account, please contact us immediately at
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, "Welcome to EdenRadar.", html);
+  `, { replyToHint: SUPPORT_EMAIL });
+  return sendEmail(to, "Welcome to EdenRadar.", html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
 }
 
 export function sendTeamInviteEmail(
@@ -144,10 +283,10 @@ export function sendTeamInviteEmail(
     ${actionBlock}
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       If you were not expecting this invitation, please contact
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, `${orgName} has added you to EdenRadar.`, html);
+  `, { replyToHint: SUPPORT_EMAIL });
+  return sendEmail(to, `${orgName} has added you to EdenRadar.`, html, { from: FROM_NOREPLY, replyTo: SUPPORT_EMAIL });
 }
 
 export interface AlertAsset {
@@ -166,6 +305,7 @@ export function sendThesisAlertEmail(
   assets: AlertAsset[],
   therapeuticAreas: string[],
   modalities: string[],
+  unsubscribeUrl?: string,
 ): Promise<void> {
   const name = displayName?.trim() || "there";
   const focusSummary = [
@@ -224,8 +364,13 @@ export function sendThesisAlertEmail(
       You are receiving this because you opted in to asset match alerts.
       Update your preferences in <a href="${APP_URL}/industry/profile" style="color:#059669;text-decoration:none;">account settings</a>.
     </p>
-  `);
-  return sendEmail(to, `${assets.length} new asset${assets.length !== 1 ? "s" : ""} match your deal focus — EdenRadar`, html);
+  `, { unsubscribeUrl });
+  return sendEmail(
+    to,
+    `${assets.length} new asset${assets.length !== 1 ? "s" : ""} match your deal focus — EdenRadar`,
+    html,
+    { from: FROM_DIGEST, replyTo: SUPPORT_EMAIL, unsubscribeUrl },
+  );
 }
 
 export function sendSubscriptionWelcomeEmail(
@@ -263,10 +408,13 @@ export function sendSubscriptionWelcomeEmail(
     </a>
     <p style="margin:28px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Need help getting started? Reply to this email or reach us at
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, "Welcome to EdenScout — your subscription is active.", html, "EdenScout <onboarding@edenradar.com>");
+  `, { replyToHint: SUPPORT_EMAIL });
+  return sendEmail(to, "Welcome to EdenScout — your subscription is active.", html, {
+    from: FROM_ONBOARDING,
+    replyTo: SUPPORT_EMAIL,
+  });
 }
 
 export function sendPaymentFailedEmail(
@@ -288,10 +436,13 @@ export function sendPaymentFailedEmail(
     <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       If you have already updated your details, you can ignore this email. Stripe will automatically
       retry the charge. Questions? Reply to this email or contact
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${BILLING_EMAIL}" style="color:#059669;text-decoration:none;">${BILLING_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, "Your EdenScout payment failed — action required", html, "EdenScout <billing@edenradar.com>");
+  `, { replyToHint: BILLING_EMAIL });
+  return sendEmail(to, "Your EdenScout payment failed — action required", html, {
+    from: FROM_BILLING,
+    replyTo: BILLING_EMAIL,
+  });
 }
 
 export function sendRenewalConfirmationEmail(
@@ -314,8 +465,11 @@ export function sendRenewalConfirmationEmail(
       You can manage your subscription and view invoices in your
       <a href="${APP_URL}/industry/settings" style="color:#059669;text-decoration:none;">billing settings</a>.
     </p>
-  `);
-  return sendEmail(to, "EdenScout subscription renewed successfully", html, "EdenScout <billing@edenradar.com>");
+  `, { replyToHint: BILLING_EMAIL });
+  return sendEmail(to, "EdenScout subscription renewed successfully", html, {
+    from: FROM_BILLING,
+    replyTo: BILLING_EMAIL,
+  });
 }
 
 export function sendTrialEndingEmail(
@@ -344,10 +498,13 @@ export function sendTrialEndingEmail(
     </a>
     <p style="margin:20px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Questions? Reply to this email or reach us at
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${BILLING_EMAIL}" style="color:#059669;text-decoration:none;">${BILLING_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, "Your EdenScout trial expires tomorrow", html, "EdenScout <billing@edenradar.com>");
+  `, { replyToHint: BILLING_EMAIL });
+  return sendEmail(to, "Your EdenScout trial expires tomorrow", html, {
+    from: FROM_BILLING,
+    replyTo: BILLING_EMAIL,
+  });
 }
 
 export function sendMarketMutualInterestEmail(
@@ -371,10 +528,13 @@ export function sendMarketMutualInterestEmail(
     </a>
     <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       Both parties must sign the NDA before deal room documents and communication become accessible.
-      Questions? Contact <a href="mailto:market@edenradar.com" style="color:#7c3aed;text-decoration:none;">market@edenradar.com</a>.
+      Questions? Contact <a href="mailto:${MARKET_EMAIL}" style="color:#7c3aed;text-decoration:none;">${MARKET_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, `Mutual interest confirmed — ${assetLabel} — EdenMarket`, html, "EdenMarket <market@edenradar.com>");
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `Mutual interest confirmed — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
 }
 
 export function sendMarketNdaSignedEmail(
@@ -400,8 +560,11 @@ export function sendMarketNdaSignedEmail(
     <p style="margin:24px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       A copy of the signed NDA is available in your deal room for your records.
     </p>
-  `);
-  return sendEmail(to, `Deal room open — ${assetLabel} — EdenMarket`, html, "EdenMarket <market@edenradar.com>");
+  `, { replyToHint: MARKET_EMAIL });
+  return sendEmail(to, `Deal room open — ${assetLabel} — EdenMarket`, html, {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
 }
 
 export function sendAccountDeletionEmail(to: string, name: string): Promise<void> {
@@ -414,8 +577,36 @@ export function sendAccountDeletionEmail(to: string, name: string): Promise<void
     </p>
     <p style="margin:0 0 0;font-size:13px;color:#6b7280;line-height:1.5;">
       If you believe this was done in error or have questions, contact us at
-      <a href="mailto:support@edenradar.com" style="color:#059669;text-decoration:none;">support@edenradar.com</a>.
+      <a href="mailto:${SUPPORT_EMAIL}" style="color:#059669;text-decoration:none;">${SUPPORT_EMAIL}</a>.
     </p>
-  `);
-  return sendEmail(to, "Your EdenRadar account has been deleted.", html);
+  `, { replyToHint: SUPPORT_EMAIL });
+  return sendEmail(to, "Your EdenRadar account has been deleted.", html, {
+    from: FROM_NOREPLY,
+    replyTo: SUPPORT_EMAIL,
+  });
+}
+
+// ── EdenMarket ad-hoc helpers (replaces inline-HTML sites in routes.ts) ──────
+
+export function sendMarketAdHocEmail(
+  to: string | string[],
+  subject: string,
+  bodyHtml: string,
+): Promise<void> {
+  return sendEmail(to, subject, baseHtml(bodyHtml, { replyToHint: MARKET_EMAIL }), {
+    from: FROM_MARKET,
+    replyTo: MARKET_EMAIL,
+  });
+}
+
+export function sendAdminNotificationEmail(
+  subject: string,
+  bodyHtml: string,
+): Promise<void> {
+  const recipients = getAdminNotificationRecipients();
+  if (recipients.length === 0) return Promise.resolve();
+  return sendEmail(recipients, subject, baseHtml(bodyHtml, { replyToHint: SUPPORT_EMAIL }), {
+    from: FROM_NOREPLY,
+    replyTo: SUPPORT_EMAIL,
+  });
 }

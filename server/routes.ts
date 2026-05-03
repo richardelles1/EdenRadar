@@ -37,7 +37,7 @@ import { verifyResearcherAuth, verifyConceptAuth, verifyAnyAuth, tryGetUserId, r
 import { registerClient, unregisterClient, broadcastToOrg } from "./lib/orgBroadcast";
 import { ALL_PORTAL_ROLES } from "@shared/portals";
 import type { RawSignal } from "./lib/types";
-import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, APP_URL, sendEmail } from "./email";
+import { sendWelcomeEmail, sendTeamInviteEmail, sendAccountDeletionEmail, sendSubscriptionWelcomeEmail, sendPaymentFailedEmail, sendRenewalConfirmationEmail, sendMarketMutualInterestEmail, sendMarketNdaSignedEmail, APP_URL, sendEmail, sendMarketAdHocEmail, sendAdminNotificationEmail, verifyUnsubscribeToken, FROM_DIGEST } from "./email";
 
 const SOURCE_TYPE_MAP: Record<string, string[]> = {
   publication: ["paper"],
@@ -7467,6 +7467,75 @@ If multiple assets appear, return each as a separate array item.`;
       .replace(/\{date\}/g, date);
   }
 
+  // ── Unsubscribe (token-signed, no auth) ────────────────────────────────────
+  // Used by the List-Unsubscribe header (one-click POST per RFC 8058) and by the
+  // visible footer link (GET → page → POST). Flips industry_profiles.subscribed_to_digest = false.
+  async function handleUnsubscribe(token: string): Promise<{ ok: boolean; alreadyUnsubscribed?: boolean; error?: string }> {
+    const userId = verifyUnsubscribeToken(token);
+    if (!userId) return { ok: false, error: "Invalid or expired unsubscribe link" };
+    try {
+      const existing = await db.select({ subscribedToDigest: industryProfiles.subscribedToDigest })
+        .from(industryProfiles).where(eq(industryProfiles.userId, userId)).limit(1);
+      if (existing.length === 0) {
+        await db.insert(industryProfiles).values({ userId, subscribedToDigest: false }).onConflictDoNothing();
+        return { ok: true };
+      }
+      if (!existing[0].subscribedToDigest) return { ok: true, alreadyUnsubscribed: true };
+      await db.update(industryProfiles).set({ subscribedToDigest: false }).where(eq(industryProfiles.userId, userId));
+      console.log(`[unsubscribe] User ${userId} unsubscribed via token link`);
+      return { ok: true };
+    } catch (err: any) {
+      console.error("[unsubscribe] Error:", err?.message);
+      return { ok: false, error: "Could not process unsubscribe" };
+    }
+  }
+
+  app.post("/api/digest/unsubscribe", async (req, res) => {
+    const token = (req.body?.token ?? req.query?.t ?? "") as string;
+    const result = await handleUnsubscribe(token);
+    if (!result.ok) return res.status(400).json(result);
+    res.json(result);
+  });
+
+  // RFC 8058 one-click unsubscribe (Gmail/Yahoo bulk-sender requirement).
+  // Mail clients POST to the List-Unsubscribe URL with body `List-Unsubscribe=One-Click`.
+  app.post("/unsubscribe", async (req, res) => {
+    const token = (req.query?.t ?? req.body?.t ?? "") as string;
+    const result = await handleUnsubscribe(token);
+    if (!result.ok) return res.status(400).send(result.error ?? "Invalid request");
+    res.send("Unsubscribed");
+  });
+
+  // ── Avg alert delivery latency (last 24h) ──────────────────────────────────
+  // Computes average minutes from ingested_assets.first_seen_at to dispatch_logs.sent_at
+  // for non-test dispatch logs in the last 24h. Used by Admin "Avg alert latency" tile
+  // to verify the periodic-evaluation timer (Task #687) is keeping latency low.
+  app.get("/api/admin/alerts/latency", requireAdmin, async (_req, res) => {
+    try {
+      const result: any = await db.execute(sql`
+        SELECT
+          AVG(EXTRACT(EPOCH FROM (dl.sent_at - ia.first_seen_at)) / 60.0)::float AS avg_minutes,
+          COUNT(*)::int AS sample_size
+        FROM dispatch_logs dl
+        CROSS JOIN LATERAL unnest(dl.asset_ids) AS aid
+        JOIN ingested_assets ia ON ia.id = aid
+        WHERE dl.is_test = false
+          AND dl.sent_at >= NOW() - INTERVAL '24 hours'
+          AND ia.first_seen_at IS NOT NULL
+          AND dl.sent_at >= ia.first_seen_at
+      `);
+      const row = (result.rows ?? result)[0] ?? {};
+      res.json({
+        avgMinutes: row.avg_minutes != null ? Number(row.avg_minutes) : null,
+        sampleSize: row.sample_size ?? 0,
+        windowHours: 24,
+      });
+    } catch (err: any) {
+      console.error("[admin/alerts/latency] error:", err?.message);
+      res.status(500).json({ error: err?.message ?? "Failed to compute latency" });
+    }
+  });
+
   app.get("/api/admin/dispatch/filter-options", async (req, res) => {
     try {
       const rows = await db
@@ -7574,21 +7643,19 @@ If multiple assets appear, return each as a separate array item.`;
         return res.status(503).json({ error: "RESEND_API_KEY is not configured. Add it to your environment secrets to enable email dispatch." });
       }
 
-      const { Resend } = await import("resend");
-      const resendClient = new Resend(apiKey);
       const toList = isTest ? [testAddress ?? recipients[0]] : recipients;
       const finalSubject = isTest ? `[TEST] ${resolvedSubject}` : resolvedSubject;
 
-      const { error: sendError } = await resendClient.emails.send({
-        from: "EdenRadar Digest <digest@edenradar.com>",
-        to: toList,
-        subject: finalSubject,
-        html: htmlBody,
-      });
-
-      if (sendError) {
-        console.error("[dispatch/send] Resend error:", sendError);
-        return res.status(502).json({ error: `Email provider error: ${sendError.message}` });
+      // Manual admin dispatch: recipients may be free-form addresses not tied
+      // to a userId, so we use a mailto-only List-Unsubscribe (no token URL).
+      try {
+        await sendEmail(toList, finalSubject, htmlBody, {
+          from: FROM_DIGEST,
+          replyTo: "support@edenradar.com",
+        });
+      } catch (sendErr: any) {
+        console.error("[dispatch/send] Resend error:", sendErr);
+        return res.status(502).json({ error: `Email provider error: ${sendErr?.message ?? "send failed"}` });
       }
 
       if (!isTest) {
@@ -9604,8 +9671,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       // Notify admin
       try {
-        await sendEmail(
-          "admin@edenradar.com",
+        await sendAdminNotificationEmail(
           `New EOI submitted — Listing #${data.listingId}`,
           `<p>A new Expression of Interest has been submitted for listing #${data.listingId}.</p>
            <p>Company: ${data.company}<br>Role: ${data.role}</p>
@@ -9619,12 +9685,12 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         const sellerEmail = sellerOrg?.billingEmail;
         if (sellerEmail) {
           const assetLabel = listing.blind ? `a blind ${listing.therapeuticArea} ${listing.modality} listing` : (listing.assetName || `Listing #${listing.id}`);
-          await sendEmail(
+          await sendMarketAdHocEmail(
             sellerEmail,
             `New Expression of Interest received — ${assetLabel}`,
             `<p>A qualified buyer has submitted an Expression of Interest for <strong>${assetLabel}</strong>.</p>
              <p>Log in to your <a href="${APP_URL}/market/seller">Seller Dashboard</a> to review the EOI details.</p>
-             <p style="font-size:12px;color:#888">Buyer identity is kept confidential until you accept and both parties agree to reveal. This notification was sent by EdenMarket.</p>`
+             <p style="font-size:12px;color:#9ca3af">Buyer identity is kept confidential until you accept and both parties agree to reveal.</p>`
           );
         }
       } catch (e) { console.warn("[market] seller EOI-submitted email failed", e); }
@@ -9733,25 +9799,21 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
             : (updated.assetName || `a ${updated.therapeuticArea} asset`);
 
           const notifMessage = `An asset you track in EdenScout — ${assetLabel} — is now listed in EdenMarket.`;
+          const { enqueueListingAvailable } = await import("./lib/marketEmailCoalescer");
           await Promise.allSettled(saved.map(async uid => {
-            // Insert in-app notification (deduplicated by user+listing)
+            // Insert in-app notification (deduplicated by user+listing via DB unique idx)
             await db.insert(marketAvailabilityNotifications).values({
               userId: uid,
               listingId: updated.id,
               ingestedAssetId: assetId,
               message: notifMessage,
             }).onConflictDoNothing().catch(() => {});
-            // Send email notification
+            // Enqueue email — coalesced per-user with a 5-min debounce so a bulk
+            // status flip becomes one summary email rather than one per listing.
             const userOrg = await storage.getOrgForUser(uid);
             const email = userOrg?.billingEmail;
             if (email) {
-              await sendEmail(
-                email,
-                `EdenMarket — ${assetLabel} is now listed`,
-                `<p>An asset you've been tracking in EdenScout — <strong>${assetLabel}</strong> — is now available for licensing in <strong>EdenMarket</strong>.</p>
-                 <p><a href="${APP_URL}/market/listing/${updated.id}">View the listing</a></p>
-                 <p style="font-size:12px;color:#888">This alert was triggered because you have this asset in your EdenScout portfolio.</p>`
-              ).catch(() => {});
+              enqueueListingAvailable(email, updated.id, assetLabel);
             }
           }));
         } catch (e) { console.warn("[market] availability signal emails failed", e); }
@@ -9868,7 +9930,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         }
       } catch (e) { console.warn("[market] buyer mutual-interest email failed", e); }
       try {
-        await sendEmail("admin@edenradar.com", `Deal created — #${deal.id} — ${assetLabel}`, `<p>Seller accepted EOI #${eoiId}. Deal #${deal.id} created. <a href="${APP_URL}/admin">View admin</a></p>`);
+        await sendAdminNotificationEmail(`Deal created — #${deal.id} — ${assetLabel}`, `<p>Seller accepted EOI #${eoiId}. Deal #${deal.id} created. <a href="${APP_URL}/admin">View admin</a></p>`);
       } catch (e) { console.warn("[market] admin deal-created email failed", e); }
 
       res.json({ deal, created: true });
@@ -10193,8 +10255,7 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
         const listing = await storage.getMarketListing(deal.listingId);
         const label = listing?.assetName || `Listing #${deal.listingId}`;
         try {
-          await sendEmail(
-            "admin@edenradar.com",
+          await sendAdminNotificationEmail(
             `Deal #${dealId} moved to ${status.toUpperCase()} — ${label}`,
             `<p>Deal #${dealId} (${label}) has been moved to <strong>${status}</strong>.</p><p><a href="${APP_URL}/admin">View in admin panel</a></p>`
           );

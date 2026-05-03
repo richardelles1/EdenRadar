@@ -15,6 +15,7 @@ import { existsSync } from "fs";
 import { spawn } from "child_process";
 import { loadAndRestoreScheduler, startScheduler, flushSchedulerState } from "./lib/scheduler";
 import { sendTrialEndingEmail } from "./email";
+import { checkAndSendAlerts } from "./lib/alertMailer";
 import pg from "pg";
 
 const app = express();
@@ -1081,6 +1082,41 @@ function scheduleTrialReminderCheck() {
   }, 10_000);
 }
 
+// ── Periodic alert-mailer evaluation (Task #687) ─────────────────────────────
+// In addition to firing at scheduler-cycle completion (~70-min cycles), evaluate
+// alerts on a short cadence so realtime subscribers receive new assets within
+// ~5 minutes of firstSeenAt. The isEvaluating guard inside checkAndSendAlerts
+// prevents concurrent runs; the lastAlertSentAt watermark prevents double-sends.
+function schedulePeriodicAlertCheck() {
+  const intervalMin = Math.max(2, Number(process.env.ALERT_EVAL_INTERVAL_MIN ?? 5));
+  const intervalMs = intervalMin * 60 * 1000;
+  log(`[alertMailer] Periodic evaluation every ${intervalMin} min`, "startup");
+  setTimeout(() => {
+    checkAndSendAlerts().catch((err: any) =>
+      log(`[alertMailer] Periodic check failed: ${err?.message}`, "startup"));
+    setInterval(() => {
+      checkAndSendAlerts().catch((err: any) =>
+        log(`[alertMailer] Periodic check failed: ${err?.message}`, "startup"));
+    }, intervalMs);
+  }, 30_000);
+}
+
+// ── Index for alert-matching query (Task #687) ───────────────────────────────
+// alertMailer's matchAssetsForAlert filters on (firstSeenAt > since AND relevant = true).
+// At 5-min cadence with growing alert/asset volume, this needs an index to stay fast.
+async function ensureAlertMatchIndex() {
+  try {
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS ingested_assets_first_seen_relevant_idx
+      ON ingested_assets(first_seen_at DESC, relevant)
+      WHERE relevant = true
+    `);
+    log("[startup] ingested_assets first_seen/relevant index ensured", "startup");
+  } catch (err: any) {
+    log(`[startup] ingested_assets index check: ${err?.message}`, "startup");
+  }
+}
+
 // ── Ensure organizations.trial_reminder_sent_at column exists ─────────────────
 async function addTrialReminderSentAtColumn() {
   try {
@@ -1402,6 +1438,10 @@ async function migrateAssetStatusValues() {
       createExportLogsTable().catch(() => {});
       // ── Trial-ending reminder emails (every 6h, 25h window) ────────────
       scheduleTrialReminderCheck();
+      // ── Periodic alert evaluation (every 5 min by default) ─────────────
+      schedulePeriodicAlertCheck();
+      // ── Index for alertMailer's matchAssetsForAlert query ──────────────
+      ensureAlertMatchIndex().catch(() => {});
       // ── Backfill industry_profiles for Supabase digest subscribers ───────
       syncSubscribersFromSupabase().catch(() => {});
       // ── Migrate asset status values to new vocabulary ──────────────────

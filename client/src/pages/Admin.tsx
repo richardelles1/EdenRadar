@@ -8919,6 +8919,17 @@ function PlatformInfo({ pw }: { pw: string }) {
     enabled: !!pw,
   });
 
+  const { data: alertLatency } = useQuery<{ avgMinutes: number | null; sampleSize: number; windowHours: number }>({
+    queryKey: ["/api/admin/alerts/latency"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/alerts/latency", { headers: { ...(pw ? { Authorization: `Bearer ${pw}` } : {}) } });
+      if (!res.ok) throw new Error("Failed to load alert latency");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!pw,
+  });
+
   const aiCalls24h = data ? Math.round(data.edenSessions24h * 4 + (data.enrichmentJobsProcessed / Math.max(data.totalAssets, 1)) * 50) : 0;
   const aiCalls7d = data ? Math.round(data.edenSessions7d * 4 + (data.enrichmentJobsProcessed / Math.max(data.totalAssets, 1)) * 300) : 0;
   const aiCalls30d = data ? Math.round(data.edenSessions30d * 4 + data.enrichmentJobsProcessed) : 0;
@@ -8953,6 +8964,19 @@ function PlatformInfo({ pw }: { pw: string }) {
           <StatCard label="Total Assets" value={data?.totalAssets ?? 0} icon={Database} testid="stat-total-assets" />
           <StatCard label="Biotech-Relevant" value={data?.relevantAssets ?? 0} sub={data ? `${((data.relevantAssets / Math.max(data.totalAssets, 1)) * 100).toFixed(1)}% of total` : undefined} icon={FlaskConical} testid="stat-relevant-assets" />
           <StatCard label="Institutions Indexed" value={data?.totalInstitutions ?? 0} icon={Globe} testid="stat-total-institutions" />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-widest mb-3">Alert Delivery</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <StatCard
+            label="Avg alert latency (24h)"
+            value={alertLatency?.avgMinutes != null ? `${alertLatency.avgMinutes.toFixed(1)} min` : "—"}
+            sub={alertLatency?.sampleSize ? `${alertLatency.sampleSize} asset send${alertLatency.sampleSize !== 1 ? "s" : ""}` : "no sends in window"}
+            icon={Clock}
+            testid="stat-alert-latency-24h"
+          />
         </div>
       </div>
 

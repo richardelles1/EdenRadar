@@ -155,8 +155,9 @@ export function renderDispatchEmail(opts: {
   totalCount?: number;
   settingsUrl?: string;
   appBaseUrl?: string;
+  unsubscribeUrl?: string;
 }): string {
-  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount, settingsUrl, appBaseUrl = "https://edenradar.com" } = opts;
+  const { subject, assets, windowLabel, isTest = false, colorMode = "light", totalCount, settingsUrl, appBaseUrl = "https://edenradar.com", unsubscribeUrl } = opts;
   const resolvedSettingsUrl = settingsUrl ?? `${appBaseUrl}/industry/settings`;
   const isLight = colorMode === "light";
 
@@ -386,7 +387,7 @@ export function renderDispatchEmail(opts: {
                   <p style="margin:0 0 12px 0;font-size:11px;color:${footerSubtitle};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:0.03em;">Biotech intelligence for industry buyers</p>
                   <p style="margin:0;font-size:11px;color:${footerBody};line-height:1.7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
                     You received this digest because you are subscribed to EdenRadar TTO intelligence alerts.<br />
-                    To manage your alert preferences or unsubscribe, <a href="${resolvedSettingsUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">visit your notification settings</a>.<br />
+                    To manage your alert preferences, <a href="${resolvedSettingsUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">visit your notification settings</a>${unsubscribeUrl ? ` or <a href="${unsubscribeUrl}" style="color:${isLight ? G_MAIN : G_BRIGHT};text-decoration:underline;font-size:11px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">unsubscribe</a>` : ""}.<br />
                     &copy; ${year} EdenRadar. All rights reserved.
                   </p>
                 </td>

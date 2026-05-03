@@ -73,6 +73,7 @@ import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { SiteGate } from "@/components/SiteGate";
 import { ScoutGate } from "@/components/ScoutGate";
 import Login from "@/pages/Login";
+import Unsubscribe from "@/pages/Unsubscribe";
 import { EdenWidget } from "@/components/EdenWidget";
 import { useEffect } from "react";
 import { useLocation } from "wouter";
@@ -253,6 +254,8 @@ function Router() {
           </ScoutGate>
         </DashboardLayout>
       </Route>
+
+      <Route path="/unsubscribe" component={Unsubscribe} />
 
       <Route path="/admin" component={Admin} />
       <Route path="/admin/mobile" component={AdminMobile} />

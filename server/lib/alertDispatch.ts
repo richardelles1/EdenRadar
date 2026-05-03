@@ -1,5 +1,5 @@
 import { storage } from "../storage.js";
-import { sendThesisAlertEmail, type AlertAsset } from "../email.js";
+import { sendThesisAlertEmail, unsubscribeUrlFor, type AlertAsset } from "../email.js";
 
 export interface AlertDispatchResult {
   checked: number;
@@ -92,7 +92,14 @@ export async function runAlertDispatch(): Promise<AlertDispatchResult> {
         sourceUrl: m.sourceUrl,
       }));
 
-      await sendThesisAlertEmail(email, displayName, alertAssets, profile.therapeuticAreas, profile.modalities);
+      await sendThesisAlertEmail(
+        email,
+        displayName,
+        alertAssets,
+        profile.therapeuticAreas,
+        profile.modalities,
+        unsubscribeUrlFor(profile.userId),
+      );
 
       const maxAssetId = Math.max(...matches.map((m) => m.id));
       await storage.updateAlertState(profile.userId, new Date(), maxAssetId);
