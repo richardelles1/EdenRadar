@@ -1,0 +1,236 @@
+/* EdenMarket day-one launch ad styles.
+   Mirrors the EdenNX/_shared-edennx.css system 1:1 for visual consistency
+   across the EdenNX product suite — same Inter typography, same emerald
+   palette pulled from edennx.com / edenmarket.com (EdenMarket is a surface
+   of the EdenNX suite, so it inherits the parent-brand emerald system on
+   the artwork). The only EdenMarket-specific touches are:
+     - the wordmark reads "EdenMarket" instead of "EdenNX"
+     - a single subtle violet signal accent (#7c3aed) on a few details, since
+       EdenMarket's in-app accent is violet (hsl(271 81% 55%) ≈ #8B5CF6)
+     - the URL footer reads edenmarket.com
+
+   Multi-size: same HTML renders at 1200x627, 1200x1200, 1080x1350, 1200x675.
+   Sizing in vw/vh/vmin so the layout scales to every viewport. */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100vw; height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+  color: #0f172a;
+  font-family: 'Inter', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.ad {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.grid-bg {
+  position: absolute;
+  inset: 0;
+  background-image: url("/images/edennx-grid.svg");
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.bottom-fade {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 30vh;
+  background: linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.92) 70%, #ffffff 100%);
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Logo — top-left, leaf glyph + "EdenMarket" wordmark. Rendered in HTML
+   instead of an image so the type aligns precisely with Inter on the rest
+   of the artwork and stays crisp at every viewport. */
+.logo {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  z-index: 3;
+  height: 7vh;
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+}
+
+.logo .leaf {
+  height: 100%;
+  width: auto;
+  display: block;
+  color: #005f46;
+  flex-shrink: 0;
+}
+
+.logo .wordmark {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 4.4vh;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: #0f172a;
+}
+
+.logo .wordmark .eden { color: #005f46; }
+
+.content {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  padding: 18vh 6vw 12vh 6vw;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3vh;
+  box-sizing: border-box;
+}
+
+.eyebrow {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 1.7vh;
+  text-transform: uppercase;
+  letter-spacing: 0.32em;
+  color: #005f46;
+}
+
+.headline {
+  font-family: 'Inter', sans-serif;
+  font-weight: 800;
+  font-size: 8.6vmin;
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  max-width: 92%;
+  text-wrap: balance;
+}
+
+.headline .green { color: #005f46; }
+.headline .accent { color: #10603b; }
+.headline .violet { color: #7c3aed; }
+
+.subline {
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+  font-size: 3.2vmin;
+  line-height: 1.4;
+  color: #475569;
+  max-width: 78%;
+}
+
+.url {
+  position: absolute;
+  bottom: 5vh;
+  left: 5vw;
+  z-index: 3;
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 2.2vh;
+  letter-spacing: 0.04em;
+  color: #005f46;
+}
+
+.url .sub {
+  display: block;
+  margin-top: 0.6vh;
+  font-weight: 500;
+  font-size: 1.5vh;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+/* Two-column "buyers / sellers" layout used by angles 3 and 4. */
+.duo {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2vw;
+  margin-top: 1vh;
+  max-width: 92%;
+}
+
+.duo .card {
+  background: #ffffff;
+  border: 1px solid rgba(0, 95, 70, 0.22);
+  border-radius: 1.4vh;
+  padding: 2.2vh 2vw;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8vh;
+}
+
+.duo .card .tag {
+  font-weight: 800;
+  font-size: 1.5vh;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: #005f46;
+}
+
+.duo .card .name {
+  font-weight: 800;
+  font-size: 3.0vmin;
+  letter-spacing: -0.015em;
+  color: #0f172a;
+}
+
+.duo .card .what {
+  font-weight: 500;
+  font-size: 2vmin;
+  color: #475569;
+}
+
+/* Feature pill list used by the "confidential by design" angle. */
+.features {
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vh;
+  margin-top: 1vh;
+}
+
+.features .row {
+  display: flex;
+  align-items: center;
+  gap: 1.2vh;
+  padding: 1.4vh 2vw;
+  background: #ffffff;
+  border: 1px solid rgba(0, 95, 70, 0.22);
+  border-radius: 999px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  width: max-content;
+  max-width: 92%;
+}
+
+.features .row .dot {
+  width: 1.4vh;
+  height: 1.4vh;
+  border-radius: 50%;
+  background: #005f46;
+  flex-shrink: 0;
+}
+
+.features .row .label {
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: 2.6vmin;
+  letter-spacing: -0.005em;
+  color: #0f172a;
+}
+
+@media (orientation: portrait) {
+  .headline { font-size: 9.6vmin; }
+  .subline  { font-size: 3.4vmin; }
+  .content  { padding-top: 22vh; padding-bottom: 16vh; }
+  .duo .card .name { font-size: 3.8vmin; }
+  .duo .card .what { font-size: 2.4vmin; }
+  .features .row .label { font-size: 3.2vmin; }
+}
