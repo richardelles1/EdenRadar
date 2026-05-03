@@ -16,7 +16,7 @@ import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import multer from "multer";
-import { dataSources, collectAllSignals, collectAllSignalsWithDiag, ALL_SOURCE_KEYS, withHardTimeout, type SourceKey, type SourceDiag } from "./lib/sources/index";
+import { dataSources, collectAllSignals, collectAllSignalsWithDiag, ALL_SOURCE_KEYS, withHardTimeout, getSourceHealthEntries, type SourceKey, type SourceDiag } from "./lib/sources/index";
 import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
@@ -351,6 +351,10 @@ export async function registerRoutes(
       description: s.description,
     }));
     res.json({ sources });
+  });
+
+  app.get("/api/sources/health", (_req, res) => {
+    res.json({ entries: getSourceHealthEntries() });
   });
 
   app.post("/api/search", aiRateLimit, async (req, res) => {

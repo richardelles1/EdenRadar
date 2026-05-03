@@ -411,8 +411,40 @@ const KNOWN_FLAKY_SOURCES: ReadonlyArray<{ id: SourceKey; reason: string }> = [
   { id: "ieee", reason: "Requires IEEE_API_KEY (no-op when unset)" },
 ];
 
+export type SourceHealthEntry = {
+  id: SourceKey;
+  status: "ok" | "missing_key" | "flaky";
+  detail?: string;
+};
+
+const KEY_GATED_SOURCES: ReadonlyArray<{ id: SourceKey; envVar: string }> = [
+  { id: "patents", envVar: "USPTO_ODP_API_KEY" },
+  { id: "lens", envVar: "LENS_API_KEY" },
+  { id: "ieee", envVar: "IEEE_API_KEY" },
+];
+
+export function getSourceHealthEntries(): SourceHealthEntry[] {
+  const entries: SourceHealthEntry[] = [];
+  for (const gated of KEY_GATED_SOURCES) {
+    if (!process.env[gated.envVar]) {
+      entries.push({ id: gated.id, status: "missing_key", detail: `${gated.envVar} not set — source returns empty silently` });
+    }
+  }
+  for (const flaky of KNOWN_FLAKY_SOURCES) {
+    entries.push({ id: flaky.id, status: "flaky", detail: flaky.reason });
+  }
+  return entries;
+}
+
 export function logSourceHealthSummary(): void {
   console.log(`[search/sources] ${ALL_SOURCE_KEYS.length} sources registered; per-source hard timeout = ${SOURCE_TIMEOUT_MS}ms; concurrency = ${CONCURRENCY_LIMIT}`);
+  for (const gated of KEY_GATED_SOURCES) {
+    if (process.env[gated.envVar]) {
+      console.log(`[search/sources] key-gated: ${gated.id} — ${gated.envVar} present (OK)`);
+    } else {
+      console.warn(`[search/sources] key-gated: ${gated.id} — ${gated.envVar} MISSING; source will return empty for every query`);
+    }
+  }
   for (const flaky of KNOWN_FLAKY_SOURCES) {
     console.log(`[search/sources] flaky-upstream: ${flaky.id} — ${flaky.reason} (kept enabled, contained by hard timeout)`);
   }

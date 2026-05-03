@@ -134,7 +134,14 @@ export async function searchPatents(
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
-      console.warn(`[search] USPTO ODP patents error ${res.status}: ${text.slice(0, 120)}`);
+      // USPTO ODP returns HTTP 404 with body containing "No matching records found"
+      // for legitimate zero-result queries. Treat as empty (silent) — only warn
+      // on real transport/auth failures (5xx, 401/403, or 4xx without that marker).
+      const isLegitimateEmpty =
+        res.status === 404 && /no matching records found/i.test(text);
+      if (!isLegitimateEmpty) {
+        console.warn(`[search] USPTO ODP patents error ${res.status}: ${text.slice(0, 120)}`);
+      }
       return [];
     }
 

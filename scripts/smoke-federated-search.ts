@@ -211,7 +211,23 @@ function pad(s: string, n: number): string {
 
   const avg = Math.round(results.reduce((s, r) => s + r.ms, 0) / results.length);
   const errorRate = results.length === 0 ? 0 : failed / results.length;
-  console.log(`\nAverage latency: ${avg}ms · Error rate: ${(errorRate * 100).toFixed(1)}% (${failed}/${results.length}) · ${failed === 0 ? "ALL PASS" : "FAIL"}\n`);
 
-  process.exit(failed === 0 ? 0 : 1);
+  // Cross-query SLA: patents and clinicaltrials must each contribute >0 on
+  // at least one of the panel queries. This catches USPTO key expiry / CT.gov
+  // outages that per-query checks miss because each individual query may
+  // legitimately have zero patent or trial matches.
+  const totalPatents = results.reduce((s, r) => s + r.byCategory.patent, 0);
+  const totalTrials = results.reduce((s, r) => s + r.byCategory.clinical_trial, 0);
+  const patentsBlind = totalPatents === 0;
+  const trialsBlind = totalTrials === 0;
+  if (patentsBlind || trialsBlind) {
+    console.log("\nCross-query SLA failures:");
+    if (patentsBlind) console.log(`  FAIL · patents contributed 0 results across all ${results.length} queries — USPTO connector likely broken`);
+    if (trialsBlind) console.log(`  FAIL · clinicaltrials contributed 0 results across all ${results.length} queries — CT.gov connector likely broken`);
+  }
+  const crossQueryFails = (patentsBlind ? 1 : 0) + (trialsBlind ? 1 : 0);
+
+  console.log(`\nAverage latency: ${avg}ms · Error rate: ${(errorRate * 100).toFixed(1)}% (${failed}/${results.length}) · Patents total: ${totalPatents} · Trials total: ${totalTrials} · ${failed === 0 && crossQueryFails === 0 ? "ALL PASS" : "FAIL"}\n`);
+
+  process.exit(failed === 0 && crossQueryFails === 0 ? 0 : 1);
 })();
