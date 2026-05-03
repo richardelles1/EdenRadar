@@ -57,6 +57,11 @@ type PipelineSummaryData = {
   totalPipelines: number;
   totalSavedAssets: number;
   institutionCount: number;
+  typeCounts?: {
+    patents: number;
+    researchStudies: number;
+    clinicalTrials: number;
+  };
 };
 
 type NewArrivalsAsset = {
@@ -977,9 +982,9 @@ export default function IndustryDashboard() {
               )}
             </div>
 
-            {/* Actions + Alerts */}
+            {/* By the Numbers + Alerts */}
             <div className="space-y-3">
-              <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground mb-2">Actions</p>
+              <p className="text-[10px] uppercase tracking-wide font-medium text-muted-foreground mb-2">By the Numbers</p>
 
               {!deltaLoading && deltaTotal > 0 && (
                 <Link href="/alerts">
@@ -999,20 +1004,39 @@ export default function IndustryDashboard() {
               )}
 
               {!pipelineLoading && (
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
-                    <span className="text-[10px] text-muted-foreground">Saved Assets</span>
-                    <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalSavedAssets ?? 0}</span>
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-saved">
+                      <span className="text-[10px] text-muted-foreground">Saved Assets</span>
+                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalSavedAssets ?? 0}</span>
+                    </div>
+                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
+                      <span className="text-[10px] text-muted-foreground">Institutions</span>
+                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
+                    </div>
+                    <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
+                      <span className="text-[10px] text-muted-foreground">Pipelines</span>
+                      <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
+                    </div>
                   </div>
-                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-institutions">
-                    <span className="text-[10px] text-muted-foreground">Institutions</span>
-                    <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.institutionCount ?? 0}</span>
-                  </div>
-                  <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-pipelines">
-                    <span className="text-[10px] text-muted-foreground">Pipelines</span>
-                    <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.totalPipelines ?? pipelineData?.lists.length ?? 0}</span>
-                  </div>
-                </div>
+
+                  {(pipelineData?.totalSavedAssets ?? 0) > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-patents">
+                        <span className="text-[10px] text-muted-foreground">Patents</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.patents ?? 0}</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-research-studies">
+                        <span className="text-[10px] text-muted-foreground">Research Studies</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.researchStudies ?? 0}</span>
+                      </div>
+                      <div className="flex flex-col items-center justify-center gap-0.5 p-3 rounded-lg border border-border/60 bg-background/50 text-center" data-testid="pipeline-stat-clinical-trials">
+                        <span className="text-[10px] text-muted-foreground">Clinical Trials</span>
+                        <span className="text-base font-bold text-foreground tabular-nums">{pipelineData?.typeCounts?.clinicalTrials ?? 0}</span>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {pipelineData !== undefined && pipelineData.lists.length === 0 && (

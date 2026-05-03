@@ -997,7 +997,7 @@ export async function registerRoutes(
           ORDER BY pl.created_at DESC
         `;
 
-      const [lists, totalSavedResult, institutionCountResult] = await Promise.all([
+      const [lists, totalSavedResult, institutionCountResult, typeCountsResult] = await Promise.all([
         db.execute(listsQuery),
         db.execute(sql`SELECT COUNT(*)::int AS n FROM saved_assets WHERE user_id = ${userId}`),
         db.execute(sql`
@@ -1009,6 +1009,23 @@ export async function registerRoutes(
             AND COALESCE(ia.institution, sa.source_journal) != ''
             AND COALESCE(ia.institution, sa.source_journal) != 'unknown'
         `),
+        // ── By-the-Numbers type breakdown (Task #743) ────────────────────────
+        // Buckets the user's saved assets by ingested_assets.source_type.
+        // Mapping (single source of truth — extend here when adding sources):
+        //   patents          → 'patent'
+        //   researchStudies  → 'paper', 'preprint'
+        //   clinicalTrials   → 'clinical_trial'
+        // Rows with no linked ingested_asset (legacy saves) fall through and
+        // are excluded from these three counts (per task spec).
+        db.execute(sql`
+          SELECT
+            SUM(CASE WHEN ia.source_type = 'patent' THEN 1 ELSE 0 END)::int AS patents,
+            SUM(CASE WHEN ia.source_type IN ('paper','preprint') THEN 1 ELSE 0 END)::int AS research_studies,
+            SUM(CASE WHEN ia.source_type = 'clinical_trial' THEN 1 ELSE 0 END)::int AS clinical_trials
+          FROM saved_assets sa
+          JOIN ingested_assets ia ON ia.id = sa.ingested_asset_id
+          WHERE sa.user_id = ${userId}
+        `),
       ]);
       const pipelineSummaryLists = (lists.rows as Record<string, unknown>[]).map((r) => ({
         id: Number(r.id),
@@ -1018,7 +1035,13 @@ export async function registerRoutes(
       const totalPipelines = pipelineSummaryLists.length;
       const totalSavedAssets = Number((totalSavedResult.rows[0] as Record<string, unknown>)?.n ?? 0);
       const institutionCount = Number((institutionCountResult.rows[0] as Record<string, unknown>)?.n ?? 0);
-      return res.json({ lists: pipelineSummaryLists, totalPipelines, totalSavedAssets, institutionCount });
+      const tcRow = (typeCountsResult.rows[0] as Record<string, unknown> | undefined) ?? {};
+      const typeCounts = {
+        patents: Number(tcRow.patents ?? 0),
+        researchStudies: Number(tcRow.research_studies ?? 0),
+        clinicalTrials: Number(tcRow.clinical_trials ?? 0),
+      };
+      return res.json({ lists: pipelineSummaryLists, totalPipelines, totalSavedAssets, institutionCount, typeCounts });
     } catch (err: any) {
       console.error("[pipeline-lists/summary] Error:", err);
       return res.status(500).json({ error: err.message ?? "Failed to load pipeline summary" });
