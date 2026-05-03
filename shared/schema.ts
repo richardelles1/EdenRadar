@@ -977,6 +977,10 @@ export type MarketAvailabilityNotification = typeof marketAvailabilityNotificati
 export const FEEDBACK_ACTIONS = ["save", "dismiss", "view", "nda_request"] as const;
 export type FeedbackAction = (typeof FEEDBACK_ACTIONS)[number];
 
+// Append-only event log: every save / dismiss / view / nda_request lands as
+// its own row so weekly metrics and per-user offsets can reason about full
+// history. "Current preference" is derived at query time (latest event per
+// (userId, assetId) wins).
 export const userAssetFeedback = pgTable("user_asset_feedback", {
   id: serial("id").primaryKey(),
   userId: text("user_id").notNull(),
@@ -987,7 +991,7 @@ export const userAssetFeedback = pgTable("user_asset_feedback", {
 }, (t) => ({
   userActionIdx: index("user_asset_feedback_user_action_idx").on(t.userId, t.action),
   assetActionIdx: index("user_asset_feedback_asset_action_idx").on(t.assetId, t.action),
-  uniq: uniqueIndex("user_asset_feedback_user_asset_action_uniq").on(t.userId, t.assetId, t.action),
+  userAssetCreatedIdx: index("user_asset_feedback_user_asset_created_idx").on(t.userId, t.assetId, t.createdAt),
 }));
 
 export const insertUserAssetFeedbackSchema = createInsertSchema(userAssetFeedback)

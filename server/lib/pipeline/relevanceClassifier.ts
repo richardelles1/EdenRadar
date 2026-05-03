@@ -53,9 +53,37 @@ export const CLASSIFIER_V2_ENABLED = flagRaw === "true"
     : !isProdEnv;
 
 const thresholdRaw = parseFloat(process.env.EDEN_RELEVANCE_CLASSIFIER_THRESHOLD ?? "");
-export const CLASSIFIER_THRESHOLD = Number.isFinite(thresholdRaw) && thresholdRaw > 0 && thresholdRaw < 1
+const ENV_THRESHOLD = Number.isFinite(thresholdRaw) && thresholdRaw > 0 && thresholdRaw < 1
   ? thresholdRaw
-  : DEFAULT_THRESHOLD;
+  : null;
+export const CLASSIFIER_THRESHOLD = ENV_THRESHOLD ?? DEFAULT_THRESHOLD;
+
+// Tuned threshold: persisted by POST /api/admin/relevance/threshold/tune
+// after evaluating the holdout. Cached for 5 min so the hot path doesn't
+// hit the DB. Env var takes precedence (for explicit ops overrides).
+const THRESHOLD_CACHE_MS = 5 * 60 * 1000;
+let cachedTunedThreshold: { value: number | null; expiresAt: number } = { value: null, expiresAt: 0 };
+
+export function invalidateThresholdCache(): void {
+  cachedTunedThreshold = { value: null, expiresAt: 0 };
+}
+
+export async function getActiveThreshold(): Promise<number> {
+  if (ENV_THRESHOLD != null) return ENV_THRESHOLD;
+  const now = Date.now();
+  if (now < cachedTunedThreshold.expiresAt) {
+    return cachedTunedThreshold.value ?? DEFAULT_THRESHOLD;
+  }
+  try {
+    const { storage } = await import("../../storage");
+    const tuned = await storage.getTunedClassifierThreshold();
+    cachedTunedThreshold = { value: tuned?.threshold ?? null, expiresAt: now + THRESHOLD_CACHE_MS };
+    return tuned?.threshold ?? DEFAULT_THRESHOLD;
+  } catch {
+    cachedTunedThreshold = { value: null, expiresAt: now + THRESHOLD_CACHE_MS };
+    return DEFAULT_THRESHOLD;
+  }
+}
 
 function sigmoid(z: number): number {
   if (z >= 0) {

@@ -1196,11 +1196,11 @@ export async function registerRoutes(
         pmid: body.pmid,
       }, userId);
       logTeamActivity(userId ?? null, "saved_asset", asset.ingestedAssetId ?? null, asset.assetName).catch(() => {});
-      // Record save as relevance feedback (Task #694).
+      // Append save event to the relevance feedback log (Task #694). The log is
+      // append-only — earlier dismiss events are kept; getUserClassOffsets
+      // resolves preference using the latest event per (user, asset).
       if (userId && asset.ingestedAssetId) {
         storage.recordFeedback(userId, asset.ingestedAssetId, "save", "saved_assets").catch(() => {});
-        // Remove any prior dismiss feedback so per-user offsets re-balance.
-        storage.deleteFeedback(userId, asset.ingestedAssetId, "dismiss").catch(() => {});
       }
       res.status(201).json({ asset });
     } catch (err: any) {
@@ -1487,9 +1487,11 @@ export async function registerRoutes(
       if (!await canAccessSavedAsset(assetBefore, userId ?? null)) return res.status(403).json({ error: "Access denied" });
       await storage.deleteSavedAsset(id);
       logTeamActivity(userId ?? null, "removed_asset", null, assetBefore.assetName).catch(() => {});
-      // Unsave clears the save signal (Task #694).
+      // Unsave records a dismiss event (Task #694). The prior save event is
+      // preserved in the append-only log; latest-event-wins makes this user's
+      // current preference "dismiss" for the asset class.
       if (userId && assetBefore.ingestedAssetId) {
-        storage.deleteFeedback(userId, assetBefore.ingestedAssetId, "save").catch(() => {});
+        storage.recordFeedback(userId, assetBefore.ingestedAssetId, "dismiss", "unsave").catch(() => {});
       }
       res.status(204).send();
     } catch (err: any) {
@@ -1950,17 +1952,14 @@ export async function registerRoutes(
       const body = feedbackBodySchema.parse(req.body);
       const userId = await tryGetUserId(req).catch(() => null);
       if (!userId) return res.status(200).json({ recorded: false, reason: "anonymous" });
-      // Save and dismiss are mutually exclusive for offset semantics — clear the
-      // opposite signal when one is recorded.
-      if (body.action === "save") {
-        storage.deleteFeedback(userId, body.assetId, "dismiss").catch(() => {});
-      } else if (body.action === "dismiss") {
-        storage.deleteFeedback(userId, body.assetId, "save").catch(() => {});
-      }
+      // Append-only log: every event is preserved. getUserClassOffsets and
+      // buildRelevanceHoldout derive the user's current preference using the
+      // latest event per (user, asset).
       const row = await storage.recordFeedback(userId, body.assetId, body.action, body.source ?? "scout");
       res.status(201).json({ recorded: true, feedback: row });
-    } catch (err: any) {
-      res.status(400).json({ error: err.message ?? "Failed to record feedback" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to record feedback";
+      res.status(400).json({ error: msg });
     }
   });
 
@@ -1991,18 +1990,40 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/relevance/eval", async (req, res) => {
+  app.get("/api/admin/relevance/eval", async (_req, res) => {
     try {
-      const { preFilterRelevance } = await import("./lib/pipeline/relevancePreFilter");
-      const { scoreText, CLASSIFIER_THRESHOLD } = await import("./lib/pipeline/relevanceClassifier");
-      const rows = await storage.listRelevanceHoldout(20000);
+      const preFilterMod = await import("./lib/pipeline/relevancePreFilter");
+      const classifierMod = await import("./lib/pipeline/relevanceClassifier");
+      const { preFilterRelevance } = preFilterMod;
+      const { scoreText, CLASSIFIER_THRESHOLD, CLASSIFIER_V2_ENABLED, getActiveThreshold } = classifierMod;
+      // Eval split only — train/eval partitioning is enforced by buildRelevanceHoldout.
+      const rows = await storage.listRelevanceHoldout(20000, "eval");
+      const activeThreshold = await getActiveThreshold();
       if (rows.length === 0) {
-        return res.json({ holdoutSize: 0, threshold: CLASSIFIER_THRESHOLD, v1: null, v2: null, sweep: [] });
+        return res.json({
+          holdoutSize: 0,
+          threshold: CLASSIFIER_THRESHOLD,
+          activeThreshold,
+          currentVariant: CLASSIFIER_V2_ENABLED ? "v2_classifier" : "v1_keyword",
+          v1: null,
+          v2: null,
+          current: null,
+          sweep: [],
+          bestThreshold: null,
+        });
       }
 
+      type Listing = Parameters<typeof preFilterRelevance>[0];
       const scored = rows.map((r) => {
-        const probV2 = scoreText(r.text || "").prob;
-        const v1 = preFilterRelevance({ title: r.text || "", description: "", url: "", source: r.sourceName || "unknown" } as any);
+        const text = r.text || "";
+        const probV2 = scoreText(text).prob;
+        const listing: Listing = {
+          title: text,
+          description: "",
+          url: "",
+          institution: r.sourceName || "unknown",
+        };
+        const v1 = preFilterRelevance(listing);
         return { label: !!r.label, probV2, v1Pass: v1 !== "reject" };
       });
 
@@ -2027,16 +2048,60 @@ export async function registerRoutes(
         threshold: t,
         ...evalAt(t),
       }));
+      // currentPipeline = whichever pre-filter actually runs in production
+      // right now (v1 keyword OR v2 classifier at the active threshold).
+      const currentStats = CLASSIFIER_V2_ENABLED ? evalAt(activeThreshold) : v1Stats;
+      // bestThreshold = sweep entry with the highest F1 — used by
+      // POST /api/admin/relevance/threshold/tune to persist the choice.
+      const best = sweep.reduce((acc, s) => (s.f1 > acc.f1 ? s : acc), sweep[0]);
 
       res.json({
         holdoutSize: rows.length,
         threshold: CLASSIFIER_THRESHOLD,
+        activeThreshold,
+        currentVariant: CLASSIFIER_V2_ENABLED ? "v2_classifier" : "v1_keyword",
         v1: v1Stats,
         v2: v2Stats,
+        current: currentStats,
         sweep,
+        bestThreshold: best ? { threshold: best.threshold, f1: best.f1 } : null,
       });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message ?? "Failed to evaluate" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to evaluate";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // POST → picks the best-F1 threshold from the sweep and persists it via
+  // storage.setTunedClassifierThreshold. The classifier reads it lazily
+  // (cached for 5 min) so production switches over without a restart.
+  app.post("/api/admin/relevance/threshold/tune", async (_req, res) => {
+    try {
+      const classifierMod = await import("./lib/pipeline/relevanceClassifier");
+      const { scoreText, invalidateThresholdCache } = classifierMod;
+      const rows = await storage.listRelevanceHoldout(20000, "eval");
+      if (rows.length === 0) return res.status(400).json({ error: "Holdout is empty — build it first" });
+      const probs = rows.map((r) => ({ label: !!r.label, prob: scoreText(r.text || "").prob }));
+      let best = { threshold: 0.5, f1: -1 };
+      for (const t of [0.30, 0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]) {
+        let tp = 0, fp = 0, fn = 0;
+        for (const p of probs) {
+          const pred = p.prob >= t;
+          if (pred && p.label) tp++;
+          else if (pred && !p.label) fp++;
+          else if (!pred && p.label) fn++;
+        }
+        const precision = tp + fp > 0 ? tp / (tp + fp) : 0;
+        const recall = tp + fn > 0 ? tp / (tp + fn) : 0;
+        const f1 = precision + recall > 0 ? (2 * precision * recall) / (precision + recall) : 0;
+        if (f1 > best.f1) best = { threshold: t, f1 };
+      }
+      await storage.setTunedClassifierThreshold(best.threshold, best.f1);
+      invalidateThresholdCache();
+      res.json({ tuned: best, holdoutSize: rows.length });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to tune threshold";
+      res.status(500).json({ error: msg });
     }
   });
 

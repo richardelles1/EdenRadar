@@ -391,24 +391,44 @@ Programmatic end-to-end test executed against the live Stripe **test-mode** API 
 ## Feedback-Driven Relevance (Task #694)
 
 Three new tables drive the closed-loop relevance system:
-- `user_asset_feedback` — every save / dismiss / view / nda_request action
-  per (userId, assetId, action) with a partial unique index. Saves are also
-  recorded automatically from `POST /api/saved-assets` (with the prior dismiss
-  cleared) and unsaves clear the save signal from `DELETE /api/saved-assets/:id`.
+- `user_asset_feedback` — **append-only event log**. Every save / dismiss / view /
+  nda_request lands as its own row; the previous unique index on
+  `(user_id, asset_id, action)` was dropped so full history is preserved.
+  Indexed on `(user_id, asset_id, created_at)` to make latest-event-wins
+  lookups cheap. `POST /api/saved-assets` appends a `save` event and
+  `DELETE /api/saved-assets/:id` appends a `dismiss` event (source `unsave`)
+  — neither path mutates earlier rows.
 - `relevance_holdout` — eval set built from `ingested_assets.human_verified`
   positives plus strong save (positive) / dismiss-only (negative) signals via
-  `storage.buildRelevanceHoldout`. Idempotent — existing rows are kept.
+  `storage.buildRelevanceHoldout`. Rows are deterministically partitioned
+  80/20 train/eval (`ia.id % 5 == 0 → eval`). Eval cap of ~1,000 rows is
+  enforced by demoting overflow back into train, and a 180-day recency
+  window keeps the distribution aligned with what users see today.
+  Dismiss-signal labels use latest-event-wins so a save-after-dismiss is
+  treated as the user's current preference. Idempotent — existing rows
+  keep their split assignment across re-runs.
 - `relevance_metrics` — weekly aggregated save/dismiss counts and rates per
-  dimension (overall, source, asset_class). Written by
+  dimension (overall, source, asset_class, **score_bucket** based on
+  `ingested_assets.category_confidence` low/medium/high/unknown). Written by
   `storage.computeRelevanceMetrics(7)` and refreshed by
   `scheduleRelevanceMetricsAggregation` in `server/index.ts` (1 minute after
-  boot if stale, then every 7 days).
+  boot if stale, then every 7 days). Tuned thresholds are persisted as rows
+  with `dimension='tuned_threshold'`, `dimensionValue=String(threshold)`,
+  `saveRate=f1` (latest row wins).
 
 Public endpoint `POST /api/feedback {assetId, action, source?}` records
 feedback when a userId resolves (anonymous calls return `{recorded: false}`);
 the `✕ Not relevant` button on `AssetCard` posts `action="dismiss"` here.
-Admin endpoints `/api/admin/relevance/{holdout/build,eval,metrics,metrics/refresh}`
+Admin endpoints `/api/admin/relevance/{holdout/build,eval,metrics,metrics/refresh,threshold/tune}`
 power the Admin → Data Pipeline → Feedback-Driven Relevance panel.
+The eval endpoint filters to `split='eval'` only and returns three
+side-by-side stats blocks — `v1 keyword`, `v2 classifier`, and
+`Current pipeline` (whichever variant is actually serving production at
+the active threshold) — plus the best-F1 `bestThreshold` from the sweep.
+`POST /api/admin/relevance/threshold/tune` picks the best-F1 threshold
+from the sweep and persists it; the classifier reads it lazily (cached
+5 min) so production switches over without a restart. Env var
+`EDEN_RELEVANCE_CLASSIFIER_THRESHOLD` always overrides the tuned value.
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)

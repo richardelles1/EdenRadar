@@ -100,10 +100,12 @@ export interface IStorage {
   // ── Feedback-driven Relevance (Task #694) ────────────────────────────────
   recordFeedback(userId: string, assetId: number, action: FeedbackAction, source?: string): Promise<UserAssetFeedback | null>;
   deleteFeedback(userId: string, assetId: number, action: FeedbackAction): Promise<number>;
+  setTunedClassifierThreshold(threshold: number, f1: number): Promise<void>;
+  getTunedClassifierThreshold(): Promise<{ threshold: number; f1: number | null; computedAt: Date } | null>;
   listUserFeedback(userId: string, limit?: number): Promise<UserAssetFeedback[]>;
   backfillFeedbackFromSavedAssets(): Promise<{ inserted: number }>;
-  buildRelevanceHoldout(): Promise<{ inserted: number; fromHumanVerified: number; fromSaves: number; fromDismisses: number; total: number }>;
-  listRelevanceHoldout(limit?: number): Promise<RelevanceHoldoutRow[]>;
+  buildRelevanceHoldout(): Promise<{ inserted: number; fromHumanVerified: number; fromSaves: number; fromDismisses: number; total: number; evalSize: number; trainSize: number }>;
+  listRelevanceHoldout(limit?: number, split?: "eval" | "train"): Promise<RelevanceHoldoutRow[]>;
   getRelevanceHoldoutStats(): Promise<{ total: number; positives: number; negatives: number; bySource: Array<{ labelSource: string; count: number; positives: number }> }>;
   computeRelevanceMetrics(periodDays?: number): Promise<{ inserted: number; rows: RelevanceMetricsRow[] }>;
   getLatestRelevanceMetrics(limit?: number): Promise<RelevanceMetricsRow[]>;
@@ -3536,11 +3538,11 @@ export class DatabaseStorage implements IStorage {
   ): Promise<UserAssetFeedback | null> {
     if (!userId || !Number.isFinite(assetId)) return null;
     if (!FEEDBACK_ACTIONS.includes(action)) return null;
+    // Append-only history: every event is preserved so weekly metrics and
+    // per-user offsets can reason about the full timeline. Current preference
+    // is derived at query time (latest event per (userId, assetId)).
     const [row] = await db.insert(userAssetFeedback)
       .values({ userId, assetId, action, source })
-      .onConflictDoNothing({
-        target: [userAssetFeedback.userId, userAssetFeedback.assetId, userAssetFeedback.action],
-      })
       .returning();
     return row ?? null;
   }
@@ -3566,15 +3568,25 @@ export class DatabaseStorage implements IStorage {
   }
 
   async backfillFeedbackFromSavedAssets(): Promise<{ inserted: number }> {
-    // Idempotent: ON CONFLICT DO NOTHING via partial unique index.
+    // Idempotent: only inserts a backfill row when one doesn't already exist
+    // for that (user, asset) — without relying on a unique constraint on the
+    // append-only table.
     const res = await db.execute(sql`
       INSERT INTO user_asset_feedback (user_id, asset_id, action, source, created_at)
       SELECT sa.user_id, sa.ingested_asset_id, 'save', 'backfill', sa.saved_at
       FROM saved_assets sa
-      WHERE sa.user_id IS NOT NULL AND sa.ingested_asset_id IS NOT NULL
-      ON CONFLICT (user_id, asset_id, action) DO NOTHING
+      WHERE sa.user_id IS NOT NULL
+        AND sa.ingested_asset_id IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM user_asset_feedback uf
+          WHERE uf.user_id = sa.user_id
+            AND uf.asset_id = sa.ingested_asset_id
+            AND uf.action = 'save'
+            AND uf.source = 'backfill'
+        )
     `);
-    return { inserted: (res as any).rowCount ?? 0 };
+    const rowCount = (res as { rowCount?: number }).rowCount;
+    return { inserted: rowCount ?? 0 };
   }
 
   /**
@@ -3590,87 +3602,108 @@ export class DatabaseStorage implements IStorage {
     fromSaves: number;
     fromDismisses: number;
     total: number;
+    evalSize: number;
+    trainSize: number;
   }> {
     await this.backfillFeedbackFromSavedAssets();
 
-    // Human-verified positives (any field flagged true).
+    // 80/20 train/eval split via deterministic hash on the asset id, capped at
+    // ~1,000 eval rows per the documented sampling target. The split column is
+    // assigned at insert time and never changed for an existing asset, so
+    // re-running the build is idempotent (existing assets stay in the same
+    // split). Recent assets (last 180 days) are preferred to keep the
+    // distribution aligned with what users see today.
+    const SPLIT_EXPR = sql`CASE WHEN (ia.id % 5) = 0 THEN 'eval' ELSE 'train' END`;
+    const RECENT_WINDOW = sql`ia.first_seen_at >= NOW() - INTERVAL '180 days' OR ia.first_seen_at IS NULL`;
+    const TEXT_EXPR = sql`COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, '')`;
+
     const humanRes = await db.execute(sql`
       INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
-      SELECT
-        ia.id,
-        TRUE,
-        'human_verified',
-        'eval',
-        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
-        ia.asset_class,
-        ia.source_name
+      SELECT ia.id, TRUE, 'human_verified', ${SPLIT_EXPR},
+             ${TEXT_EXPR}, ia.asset_class, ia.source_name
       FROM ingested_assets ia
       WHERE ia.human_verified IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM jsonb_each_text(ia.human_verified) v WHERE v.value = 'true'
-        )
-      ON CONFLICT (asset_id) DO NOTHING
+        AND EXISTS (SELECT 1 FROM jsonb_each_text(ia.human_verified) v WHERE v.value = 'true')
+        AND NOT EXISTS (SELECT 1 FROM relevance_holdout h WHERE h.asset_id = ia.id)
     `);
-    const fromHumanVerified = (humanRes as any).rowCount ?? 0;
+    const fromHumanVerified = (humanRes as { rowCount?: number }).rowCount ?? 0;
 
-    // Save signals: ≥1 user save → positive.
     const saveRes = await db.execute(sql`
       INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
-      SELECT
-        ia.id,
-        TRUE,
-        'save_signal',
-        'eval',
-        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
-        ia.asset_class,
-        ia.source_name
+      SELECT ia.id, TRUE, 'save_signal', ${SPLIT_EXPR},
+             ${TEXT_EXPR}, ia.asset_class, ia.source_name
       FROM ingested_assets ia
-      WHERE EXISTS (
-        SELECT 1 FROM user_asset_feedback uf
-        WHERE uf.asset_id = ia.id AND uf.action = 'save'
-      )
-      ON CONFLICT (asset_id) DO NOTHING
+      WHERE (${RECENT_WINDOW})
+        AND EXISTS (SELECT 1 FROM user_asset_feedback uf WHERE uf.asset_id = ia.id AND uf.action = 'save')
+        AND NOT EXISTS (SELECT 1 FROM relevance_holdout h WHERE h.asset_id = ia.id)
     `);
-    const fromSaves = (saveRes as any).rowCount ?? 0;
+    const fromSaves = (saveRes as { rowCount?: number }).rowCount ?? 0;
 
-    // Dismiss signals: ≥1 dismiss and 0 saves → negative.
+    // Dismiss signals: latest event per (user,asset) must still be 'dismiss'
+    // (i.e. the user didn't subsequently save it). This matches the new
+    // append-only semantics.
     const dismissRes = await db.execute(sql`
       INSERT INTO relevance_holdout (asset_id, label, label_source, split, text, asset_class, source_name)
-      SELECT
-        ia.id,
-        FALSE,
-        'dismiss_signal',
-        'eval',
-        COALESCE(ia.asset_name, '') || ' ' || COALESCE(ia.summary, ''),
-        ia.asset_class,
-        ia.source_name
+      SELECT ia.id, FALSE, 'dismiss_signal', ${SPLIT_EXPR},
+             ${TEXT_EXPR}, ia.asset_class, ia.source_name
       FROM ingested_assets ia
-      WHERE EXISTS (
-        SELECT 1 FROM user_asset_feedback uf
-        WHERE uf.asset_id = ia.id AND uf.action = 'dismiss'
-      )
-      AND NOT EXISTS (
-        SELECT 1 FROM user_asset_feedback uf2
-        WHERE uf2.asset_id = ia.id AND uf2.action = 'save'
-      )
-      ON CONFLICT (asset_id) DO NOTHING
+      WHERE (${RECENT_WINDOW})
+        AND EXISTS (
+          SELECT 1 FROM (
+            SELECT DISTINCT ON (user_id, asset_id) user_id, asset_id, action
+            FROM user_asset_feedback
+            WHERE asset_id = ia.id AND action IN ('save', 'dismiss')
+            ORDER BY user_id, asset_id, created_at DESC
+          ) latest WHERE latest.action = 'dismiss'
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM (
+            SELECT DISTINCT ON (user_id, asset_id) user_id, asset_id, action
+            FROM user_asset_feedback
+            WHERE asset_id = ia.id AND action IN ('save', 'dismiss')
+            ORDER BY user_id, asset_id, created_at DESC
+          ) latest WHERE latest.action = 'save'
+        )
+        AND NOT EXISTS (SELECT 1 FROM relevance_holdout h WHERE h.asset_id = ia.id)
     `);
-    const fromDismisses = (dismissRes as any).rowCount ?? 0;
+    const fromDismisses = (dismissRes as { rowCount?: number }).rowCount ?? 0;
 
-    const totalRes = await db.execute(sql`SELECT COUNT(*)::int AS c FROM relevance_holdout`);
-    const total = ((totalRes as any).rows?.[0]?.c ?? 0) as number;
+    // Cap the eval split at ~1,000 rows by demoting overflow into train. We
+    // demote the lowest-id rows so the most recent feedback stays in eval.
+    await db.execute(sql`
+      UPDATE relevance_holdout SET split = 'train'
+      WHERE id IN (
+        SELECT id FROM relevance_holdout
+        WHERE split = 'eval'
+        ORDER BY created_at ASC, id ASC
+        OFFSET 1000
+      )
+    `);
+
+    const sizes = await db.execute(sql`
+      SELECT
+        COUNT(*) FILTER (WHERE split = 'eval')::int AS eval_size,
+        COUNT(*) FILTER (WHERE split = 'train')::int AS train_size,
+        COUNT(*)::int AS total
+      FROM relevance_holdout
+    `);
+    const sizeRow = (sizes as unknown as { rows?: Array<{ eval_size: number; train_size: number; total: number }> }).rows?.[0];
 
     return {
       inserted: fromHumanVerified + fromSaves + fromDismisses,
       fromHumanVerified,
       fromSaves,
       fromDismisses,
-      total,
+      total: sizeRow?.total ?? 0,
+      evalSize: sizeRow?.eval_size ?? 0,
+      trainSize: sizeRow?.train_size ?? 0,
     };
   }
 
-  async listRelevanceHoldout(limit = 5000): Promise<RelevanceHoldoutRow[]> {
-    return db.select().from(relevanceHoldout).limit(limit);
+  async listRelevanceHoldout(limit = 5000, split?: "eval" | "train"): Promise<RelevanceHoldoutRow[]> {
+    const q = db.select().from(relevanceHoldout);
+    const filtered = split ? q.where(eq(relevanceHoldout.split, split)) : q;
+    return filtered.limit(limit);
   }
 
   async getRelevanceHoldoutStats(): Promise<{
@@ -3745,14 +3778,41 @@ export class DatabaseStorage implements IStorage {
       GROUP BY COALESCE(ia.asset_class, 'unknown')
     `);
 
+    // Per scoring-confidence bucket — slices feedback by the classifier's
+    // own categoryConfidence so we can see whether high-confidence picks
+    // actually convert to saves.
+    const perBucket = await db.execute(sql`
+      SELECT
+        CASE
+          WHEN ia.category_confidence IS NULL THEN 'unknown'
+          WHEN ia.category_confidence >= 0.75 THEN 'high'
+          WHEN ia.category_confidence >= 0.5 THEN 'medium'
+          ELSE 'low'
+        END AS dim_value,
+        COUNT(*) FILTER (WHERE uf.action = 'save')::int AS saves,
+        COUNT(*) FILTER (WHERE uf.action = 'dismiss')::int AS dismisses,
+        COUNT(*) FILTER (WHERE uf.action = 'view')::int AS views
+      FROM user_asset_feedback uf
+      JOIN ingested_assets ia ON ia.id = uf.asset_id
+      WHERE uf.created_at >= ${since}
+      GROUP BY 1
+    `);
+
     type Bucket = { dimension: string; dimensionValue: string; saves: number; dismisses: number; views: number };
+    type DimRow = { dim_value: string; saves: number; dismisses: number; views: number };
+    const sourceRows = ((perSource as unknown as { rows?: DimRow[] }).rows ?? []);
+    const classRows = ((perClass as unknown as { rows?: DimRow[] }).rows ?? []);
+    const bucketRows = ((perBucket as unknown as { rows?: DimRow[] }).rows ?? []);
     const buckets: Bucket[] = [
       { dimension: "overall", dimensionValue: "", saves: o.saves ?? 0, dismisses: o.dismisses ?? 0, views: o.views ?? 0 },
-      ...((perSource as any).rows ?? []).map((r: any): Bucket => ({
+      ...sourceRows.map((r): Bucket => ({
         dimension: "source", dimensionValue: r.dim_value, saves: r.saves, dismisses: r.dismisses, views: r.views,
       })),
-      ...((perClass as any).rows ?? []).map((r: any): Bucket => ({
+      ...classRows.map((r): Bucket => ({
         dimension: "asset_class", dimensionValue: r.dim_value, saves: r.saves, dismisses: r.dismisses, views: r.views,
+      })),
+      ...bucketRows.map((r): Bucket => ({
+        dimension: "score_bucket", dimensionValue: r.dim_value, saves: r.saves, dismisses: r.dismisses, views: r.views,
       })),
     ];
 
@@ -3795,23 +3855,63 @@ export class DatabaseStorage implements IStorage {
    */
   async getUserClassOffsets(userId: string): Promise<Record<string, number>> {
     if (!userId) return {};
+    // Latest-event-wins per (user, asset): a save followed by a dismiss
+    // counts as a single dismiss; multiple saves still count once. Then
+    // sum (latest=='save') minus (latest=='dismiss') per asset class and
+    // clamp to ±10 — same hard cap is also re-applied in scoreAssets.
     const rows = await db.execute(sql`
+      WITH latest AS (
+        SELECT DISTINCT ON (asset_id) asset_id, action
+        FROM user_asset_feedback
+        WHERE user_id = ${userId} AND action IN ('save', 'dismiss')
+        ORDER BY asset_id, created_at DESC
+      )
       SELECT
         COALESCE(ia.asset_class, 'unknown') AS asset_class,
-        SUM(CASE WHEN uf.action = 'save' THEN 1 ELSE 0 END)::int AS saves,
-        SUM(CASE WHEN uf.action = 'dismiss' THEN 1 ELSE 0 END)::int AS dismisses
-      FROM user_asset_feedback uf
-      JOIN ingested_assets ia ON ia.id = uf.asset_id
-      WHERE uf.user_id = ${userId}
+        SUM(CASE WHEN latest.action = 'save' THEN 1 ELSE 0 END)::int AS saves,
+        SUM(CASE WHEN latest.action = 'dismiss' THEN 1 ELSE 0 END)::int AS dismisses
+      FROM latest
+      JOIN ingested_assets ia ON ia.id = latest.asset_id
       GROUP BY COALESCE(ia.asset_class, 'unknown')
     `);
     const out: Record<string, number> = {};
-    for (const r of ((rows as any).rows ?? [])) {
-      const raw = (r.saves as number) - (r.dismisses as number);
+    type OffsetRow = { asset_class: string; saves: number; dismisses: number };
+    for (const r of ((rows as unknown as { rows?: OffsetRow[] }).rows ?? [])) {
+      const raw = r.saves - r.dismisses;
       const capped = Math.max(-10, Math.min(10, raw));
-      if (capped !== 0) out[r.asset_class as string] = capped;
+      if (capped !== 0) out[r.asset_class] = capped;
     }
     return out;
+  }
+
+  // ── Tuned classifier threshold (Task #694) ────────────────────────────────
+  // Persisted as a `relevance_metrics` row with dimension='tuned_threshold'
+  // and dimensionValue=String(threshold). Reads pick up the most recent.
+  async setTunedClassifierThreshold(threshold: number, f1: number): Promise<void> {
+    if (!Number.isFinite(threshold) || threshold <= 0 || threshold >= 1) return;
+    await db.insert(relevanceMetrics).values({
+      periodDays: 0,
+      dimension: "tuned_threshold",
+      dimensionValue: threshold.toFixed(4),
+      shownCount: 0,
+      saveCount: 0,
+      dismissCount: 0,
+      viewCount: 0,
+      saveRate: f1,
+      dismissRate: null,
+    });
+  }
+
+  async getTunedClassifierThreshold(): Promise<{ threshold: number; f1: number | null; computedAt: Date } | null> {
+    const r = await db.select().from(relevanceMetrics)
+      .where(eq(relevanceMetrics.dimension, "tuned_threshold"))
+      .orderBy(desc(relevanceMetrics.computedAt))
+      .limit(1);
+    const row = r[0];
+    if (!row) return null;
+    const t = parseFloat(row.dimensionValue);
+    if (!Number.isFinite(t)) return null;
+    return { threshold: t, f1: row.saveRate ?? null, computedAt: row.computedAt };
   }
 }
 

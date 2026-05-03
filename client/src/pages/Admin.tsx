@@ -9330,9 +9330,13 @@ type RelevanceEvalStats = { tp: number; fp: number; tn: number; fn: number; prec
 type RelevanceEvalResp = {
   holdoutSize: number;
   threshold: number;
+  activeThreshold: number;
+  currentVariant: "v1_keyword" | "v2_classifier";
   v1: RelevanceEvalStats | null;
   v2: RelevanceEvalStats | null;
+  current: RelevanceEvalStats | null;
   sweep: Array<{ threshold: number } & RelevanceEvalStats>;
+  bestThreshold: { threshold: number; f1: number } | null;
 };
 type RelevanceMetricsResp = {
   rows: Array<{ id: number; computedAt: string; periodDays: number; dimension: string; dimensionValue: string; shownCount: number; saveCount: number; dismissCount: number; viewCount: number; saveRate: number | null; dismissRate: number | null }>;
@@ -9366,30 +9370,54 @@ function RelevancePanel({ pw }: { pw: string }) {
     },
   });
 
-  const buildHoldout = useMutation({
+  type BuildResp = {
+    inserted: number;
+    stats?: { total?: number };
+    evalSize?: number;
+    trainSize?: number;
+  };
+  const buildHoldout = useMutation<BuildResp, Error, void>({
     mutationFn: async () => {
       const r = await fetch("/api/admin/relevance/holdout/build", { method: "POST", headers: authHeaders });
       if (!r.ok) throw new Error("Build failed");
-      return r.json();
+      return (await r.json()) as BuildResp;
     },
-    onSuccess: (data: any) => {
-      toast({ title: "Holdout built", description: `Total ${data?.stats?.total ?? "?"} rows (+${data?.inserted ?? 0} new)` });
+    onSuccess: (data) => {
+      toast({
+        title: "Holdout built",
+        description: `Total ${data?.stats?.total ?? "?"} rows (+${data?.inserted ?? 0} new) · eval ${data?.evalSize ?? "?"} / train ${data?.trainSize ?? "?"}`,
+      });
       evalQ.refetch();
     },
-    onError: (e: any) => toast({ title: "Build failed", description: e.message, variant: "destructive" }),
+    onError: (e) => toast({ title: "Build failed", description: e.message, variant: "destructive" }),
   });
 
-  const refreshMetrics = useMutation({
+  type RefreshResp = { inserted: number };
+  const refreshMetrics = useMutation<RefreshResp, Error, void>({
     mutationFn: async () => {
       const r = await fetch("/api/admin/relevance/metrics/refresh", { method: "POST", headers: authHeaders });
       if (!r.ok) throw new Error("Refresh failed");
-      return r.json();
+      return (await r.json()) as RefreshResp;
     },
-    onSuccess: (data: any) => {
+    onSuccess: (data) => {
       toast({ title: "Metrics refreshed", description: `${data?.inserted ?? 0} rows snapshotted` });
       metricsQ.refetch();
     },
-    onError: (e: any) => toast({ title: "Refresh failed", description: e.message, variant: "destructive" }),
+    onError: (e) => toast({ title: "Refresh failed", description: e.message, variant: "destructive" }),
+  });
+
+  type TuneResp = { tuned: { threshold: number; f1: number }; holdoutSize: number };
+  const tuneThreshold = useMutation<TuneResp, Error, void>({
+    mutationFn: async () => {
+      const r = await fetch("/api/admin/relevance/threshold/tune", { method: "POST", headers: authHeaders });
+      if (!r.ok) throw new Error("Tune failed");
+      return (await r.json()) as TuneResp;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Threshold tuned", description: `t=${data.tuned.threshold.toFixed(2)} · F1=${(data.tuned.f1 * 100).toFixed(1)}%` });
+      evalQ.refetch();
+    },
+    onError: (e) => toast({ title: "Tune failed", description: e.message, variant: "destructive" }),
   });
 
   const ev = evalQ.data;
@@ -9397,6 +9425,7 @@ function RelevancePanel({ pw }: { pw: string }) {
   const overallRow = m?.rows.find((r) => r.dimension === "overall");
   const sourceRows = (m?.rows ?? []).filter((r) => r.dimension === "source").slice(0, 12);
   const classRows = (m?.rows ?? []).filter((r) => r.dimension === "asset_class").slice(0, 12);
+  const bucketRows = (m?.rows ?? []).filter((r) => r.dimension === "score_bucket");
 
   const renderStats = (s: RelevanceEvalStats | null | undefined, label: string) => (
     <div className="border border-border rounded-lg p-3 bg-muted/10" data-testid={`relevance-stats-${label.toLowerCase()}`}>
@@ -9435,17 +9464,23 @@ function RelevancePanel({ pw }: { pw: string }) {
           <Button size="sm" variant="outline" onClick={() => refreshMetrics.mutate()} disabled={refreshMetrics.isPending} data-testid="button-refresh-metrics">
             {refreshMetrics.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Refresh metrics"}
           </Button>
+          <Button size="sm" variant="outline" onClick={() => tuneThreshold.mutate()} disabled={tuneThreshold.isPending} data-testid="button-tune-threshold">
+            {tuneThreshold.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tune threshold"}
+          </Button>
         </div>
       </div>
 
       <div>
-        <div className="text-xs text-muted-foreground mb-2">
-          Holdout size: <span className="font-semibold text-foreground" data-testid="holdout-size">{ev?.holdoutSize ?? "—"}</span>
-          {ev?.threshold != null && <> · Threshold: <span className="font-semibold text-foreground">{ev.threshold.toFixed(2)}</span></>}
+        <div className="text-xs text-muted-foreground mb-2 flex flex-wrap gap-x-3 gap-y-1">
+          <span>Eval holdout size: <span className="font-semibold text-foreground" data-testid="holdout-size">{ev?.holdoutSize ?? "—"}</span></span>
+          {ev?.activeThreshold != null && <span>Active threshold: <span className="font-semibold text-foreground" data-testid="active-threshold">{ev.activeThreshold.toFixed(2)}</span></span>}
+          {ev?.currentVariant && <span>Current pipeline: <span className="font-semibold text-foreground" data-testid="current-variant">{ev.currentVariant}</span></span>}
+          {ev?.bestThreshold && <span>Best (sweep) F1 @ <span className="font-semibold text-foreground" data-testid="best-threshold">{ev.bestThreshold.threshold.toFixed(2)}</span></span>}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {renderStats(ev?.v1, "v1 keyword")}
           {renderStats(ev?.v2, "v2 classifier")}
+          {renderStats(ev?.current, "Current pipeline")}
         </div>
       </div>
 
@@ -9514,6 +9549,19 @@ function RelevancePanel({ pw }: { pw: string }) {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        )}
+        {bucketRows.length > 0 && (
+          <div className="mt-3 border border-border rounded-lg p-3 bg-muted/10" data-testid="score-bucket-row">
+            <div className="text-xs font-semibold text-foreground mb-2">By scoring confidence bucket (categoryConfidence)</div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+              {bucketRows.map((r) => (
+                <div key={r.id} className="border border-border rounded px-2 py-1">
+                  <div className="font-semibold capitalize">{r.dimensionValue}</div>
+                  <div className="text-muted-foreground tabular-nums">{r.saveCount}/{r.dismissCount} · {fmtPct(r.saveRate)}</div>
+                </div>
+              ))}
             </div>
           </div>
         )}
