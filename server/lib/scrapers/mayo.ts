@@ -106,8 +106,9 @@ async function fetchPage(url: string, externalSignal?: AbortSignal): Promise<str
       return null;
     }
     return await res.text();
-  } catch (err: any) {
-    console.warn(`[scraper] ${INST}: fetch failed for ${url} — ${err?.message}`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`[scraper] ${INST}: fetch failed for ${url} — ${msg}`);
     return null;
   }
 }
@@ -119,7 +120,7 @@ export function parseBiopharmaPage(html: string, url: string): ScrapedListing[] 
   const $ = cheerio.load(html);
 
   const widgets: Array<{ kind: "title" | "body"; text: string }> = [];
-  $(".elementor-widget-text-editor .elementor-widget-container").each((_: number, el: any) => {
+  $(".elementor-widget-text-editor .elementor-widget-container").each((_, el) => {
     const h5 = $(el).find("h5").text().trim();
     if (h5 && h5.length > 5) {
       widgets.push({ kind: "title", text: cleanText(h5) });
@@ -182,7 +183,7 @@ export function parseIndividualTechPage(
   // Description: prefer the longest text-editor widget body (real prose),
   // fall back to og:description / meta description.
   let bestBody = "";
-  $(".elementor-widget-text-editor .elementor-widget-container").each((_: number, el: any) => {
+  $(".elementor-widget-text-editor .elementor-widget-container").each((_, el) => {
     const text = cleanText($(el).text());
     if (
       text.length > bestBody.length &&
@@ -225,6 +226,8 @@ export const mayoScraper: InstitutionScraper = {
     const perCategoryCounts: Record<string, number> = {};
     const dedupeKeys = new Set<string>(); // institution|title (case-insensitive)
     const listings: ScrapedListing[] = [];
+    let rawCount = 0;
+    let duplicatesRemoved = 0;
 
     for (const page of fetched) {
       if (!page.html) continue;
@@ -237,8 +240,12 @@ export const mayoScraper: InstitutionScraper = {
             })();
 
       for (const item of items) {
+        rawCount++;
         const key = `${INST}|${item.title.toLowerCase().trim()}`;
-        if (dedupeKeys.has(key)) continue;
+        if (dedupeKeys.has(key)) {
+          duplicatesRemoved++;
+          continue;
+        }
         dedupeKeys.add(key);
         listings.push(item);
         const cat = item.categories?.[0] || "uncategorized";
@@ -249,7 +256,10 @@ export const mayoScraper: InstitutionScraper = {
     const breakdown = Object.entries(perCategoryCounts)
       .map(([cat, n]) => `${cat}=${n}`)
       .join(", ");
-    console.log(`[scraper] ${INST}: ${listings.length} listings (${breakdown})`);
+    console.log(
+      `[scraper] ${INST}: ${listings.length} listings (raw=${rawCount}, ` +
+        `duplicates_removed=${duplicatesRemoved}, ${breakdown})`,
+    );
     return listings;
   },
 };

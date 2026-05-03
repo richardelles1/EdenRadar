@@ -15,6 +15,19 @@
 
 import assert from "node:assert/strict";
 import { mayoScraper, parseBiopharmaPage, parseIndividualTechPage } from "../server/lib/scrapers/mayo";
+import { classifyBatch } from "../server/lib/pipeline/classifyAsset";
+
+const PRIOR_BIOPHARMA_TITLES = new Set<string>([
+  "anti-fibrotics for ipf",
+  "biologic for tendon regeneration",
+  "small molecule antagonist for cholangiopathies",
+  "in vivo regulatory b-cell therapy for immune tolerance",
+  "in situ car-t platform",
+  "nanoimmuno conjugate platform",
+  "bi-specific antibody targeting alk fusions in lung cancer",
+  "modified proteins for neurodegenerative disease",
+  "dendritic cell vaccine for rrp",
+]);
 
 // ── 0. Verify every configured Mayo URL returns HTTP 200 ──────────────────────
 const REQUIRED_URLS = [
@@ -148,6 +161,36 @@ const single = parseIndividualTechPage(singleHtml, "https://example/xyz/", "indi
 assert.ok(single, "parseIndividualTechPage should return a listing for a valid page");
 assert.equal(single!.title, "Synthetic Tech XYZ", "og:title suffix should be stripped");
 assert.match(single!.description, /longer prose description/);
+
+// ── 10. Classifier sanity check on the newly-discovered listings ──────────────
+// Reports counts only — does not retune the classifier. Skipped (with warning)
+// if OPENAI_API_KEY is not set in the environment.
+const newItems = listings.filter((l) => !PRIOR_BIOPHARMA_TITLES.has(l.title.toLowerCase().trim()));
+console.log(`\nClassifier sanity check on ${newItems.length} newly-discovered listings…`);
+if (!process.env.OPENAI_API_KEY) {
+  console.log("  OPENAI_API_KEY not set — skipping classifier pass.");
+} else {
+  const classifyInputs = newItems.map((l, idx) => ({
+    id: idx,
+    title: l.title,
+    description: l.description,
+    ctx: { sourceUrl: l.url, categories: l.categories },
+  }));
+  const results = await classifyBatch(classifyInputs, 8);
+  let relevant = 0;
+  const byClass: Record<string, number> = {};
+  const byStage: Record<string, number> = {};
+  for (const item of classifyInputs) {
+    const c = results.get(item.id);
+    if (!c) continue;
+    if (c.biotechRelevant) relevant++;
+    byClass[c.assetClass] = (byClass[c.assetClass] || 0) + 1;
+    byStage[c.developmentStage] = (byStage[c.developmentStage] || 0) + 1;
+  }
+  console.log(`  biotechRelevant: ${relevant}/${newItems.length}`);
+  console.log(`  by assetClass:    ${Object.entries(byClass).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+  console.log(`  by stage:         ${Object.entries(byStage).map(([k, v]) => `${k}=${v}`).join(", ")}`);
+}
 
 // ── Done ──────────────────────────────────────────────────────────────────────
 console.log("\n✓ Mayo scraper smoke tests PASSED");
