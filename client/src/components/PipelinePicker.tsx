@@ -10,7 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Input } from "@/components/ui/input";
-import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2 } from "lucide-react";
+import { Bookmark, Layers, Plus, Check, ChevronDown, Loader2, Trash2 } from "lucide-react";
 import type { ScoredAsset } from "@/lib/types";
 import { useOrg } from "@/hooks/use-org";
 
@@ -43,8 +43,15 @@ type PipelinesResponse = {
   uncategorisedCount: number;
 };
 
+type SavedAssetSummary = {
+  id: number;
+  pmid?: string | null;
+  assetName: string;
+  pipelineListId?: number | null;
+};
+
 type SavedAssetsResponse = {
-  assets: Array<{ pmid?: string | null; assetName: string }>;
+  assets: SavedAssetSummary[];
 };
 
 type Props = {
@@ -92,7 +99,6 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
 
   const { data: savedData } = useQuery<SavedAssetsResponse>({
     queryKey: ["/api/saved-assets"],
-    enabled: alreadySaved === undefined,
   });
 
   const pipelines = pipelinesData?.pipelines ?? [];
@@ -101,16 +107,30 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   const myLists = pipelines.filter((p) => !p.orgId);
   const teamLists = pipelines.filter((p) => !!p.orgId);
 
-  const isSaved = alreadySaved !== undefined
-    ? alreadySaved
-    : savedAssets.some(
-        (a) => (a.pmid ?? a.assetName) === (effectivePayload?.pmid ?? effectivePayload?.asset_name)
-      );
+  const matchKey = effectivePayload?.pmid ?? effectivePayload?.asset_name;
+  const savedAsset = matchKey
+    ? savedAssets.find((a) => (a.pmid ?? a.assetName) === matchKey)
+    : undefined;
 
-  const saveMutation = useMutation({
-    mutationFn: async ({ pipelineListId, pipelineId }: { pipelineListId: number | null; pipelineId?: number }) => {
+  const isSaved = alreadySaved !== undefined ? alreadySaved : !!savedAsset;
+  const currentPipelineListId = savedAsset?.pipelineListId ?? null;
+
+  type SaveMutationResult = { moved: boolean };
+  const saveMutation = useMutation<SaveMutationResult, Error, { pipelineListId: number | null; pipelineId?: number }>({
+    mutationFn: async ({ pipelineListId, pipelineId }) => {
       if (!effectivePayload) throw new Error("No asset payload");
       const authHeaders = await getAuthHeaders();
+      // If the asset is already saved, move it instead of creating a duplicate.
+      if (savedAsset?.id) {
+        const targetListId = pipelineId ?? pipelineListId;
+        const res = await fetch(`/api/saved-assets/${savedAsset.id}/pipeline`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ pipeline_list_id: targetListId }),
+        });
+        if (!res.ok) throw new Error("Failed to move asset");
+        return { moved: true };
+      }
       const url = pipelineId != null ? `/api/pipelines/${pipelineId}/assets` : "/api/saved-assets";
       const res = await fetch(url, {
         method: "POST",
@@ -133,20 +153,45 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         }),
       });
       if (!res.ok) throw new Error("Failed to save asset");
-      return res.json();
+      // Server-side dedup may have moved an existing row; report as a save
+      // here since the client could not tell either way.
+      return { moved: false };
     },
-    onSuccess: (_data, vars) => {
+    onSuccess: (data, vars) => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      const pl = pipelines.find((p) => p.id === (vars.pipelineId ?? vars.pipelineListId));
+      const targetId = vars.pipelineId ?? vars.pipelineListId;
+      const pl = pipelines.find((p) => p.id === targetId);
       toast({
-        title: "Asset saved",
-        description: pl ? `Added to "${pl.name}"` : "Added to Uncategorised",
+        title: data.moved ? "Asset moved" : "Asset saved",
+        description: pl ? `${data.moved ? "Moved to" : "Added to"} "${pl.name}"` : (data.moved ? "Moved to Uncategorised" : "Added to Uncategorised"),
       });
       setOpen(false);
     },
-    onError: (err: any) => {
+    onError: (err) => {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: async () => {
+      if (!savedAsset?.id) throw new Error("Not saved");
+      const authHeaders = await getAuthHeaders();
+      const res = await fetch(`/api/saved-assets/${savedAsset.id}`, {
+        method: "DELETE",
+        headers: { ...authHeaders },
+      });
+      if (!res.ok) throw new Error("Failed to remove asset");
+      return res.json().catch(() => ({}));
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
+      qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
+      toast({ title: "Removed from saved" });
+      setOpen(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Remove failed", description: err.message, variant: "destructive" });
     },
   });
 
@@ -161,6 +206,16 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
       });
       if (!plRes.ok) throw new Error("Failed to create pipeline");
       const { pipeline } = await plRes.json();
+      // If asset is already saved, move it to the newly created pipeline.
+      if (savedAsset?.id) {
+        const res = await fetch(`/api/saved-assets/${savedAsset.id}/pipeline`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", ...authHeaders },
+          body: JSON.stringify({ pipeline_list_id: pipeline.id }),
+        });
+        if (!res.ok) throw new Error("Failed to move asset");
+        return { asset: await res.json(), pipeline, moved: true };
+      }
       const res = await fetch(`/api/pipelines/${pipeline.id}/assets`, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...authHeaders },
@@ -181,23 +236,26 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         }),
       });
       if (!res.ok) throw new Error("Failed to save asset");
-      return { asset: await res.json(), pipeline };
+      return { asset: await res.json(), pipeline, moved: false };
     },
-    onSuccess: ({ pipeline }) => {
+    onSuccess: ({ pipeline, moved }) => {
       qc.invalidateQueries({ queryKey: ["/api/saved-assets"] });
       qc.invalidateQueries({ queryKey: ["/api/pipelines"] });
-      toast({ title: "Asset saved", description: `Added to new pipeline "${pipeline.name}"` });
+      toast({
+        title: moved ? "Asset moved" : "Asset saved",
+        description: `${moved ? "Moved to" : "Added to"} new pipeline "${pipeline.name}"`,
+      });
       setNewName("");
       setCreateShared(false);
       setCreating(false);
       setOpen(false);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       toast({ title: "Save failed", description: err.message, variant: "destructive" });
     },
   });
 
-  const isPending = saveMutation.isPending || createAndSaveMutation.isPending;
+  const isPending = saveMutation.isPending || createAndSaveMutation.isPending || removeMutation.isPending;
 
   const handleCreateAndSave = () => {
     const name = newName.trim();
@@ -206,28 +264,36 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
   };
 
   function renderPipelineRow(p: PipelineWithCount, showSharedBadge?: boolean) {
+    const isCurrent = isSaved && currentPipelineListId === p.id;
     return (
       <button
         key={p.id}
-        onClick={() => saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id })}
+        onClick={() => {
+          if (isCurrent) { setOpen(false); return; }
+          saveMutation.mutate({ pipelineListId: p.id, pipelineId: p.id });
+        }}
         disabled={isPending}
-        className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted/50 transition-colors text-left"
+        className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left ${isCurrent ? "bg-primary/5" : "hover:bg-muted/50"}`}
         data-testid={`pipeline-option-${p.id}`}
       >
-        <Layers className="w-3.5 h-3.5 text-primary/70 shrink-0" />
-        <span className="flex-1 truncate">{p.name}</span>
+        <Layers className={`w-3.5 h-3.5 shrink-0 ${isCurrent ? "text-primary" : "text-primary/70"}`} />
+        <span className={`flex-1 truncate ${isCurrent ? "font-medium text-primary" : ""}`}>{p.name}</span>
         {showSharedBadge && (
           <Badge variant="outline" className="text-[9px] px-1 py-0 h-3.5 border-muted-foreground/30 text-muted-foreground shrink-0">
             shared
           </Badge>
         )}
-        <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
+        {isCurrent ? (
+          <Check className="w-3.5 h-3.5 text-primary shrink-0" />
+        ) : (
+          <span className="text-[10px] text-muted-foreground tabular-nums">{p.assetCount}</span>
+        )}
       </button>
     );
   }
 
   return (
-    <Popover open={open && !isSaved} onOpenChange={(o) => { if (!isSaved) setOpen(o); }}>
+    <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         {variant === "button" ? (
           <Button
@@ -273,18 +339,27 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
         data-testid="pipeline-picker-popover"
       >
         <div className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1">
-          Save to pipeline
+          {isSaved ? "Move to pipeline" : "Save to pipeline"}
         </div>
 
-        <button
-          onClick={() => saveMutation.mutate({ pipelineListId: null })}
-          disabled={isPending}
-          className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm hover:bg-muted/50 transition-colors text-left"
-          data-testid="pipeline-option-uncategorised"
-        >
-          <Layers className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-          <span className="flex-1 truncate">Uncategorised</span>
-        </button>
+        {(() => {
+          const isCurrentUncat = isSaved && currentPipelineListId === null;
+          return (
+            <button
+              onClick={() => {
+                if (isCurrentUncat) { setOpen(false); return; }
+                saveMutation.mutate({ pipelineListId: null });
+              }}
+              disabled={isPending}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm transition-colors text-left ${isCurrentUncat ? "bg-primary/5" : "hover:bg-muted/50"}`}
+              data-testid="pipeline-option-uncategorised"
+            >
+              <Layers className={`w-3.5 h-3.5 shrink-0 ${isCurrentUncat ? "text-primary" : "text-muted-foreground"}`} />
+              <span className={`flex-1 truncate ${isCurrentUncat ? "font-medium text-primary" : ""}`}>Uncategorised</span>
+              {isCurrentUncat && <Check className="w-3.5 h-3.5 text-primary shrink-0" />}
+            </button>
+          );
+        })()}
 
         {hasTeamOrg ? (
           <>
@@ -375,6 +450,20 @@ export function PipelinePicker({ payload, asset, alreadySaved, variant = "icon",
             </button>
           )}
         </div>
+
+        {isSaved && savedAsset?.id && !creating && (
+          <div className="mt-1 border-t border-border pt-1">
+            <button
+              onClick={() => removeMutation.mutate()}
+              disabled={isPending}
+              className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-sm text-destructive hover:bg-destructive/10 transition-colors text-left"
+              data-testid="button-remove-saved-asset"
+            >
+              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              Remove from saved
+            </button>
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

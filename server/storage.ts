@@ -553,6 +553,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createSavedAsset(asset: InsertSavedAsset, userId?: string): Promise<SavedAsset> {
+    // Dedup: if this user already has a saved asset matching the same pmid (or
+    // assetName when pmid is missing), reassign its pipeline_list_id instead of
+    // inserting a duplicate. This guarantees no-duplicate semantics even if the
+    // client lacks the saved-asset id (e.g. stale list or race condition).
+    if (userId) {
+      const matchConditions: SQL[] = [eq(savedAssets.userId, userId)];
+      if (asset.pmid) matchConditions.push(eq(savedAssets.pmid, asset.pmid));
+      else matchConditions.push(eq(savedAssets.assetName, asset.assetName));
+      const [existing] = await db
+        .select()
+        .from(savedAssets)
+        .where(and(...matchConditions))
+        .limit(1);
+      if (existing) {
+        const [updated] = await db
+          .update(savedAssets)
+          .set({ pipelineListId: asset.pipelineListId ?? null })
+          .where(eq(savedAssets.id, existing.id))
+          .returning();
+        return updated;
+      }
+    }
     const [row] = await db.insert(savedAssets).values({ ...asset, ...(userId ? { userId } : {}) }).returning();
     return row;
   }
