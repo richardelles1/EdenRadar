@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { useDocumentMeta } from "@/hooks/use-document-meta";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, Mail } from "lucide-react";
 
 function PasswordRule({ met, label }: { met: boolean; label: string }) {
   return (
@@ -17,6 +17,83 @@ function PasswordRule({ met, label }: { met: boolean; label: string }) {
         : <Circle className="w-3.5 h-3.5 shrink-0" />}
       {label}
     </li>
+  );
+}
+
+function ExpiredCard() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  async function onResend(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email) return;
+    setSending(true);
+    try {
+      await fetch("/api/auth/resend-invite-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+    } catch {
+      // ignore network errors — always show success to avoid enumeration
+    }
+    setSending(false);
+    setSent(true);
+    toast({ title: "Check your inbox", description: "If that email is on our system, a new invite link is on its way." });
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 bg-background">
+      <Card className="w-full max-w-md" data-testid="card-set-password-expired">
+        <CardHeader>
+          <CardTitle>Link expired</CardTitle>
+          <CardDescription>
+            Your invitation link is no longer valid — links expire after 24 hours.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sent ? (
+            <div className="flex flex-col items-center gap-3 py-2 text-center">
+              <div className="w-10 h-10 rounded-full bg-emerald-600/10 flex items-center justify-center">
+                <Mail className="w-5 h-5 text-emerald-600" />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                If that email is registered, a new invite link has been sent. Check your inbox (and spam folder).
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={onResend} className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Enter your email address and we'll send you a fresh invite link right away.
+              </p>
+              <div className="space-y-2">
+                <Label htmlFor="resend-email">Your email address</Label>
+                <Input
+                  id="resend-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@company.com"
+                  autoFocus
+                  required
+                  data-testid="input-resend-email"
+                />
+              </div>
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={sending || !email}
+                data-testid="button-resend-invite"
+              >
+                {sending ? "Sending…" : "Send me a new link"}
+              </Button>
+            </form>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -59,9 +136,6 @@ export default function SetPassword() {
       return;
     }
 
-    // Eagerly flip invite_status → active so ScoutGate passes immediately.
-    // Non-fatal: /api/industry/org also auto-activates on first dashboard load
-    // as a safety net if this call fails transiently.
     try {
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
@@ -79,19 +153,7 @@ export default function SetPassword() {
   }
 
   if (!loading && !session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center px-4 bg-background">
-        <Card className="w-full max-w-md" data-testid="card-set-password-expired">
-          <CardHeader>
-            <CardTitle>Link expired</CardTitle>
-            <CardDescription>
-              Your invitation link is no longer valid — links expire after 24 hours.
-              Ask your team admin to resend the invite.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      </div>
-    );
+    return <ExpiredCard />;
   }
 
   return (

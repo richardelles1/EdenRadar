@@ -7023,11 +7023,13 @@ If a field cannot be determined, use "N/A".`
       if (supabaseError) return res.status(500).json({ error: supabaseError.message });
       const userId = userData.user.id;
 
-      // Generate a password-recovery link the new member can use to set their password
+      // Generate an invite link the new member can use to set their password.
+      // type: "invite" uses Supabase's invite token lifetime (default 24h) instead
+      // of the recovery token lifetime (default 1h), matching what the email says.
       let setPasswordLink: string | undefined;
       try {
         const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-          type: "recovery",
+          type: "invite",
           email,
           options: { redirectTo: `${APP_URL}/set-password` },
         });
@@ -7069,7 +7071,7 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
-  // Resend invite — generates a fresh recovery link and re-sends the team invite email
+  // Resend invite — generates a fresh invite link and re-sends the team invite email
   app.post("/api/admin/organizations/:id/members/:userId/resend-invite", async (req, res) => {
     try {
       if (!supabaseServiceRoleKey || !supabaseUrl) {
@@ -7090,7 +7092,7 @@ If a field cannot be determined, use "N/A".`
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
 
       const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
-        type: "recovery",
+        type: "invite",
         email: member.email,
         options: { redirectTo: `${APP_URL}/set-password` },
       });
@@ -7246,6 +7248,50 @@ If a field cannot be determined, use "N/A".`
     }
   });
 
+  // POST /api/auth/resend-invite-link — unauthenticated self-service link re-request.
+  // Called from the /set-password expired page when the user's link has expired.
+  // Looks up the email in org_members, generates a fresh invite link, and emails it.
+  // Always returns { ok: true } to avoid user enumeration.
+  app.post("/api/auth/resend-invite-link", async (req, res) => {
+    try {
+      if (!supabaseServiceRoleKey || !supabaseUrl) {
+        return res.status(500).json({ error: "Service not configured" });
+      }
+      const { email } = z.object({ email: z.string().email() }).parse(req.body);
+
+      // Look up member record to find their org
+      const member = await storage.getOrgMemberByEmail(email);
+      if (member) {
+        const org = await storage.getOrganization(member.orgId);
+        if (org) {
+          try {
+            const { createClient } = await import("@supabase/supabase-js");
+            const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
+            const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({
+              type: "invite",
+              email,
+              options: { redirectTo: `${APP_URL}/set-password` },
+            });
+            if (!linkError) {
+              const setPasswordLink = linkData?.properties?.action_link ?? undefined;
+              await sendTeamInviteEmail(email, member.memberName ?? "", org.name, org.planTier ?? "individual", setPasswordLink)
+                .catch((err) => console.error("[email] Resend invite link (self-service expired) failed:", err));
+            } else {
+              console.warn("[resend-invite-link] generateLink error:", linkError.message);
+            }
+          } catch (err) {
+            console.error("[resend-invite-link] Error generating link:", err);
+          }
+        }
+      }
+      // Always return ok — do not reveal whether email was found
+      res.json({ ok: true });
+    } catch (err: any) {
+      if (err.name === "ZodError") return res.status(400).json({ error: "Valid email required" });
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // ── Self-service team invite routes (owner-only, no admin password required) ──
 
   async function requireOrgOwner(req: any, res: any): Promise<{ org: any; userId: string } | null> {
@@ -7297,7 +7343,7 @@ If a field cannot be determined, use "N/A".`
 
       let setPasswordLink: string | undefined;
       try {
-        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email, options: { redirectTo: `${APP_URL}/set-password` } });
+        const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "invite", email, options: { redirectTo: `${APP_URL}/set-password` } });
         if (!linkError) setPasswordLink = linkData?.properties?.action_link ?? undefined;
       } catch {}
 
@@ -7357,7 +7403,7 @@ If a field cannot be determined, use "N/A".`
 
       const { createClient } = await import("@supabase/supabase-js");
       const adminSupabase = createClient(supabaseUrl, supabaseServiceRoleKey);
-      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "recovery", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
+      const { data: linkData, error: linkError } = await adminSupabase.auth.admin.generateLink({ type: "invite", email: member.email, options: { redirectTo: `${APP_URL}/set-password` } });
       if (linkError) return res.status(500).json({ error: linkError.message });
       const setPasswordLink = linkData?.properties?.action_link ?? undefined;
 

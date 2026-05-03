@@ -40,7 +40,10 @@ function isRecoveryUrl(): boolean {
   try {
     const hash = window.location.hash.slice(1);
     const params = new URLSearchParams(hash);
-    return params.get("type") === "recovery";
+    const type = params.get("type");
+    // Both "recovery" (password reset) and "invite" (new member onboarding) links
+    // should trigger the set-password flow.
+    return type === "recovery" || type === "invite";
   } catch {
     return false;
   }
@@ -83,6 +86,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
         // researcher / concept / unknown: no forced redirect
       }
+
+      // Invite links (type: "invite") fire SIGNED_IN instead of PASSWORD_RECOVERY.
+      // Detect from URL hash and redirect industry users to /set-password so they
+      // can choose a password before landing on the dashboard.
+      if (event === "SIGNED_IN") {
+        try {
+          const hashParams = new URLSearchParams(window.location.hash.slice(1));
+          if (hashParams.get("type") === "invite") {
+            setIsPasswordRecovery(true);
+            const userRole = s?.user?.user_metadata?.role as string | undefined;
+            if (userRole === "industry" && !window.location.pathname.startsWith("/set-password")) {
+              window.location.replace("/set-password");
+            }
+          }
+        } catch {
+          // ignore hash parse errors
+        }
+      }
+
       setSession(s);
       setUser(s?.user ?? null);
     });

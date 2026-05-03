@@ -424,6 +424,7 @@ export interface IStorage {
 
   // Team Activities
   getOrgMemberByUserId(orgId: number, userId: string): Promise<OrgMember | undefined>;
+  getOrgMemberByEmail(email: string): Promise<OrgMember | undefined>;
   createTeamActivity(data: InsertTeamActivity): Promise<TeamActivity>;
   getTeamActivities(orgId: number, limit?: number): Promise<TeamActivity[]>;
   getUserActivities(userId: string, limit?: number): Promise<TeamActivity[]>;
@@ -3618,6 +3619,15 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(orgMembers)
       .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)))
+      .limit(1);
+    return row;
+  }
+
+  async getOrgMemberByEmail(email: string): Promise<OrgMember | undefined> {
+    const [row] = await db
+      .select()
+      .from(orgMembers)
+      .where(eq(orgMembers.email, email))
       .limit(1);
     return row;
   }
