@@ -10067,12 +10067,16 @@ If multiple assets appear, return each as a separate array item.`;
       const myEois = await storage.getMarketEoisByBuyer(userId);
       const myEoiMap = new Map(myEois.map(e => [e.listingId, e.status]));
 
-      // Batch resolve seller-verification status. We expose only a boolean —
-      // never leak the seller's org name or other identifying info (esp. for blind listings).
-      const sellerIds = [...new Set(listings.map(l => l.sellerId))];
-      const sellerOrgs = await Promise.all(sellerIds.map(sid => storage.getOrgForUser(sid).catch(() => null)));
-      const sellerVerifiedMap = new Map<string, boolean>();
-      sellerIds.forEach((sid, i) => sellerVerifiedMap.set(sid, !!sellerOrgs[i]?.marketSellerVerifiedAt));
+      // Batch resolve seller-verification status off the listing's owning org
+      // (listing.orgId is set at creation time — see createMarketListing). This is
+      // architecturally sounder than going through the seller user's current org
+      // and is robust if a user later belongs to multiple orgs. We expose only a
+      // boolean — never leak the seller's org name or other identifying info
+      // (esp. for blind listings).
+      const orgIds = [...new Set(listings.map(l => l.orgId).filter((id): id is number => id != null))];
+      const orgs = await Promise.all(orgIds.map(oid => storage.getOrganization(oid).catch(() => null)));
+      const orgVerifiedMap = new Map<number, boolean>();
+      orgIds.forEach((oid, i) => orgVerifiedMap.set(oid, !!orgs[i]?.marketSellerVerifiedAt));
 
       const result = listings.map((l, i) => ({
         ...l,
@@ -10080,7 +10084,7 @@ If multiple assets appear, return each as a separate array item.`;
         eoiCount: eoiCounts[i],
         myEoiStatus: myEoiMap.get(l.id) ?? null,
         edenSignalScore: edenSignalScore(l, l.ingestedAssetId ? linkedMap.get(l.ingestedAssetId) ?? null : null),
-        sellerVerified: sellerVerifiedMap.get(l.sellerId) ?? false,
+        sellerVerified: l.orgId != null ? (orgVerifiedMap.get(l.orgId) ?? false) : false,
       }));
 
       res.json(result);
@@ -10223,7 +10227,11 @@ Write in a professional deal memo tone. 2–4 sentences. Focus on the strategic 
 
       const eoiCount = await storage.getMarketEoiCount(id);
       const myEoi = await storage.getBuyerEoiForListing(id, userId);
-      const sellerOrg = await storage.getOrgForUser(listing.sellerId).catch(() => null);
+      // Derive seller verification from the listing's owning org (listing.orgId),
+      // not from the seller user's current org membership.
+      const sellerOrg = listing.orgId != null
+        ? await storage.getOrganization(listing.orgId).catch(() => null)
+        : null;
 
       res.json({
         ...listing,

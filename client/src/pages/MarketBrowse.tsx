@@ -113,7 +113,7 @@ function ListingCard({
           {listing.sellerVerified && (
             <span
               className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
-              title="EdenMarket verified seller"
+              title="Eden ops has confirmed this seller's organization and authority to list this asset."
               data-testid={`market-listing-verified-seller-${listing.id}`}
             >
               <BadgeCheck className="w-2.5 h-2.5" /> Verified Seller

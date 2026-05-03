@@ -523,7 +523,7 @@ export default function MarketListingDetail() {
                 {listing.sellerVerified && (
                   <span
                     className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded border border-violet-500/30 bg-violet-500/10 text-violet-700 dark:text-violet-400"
-                    title="EdenMarket verified seller — admin-confirmed institution or company"
+                    title="Eden ops has confirmed this seller's organization and authority to list this asset."
                     data-testid="market-listing-detail-verified-seller"
                   >
                     <BadgeCheck className="w-3 h-3" /> Verified Seller
