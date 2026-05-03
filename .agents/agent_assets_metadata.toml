@@ -114,6 +114,30 @@ uri = "file://artifacts/mockup-sandbox/public/images/r3-edenengine-scale.png"
 type = "image"
 title = "generated_image"
 
+[[generated]]
+id = "6p7ilNJvW9RE4_5dkUGky"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r4-1-atlas.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "euVLY4yU-OqVyMp2og77w"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r4-2-observatory.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "YwRJ7LD39bOi0vRzBStGa"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r4-3-vault.png"
+type = "image"
+title = "generated_image"
+
+[[generated]]
+id = "DWAYqkWqNDs2StX3Gxz2I"
+uri = "file://artifacts/mockup-sandbox/public/images/edenscout-r4-4-firstlight.png"
+type = "image"
+title = "generated_image"
+
 [[outputs]]
 id = "ArDED0GTo_r5hUwP2eMLd"
 uri = "file://exports/EdenRadar-OnePager-2026-05-02.pdf"
