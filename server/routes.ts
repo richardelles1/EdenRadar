@@ -15,7 +15,7 @@ import { classifyBatch, classifyAsset } from "./lib/pipeline/classifyAsset";
 import OpenAI from "openai";
 import Stripe from "stripe";
 import multer from "multer";
-import { dataSources, collectAllSignals, ALL_SOURCE_KEYS, withHardTimeout, type SourceKey } from "./lib/sources/index";
+import { dataSources, collectAllSignals, collectAllSignalsWithDiag, ALL_SOURCE_KEYS, withHardTimeout, type SourceKey, type SourceDiag } from "./lib/sources/index";
 import { searchPatents } from "./lib/sources/patents";
 import { searchClinicalTrials } from "./lib/sources/clinicaltrials";
 import { normalizeSignals } from "./lib/pipeline/normalizeSignals";
@@ -363,30 +363,42 @@ export async function registerRoutes(
         (s) => s !== ("patents" as SourceKey) && s !== ("clinicaltrials" as SourceKey)
       );
 
-      const [signals, patentSignals, trialSignals] = await Promise.all([
-        collectAllSignals(enrichedQuery, nonDirectSources, maxPerSource),
-        patentInSources
-          ? withHardTimeout(searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate), 4000, "patents").catch((e) => {
-              console.warn(`[search] patents dropped:`, e instanceof Error ? e.message : e);
-              return [];
-            })
-          : Promise.resolve([]),
-        trialInSources
-          ? withHardTimeout(searchClinicalTrials(enrichedQuery, maxPerSource), 4000, "clinicaltrials").catch((e) => {
-              console.warn(`[search] clinicaltrials dropped:`, e instanceof Error ? e.message : e);
-              return [];
-            })
-          : Promise.resolve([]),
+      const directDiag: SourceDiag[] = [];
+      const timedDirect = async (
+        key: "patents" | "clinicaltrials",
+        run: () => Promise<RawSignal[]>,
+      ): Promise<RawSignal[]> => {
+        const t0 = Date.now();
+        try {
+          const out = await withHardTimeout(run(), 4000, key);
+          directDiag.push({ source: key, ms: Date.now() - t0, status: out.length === 0 ? "empty" : "ok", count: out.length });
+          return out;
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          console.warn(`[search] ${key} dropped:`, msg);
+          directDiag.push({ source: key, ms: Date.now() - t0, status: msg.includes("timed out") ? "timeout" : "error", count: 0, error: msg });
+          return [];
+        }
+      };
+
+      const [collected, patentSignals, trialSignals] = await Promise.all([
+        collectAllSignalsWithDiag(enrichedQuery, nonDirectSources, maxPerSource),
+        patentInSources ? timedDirect("patents", () => searchPatents(enrichedQuery, maxPerSource, patentSinceDate, patentBeforeDate)) : Promise.resolve([] as RawSignal[]),
+        trialInSources ? timedDirect("clinicaltrials", () => searchClinicalTrials(enrichedQuery, maxPerSource)) : Promise.resolve([] as RawSignal[]),
       ]);
+      const signals = collected.signals;
+      const sourceDiagnostics: SourceDiag[] = [...collected.diagnostics, ...directDiag];
       const filteredOther = applySignalFilters(signals, { sourceType, dateRange, trialPhase, field, technologyType });
       const filteredPatents = applySignalFilters(patentSignals, { sourceType, dateRange, trialPhase, field, technologyType });
       const filteredTrials = applySignalFilters(trialSignals, { sourceType, dateRange, trialPhase, field, technologyType });
 
-      // Fair-share the 150-signal cap so that patents and clinical trials always
+      // Fair-share the signal cap so that patents and clinical trials always
       // get to contribute results, instead of being starved by a flood of TTO/article
-      // signals that come first in the concat order. Reserve 30 slots each for
-      // patents and trials, the rest goes to the other sources, then any unused
-      // reservation is given back.
+      // signals that come first in the concat order. Reserve PATENT_RESERVE/TRIAL_RESERVE
+      // slots out of TOTAL_CAP for them; the rest goes to the other sources; any
+      // unused reservation is redistributed below.
+      // TOTAL_CAP is sized to fit normalize/score within the per-step hard budgets;
+      // raising it past ~80 starts to push normalizeSignals beyond its 2s window.
       const TOTAL_CAP = 80;
       const PATENT_RESERVE = 20;
       const TRIAL_RESERVE = 20;
@@ -546,6 +558,7 @@ export async function registerRoutes(
         sources: effectiveSources,
         signalsFound: signals.length,
         assetsFound: scored.length,
+        sourceDiagnostics,
       };
       cacheSet(searchCacheKey, searchResponse, 45 * 60 * 1000);
       return res.json(searchResponse);

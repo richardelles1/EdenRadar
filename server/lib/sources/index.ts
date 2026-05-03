@@ -401,16 +401,30 @@ export function withHardTimeout<T>(promise: Promise<T>, ms: number, label: strin
 
 const CONCURRENCY_LIMIT = 16;
 
-export async function collectAllSignals(
+export type SourceDiag = {
+  source: SourceKey;
+  ms: number;
+  status: "ok" | "empty" | "timeout" | "error";
+  count: number;
+  error?: string;
+};
+
+export type CollectResult = {
+  signals: RawSignal[];
+  diagnostics: SourceDiag[];
+};
+
+export async function collectAllSignalsWithDiag(
   query: string,
   sourceKeys: SourceKey[],
   maxPerSource = 25
-): Promise<RawSignal[]> {
+): Promise<CollectResult> {
   const selectedSources = sourceKeys
     .filter((k) => k in dataSources)
     .map((k) => dataSources[k]);
 
   const signals: RawSignal[] = [];
+  const diagnostics: SourceDiag[] = [];
 
   for (let i = 0; i < selectedSources.length; i += CONCURRENCY_LIMIT) {
     const batch = selectedSources.slice(i, i + CONCURRENCY_LIMIT);
@@ -424,21 +438,36 @@ export async function collectAllSignals(
 
     results.forEach((r, j) => {
       const elapsed = Date.now() - startTimes[j];
+      const id = batch[j].id;
       if (r.status === "fulfilled") {
         if (r.value.length === 0) {
-          console.warn(`[search] ${batch[j].id} returned 0 results in ${elapsed}ms`);
+          console.warn(`[search] ${id} returned 0 results in ${elapsed}ms`);
+          diagnostics.push({ source: id, ms: elapsed, status: "empty", count: 0 });
+        } else {
+          diagnostics.push({ source: id, ms: elapsed, status: "ok", count: r.value.length });
         }
         signals.push(...r.value);
       } else {
         const msg = r.reason instanceof Error ? r.reason.message : String(r.reason);
         if (msg.includes("timed out")) {
-          console.warn(`[search] ${batch[j].id} hit hard ${SOURCE_TIMEOUT_MS}ms budget, dropping.`);
+          console.warn(`[search] ${id} hit hard ${SOURCE_TIMEOUT_MS}ms budget, dropping.`);
+          diagnostics.push({ source: id, ms: elapsed, status: "timeout", count: 0, error: msg });
         } else {
-          console.error(`[search] ${batch[j].id} failed in ${elapsed}ms:`, msg);
+          console.error(`[search] ${id} failed in ${elapsed}ms:`, msg);
+          diagnostics.push({ source: id, ms: elapsed, status: "error", count: 0, error: msg });
         }
       }
     });
   }
 
+  return { signals, diagnostics };
+}
+
+export async function collectAllSignals(
+  query: string,
+  sourceKeys: SourceKey[],
+  maxPerSource = 25
+): Promise<RawSignal[]> {
+  const { signals } = await collectAllSignalsWithDiag(query, sourceKeys, maxPerSource);
   return signals;
 }

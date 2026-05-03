@@ -1,23 +1,25 @@
 /**
  * Smoke test for the federated /api/search endpoint.
  *
- * Runs 4 representative queries across all default sources, captures
- * per-category latency and result counts, prints a summary table, and
- * exits non-zero if the speed/reliability bar is missed.
+ * Runs a panel of representative queries against /api/search, captures total
+ * latency, per-category result counts, and per-source latency from the
+ * response's sourceDiagnostics block. Prints summary tables and exits non-zero
+ * if any query misses the SLA.
  *
  * Usage:
  *   npx tsx scripts/smoke-federated-search.ts [base-url]
  *
  * Default base URL is http://localhost:5000.
  *
- * Bar:
- *   - Each cold run must complete in <= COLD_BUDGET_MS (default 12000).
- *   - At least 3 of {tech_transfer, paper, preprint, patent, clinical_trial}
- *     categories must contribute >= 1 result on each query.
+ * SLA bar (per task #705 done criteria):
+ *   - Each cold run must complete in <= COLD_BUDGET_MS (12000ms).
+ *   - At least MIN_CATEGORIES_WITH_RESULTS of {tech_transfer, paper, preprint,
+ *     patent, clinical_trial} categories must contribute >= 1 result.
+ *   - Aggregate error rate (queries that failed any check) must be 0.
  */
 
 const BASE_URL = process.argv[2] ?? "http://localhost:5000";
-const COLD_BUDGET_MS = 13000;
+const COLD_BUDGET_MS = 12000;
 const MIN_CATEGORIES_WITH_RESULTS = 3;
 
 const QUERIES = [
@@ -27,10 +29,19 @@ const QUERIES = [
   "mRNA vaccine cancer",
 ];
 
+interface SourceDiag {
+  source: string;
+  ms: number;
+  status: "ok" | "empty" | "timeout" | "error";
+  count: number;
+  error?: string;
+}
+
 interface SearchResponse {
   assets?: Array<{ source_types?: string[]; source_urls?: string[] }>;
   signalsFound?: number;
   assetsFound?: number;
+  sourceDiagnostics?: SourceDiag[];
   error?: string;
 }
 
@@ -41,6 +52,7 @@ interface RunResult {
   signalsFound: number;
   assetsFound: number;
   byCategory: Record<string, number>;
+  diagnostics: SourceDiag[];
   error?: string;
 }
 
@@ -71,6 +83,7 @@ async function runOne(query: string): Promise<RunResult> {
       signalsFound: body.signalsFound ?? 0,
       assetsFound: body.assetsFound ?? (body.assets?.length ?? 0),
       byCategory,
+      diagnostics: body.sourceDiagnostics ?? [],
       error: res.ok ? undefined : (body.error ?? text.slice(0, 200)),
     };
   } catch (err) {
@@ -81,6 +94,7 @@ async function runOne(query: string): Promise<RunResult> {
       signalsFound: 0,
       assetsFound: 0,
       byCategory: Object.fromEntries(CATEGORIES.map((c) => [c, 0])),
+      diagnostics: [],
       error: err instanceof Error ? err.message : String(err),
     };
   }
@@ -104,7 +118,7 @@ function pad(s: string, n: number): string {
     console.log(`${r.ms}ms · ${r.assetsFound} assets · ${r.error ? "ERROR: " + r.error : "ok"}`);
   }
 
-  console.log("\nResults:");
+  console.log("\nPer-query category contribution:");
   console.log(pad("query", 42) + pad("ms", 8) + pad("assets", 8) + pad("tto", 6) + pad("paper", 7) + pad("prep", 6) + pad("pat", 5) + pad("trial", 6));
   console.log("-".repeat(88));
   for (const r of results) {
@@ -118,6 +132,40 @@ function pad(s: string, n: number): string {
       pad(String(r.byCategory.patent), 5) +
       pad(String(r.byCategory.clinical_trial), 6)
     );
+  }
+
+  // Aggregate per-source latency across all queries
+  type Agg = { count: number; totalMs: number; ok: number; empty: number; timeout: number; error: number };
+  const bySource = new Map<string, Agg>();
+  for (const r of results) {
+    for (const d of r.diagnostics) {
+      const cur = bySource.get(d.source) ?? { count: 0, totalMs: 0, ok: 0, empty: 0, timeout: 0, error: 0 };
+      cur.count++;
+      cur.totalMs += d.ms;
+      cur[d.status]++;
+      bySource.set(d.source, cur);
+    }
+  }
+
+  if (bySource.size > 0) {
+    console.log("\nPer-source latency (avg ms across all queries) and outcome counts:");
+    console.log(pad("source", 24) + pad("avg ms", 10) + pad("ok", 6) + pad("empty", 8) + pad("timeout", 10) + pad("error", 8));
+    console.log("-".repeat(66));
+    const rows = Array.from(bySource.entries())
+      .map(([src, a]) => ({ src, avg: Math.round(a.totalMs / a.count), ...a }))
+      .sort((a, b) => b.avg - a.avg);
+    for (const row of rows) {
+      console.log(
+        pad(row.src, 24) +
+        pad(String(row.avg), 10) +
+        pad(String(row.ok), 6) +
+        pad(String(row.empty), 8) +
+        pad(String(row.timeout), 10) +
+        pad(String(row.error), 8)
+      );
+    }
+  } else {
+    console.log("\n(no sourceDiagnostics returned by server — check /api/search response shape)");
   }
 
   let failed = 0;
@@ -137,7 +185,8 @@ function pad(s: string, n: number): string {
   }
 
   const avg = Math.round(results.reduce((s, r) => s + r.ms, 0) / results.length);
-  console.log(`\nAverage: ${avg}ms · ${failed === 0 ? "ALL PASS" : `${failed}/${results.length} FAILED`}\n`);
+  const errorRate = results.length === 0 ? 0 : failed / results.length;
+  console.log(`\nAverage latency: ${avg}ms · Error rate: ${(errorRate * 100).toFixed(1)}% (${failed}/${results.length}) · ${failed === 0 ? "ALL PASS" : "FAIL"}\n`);
 
   process.exit(failed === 0 ? 0 : 1);
 })();
