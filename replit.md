@@ -419,7 +419,7 @@ Three new tables drive the closed-loop relevance system:
 Public endpoint `POST /api/feedback {assetId, action, source?}` records
 feedback when a userId resolves (anonymous calls return `{recorded: false}`);
 the `✕ Not relevant` button on `AssetCard` posts `action="dismiss"` here.
-Admin endpoints `/api/admin/relevance/{holdout/build,eval,metrics,metrics/refresh,threshold/tune}`
+Admin endpoints `/api/admin/relevance/{holdout/build,eval,metrics,metrics/refresh,threshold/tune,weights/tune}`
 power the Admin → Data Pipeline → Feedback-Driven Relevance panel.
 The eval endpoint filters to `split='eval'` only and returns three
 side-by-side stats blocks — `v1 keyword`, `v2 classifier`, and
@@ -429,6 +429,19 @@ the active threshold) — plus the best-F1 `bestThreshold` from the sweep.
 from the sweep and persists it; the classifier reads it lazily (cached
 5 min) so production switches over without a restart. Env var
 `EDEN_RELEVANCE_CLASSIFIER_THRESHOLD` always overrides the tuned value.
+
+Task #699 adds `POST /api/admin/relevance/weights/tune` and the offline
+CLI `npx tsx scripts/train-relevance-classifier.ts [--persist] [--force]`.
+Both fit logistic regression weights (`server/lib/pipeline/relevanceTrainer.ts`)
+on `split='train'`, choose the threshold on `split='eval'`, and persist
+both via `storage.setTunedClassifierWeights` + `setTunedClassifierThreshold`
+**only when fitted F1 strictly beats the current live weights** (override
+with `?force=1` / `--force`). The classifier loads tuned weights via
+`getActiveWeights()` (cached 5 min, invalidated on tune). The admin
+`/relevance/eval` per-row score cache key includes the active weights
+signature, so a tune is reflected on the next click without a restart.
+Persistence reuses the `relevance_metrics` table (`dimension='tuned_weights'`,
+`dimensionValue=JSON.stringify(weights)`, `saveRate=evalF1`).
 
 ## Environment Variables
 - `DATABASE_URL`: PostgreSQL connection (auto-provided by Replit)

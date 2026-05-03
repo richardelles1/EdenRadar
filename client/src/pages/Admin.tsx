@@ -9420,6 +9420,36 @@ function RelevancePanel({ pw }: { pw: string }) {
     onError: (e) => toast({ title: "Tune failed", description: e.message, variant: "destructive" }),
   });
 
+  type TuneWeightsResp = {
+    persisted: boolean;
+    improvedF1: boolean;
+    fitted: { threshold: number; eval: { f1: number; precision: number; recall: number } };
+    baseline: { threshold: number; eval: { f1: number } };
+    trainSize: number;
+    evalSize: number;
+  };
+  const tuneWeights = useMutation<TuneWeightsResp, Error, void>({
+    mutationFn: async () => {
+      const r = await fetch("/api/admin/relevance/weights/tune", { method: "POST", headers: authHeaders });
+      if (!r.ok) {
+        const body = await r.json().catch(() => ({}));
+        throw new Error(body.error || "Tune weights failed");
+      }
+      return (await r.json()) as TuneWeightsResp;
+    },
+    onSuccess: (d) => {
+      const fF1 = (d.fitted.eval.f1 * 100).toFixed(1);
+      const bF1 = (d.baseline.eval.f1 * 100).toFixed(1);
+      const verb = d.persisted ? "Persisted" : "Skipped";
+      toast({
+        title: `${verb} weight tune`,
+        description: `Fitted F1 ${fF1}% vs baseline ${bF1}% @ t=${d.fitted.threshold.toFixed(2)} (train=${d.trainSize}, eval=${d.evalSize})`,
+      });
+      evalQ.refetch();
+    },
+    onError: (e) => toast({ title: "Tune weights failed", description: e.message, variant: "destructive" }),
+  });
+
   const ev = evalQ.data;
   const m = metricsQ.data;
   const overallRow = m?.rows.find((r) => r.dimension === "overall");
@@ -9466,6 +9496,9 @@ function RelevancePanel({ pw }: { pw: string }) {
           </Button>
           <Button size="sm" variant="outline" onClick={() => tuneThreshold.mutate()} disabled={tuneThreshold.isPending} data-testid="button-tune-threshold">
             {tuneThreshold.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tune threshold"}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => tuneWeights.mutate()} disabled={tuneWeights.isPending} data-testid="button-tune-weights">
+            {tuneWeights.isPending ? <Loader2 className="h-3 w-3 animate-spin" /> : "Tune weights"}
           </Button>
         </div>
       </div>

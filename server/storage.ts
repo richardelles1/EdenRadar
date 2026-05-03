@@ -102,6 +102,15 @@ export interface IStorage {
   deleteFeedback(userId: string, assetId: number, action: FeedbackAction): Promise<number>;
   setTunedClassifierThreshold(threshold: number, f1: number): Promise<void>;
   getTunedClassifierThreshold(): Promise<{ threshold: number; f1: number | null; computedAt: Date } | null>;
+  setTunedClassifierWeights(
+    weights: { wBiotech: number; wNonBiotech: number; wLength: number; bias: number },
+    evalF1: number,
+  ): Promise<void>;
+  getTunedClassifierWeights(): Promise<{
+    weights: { wBiotech: number; wNonBiotech: number; wLength: number; bias: number };
+    evalF1: number | null;
+    computedAt: Date;
+  } | null>;
   listUserFeedback(userId: string, limit?: number): Promise<UserAssetFeedback[]>;
   backfillFeedbackFromSavedAssets(): Promise<{ inserted: number }>;
   buildRelevanceHoldout(): Promise<{ inserted: number; fromHumanVerified: number; fromSaves: number; fromDismisses: number; total: number; evalSize: number; trainSize: number }>;
@@ -3922,6 +3931,59 @@ export class DatabaseStorage implements IStorage {
     const t = parseFloat(row.dimensionValue);
     if (!Number.isFinite(t)) return null;
     return { threshold: t, f1: row.saveRate ?? null, computedAt: row.computedAt };
+  }
+
+  // ── Tuned classifier weights (Task #699) ──────────────────────────────────
+  // Same trick as the threshold persistence above: stored as a
+  // `relevance_metrics` row with dimension='tuned_weights' and
+  // dimensionValue=JSON.stringify(weights). saveRate carries the eval-split F1
+  // achieved with these weights (so the admin UI can show whether a tune
+  // actually improved over the previous run).
+  async setTunedClassifierWeights(
+    weights: { wBiotech: number; wNonBiotech: number; wLength: number; bias: number },
+    evalF1: number,
+  ): Promise<void> {
+    const finite = (n: number) => Number.isFinite(n);
+    if (!finite(weights.wBiotech) || !finite(weights.wNonBiotech) || !finite(weights.wLength) || !finite(weights.bias)) return;
+    await db.insert(relevanceMetrics).values({
+      periodDays: 0,
+      dimension: "tuned_weights",
+      dimensionValue: JSON.stringify(weights),
+      shownCount: 0,
+      saveCount: 0,
+      dismissCount: 0,
+      viewCount: 0,
+      saveRate: evalF1,
+      dismissRate: null,
+    });
+  }
+
+  async getTunedClassifierWeights(): Promise<{
+    weights: { wBiotech: number; wNonBiotech: number; wLength: number; bias: number };
+    evalF1: number | null;
+    computedAt: Date;
+  } | null> {
+    const r = await db.select().from(relevanceMetrics)
+      .where(eq(relevanceMetrics.dimension, "tuned_weights"))
+      .orderBy(desc(relevanceMetrics.computedAt))
+      .limit(1);
+    const row = r[0];
+    if (!row) return null;
+    try {
+      const parsed = JSON.parse(row.dimensionValue);
+      if (!parsed || typeof parsed !== "object") return null;
+      const { wBiotech, wNonBiotech, wLength, bias } = parsed;
+      if (![wBiotech, wNonBiotech, wLength, bias].every((n) => typeof n === "number" && Number.isFinite(n))) {
+        return null;
+      }
+      return {
+        weights: { wBiotech, wNonBiotech, wLength, bias },
+        evalF1: row.saveRate ?? null,
+        computedAt: row.computedAt,
+      };
+    } catch {
+      return null;
+    }
   }
 }
 

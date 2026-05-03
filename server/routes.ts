@@ -294,8 +294,13 @@ type RelevanceEvalCache = {
   holdoutSize: number;
 };
 let relevanceEvalCache: RelevanceEvalCache | null = null;
-function relevanceEvalCacheKey(classifierVersion: string): string {
-  return `cv=${classifierVersion}`;
+function relevanceEvalCacheKey(classifierVersion: string, weightsSig: string): string {
+  // Per-row scores depend on BOTH the static feature/keyword version (bumped
+  // by engineers when extractFeatures changes) and the active tuned weights
+  // (which can change on every /weights/tune call). Including the weights
+  // signature in the cache key means a tune is reflected on the next admin
+  // /relevance/eval click without needing a manual invalidate.
+  return `cv=${classifierVersion}|w=${weightsSig}`;
 }
 function invalidateRelevanceEvalCache(): void {
   relevanceEvalCache = null;
@@ -2029,8 +2034,14 @@ export async function registerRoutes(
         CLASSIFIER_V2_ENABLED,
         CLASSIFIER_VERSION,
         getActiveThreshold,
+        getActiveWeights,
+        weightsSignature,
       } = classifierMod;
-      const activeThreshold = await getActiveThreshold();
+      const [activeThreshold, activeWeights] = await Promise.all([
+        getActiveThreshold(),
+        getActiveWeights(),
+      ]);
+      const activeWeightsSig = weightsSignature(activeWeights);
 
       // Production pipeline keeps anything that isn't an explicit reject:
       // both `pass` and `ambiguous` flow forward into the rest of ingestion.
@@ -2045,7 +2056,7 @@ export async function registerRoutes(
       type ScoredRow = { label: boolean; prob: number; v1Kept: boolean };
       let scored: ScoredRow[];
       let holdoutSize: number;
-      const cacheKey = relevanceEvalCacheKey(CLASSIFIER_VERSION);
+      const cacheKey = relevanceEvalCacheKey(CLASSIFIER_VERSION, activeWeightsSig);
       if (relevanceEvalCache && relevanceEvalCache.key === cacheKey) {
         scored = relevanceEvalCache.scored;
         holdoutSize = relevanceEvalCache.holdoutSize;
@@ -2065,7 +2076,11 @@ export async function registerRoutes(
           const text = `${listing.title} ${listing.description ?? ""}`;
           return {
             label: !!r.label,
-            prob: scoreText(text).prob,
+            // Score with the *active* (possibly tuned) weights so the cached
+            // probability vector reflects whatever production is using right
+            // now. The cache key above includes the weights signature, so a
+            // tune call invalidates this cache automatically.
+            prob: scoreText(text, activeWeights).prob,
             v1Kept: decisionToKept(preFilterRelevance(listing)),
           };
         });
@@ -2178,6 +2193,94 @@ export async function registerRoutes(
       res.json({ tuned: best, holdoutSize: rows.length });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to tune threshold";
+      res.status(500).json({ error: msg });
+    }
+  });
+
+  // Task #699: fit logistic-regression weights from the train split, choose
+  // the threshold on the eval split, persist both — but only if the fitted
+  // model strictly beats the current persisted/baseline F1 on eval. This
+  // satisfies the task's "v2 strictly ≥ v1 on F1 before flag default flips
+  // ON" gate. Pass ?force=1 to persist regardless (useful when iterating).
+  app.post("/api/admin/relevance/weights/tune", async (req, res) => {
+    try {
+      const force = req.query.force === "1" || req.query.force === "true";
+      const trainerMod = await import("./lib/pipeline/relevanceTrainer");
+      const classifierMod = await import("./lib/pipeline/relevanceClassifier");
+      const { fitAndEvaluate } = trainerMod;
+      const {
+        DEFAULT_WEIGHTS,
+        getActiveWeights,
+        invalidateWeightsCache,
+        invalidateThresholdCache,
+      } = classifierMod;
+
+      const [trainRowsRaw, evalRowsRaw, currentActive] = await Promise.all([
+        storage.listRelevanceHoldout(20000, "train"),
+        storage.listRelevanceHoldout(20000, "eval"),
+        getActiveWeights(),
+      ]);
+      if (trainRowsRaw.length < 50) {
+        return res.status(400).json({
+          error: `Train split too small (${trainRowsRaw.length} rows). Build holdout and collect more save/dismiss feedback first.`,
+        });
+      }
+      if (evalRowsRaw.length < 20) {
+        return res.status(400).json({
+          error: `Eval split too small (${evalRowsRaw.length} rows). Build holdout first.`,
+        });
+      }
+
+      const trainRows = trainRowsRaw.map((r) => ({ text: r.text || "", label: !!r.label }));
+      const evalRows = evalRowsRaw.map((r) => ({ text: r.text || "", label: !!r.label }));
+
+      // Baseline = whatever's currently live (DEFAULT_WEIGHTS if nothing has
+      // ever been tuned). This is what the new weights have to beat.
+      const result = fitAndEvaluate(trainRows, evalRows, currentActive);
+
+      const improvedF1 = result.fittedEval.f1 > result.baselineEval.f1;
+      const persisted = force || improvedF1;
+
+      if (persisted) {
+        await storage.setTunedClassifierWeights(result.fitted, result.fittedEval.f1);
+        // Tuning weights also implies the chosen threshold — persist it too
+        // so the active threshold reflects the same fit.
+        await storage.setTunedClassifierThreshold(result.threshold, result.fittedEval.f1);
+        invalidateWeightsCache();
+        invalidateThresholdCache();
+        invalidateRelevanceEvalCache();
+      }
+
+      res.json({
+        persisted,
+        improvedF1,
+        forced: force,
+        defaultWeights: DEFAULT_WEIGHTS,
+        currentActiveWeights: currentActive,
+        fitted: {
+          weights: result.fitted,
+          threshold: result.threshold,
+          eval: result.fittedEval,
+        },
+        baseline: {
+          // What the live weights score on the eval split *right now* (at the
+          // best sweep threshold) — so the UI can render a fair head-to-head.
+          weights: currentActive,
+          threshold: result.baselineThreshold,
+          eval: result.baselineEval,
+        },
+        trainSize: trainRows.length,
+        evalSize: evalRows.length,
+        trainResult: {
+          iterations: result.trainResult.iterations,
+          finalLoss: result.trainResult.finalLoss,
+          positiveRate: result.trainResult.positiveRate,
+          converged: result.trainResult.converged,
+        },
+        sweep: result.sweep,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to tune weights";
       res.status(500).json({ error: msg });
     }
   });
