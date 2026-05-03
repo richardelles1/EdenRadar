@@ -640,6 +640,9 @@ export async function registerRoutes(
       // each result's asset_name so we can pin/boost rows whose name contains
       // the full query string (case + punctuation insensitive). This protects
       // against the confidence gate burying a real exact match.
+      // Mirrors storage SQL normalization (lower → strip non [a-z0-9 -] →
+      // collapse whitespace → trim) so route-level pin/exemption is symmetric
+      // with the SQL exact_name_match flag computed in keywordSearchIngestedAssets.
       const normalizeText = (s: string) =>
         s.toLowerCase().replace(/[^a-z0-9\s-]/g, " ").replace(/\s+/g, " ").trim();
       const normalizedQuery = normalizeText(query);

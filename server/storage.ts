@@ -2555,12 +2555,15 @@ export class DatabaseStorage implements IStorage {
         const p = `%${t}%`;
         return sql`(LOWER(asset_name) LIKE ${p} OR LOWER(indication) LIKE ${p} OR LOWER(target) LIKE ${p} OR LOWER(COALESCE(summary,'')) LIKE ${p} OR LOWER(institution) LIKE ${p} OR LOWER(COALESCE(mechanism_of_action,'')) LIKE ${p})`;
       });
-      // Exact-name match clause — also matches when the normalized query
-      // appears anywhere inside the normalized asset_name (handles punctuation
-      // like parentheses or em-dashes that the tokenizer strips).
+      // Exact-name match clause — matches when the normalized query appears
+      // anywhere inside the normalized asset_name. The column-side
+      // normalization mirrors the query-side: lowercase, replace any non
+      // [a-z0-9 -] with a space, then collapse runs of whitespace to a single
+      // space and trim. This handles punctuation (parens, em-dashes, slashes)
+      // as well as titles with double spaces.
       if (normalizedQuery) {
         const exactPat = `%${normalizedQuery}%`;
-        termConditions.push(sql`(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g') LIKE ${exactPat})`);
+        termConditions.push(sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPat})`);
       }
       const textMatch = termConditions.reduce((acc, cond, i) => i === 0 ? cond : sql`${acc} OR ${cond}`);
       filterConditions.push(sql`(${textMatch})`);
@@ -2597,7 +2600,7 @@ export class DatabaseStorage implements IStorage {
     // ever sees it.
     const exactPattern = normalizedQuery ? `%${normalizedQuery}%` : "";
     const exactMatchExpr = normalizedQuery
-      ? sql`(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g') LIKE ${exactPattern})`
+      ? sql`(TRIM(REGEXP_REPLACE(REGEXP_REPLACE(LOWER(asset_name), '[^a-z0-9\\s-]', ' ', 'g'), '\\s+', ' ', 'g')) LIKE ${exactPattern})`
       : sql`FALSE`;
 
     const result = await db.execute(sql`
